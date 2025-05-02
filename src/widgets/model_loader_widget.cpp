@@ -4,6 +4,8 @@
 #include <igl/readOFF.h>
 #include <igl/readPLY.h>
 #include <igl/readSTL.h>
+#include <polyscope/polyscope.h>
+#include <portable-file-dialogs.h>
 #include <spdlog/spdlog.h>
 
 #include <Eigen/Core>

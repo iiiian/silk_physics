@@ -1,8 +1,5 @@
 #pragma once
 
-#include <polyscope/polyscope.h>
-#include <portable-file-dialogs.h>
-
 #include "../gui_helper.hpp"
 
 class ModelLoaderWidget : public IWidget {
