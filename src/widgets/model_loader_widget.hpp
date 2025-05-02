@@ -1,19 +1,18 @@
 #pragma once
 
-#include <polyscope/point_cloud.h>
-
-#include <Eigen/Core>
-#include <glm/glm.hpp>
-#include <nanoflann.hpp>
+#include <polyscope/polyscope.h>
+#include <portable-file-dialogs.h>
 
 #include "../gui_helper.hpp"
 
 class ModelLoaderWidget : public IWidget {
-  UIContext& ctx_;
-  EngineContext* p_engine_ctx_ = nullptr;
+    UIContext& ui_ctx_;
+    EngineContext& engine_ctx_;
 
- public:
-  explicit ModelLoaderWidget(UIContext& context);
-  void draw() override;
-  void on_event(EventFlag events) override;
+    bool load_model_from_path(const std::string& path);
+
+public:
+    ModelLoaderWidget(UIContext& ui_context, EngineContext& engine_context);
+    EventFlag draw() override;
+    void on_event(EventFlag events) override;
 };
