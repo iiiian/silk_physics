@@ -18,19 +18,19 @@ bool ModelLoaderWidget::load_model_from_path(const std::string& path) {
 
   bool success = false;
   if (path.ends_with(".off")) {
-    success = igl::readOFF(path, engine_ctx_.V, engine_ctx_.F, 
-                         engine_ctx_.V_normals, engine_ctx_.UV_coords);
+    success = igl::readOFF(path, engine_ctx_.V, engine_ctx_.F,
+                           engine_ctx_.V_normals, engine_ctx_.UV_coords);
   } else if (path.ends_with(".obj")) {
     Eigen::MatrixX3f N;
-    success = igl::readOBJ(path, engine_ctx_.V, engine_ctx_.UV_coords,
-                         N, engine_ctx_.F);
+    success = igl::readOBJ(path, engine_ctx_.V, engine_ctx_.UV_coords, N,
+                           engine_ctx_.F);
     engine_ctx_.V_normals = N;
   } else if (path.ends_with(".ply")) {
     success = igl::readPLY(path, engine_ctx_.V, engine_ctx_.F,
-                         engine_ctx_.UV_coords, engine_ctx_.V_normals);
+                           engine_ctx_.UV_coords, engine_ctx_.V_normals);
   } else if (path.ends_with(".stl")) {
-    success = igl::readSTL(path, engine_ctx_.V, engine_ctx_.F,
-                         engine_ctx_.V_normals);
+    success =
+        igl::readSTL(path, engine_ctx_.V, engine_ctx_.F, engine_ctx_.V_normals);
   }
 
   if (!success || engine_ctx_.V.rows() == 0 || engine_ctx_.F.rows() == 0) {
