@@ -16,6 +16,7 @@ add_executable(
     main
     "src/main.cpp"
     "src/widgets/selector_widget.cpp"
+    "src/widgets/model_loader_widget.cpp"
     "extern/polyscope/deps/imgui/imgui/misc/cpp/imgui_stdlib.cpp"
 )
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -38,5 +39,5 @@ endif()
 target_link_libraries(main PRIVATE spdlog::spdlog)
 target_link_libraries(main PRIVATE igl::core)
 target_link_libraries(main PRIVATE polyscope)
-target_link_libraries(main PRIVATE portable-file-dialogs)
+target_link_libraries(main PRIVATE portable_file_dialogs)
 target_link_libraries(main PRIVATE nanoflann::nanoflann)
