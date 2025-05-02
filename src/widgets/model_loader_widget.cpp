@@ -6,7 +6,11 @@
 #include <igl/readSTL.h>
 #include <spdlog/spdlog.h>
 
+#include <Eigen/Core>
+#include <fstream>
+
 namespace py = polyscope;
+namespace eg = Eigen;
 
 ModelLoaderWidget::ModelLoaderWidget(UIContext& ui_context,
                                      EngineContext& engine_context)
@@ -16,44 +20,40 @@ bool ModelLoaderWidget::load_model_from_path(const std::string& path) {
   spdlog::info("Loading model from: {}", path);
 
   bool success = false;
+  eg::MatrixX3f V;
+  eg::MatrixX3i F;
+  eg::MatrixX3f N;
   if (path.ends_with(".off")) {
-    success = igl::readOFF(path, engine_ctx_.V, engine_ctx_.F);
+    success = igl::readOFF(path, V, F);
   } else if (path.ends_with(".obj")) {
-    success = igl::readOBJ(path, engine_ctx_.V, engine_ctx_.F);
+    success = igl::readOBJ(path, V, F);
   } else if (path.ends_with(".ply")) {
-    success = igl::readPLY(path, engine_ctx_.V, engine_ctx_.F);
+    success = igl::readPLY(path, V, F);
   } else if (path.ends_with(".stl")) {
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) {
       spdlog::error("Failed to open STL file: {}", path);
     } else {
-      Eigen::MatrixXd N;  // Normals (not used, but required by signature)
-      success = igl::readSTL(file, engine_ctx_.V, engine_ctx_.F, N);
+      success = igl::readSTL(file, V, F, N);
       file.close();
     }
   }
 
-  if (!success || engine_ctx_.V.rows() == 0 || engine_ctx_.F.rows() == 0) {
+  if (!success || V.rows() == 0 || F.rows() == 0) {
     spdlog::error("Failed to load model or empty mesh from: {}", path);
-    // Clear context if loading failed
-    engine_ctx_.V.resize(0, 3);
-    engine_ctx_.F.resize(0, 3);
     return false;
   }
 
-  // Register new mesh and calculate properties
-  // Remove existing mesh if present
-  if (ui_ctx_.p_surface) {
-    py::removeStructure("model");
-  }
-  ui_ctx_.p_surface =
-      py::registerSurfaceMesh("model", engine_ctx_.V, engine_ctx_.F);
-
-  auto min = engine_ctx_.V.colwise().minCoeff();
-  auto max = engine_ctx_.V.colwise().maxCoeff();
+  // Register new mesh
+  auto min = V.colwise().minCoeff();
+  auto max = V.colwise().maxCoeff();
   ui_ctx_.mesh_diag = (max - min).norm();
-
   ui_ctx_.selection.clear();
+  ui_ctx_.p_surface = py::registerSurfaceMesh("model", V, F);
+
+  engine_ctx_.V = std::move(V);
+  engine_ctx_.F = std::move(F);
+
   spdlog::info("Loaded model with {} vertices and {} faces",
                engine_ctx_.V.rows(), engine_ctx_.F.rows());
 
@@ -97,6 +97,4 @@ EventFlag ModelLoaderWidget::draw() {
   return generated_event;
 }
 
-void ModelLoaderWidget::on_event(EventFlag events) {
-  // No action needed for events
-}
+void ModelLoaderWidget::on_event(EventFlag events) {}
