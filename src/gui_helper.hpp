@@ -29,10 +29,6 @@ struct EngineContext {
   // Basic mesh
   Eigen::MatrixX3f V;
   Eigen::MatrixX3i F;
-  
-  // Additional attributes (empty if not present)
-  Eigen::MatrixX3f V_normals;
-  Eigen::MatrixX2f UV_coords;
 };
 
 class IWidget {
