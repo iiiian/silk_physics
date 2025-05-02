@@ -23,7 +23,14 @@ bool ModelLoaderWidget::load_model_from_path(const std::string& path) {
   } else if (path.ends_with(".ply")) {
     success = igl::readPLY(path, engine_ctx_.V, engine_ctx_.F);
   } else if (path.ends_with(".stl")) {
-    success = igl::readSTL(path, engine_ctx_.V, engine_ctx_.F);
+    std::ifstream file(path, std::ios::binary);
+    if (!file.is_open()) {
+      spdlog::error("Failed to open STL file: {}", path);
+    } else {
+      Eigen::MatrixXd N;  // Normals (not used, but required by signature)
+      success = igl::readSTL(file, engine_ctx_.V, engine_ctx_.F, N);
+      file.close();
+    }
   }
 
   if (!success || engine_ctx_.V.rows() == 0 || engine_ctx_.F.rows() == 0) {
