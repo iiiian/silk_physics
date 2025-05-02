@@ -119,29 +119,48 @@ class SelectorWidget : public IWidget {
     assert(ctx_.ui_mode == UIMode::Paint);
     assert(ctx_.p_surface->nVertices() != 0);
 
-    // Find neighbors using the KD-Tree
-    int snum = kd_tree_.index_->radiusSearch(glm::value_ptr(selector_center_),
-                                             selector_radius_, )
+    // Convert selector center to Eigen vector for nanoflann
+    eg::Vector3f center(selector_center_.x, selector_center_.y, selector_center_.z);
+    
+    // Prepare parameters for radius search
+    std::vector<std::pair<size_t, float>> matches;
+    na::SearchParams params;
+    float radius_sq = selector_radius_ * selector_radius_;
+    
+    // Perform radius search
+    size_t found_count = kd_tree_.index_->radiusSearch(
+        center.data(), 
+        radius_sq, 
+        matches, 
+        params
+    );
 
-                   size_t changed_count = 0;
+    // Extract just the vertex indices from matches
+    std::vector<size_t> selected_indices;
+    selected_indices.reserve(found_count);
+    for (const auto& match : matches) {
+        selected_indices.push_back(match.first);
+    }
+
+    size_t changed_count = 0;
     if (add_to_selection) {
-      for (auto idx : selected_indices) {
-        if (ctx_.selection.insert(idx).second) {
-          changed_count++;
+        for (auto idx : selected_indices) {
+            if (ctx_.selection.insert(idx).second) {
+                changed_count++;
+            }
         }
-      }
     } else {  // Erase from selection
-      for (auto idx : selected_indices) {
-        if (ctx_.selection.erase(idx) > 0) {
-          changed_count++;
+        for (auto idx : selected_indices) {
+            if (ctx_.selection.erase(idx) > 0) {
+                changed_count++;
+            }
         }
-      }
     }
 
     // Only update visualization if something actually changed
     if (changed_count > 0) {
-      update_selection_visual();
-      spdlog::trace("Selection updated, {} vertices changed.", changed_count);
+        update_selection_visual();
+        spdlog::trace("Selection updated, {} vertices changed.", changed_count);
     }
   }
 
