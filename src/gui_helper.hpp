@@ -3,11 +3,8 @@
 #include <polyscope/polyscope.h>
 #include <polyscope/surface_mesh.h>
 
+#include <Eigen/Core>
 #include <cstdint>
-
-#include "bit_flag.hpp"
-
-namespace py = polyscope;
 
 // Helper for ImGui double sliders
 template <typename T>
@@ -19,18 +16,24 @@ bool DragDouble(const char* label, T* p_data, float v_speed, T* min, T* max,
 
 enum class UIMode { Normal, Paint };
 
-enum class Event : uint32_t { MeshChange = 0 };
+enum EventFlag : uint32_t { NoEvent = 0, MeshChange = 1 };
 
-struct AppContext {
+struct UIContext {
   UIMode ui_mode = UIMode::Normal;
-  py::SurfaceMesh* p_surface = nullptr;
+  polyscope::SurfaceMesh* p_surface = nullptr;
   float mesh_diag = 0;
   std::unordered_set<int> selection = {};
+};
+
+struct EngineContext {
+  // follow libigl convention
+  Eigen::MatrixX3f V;
+  Eigen::MatrixX3i F;
 };
 
 class IWidget {
  public:
   virtual ~IWidget() = default;
-  virtual void draw() = 0;
-  virtual void on_event(Flags<Event> events) = 0;
+  virtual EventFlag draw() = 0;
+  virtual void on_event(EventFlag events) = 0;
 };

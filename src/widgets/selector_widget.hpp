@@ -1,7 +1,6 @@
 #pragma once
 
 #include <polyscope/point_cloud.h>
-#include <spdlog/spdlog.h>
 
 #include <Eigen/Core>
 #include <glm/glm.hpp>
@@ -10,7 +9,7 @@
 #include "../gui_helper.hpp"
 
 class SelectorWidget : public IWidget {
-  AppContext& ctx_;
+  UIContext& ctx_;
 
   // Selector sphere visualization
   polyscope::PointCloud* selector_sphere_ = nullptr;
@@ -22,6 +21,7 @@ class SelectorWidget : public IWidget {
   bool is_mouse_on_surface_ = false;
 
   // Spatial data structures
+  bool need_rebuild_kdtree_ = false;
   Eigen::MatrixX3f verts_;
   nanoflann::KDTreeEigenMatrixAdaptor<Eigen::MatrixX3f, 3> kd_tree_{3, verts_};
 
@@ -30,9 +30,10 @@ class SelectorWidget : public IWidget {
   void update_selection_visual();
   void select_vertices_in_sphere(bool add_to_selection);
   void handle_paint_input();
+  void rebuild_kd_tree();
 
  public:
-  explicit SelectorWidget(AppContext& context);
-  void draw() override;
-  void on_event(Flags<Event> events) override;
+  explicit SelectorWidget(UIContext& context);
+  EventFlag draw() override;
+  void on_event(EventFlag events) override;
 };

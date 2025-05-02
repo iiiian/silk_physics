@@ -117,11 +117,30 @@ void SelectorWidget::handle_paint_input() {
   }
 }
 
-SelectorWidget::SelectorWidget(AppContext& context) : ctx_(context) {}
+void SelectorWidget::rebuild_kd_tree() {
+  assert(ctx_.p_surface);
 
-void SelectorWidget::draw() {
+  auto& raw_verts = ctx_.p_surface->vertexPositions;
+  verts_.resize(raw_verts.size(), 3);
+  for (size_t i = 0; i < raw_verts.size(); ++i) {
+    auto v = raw_verts.getValue(i);
+    verts_(i, 0) = v.x;
+    verts_(i, 1) = v.y;
+    verts_(i, 2) = v.z;
+  }
+  kd_tree_.index_->buildIndex();
+}
+
+SelectorWidget::SelectorWidget(UIContext& context) : ctx_(context) {}
+
+EventFlag SelectorWidget::draw() {
   ImGui::BeginDisabled(!ctx_.p_surface || !(ctx_.ui_mode == UIMode::Normal ||
                                             ctx_.ui_mode == UIMode::Paint));
+
+  if (need_rebuild_kdtree_) {
+    rebuild_kd_tree();
+    need_rebuild_kdtree_ = false;
+  }
 
   if (ImGui::CollapsingHeader("Vertex Selector",
                               ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -155,24 +174,12 @@ void SelectorWidget::draw() {
     ImGui::Text("Selected vertices: %zu", ctx_.selection.size());
   }
   ImGui::EndDisabled();
+
+  return NoEvent;
 }
 
-void SelectorWidget::on_event(Flags<Event> events) {
-  if (!events.test(Event::MeshChange)) {
-    return;
+void SelectorWidget::on_event(EventFlag events) {
+  if (events & EventFlag::MeshChange) {
+    need_rebuild_kdtree_ = true;
   }
-  if (!ctx_.p_surface || ctx_.p_surface->nVertices() == 0) {
-    return;
-  }
-
-  // Rebuild kd-tree on mesh change
-  auto& raw_verts = ctx_.p_surface->vertexPositions;
-  verts_.resize(raw_verts.size(), 3);
-  for (size_t i = 0; i < raw_verts.size(); ++i) {
-    auto v = raw_verts.getValue(i);
-    verts_(i, 0) = v.x;
-    verts_(i, 1) = v.y;
-    verts_(i, 2) = v.z;
-  }
-  kd_tree_.index_->buildIndex();
 }
