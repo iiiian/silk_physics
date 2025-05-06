@@ -14,7 +14,7 @@ add_subdirectory(extern/nanoflann)
 
 add_executable(
     main
-    "src/main.cpp"
+    "src/solver.cpp"
     "src/widgets/selector_widget.cpp"
     "src/widgets/model_loader_widget.cpp"
     "extern/polyscope/deps/imgui/imgui/misc/cpp/imgui_stdlib.cpp"

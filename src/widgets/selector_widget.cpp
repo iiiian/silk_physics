@@ -137,7 +137,7 @@ EventFlag SelectorWidget::draw() {
   ImGui::BeginDisabled(!ctx_.p_surface || !(ctx_.ui_mode == UIMode::Normal ||
                                             ctx_.ui_mode == UIMode::Paint));
 
-  if (need_rebuild_kdtree_) {
+  if (need_rebuild_kdtree_ && ctx_.ui_mode == UIMode::Paint) {
     rebuild_kd_tree();
     need_rebuild_kdtree_ = false;
   }
