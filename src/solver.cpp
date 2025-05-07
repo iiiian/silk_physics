@@ -10,7 +10,7 @@
 #include <cassert>
 #include <unordered_set>
 
-#include "vectorized_deformation_matrix.hpp"
+#include "vectorized_jacobian.hpp"
 
 namespace eg = Eigen;
 
@@ -19,7 +19,7 @@ class ClothSolver {
   eg::VectorXf area_;
   // voroni mass
   eg::SparseMatrix<float> M_;
-  std::vector<eg::Matrix<float, 6, 9>> F_operators_;
+  std::vector<Matrix69f> jacobians_;
   std::vector<eg::Triplet<float>> AA_triplets_;
   // constrain related
   int knum_ = 0;
@@ -30,7 +30,7 @@ class ClothSolver {
   eg::SparseMatrix<float> Guk_;
   eg::SimplicialLDLT<eg::SparseMatrix<float>> cholesky_solver_;
 
-  void init_elastic_constrain() {
+  bool init_elastic_constrain() {
     assert(pV_);
     assert(pF_);
     assert((pV_->rows() != 0));
@@ -41,13 +41,17 @@ class ClothSolver {
     area_ /= 2;
 
     // compute deformation matrix for each triangle
-    F_operators_.resize(pF_->rows());
+    jacobians_.resize(pF_->rows());
     for (int f = 0; f < pF_->rows(); ++f) {
       auto vidx = pF_->row(f);
-      eg::Matrix<float, 6, 9> A = vectorized_F_operator(
+      std::optional<Matrix69f> J = vectorized_jacobian(
           pV_->row(vidx(0)), pV_->row(vidx(1)), pV_->row(vidx(2)));
-      F_operators_[f] = A;
-      eg::Matrix<float, 9, 9> local_AA = A.transpose() * A;
+      if (!J) {
+        spdlog::warn("degenerate triangle {}", f);
+        return false;
+      }
+      jacobians_[f] = *J;
+      eg::Matrix<float, 9, 9> local_AA = J->transpose() * (*J);
 
       // convert the local AA to global AA
       for (int vi = 0; vi < 3; ++vi) {
@@ -67,6 +71,7 @@ class ClothSolver {
         }
       }
     }
+    return true;
   }
 
  public:
@@ -134,7 +139,9 @@ class ClothSolver {
     }
     perm_.indices() = idx_map;
 
-    init_elastic_constrain();
+    if (!init_elastic_constrain()) {
+      return false;
+    }
     eg::SparseMatrix<float> AA(3 * vnum, 3 * vnum);
     AA.setFromTriplets(AA_triplets_.begin(), AA_triplets_.end());
     AA_triplets_.clear();
@@ -178,19 +185,19 @@ class ClothSolver {
 
       // SVD decompose deformation.
       // replacing diagonal term with idenity gives us the projection
-      eg::Matrix<float, 3, 2> D = (F_operators_[f] * buffer).reshaped(3, 2);
+      eg::Matrix<float, 3, 2> J = (jacobians_[f] * buffer).reshaped(3, 2);
       // see https://gitlab.com/libeigen/eigen/-/merge_requests/658
       // eigen can't compute thin u v for static sized matrix,
       // above pull request addressed this but was reverted for API
       // compatibility reason. to work around this compute full U, V.
-      eg::JacobiSVD<eg::Matrix<float, 3, 2>> svd(D);
+      eg::JacobiSVD<eg::Matrix<float, 3, 2>> svd(J);
       // this is the projection, deformation F cause by purely rotation +
       // translation
       eg::Matrix<float, 3, 2> T =
           svd.matrixU().block<3, 2>(0, 0) * svd.matrixV().transpose();
 
       // compute the elastic rhs, reuse buffer
-      buffer = elastic_stiffness_ * area_[f] * F_operators_[f].transpose() *
+      buffer = elastic_stiffness_ * area_[f] * jacobians_[f].transpose() *
                T.reshaped();
       // add it back to global V
       rhs(eg::seqN(3 * vidx(0), 3)) += buffer(eg::seqN(0, 3));

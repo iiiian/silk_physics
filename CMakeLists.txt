@@ -15,7 +15,7 @@ add_subdirectory(extern/nanoflann)
 add_executable(
     main
     "src/solver.cpp"
-    "src/vectorized_deformation_matrix.cpp"
+    "src/vectorized_jacobian.cpp"
     "src/widgets/selector_widget.cpp"
     "src/widgets/model_loader_widget.cpp"
     "extern/polyscope/deps/imgui/imgui/misc/cpp/imgui_stdlib.cpp"

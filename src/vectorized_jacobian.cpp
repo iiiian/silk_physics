@@ -1,22 +1,28 @@
-#include "vectorized_deformation_matrix.hpp"
+#include "vectorized_jacobian.hpp"
 
-#include <Eigen/Core>
+#include <Eigen/Dense>
 #include <Eigen/Sparse>
+#include <optional>
 
 namespace eg = Eigen;
 
-// return a 6x9 sparse matrix
-eg::Matrix<float, 6, 9> vectorized_F_operator(eg::Ref<const eg::Vector3f> v0,
-                                              eg::Ref<const eg::Vector3f> v1,
-                                              eg::Ref<const eg::Vector3f> v2) {
+std::optional<Matrix69f> vectorized_jacobian(eg::Ref<const eg::Vector3f> v0,
+                                             eg::Ref<const eg::Vector3f> v1,
+                                             eg::Ref<const eg::Vector3f> v2,
+                                             float zero_threshold = 1e-8) {
   // convert triangle to 2D
   // use edge e1 = v0 -> v1 as x axis
   // use n x e1 as y axis
   eg::Vector3f e1 = v1 - v0;
   eg::Vector3f e2 = v2 - v0;
+
   // basis x
   eg::Vector3f bx = e1.normalized();
   // basis y
+  eg::VectorXf e1xe2 = e1.cross(e2);
+  if (e1xe2.norm() < zero_threshold) {
+    return std::nullopt;
+  }
   eg::Vector3f by = e1.cross(e2).cross(e1).normalized();
 
   eg::Matrix<float, 2, 2> dX;
