@@ -19,8 +19,8 @@ void SelectorWidget::enter_paint_mode() {
   ctx_.ui_mode = UIMode::Paint;
   py::state::doDefaultMouseInteraction = false;
 
-  selector_sphere_ =
-      py::registerPointCloud("selector_sphere", selector_center_);
+  selector_sphere_ = py::registerPointCloud(
+      "selector_sphere", std::vector<glm::vec3>{selector_center_});
   selector_sphere_->setPointRadius(selector_radius_, false);
   selector_sphere_->setPointColor({1.0f, 0.5f, 0.0f});
   selector_sphere_->setTransparency(0.5f);
@@ -102,7 +102,8 @@ void SelectorWidget::handle_paint_input() {
     if (pick.isHit && pick.structure == ctx_.p_surface) {
       selector_center_ = pick.position;
       assert(selector_sphere_);
-      selector_sphere_->updatePointPositions(selector_center_);
+      selector_sphere_->updatePointPositions(
+          std::vector<glm::vec3>{selector_center_});
     }
   }
 

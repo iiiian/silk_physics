@@ -34,7 +34,7 @@ eg::Matrix<float, 6, 9> vectorized_F_operator(eg::Ref<const eg::Vector3f> v0,
 
   eg::Matrix<float, 2, 3> M = (D * dX.inverse()).transpose();
 
-  // discrete vectorized deformation matrix F
+  // discrete vectorized deformation operator F
   // F = M ⊗ I3
   eg::Matrix<float, 6, 9> F = eg::Matrix<float, 6, 9>::Zero();
   for (int i = 0; i < 2; ++i) {
