@@ -5,12 +5,10 @@
 
 #include <Eigen/Core>
 #include <glm/glm.hpp>
-#include <nanoflann.hpp>
 
 #include "../gui_helper.hpp"
 
 namespace py = polyscope;
-namespace na = nanoflann;
 namespace eg = Eigen;
 
 void SelectorWidget::enter_paint_mode() {
@@ -18,6 +16,8 @@ void SelectorWidget::enter_paint_mode() {
 
   ctx_.ui_mode = UIMode::Paint;
   py::state::doDefaultMouseInteraction = false;
+
+  ctx_.p_surface->setSelectionMode(py::MeshSelectionMode::Auto);
 
   selector_sphere_ = py::registerPointCloud(
       "selector_sphere", std::vector<glm::vec3>{selector_center_});
@@ -57,19 +57,19 @@ void SelectorWidget::select_vertices_in_sphere(bool add_to_selection) {
 
   eg::Vector3f center(selector_center_.x, selector_center_.y,
                       selector_center_.z);
-  std::vector<na::ResultItem<eg::Index, float>> matches;
-  kd_tree_.index_->radiusSearch(center.data(), selector_radius_, matches);
+  std::vector<eg::Index> matches =
+      kd_tree_.find_neighbors(center, selector_radius_);
 
   size_t changed_count = 0;
   if (add_to_selection) {
     for (auto match : matches) {
-      if (ctx_.selection.insert(match.second).second) {
+      if (ctx_.selection.insert(match).second) {
         changed_count++;
       }
     }
   } else {
     for (auto match : matches) {
-      if (ctx_.selection.erase(match.second) > 0) {
+      if (ctx_.selection.erase(match) > 0) {
         changed_count++;
       }
     }
@@ -91,9 +91,6 @@ void SelectorWidget::handle_paint_input() {
   float delta_y = std::abs(mouse_pos.y - prev_mouse_pos_.y);
   bool mouse_moved = (delta_x > 1 || delta_y > 1);
 
-  bool left_mouse_down = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-  bool right_mouse_down = ImGui::IsMouseDown(ImGuiMouseButton_Right);
-
   if (mouse_moved) {
     prev_mouse_pos_ = mouse_pos;
     py::PickResult pick = py::pickAtScreenCoords({mouse_pos.x, mouse_pos.y});
@@ -111,6 +108,8 @@ void SelectorWidget::handle_paint_input() {
     return;
   }
 
+  bool left_mouse_down = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+  bool right_mouse_down = ImGui::IsMouseDown(ImGuiMouseButton_Right);
   if (left_mouse_down) {
     select_vertices_in_sphere(true);
   } else if (right_mouse_down) {
@@ -129,7 +128,7 @@ void SelectorWidget::rebuild_kd_tree() {
     verts_(i, 1) = v.y;
     verts_(i, 2) = v.z;
   }
-  kd_tree_.index_->buildIndex();
+  kd_tree_.init(&verts_);
 }
 
 SelectorWidget::SelectorWidget(UIContext& context) : ctx_(context) {}
@@ -176,11 +175,12 @@ EventFlag SelectorWidget::draw() {
   }
   ImGui::EndDisabled();
 
-  return NoEvent;
+  handle_paint_input();
+  return EventFlag::NoEvent;
 }
 
 void SelectorWidget::on_event(EventFlag events) {
-  if (events & EventFlag::MeshChange) {
+  if (raw(events & EventFlag::MeshChange)) {
     need_rebuild_kdtree_ = true;
   }
 }

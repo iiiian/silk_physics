@@ -66,7 +66,7 @@ EventFlag ModelLoaderWidget::draw() {
   // Only enabled in normal mode
   ImGui::BeginDisabled(ui_ctx_.ui_mode != UIMode::Normal);
 
-  EventFlag generated_event = NoEvent;
+  EventFlag generated_event = EventFlag::NoEvent;
   if (ImGui::CollapsingHeader("Model Loader", ImGuiTreeNodeFlags_DefaultOpen)) {
     if (ImGui::Button("Load Model")) {
       // Configure file dialog
@@ -89,13 +89,13 @@ EventFlag ModelLoaderWidget::draw() {
               .result();
 
       if (!selection.empty() && load_model_from_path(selection[0])) {
-        generated_event = MeshChange;
+        generated_event = EventFlag::MeshChange;
       }
     }
   }
 
   ImGui::EndDisabled();
-  // Return MeshChange immediately if a model was loaded, otherwise NoEvent
+  // Return MeshChange if a model was loaded, otherwise NoEvent
   return generated_event;
 }
 

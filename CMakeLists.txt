@@ -10,12 +10,12 @@ add_subdirectory(extern/spdlog)
 add_subdirectory(extern/libigl)
 add_subdirectory(extern/polyscope)
 add_subdirectory(extern/portable-file-dialogs)
-add_subdirectory(extern/nanoflann)
 
 add_executable(
     main
     "src/main.cpp"
     "src/solver.cpp"
+    "src/kd_tree.cpp"
     "src/vectorized_jacobian.cpp"
     "src/widgets/selector_widget.cpp"
     "src/widgets/model_loader_widget.cpp"
@@ -42,4 +42,3 @@ target_link_libraries(main PRIVATE spdlog::spdlog)
 target_link_libraries(main PRIVATE igl::core)
 target_link_libraries(main PRIVATE polyscope)
 target_link_libraries(main PRIVATE portable_file_dialogs)
-target_link_libraries(main PRIVATE nanoflann::nanoflann)

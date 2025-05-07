@@ -1,10 +1,11 @@
 #pragma once
-
 #include <polyscope/polyscope.h>
 #include <polyscope/surface_mesh.h>
 
 #include <Eigen/Core>
 #include <cstdint>
+
+#include "flags.hpp"
 
 // Helper for ImGui double sliders
 template <typename T>
@@ -16,7 +17,9 @@ bool DragDouble(const char* label, T* p_data, float v_speed, T* min, T* max,
 
 enum class UIMode { Normal, Paint };
 
-enum EventFlag : uint32_t { NoEvent = 0, MeshChange = 1 };
+enum class EventFlag : uint32_t { NoEvent = 0, MeshChange = 1 };
+template <>
+inline constexpr bool is_bitflag_v<EventFlag> = true;
 
 struct UIContext {
   UIMode ui_mode = UIMode::Normal;
@@ -27,7 +30,8 @@ struct UIContext {
 
 struct EngineContext {
   // Basic mesh
-  Eigen::MatrixX3f V;
+  // V needs to be row major for easy vectorization
+  Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajorBit> V;
   Eigen::MatrixX3i F;
 };
 

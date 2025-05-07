@@ -4,9 +4,9 @@
 
 #include <Eigen/Core>
 #include <glm/glm.hpp>
-#include <nanoflann.hpp>
 
 #include "../gui_helper.hpp"
+#include "../kd_tree.hpp"
 
 class SelectorWidget : public IWidget {
   UIContext& ctx_;
@@ -23,7 +23,7 @@ class SelectorWidget : public IWidget {
   // Spatial data structures
   bool need_rebuild_kdtree_ = false;
   Eigen::MatrixX3f verts_;
-  nanoflann::KDTreeEigenMatrixAdaptor<Eigen::MatrixX3f, 3> kd_tree_{3, verts_};
+  KDTree kd_tree_;
 
   void enter_paint_mode();
   void leave_paint_mode();
