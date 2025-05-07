@@ -14,6 +14,7 @@ add_subdirectory(extern/nanoflann)
 
 add_executable(
     main
+    "src/main.cpp"
     "src/solver.cpp"
     "src/vectorized_jacobian.cpp"
     "src/widgets/selector_widget.cpp"

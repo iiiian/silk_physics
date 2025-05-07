@@ -1,3 +1,6 @@
 .cache
 build
 compile_commands.json
+.aider*
+smart*
+default*
