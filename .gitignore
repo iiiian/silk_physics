@@ -4,3 +4,5 @@ compile_commands.json
 .aider*
 smart*
 default*
+.polyscope.ini
+imgui.ini

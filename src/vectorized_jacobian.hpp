@@ -4,7 +4,7 @@
 #include <Eigen/Sparse>
 #include <optional>
 
-using Matrix69f = Eigen::Matrix<float, 6, 9>;
+#include "common_types.hpp"
 
 // return vectorize jacobian from 2d reference config to 3d deformed config
 // return nullopt if triangle is degenerated

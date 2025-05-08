@@ -15,7 +15,7 @@ bool DragDouble(const char* label, T* p_data, float v_speed, T* min, T* max,
                            max, format, flags);
 }
 
-enum class UIMode { Normal, Paint };
+enum class UIMode { Normal, Paint, ClothSim };
 
 enum class EventFlag : uint32_t { NoEvent = 0, MeshChange = 1 };
 template <>
