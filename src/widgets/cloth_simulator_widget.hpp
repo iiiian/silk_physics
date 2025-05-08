@@ -13,10 +13,15 @@ class ClothSimulatorWidget : public IWidget {
   std::chrono::steady_clock::time_point prev_update_time;
   float gravity = 1;
   ClothSolver solver;
+  
+  // For drag selection
+  ImVec2 prev_mouse_pos_ = {-1.0f, -1.0f};
+  bool is_dragging_ = false;
 
   void enter_sim_mode();
   void leave_sim_mode();
   void compute_cloth(float elapse_sec);
+  void handle_drag_selection();
 
  public:
   int target_fps_ = 60;
