@@ -1,8 +1,8 @@
 #include "vectorized_jacobian.hpp"
+#include <unsupported/Eigen/KroneckerProduct>
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
-#include <iostream>
 #include <optional>
 
 namespace eg = Eigen;
@@ -43,15 +43,5 @@ std::optional<Matrix69f> vectorized_jacobian(eg::Ref<const eg::Vector3f> v0,
 
   // discrete vectorized deformation operator F
   // F = M ⊗ I3
-  eg::Matrix<float, 6, 9> F = eg::Matrix<float, 6, 9>::Zero();
-  for (int i = 0; i < 2; ++i) {
-    for (int j = 0; j < 3; ++j) {
-      float weight = M(i, j);
-      F(3 * i, 3 * j) = weight;
-      F(3 * i + 1, 3 * j + 1) = weight;
-      F(3 * i + 2, 3 * j + 2) = weight;
-    }
-  }
-
-  return F;
+  return eg::KroneckerProduct(M, eg::Matrix3f::Identity());
 }

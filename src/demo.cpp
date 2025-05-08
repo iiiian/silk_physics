@@ -14,9 +14,6 @@ Demo::Demo() {
 void Demo::draw() {
   EventFlag event = EventFlag::NoEvent;
 
-  // Debug
-  ui_ctx_.selection = {1, 2, 3, 4, 5, 6, 7};
-
   event |= model_loader_widget_.draw();
   event |= selector_widget_.draw();
   event |= cloth_sim_widget_.draw();

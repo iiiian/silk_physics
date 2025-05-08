@@ -16,7 +16,6 @@ class ClothSolver {
   Eigen::SparseMatrix<float> M_;
   // Per-triangle vectorized Jacobians
   std::vector<Matrix69f> jacobians_;
-  std::vector<Eigen::Triplet<float>> AA_triplets_;
 
   int knum_ = 0;
   int unum_ = 0;
@@ -26,7 +25,9 @@ class ClothSolver {
   Eigen::SparseMatrix<float> Guk_;
   Eigen::SimplicialLDLT<Eigen::SparseMatrix<float>> cholesky_solver_;
 
-  bool init_elastic_constrain();
+  void init_constrain_permutation();
+  Eigen::SparseMatrix<float> init_elastic_constrain();
+  bool cholesky_decomposition(const Eigen::SparseMatrix<float>& A);
 
  public:
   RMatrixX3f* pV_ = nullptr;

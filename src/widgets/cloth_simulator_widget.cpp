@@ -8,7 +8,6 @@ void ClothSimulatorWidget::enter_sim_mode() {
   assert((ui_ctx_.ui_mode == UIMode::Normal));
   assert((engine_ctx_.V.rows() != 0));
   assert((engine_ctx_.F.rows() != 0));
-  assert(!ui_ctx_.selection.empty());
 
   solver.pV_ = &engine_ctx_.V;
   solver.pF_ = &engine_ctx_.F;
@@ -60,11 +59,11 @@ EventFlag ClothSimulatorWidget::draw() {
                        !(ui_ctx_.ui_mode == UIMode::Normal ||
                          ui_ctx_.ui_mode == UIMode::ClothSim));
   // debug
-  static bool tt = true;
-  if (tt) {
-    enter_sim_mode();
-    tt = false;
-  }
+  // static bool tt = true;
+  // if (tt) {
+  //   enter_sim_mode();
+  //   tt = false;
+  // }
 
   if (ImGui::CollapsingHeader("Cloth Simulation",
                               ImGuiTreeNodeFlags_DefaultOpen)) {
