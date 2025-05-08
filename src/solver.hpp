@@ -32,7 +32,6 @@ class ClothSolver {
   RMatrixX3f* pV_ = nullptr;
   Eigen::MatrixX3i* pF_ = nullptr;
   std::unordered_set<int>* pconstrain_set = nullptr;
-  RMatrixX3f* pCV_ = nullptr;
 
   float elastic_stiffness_ = 1.0f;
   float bending_stiffness_ = 1.0f;

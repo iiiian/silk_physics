@@ -9,6 +9,7 @@
 class ClothSimulatorWidget : public IWidget {
   UIContext& ui_ctx_;
   EngineContext& engine_ctx_;
+  RMatrixX3f original_V;
   std::chrono::steady_clock::time_point prev_update_time;
   ClothSolver solver;
 

@@ -15,6 +15,7 @@ add_executable(
     main
     "src/main.cpp"
     "src/solver.cpp"
+    "src/demo.cpp"
     "src/kd_tree.cpp"
     "src/vectorized_jacobian.cpp"
     "src/widgets/selector_widget.cpp"

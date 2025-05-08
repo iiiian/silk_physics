@@ -28,6 +28,7 @@ bool ClothSolver::init_elastic_constrain() {
 
   // compute deformation matrix for each triangle
   jacobians_.resize(pF_->rows());
+  AA_triplets_.clear();
   for (int f = 0; f < pF_->rows(); ++f) {
     auto vidx = pF_->row(f);
     std::optional<Matrix69f> J = vectorized_jacobian(
@@ -47,7 +48,10 @@ bool ClothSolver::init_elastic_constrain() {
             // for global AA, add stiffness and area as weight
             float val = elastic_stiffness_ * area_(f) *
                         local_AA(3 * vi + i, 3 * vj + j);
-            if (val < zero_prune_threshold_) {
+            // if (val < zero_prune_threshold_) {
+            //   continue;
+            // }
+            if (val == 0) {
               continue;
             }
             AA_triplets_.emplace_back(3 * vidx(vi) + i, 3 * vidx(vj) + j, val);
@@ -63,19 +67,27 @@ bool ClothSolver::init() {
   assert(pV_);
   assert(pF_);
   assert(pconstrain_set);
-  assert(pCV_);
   assert((pV_->rows() != 0));
   assert((pF_->rows() != 0));
   // in most cases, there will be constrains
   assert(!pconstrain_set->empty());
-  assert((pCV_->rows() != 0));
 
   int vnum = pV_->rows();
+
+  // initialize velocity to 0
+  velocity_ = eg::VectorXf::Zero(3 * vnum);
 
   // compute voroni mass
   eg::SparseMatrix<float> mass;
   igl::massmatrix(*pV_, *pF_, igl::MASSMATRIX_TYPE_VORONOI, mass);
-  M_ = density_ * mass;
+  std::vector<eg::Triplet<float>> M_triplets;
+  for (int i = 0; i < vnum; ++i) {
+    M_triplets.emplace_back(3 * i, 3 * i, density_ * mass.coeff(i, i));
+    M_triplets.emplace_back(3 * i + 1, 3 * i + 1, density_ * mass.coeff(i, i));
+    M_triplets.emplace_back(3 * i + 2, 3 * i + 2, density_ * mass.coeff(i, i));
+  }
+  M_.resize(3 * vnum, 3 * vnum);
+  M_.setFromTriplets(M_triplets.begin(), M_triplets.end());
   // eg::SparseMatrix<float> W(vnum, vnum);
   // W.setIdentity();
   // for (int i = 0; i < vnum; i++) {
@@ -151,7 +163,6 @@ bool ClothSolver::solve() {
   int vnum = pV_->rows();
   // vectorize vertex matrix
   auto vec_V = pV_->reshaped<eg::RowMajor>();
-
   // basic linear velocity term
   eg::VectorXf rhs = (M_ / dt_ / dt_) * vec_V + (M_ / dt_) * velocity_ +
                      constant_force_field_.replicate(vnum, 1);
@@ -172,7 +183,8 @@ bool ClothSolver::solve() {
     // eigen can't compute thin u v for static sized matrix,
     // above pull request addressed this but was reverted for API
     // compatibility reason. to work around this compute full U, V.
-    eg::JacobiSVD<eg::Matrix<float, 3, 2>> svd(J);
+    eg::JacobiSVD<eg::Matrix<float, 3, 2>> svd(
+        J, eg::ComputeFullV | eg::ComputeFullU);
     // this is the projection, deformation F cause by purely rotation +
     // translation
     eg::Matrix<float, 3, 2> T =
@@ -189,9 +201,9 @@ bool ClothSolver::solve() {
 
   // permute the rhs then add the constrain
   eg::VectorXf perm_rhs = perm_ * rhs;
-  assert((pCV_->rows() == knum_));
-  eg::VectorXf b =
-      perm_rhs(eg::seqN(0, 3 * unum_)) - Guk_ * pCV_->reshaped<eg::RowMajor>();
+  eg::VectorXf perm_vec_V = perm_ * vec_V;
+  eg::VectorXf b = perm_rhs(eg::seqN(0, 3 * unum_)) -
+                   Guk_ * perm_vec_V(eg::seqN(3 * unum_, 3 * knum_));
 
   eg::VectorXf sol = cholesky_solver_.solve(b);
   if (cholesky_solver_.info() != eg::Success) {
@@ -200,13 +212,12 @@ bool ClothSolver::solve() {
   }
 
   // combine our solution with constrain then permute it back
-  eg::VectorXf new_vec_V(3 * vnum);
-  new_vec_V(eg::seqN(0, 3 * unum_)) = sol;
-  new_vec_V(eg::seqN(3 * unum_, 3 * knum_)) = pCV_->reshaped<eg::RowMajor>();
-  new_vec_V = (perm_.transpose() * new_vec_V).eval();
+  // use perm vec V as buffer for new vertex position
+  perm_vec_V(eg::seqN(0, 3 * unum_)) = sol;
+  perm_vec_V = (perm_.transpose() * perm_vec_V).eval();
 
   // update veclocity and position
-  velocity_ = (new_vec_V - vec_V) / dt_;
-  vec_V = new_vec_V;
+  velocity_ = (perm_vec_V - vec_V) / dt_;
+  vec_V = perm_vec_V;
   return true;
 }

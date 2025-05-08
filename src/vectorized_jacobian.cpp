@@ -9,7 +9,7 @@ namespace eg = Eigen;
 std::optional<Matrix69f> vectorized_jacobian(eg::Ref<const eg::Vector3f> v0,
                                              eg::Ref<const eg::Vector3f> v1,
                                              eg::Ref<const eg::Vector3f> v2,
-                                             float zero_threshold = 1e-8) {
+                                             float zero_threshold) {
   // convert triangle to 2D
   // use edge e1 = v0 -> v1 as x axis
   // use n x e1 as y axis

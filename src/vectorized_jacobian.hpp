@@ -10,4 +10,4 @@
 // return nullopt if triangle is degenerated
 std::optional<Matrix69f> vectorized_jacobian(
     Eigen::Ref<const Eigen::Vector3f> v0, Eigen::Ref<const Eigen::Vector3f> v1,
-    Eigen::Ref<const Eigen::Vector3f> v2);
+    Eigen::Ref<const Eigen::Vector3f> v2, float zero_threshold = 1e-8);

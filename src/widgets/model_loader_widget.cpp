@@ -11,6 +11,8 @@
 #include <Eigen/Core>
 #include <fstream>
 
+#include "../common_types.hpp"
+
 namespace py = polyscope;
 namespace eg = Eigen;
 
@@ -22,7 +24,7 @@ bool ModelLoaderWidget::load_model_from_path(const std::string& path) {
   spdlog::info("Loading model from: {}", path);
 
   bool success = false;
-  eg::MatrixX3f V;
+  RMatrixX3f V;
   eg::MatrixX3i F;
   eg::MatrixX3f N;
   if (path.ends_with(".off")) {
