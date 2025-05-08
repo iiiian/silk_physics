@@ -35,16 +35,20 @@ void ClothSimulatorWidget::leave_sim_mode() {
   spdlog::info("Leave cloth sim mode");
 }
 
-void ClothSimulatorWidget::compute_cloth() {
+void ClothSimulatorWidget::compute_cloth(float elapse_sec) {
   // TODO: update constrain
 
-  if (!solver.solve()) {
-    spdlog::error("Cloth solve fail");
-    leave_sim_mode();
+  int substep = elapse_sec / solver.dt_;
+  assert((substep >= 1));
+
+  for (int s = 0; s < substep; ++s) {
+    if (!solver.solve()) {
+      spdlog::error("Cloth solve fail");
+      leave_sim_mode();
+    }
   }
 
   ui_ctx_.p_surface->updateVertexPositions(engine_ctx_.V);
-  spdlog::info("cloth postition update");
 }
 
 ClothSimulatorWidget::ClothSimulatorWidget(UIContext& ui_context,
@@ -55,6 +59,12 @@ EventFlag ClothSimulatorWidget::draw() {
   ImGui::BeginDisabled(!ui_ctx_.p_surface ||
                        !(ui_ctx_.ui_mode == UIMode::Normal ||
                          ui_ctx_.ui_mode == UIMode::ClothSim));
+  // debug
+  static bool tt = true;
+  if (tt) {
+    enter_sim_mode();
+    tt = false;
+  }
 
   if (ImGui::CollapsingHeader("Cloth Simulation",
                               ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -72,9 +82,9 @@ EventFlag ClothSimulatorWidget::draw() {
     ImGui::BeginDisabled(ui_ctx_.ui_mode == UIMode::ClothSim);
     ImGui::SliderInt("Target FPS", &target_fps_, 1, 120, "%d",
                      ImGuiSliderFlags_AlwaysClamp);
-    ImGui::SliderFloat("Elastic Stiffness", &solver.elastic_stiffness_, 0, 1e4,
+    ImGui::SliderFloat("Elastic Stiffness", &solver.elastic_stiffness_, 0, 1e2,
                        "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    ImGui::SliderFloat("Bending Stiffness", &solver.bending_stiffness_, 0, 1e4,
+    ImGui::SliderFloat("Bending Stiffness", &solver.bending_stiffness_, 0, 1e2,
                        "%.3f", ImGuiSliderFlags_AlwaysClamp);
     ImGui::SliderFloat("Density", &solver.density_, 1e-3, 1e2, "%.3f",
                        ImGuiSliderFlags_AlwaysClamp);
@@ -89,7 +99,7 @@ EventFlag ClothSimulatorWidget::draw() {
     auto now = std::chrono::steady_clock::now();
     std::chrono::duration<float> elapse_sec = now - prev_update_time;
     if (elapse_sec.count() >= solver.dt_) {
-      compute_cloth();
+      compute_cloth(elapse_sec.count());
       prev_update_time = std::chrono::steady_clock::now();
     }
   }

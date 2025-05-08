@@ -10,6 +10,7 @@
 #include <Eigen/SVD>
 #include <Eigen/Sparse>
 #include <cassert>
+#include <iostream>
 #include <unordered_set>
 
 #include "vectorized_jacobian.hpp"
@@ -48,10 +49,7 @@ bool ClothSolver::init_elastic_constrain() {
             // for global AA, add stiffness and area as weight
             float val = elastic_stiffness_ * area_(f) *
                         local_AA(3 * vi + i, 3 * vj + j);
-            // if (val < zero_prune_threshold_) {
-            //   continue;
-            // }
-            if (val == 0) {
+            if (abs(val) < zero_prune_threshold_) {
               continue;
             }
             AA_triplets_.emplace_back(3 * vidx(vi) + i, 3 * vidx(vj) + j, val);
@@ -122,6 +120,11 @@ bool ClothSolver::init() {
     return false;
   }
   eg::SparseMatrix<float> AA(3 * vnum, 3 * vnum);
+  for (auto t : AA_triplets_) {
+    spdlog::info("{} {} {}", t.row(), t.col(), t.value());
+  }
+  spdlog::info("{}", M_.coeff(0, 0) / dt_ / dt_);
+  // exit(1);
   AA.setFromTriplets(AA_triplets_.begin(), AA_triplets_.end());
   AA_triplets_.clear();
 
@@ -165,7 +168,7 @@ bool ClothSolver::solve() {
   auto vec_V = pV_->reshaped<eg::RowMajor>();
   // basic linear velocity term
   eg::VectorXf rhs = (M_ / dt_ / dt_) * vec_V + (M_ / dt_) * velocity_ +
-                     constant_force_field_.replicate(vnum, 1);
+                     M_ * constant_acce_field_.replicate(vnum, 1);
 
   // for each triangle, solve projection then modify the rhs
   for (int f = 0; f < pF_->rows(); ++f) {

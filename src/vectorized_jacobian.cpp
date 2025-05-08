@@ -2,6 +2,7 @@
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
+#include <iostream>
 #include <optional>
 
 namespace eg = Eigen;
@@ -19,11 +20,11 @@ std::optional<Matrix69f> vectorized_jacobian(eg::Ref<const eg::Vector3f> v0,
   // basis x
   eg::Vector3f bx = e1.normalized();
   // basis y
-  eg::VectorXf e1xe2 = e1.cross(e2);
+  eg::Vector3f e1xe2 = e1.cross(e2);
   if (e1xe2.norm() < zero_threshold) {
     return std::nullopt;
   }
-  eg::Vector3f by = e1.cross(e2).cross(e1).normalized();
+  eg::Vector3f by = e1xe2.cross(e1).normalized();
 
   eg::Matrix<float, 2, 2> dX;
   dX(0, 0) = bx.dot(e1);

@@ -38,7 +38,7 @@ class ClothSolver {
   float density_ = 1.0f;
   float dt_ = 1.0f;
   float zero_prune_threshold_ = 1e-8f;
-  Eigen::Vector3f constant_force_field_ = {0.0f, 0.0f, -1.0f};
+  Eigen::Vector3f constant_acce_field_ = {0.0f, 0.0f, -1.0f};
 
   bool init();
   void reset();

@@ -15,7 +15,7 @@ class ClothSimulatorWidget : public IWidget {
 
   void enter_sim_mode();
   void leave_sim_mode();
-  void compute_cloth();
+  void compute_cloth(float elapse_sec);
 
  public:
   int target_fps_ = 60;
