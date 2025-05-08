@@ -141,13 +141,14 @@ bool ClothSolver::init() {
   // vectorized to 3vnum x 3vnum
   M_ = eg::kroneckerProduct(mass, eg::Matrix3f::Identity());
 
-  // bi laplacian bending constrain
+  // laplacian bending constrain
   eg::SparseMatrix<float> cot;
   igl::cotmatrix(*pV_, *pF_, cot);
   eg::SparseMatrix<float> W(vnum, vnum);
   W.setIdentity();
   for (int i = 0; i < vnum; i++) {
-    W.coeffRef(i, i) = 1.0 / mass.coeff(i, i);
+    W.coeffRef(i, i) = bending_stiffness_;
+    // W.coeffRef(i, i) = bending_stiffness_ / mass.coeff(i, i);
   }
   eg::SparseMatrix<float> LWL = cot.transpose() * W * cot;
   // vectorize to 3vmum x 3vnum

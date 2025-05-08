@@ -11,6 +11,7 @@ class ClothSimulatorWidget : public IWidget {
   EngineContext& engine_ctx_;
   RMatrixX3f original_V;
   std::chrono::steady_clock::time_point prev_update_time;
+  float gravity = 1;
   ClothSolver solver;
 
   void enter_sim_mode();

@@ -13,6 +13,7 @@ void ClothSimulatorWidget::enter_sim_mode() {
   solver.pF_ = &engine_ctx_.F;
   solver.pconstrain_set = &ui_ctx_.selection;
   solver.dt_ = 1.0f / target_fps_;
+  solver.constant_acce_field_ = {0, 0, -gravity};
   if (!solver.init()) {
     solver.reset();
     spdlog::error("Fail to enter cloth sim mode");
@@ -79,16 +80,16 @@ EventFlag ClothSimulatorWidget::draw() {
 
     // During simulation these parameters can't be adjuested
     ImGui::BeginDisabled(ui_ctx_.ui_mode == UIMode::ClothSim);
-    ImGui::SliderInt("Target FPS", &target_fps_, 1, 120, "%d",
+    ImGui::DragInt("Target FPS", &target_fps_, 1.0f, 1, 120, "%d",
+                   ImGuiSliderFlags_AlwaysClamp);
+    ImGui::DragFloat("Elastic Stiffness", &solver.elastic_stiffness_, 1.0f, 0,
+                     1e2, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::DragFloat("Bending Stiffness", &solver.bending_stiffness_, 1.0f, 0,
+                     1e2, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::DragFloat("Density", &solver.density_, 1.0f, 1e-3, 1e2, "%.3f",
                      ImGuiSliderFlags_AlwaysClamp);
-    ImGui::SliderFloat("Elastic Stiffness", &solver.elastic_stiffness_, 0, 1e2,
-                       "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    ImGui::SliderFloat("Bending Stiffness", &solver.bending_stiffness_, 0, 1e2,
-                       "%.3f", ImGuiSliderFlags_AlwaysClamp);
-    ImGui::SliderFloat("Density", &solver.density_, 1e-3, 1e2, "%.3f",
-                       ImGuiSliderFlags_AlwaysClamp);
-    ImGui::SliderFloat("Zero prune threshold", &solver.zero_prune_threshold_, 0,
-                       1e-2, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::DragFloat("Gravity", &gravity, 1.0f, 1, 100, "%.3f",
+                     ImGuiSliderFlags_AlwaysClamp);
     ImGui::EndDisabled();
   }
   ImGui::EndDisabled();
