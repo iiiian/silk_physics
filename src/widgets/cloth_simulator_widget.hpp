@@ -11,12 +11,11 @@ class ClothSimulatorWidget : public IWidget {
   EngineContext& engine_ctx_;
   RMatrixX3f original_V;
   std::chrono::steady_clock::time_point prev_update_time;
-  float gravity = 1;
+  float gravity = 10;
   ClothSolver solver;
-  
+
   // For drag selection
   ImVec2 prev_mouse_pos_ = {-1.0f, -1.0f};
-  bool is_dragging_ = false;
 
   void enter_sim_mode();
   void leave_sim_mode();

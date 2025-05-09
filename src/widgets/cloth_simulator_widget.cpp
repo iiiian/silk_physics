@@ -1,8 +1,15 @@
 #include "cloth_simulator_widget.hpp"
 
+#include <polyscope/polyscope.h>
 #include <spdlog/spdlog.h>
 
+#include <Eigen/Core>
 #include <cassert>
+#include <cmath>
+#include <numbers>
+
+namespace py = polyscope;
+namespace eg = Eigen;
 
 void ClothSimulatorWidget::enter_sim_mode() {
   assert((ui_ctx_.ui_mode == UIMode::Normal));
@@ -22,11 +29,8 @@ void ClothSimulatorWidget::enter_sim_mode() {
 
   original_V = engine_ctx_.V;
   prev_update_time = std::chrono::steady_clock::now();
+  prev_mouse_pos_ = ImGui::GetMousePos();
   ui_ctx_.ui_mode = UIMode::ClothSim;
-  // Only intercept left mouse button for dragging
-  py::state::userCallback_mouseMove = [this](py::MouseButton button, float x, float y) {
-    return button == py::MouseButton::Left;
-  };
   spdlog::info("Enter cloth sim mode");
 }
 
@@ -36,13 +40,10 @@ void ClothSimulatorWidget::leave_sim_mode() {
   ui_ctx_.p_surface->updateVertexPositions(original_V);
   original_V = {};
   ui_ctx_.ui_mode = UIMode::Normal;
-  py::state::userCallback_mouseMove = nullptr;
   spdlog::info("Leave cloth sim mode");
 }
 
 void ClothSimulatorWidget::compute_cloth(float elapse_sec) {
-  // TODO: update constrain
-
   int substep = elapse_sec / solver.dt_;
   assert((substep >= 1));
 
@@ -62,47 +63,53 @@ void ClothSimulatorWidget::handle_drag_selection() {
   }
 
   ImVec2 mouse_pos = ImGui::GetMousePos();
-  bool mouse_moved = false;
-  float delta_x = 0.0f;
-  float delta_y = 0.0f;
-  
-  if (prev_mouse_pos_.x >= 0 && prev_mouse_pos_.y >= 0) {
-    delta_x = mouse_pos.x - prev_mouse_pos_.x;
-    delta_y = mouse_pos.y - prev_mouse_pos_.y;
-    mouse_moved = (std::abs(delta_x) > 1 || std::abs(delta_y) > 1);
+  float mouse_dx = mouse_pos.x - prev_mouse_pos_.x;
+  float mouse_dy = mouse_pos.y - prev_mouse_pos_.y;
+
+  bool has_selection = !ui_ctx_.selection.empty();
+  bool is_left_click = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+  bool is_ctrl = ImGui::GetIO().KeyCtrl;
+  bool is_moving = (std::abs(mouse_dx) > 1 || std::abs(mouse_dy) > 1);
+  if (!(has_selection && is_left_click && is_ctrl && is_moving)) {
+    py::state::doDefaultMouseInteraction = true;
+    prev_mouse_pos_ = mouse_pos;
+    return;
   }
 
-  // Only handle left mouse button for dragging
-  if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-    if (!is_dragging_) {
-      is_dragging_ = true;
-    }
+  // hijack mouse handling
+  py::state::doDefaultMouseInteraction = false;
 
-    if (is_dragging_ && mouse_moved) {
-      // Get the camera view direction and up vector
-      glm::vec3 view_dir = py::view::getCameraDirection();
-      glm::vec3 up_dir = py::view::getCameraUp();
-      glm::vec3 right_dir = glm::cross(view_dir, up_dir);
-      
-      // Scale movement based on mesh size
-      float scale_factor = ui_ctx_.mesh_diag * 0.001f;
-      float dx = delta_x * scale_factor;
-      float dy = -delta_y * scale_factor; // Invert Y for screen coordinates
-      
-      // Apply movement to selected vertices
-      for (int idx : ui_ctx_.selection) {
-        if (idx < engine_ctx_.V.rows()) {
-          engine_ctx_.V.row(idx) += dx * Eigen::RowVector3f(right_dir.x, right_dir.y, right_dir.z);
-          engine_ctx_.V.row(idx) += dy * Eigen::RowVector3f(up_dir.x, up_dir.y, up_dir.z);
-        }
-      }
-      
-      // Update the mesh visualization
-      ui_ctx_.p_surface->updateVertexPositions(engine_ctx_.V);
-    }
-  } else if (is_dragging_) {
-    is_dragging_ = false;
+  py::CameraParameters camera = py::view::getCameraParametersForCurrentView();
+  // choose a random selected vertex to calculate distance
+  eg::Vector3f eg_pos = engine_ctx_.V.row(*ui_ctx_.selection.begin());
+  glm::vec3 pos(eg_pos(0), eg_pos(1), eg_pos(2));
+  float plane_dist = glm::dot(camera.getLookDir(), pos - camera.getPosition());
+
+  float fov_y = camera.getFoVVerticalDegrees();
+  float span_y = plane_dist * std::tan(std::numbers::pi * fov_y / 360);
+  float span_x = camera.getAspectRatioWidthOverHeight() * span_y;
+
+  ImVec2 win_size = ImGui::GetMainViewport()->Size;
+  float mouse_dx_ratio = mouse_dx / win_size.x;
+  float mouse_dy_ratio = mouse_dy / win_size.y;
+
+  glm::vec3 camera_right = camera.getRightDir();
+  glm::vec3 camera_up = camera.getUpDir();
+  glm::vec3 delta = mouse_dx_ratio * span_x * camera_right -
+                    mouse_dy_ratio * span_y * camera_up;
+  auto eg_delta = eg::Map<eg::Vector3f>(glm::value_ptr(delta));
+
+  // update both ui and engine mesh
+  auto& mesh_verts = ui_ctx_.p_surface->vertexPositions;
+  mesh_verts.ensureHostBufferAllocated();
+  for (int idx : ui_ctx_.selection) {
+    assert((idx < engine_ctx_.V.rows()));
+    assert((idx < mesh_verts.size()));
+
+    engine_ctx_.V.row(idx) += eg_delta;
+    mesh_verts.data[idx] += delta;
   }
+  mesh_verts.markHostBufferUpdated();
 
   prev_mouse_pos_ = mouse_pos;
 }
@@ -136,12 +143,12 @@ EventFlag ClothSimulatorWidget::draw() {
 
     // During simulation these parameters can't be adjuested
     ImGui::BeginDisabled(ui_ctx_.ui_mode == UIMode::ClothSim);
-    ImGui::DragInt("Target FPS", &target_fps_, 1.0f, 1, 120, "%d",
+    ImGui::DragInt("Target FPS", &target_fps_, 1.0f, 1, 500, "%d",
                    ImGuiSliderFlags_AlwaysClamp);
     ImGui::DragFloat("Elastic Stiffness", &solver.elastic_stiffness_, 1.0f, 0,
-                     1e2, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                     1e6, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     ImGui::DragFloat("Bending Stiffness", &solver.bending_stiffness_, 1.0f, 0,
-                     1e2, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                     1e6, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     ImGui::DragFloat("Density", &solver.density_, 1.0f, 1e-3, 1e2, "%.3f",
                      ImGuiSliderFlags_AlwaysClamp);
     ImGui::DragFloat("Gravity", &gravity, 1.0f, 1, 100, "%.3f",
