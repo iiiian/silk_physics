@@ -5,8 +5,8 @@ HelpBarWidget::HelpBarWidget(UIContext& context) : ui_ctx_(context) {};
 EventFlag HelpBarWidget::draw() {
   const float PAD = 10.0f;
   ImGuiIO& io = ImGui::GetIO();
-  ImVec2 window_pos = ImVec2(io.DisplaySize.x - PAD, io.DisplaySize.y - PAD);
-  ImVec2 window_pos_pivot = ImVec2(1.0f, 1.0f);
+  ImVec2 window_pos = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y - PAD);
+  ImVec2 window_pos_pivot = ImVec2(0.5f, 1.0f);
 
   ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, window_pos_pivot);
   // ImGui::SetNextWindowBgAlpha(0.35f);
