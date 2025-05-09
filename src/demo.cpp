@@ -9,7 +9,6 @@ namespace py = polyscope;
 
 Demo::Demo() {
   py::state::userCallback = [this]() { this->draw(); };
-  ui_ctx_.help_text = "Welcome! Hover over controls for help tips";
 }
 
 void Demo::draw() {

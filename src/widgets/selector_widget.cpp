@@ -14,10 +14,9 @@ namespace eg = Eigen;
 void SelectorWidget::enter_paint_mode() {
   assert(ctx_.ui_mode == UIMode::Normal);
 
-  ctx_.ui_mode = UIMode::Paint;
   py::state::doDefaultMouseInteraction = false;
-
   ctx_.p_surface->setSelectionMode(py::MeshSelectionMode::Auto);
+  ctx_.help_text = PAINT_MODE_HELP_TXT;
 
   selector_sphere_ = py::registerPointCloud(
       "selector_sphere", std::vector<glm::vec3>{selector_center_});
@@ -25,17 +24,19 @@ void SelectorWidget::enter_paint_mode() {
   selector_sphere_->setPointColor({1.0f, 0.5f, 0.0f});
   selector_sphere_->setTransparency(0.5f);
 
+  ctx_.ui_mode = UIMode::Paint;
   spdlog::info("Entered paint mode.");
 }
 
 void SelectorWidget::leave_paint_mode() {
   assert(ctx_.ui_mode == UIMode::Paint);
 
-  ctx_.ui_mode = UIMode::Normal;
   py::state::doDefaultMouseInteraction = true;
   py::removeStructure("selector_sphere");
   selector_sphere_ = nullptr;
+  ctx_.help_text = NORMAL_MODE_HELP_TXT;
 
+  ctx_.ui_mode = UIMode::Normal;
   spdlog::info("Left paint mode.");
 }
 

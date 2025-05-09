@@ -30,6 +30,8 @@ void ClothSimulatorWidget::enter_sim_mode() {
   original_V = engine_ctx_.V;
   prev_update_time = std::chrono::steady_clock::now();
   prev_mouse_pos_ = ImGui::GetMousePos();
+  ui_ctx_.help_text = CLOTH_SIM_MODE_HELP_TXT;
+
   ui_ctx_.ui_mode = UIMode::ClothSim;
   spdlog::info("Enter cloth sim mode");
 }
@@ -39,6 +41,9 @@ void ClothSimulatorWidget::leave_sim_mode() {
   engine_ctx_.V = original_V;
   ui_ctx_.p_surface->updateVertexPositions(original_V);
   original_V = {};
+  py::state::doDefaultMouseInteraction = true;
+  ui_ctx_.help_text = NORMAL_MODE_HELP_TXT;
+
   ui_ctx_.ui_mode = UIMode::Normal;
   spdlog::info("Leave cloth sim mode");
 }

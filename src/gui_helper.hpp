@@ -7,15 +7,11 @@
 
 #include "flags.hpp"
 
-// Helper for ImGui double sliders
-template <typename T>
-bool DragDouble(const char* label, T* p_data, float v_speed, T* min, T* max,
-                const char* format, ImGuiSliderFlags flags) {
-  return ImGui::DragScalar(label, ImGuiDataType_Double, p_data, v_speed, min,
-                           max, format, flags);
-}
-
 enum class UIMode { Normal, Paint, ClothSim };
+const std::string NORMAL_MODE_HELP_TXT = "Left Click Rotate / Right Click Move";
+const std::string PAINT_MODE_HELP_TXT = "Left Click Paint / Right Click Erase";
+const std::string CLOTH_SIM_MODE_HELP_TXT =
+    "Left Click Rotate / Right Click Move/ Ctrl + Left Click Drag";
 
 enum class EventFlag : uint32_t { NoEvent = 0, MeshChange = 1 };
 template <>
@@ -25,8 +21,8 @@ struct UIContext {
   UIMode ui_mode = UIMode::Normal;
   polyscope::SurfaceMesh* p_surface = nullptr;
   float mesh_diag = 0;
-  std::unordered_set<int> selection = {};
-  std::string help_text;
+  std::unordered_set<int> selection;
+  std::string help_text = NORMAL_MODE_HELP_TXT;
 };
 
 struct EngineContext {
