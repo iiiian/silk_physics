@@ -9,6 +9,7 @@ namespace py = polyscope;
 
 Demo::Demo() {
   py::state::userCallback = [this]() { this->draw(); };
+  ui_ctx_.help_text = "Welcome! Hover over controls for help tips";
 }
 
 void Demo::draw() {
@@ -17,6 +18,7 @@ void Demo::draw() {
   event |= model_loader_widget_.draw();
   event |= selector_widget_.draw();
   event |= cloth_sim_widget_.draw();
+  event |= help_bar_widget_.draw();
 
   model_loader_widget_.on_event(event);
   selector_widget_.on_event(event);

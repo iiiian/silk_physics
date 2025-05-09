@@ -26,6 +26,7 @@ struct UIContext {
   polyscope::SurfaceMesh* p_surface = nullptr;
   float mesh_diag = 0;
   std::unordered_set<int> selection = {};
+  std::string help_text;
 };
 
 struct EngineContext {

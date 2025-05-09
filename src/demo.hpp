@@ -12,6 +12,7 @@ class Demo {
   ModelLoaderWidget model_loader_widget_{ui_ctx_, engine_ctx_};
   SelectorWidget selector_widget_{ui_ctx_};
   ClothSimulatorWidget cloth_sim_widget_{ui_ctx_, engine_ctx_};
+  HelpBarWidget help_bar_widget_{ui_ctx_};
 
   void draw();
 
