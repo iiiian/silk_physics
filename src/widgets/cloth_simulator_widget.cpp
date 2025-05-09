@@ -148,6 +148,8 @@ EventFlag ClothSimulatorWidget::draw() {
 
     // During simulation these parameters can't be adjuested
     ImGui::BeginDisabled(ui_ctx_.ui_mode == UIMode::ClothSim);
+    ImGui::DragInt("Solver Threads", &solver.thread_num_, 1.0f, 1, 24, "%d",
+                   ImGuiSliderFlags_AlwaysClamp);
     ImGui::DragInt("Target FPS", &target_fps_, 1.0f, 1, 500, "%d",
                    ImGuiSliderFlags_AlwaysClamp);
     ImGui::DragFloat("Elastic Stiffness", &solver.elastic_stiffness_, 1.0f, 0,

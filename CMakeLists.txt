@@ -5,11 +5,12 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_SCAN_FOR_MODULES 0)
 enable_testing()
 
-# find_package(OpenMP REQUIRED)
+find_package(OpenMP REQUIRED)
 add_subdirectory(extern/spdlog)
 add_subdirectory(extern/libigl)
 add_subdirectory(extern/polyscope)
 add_subdirectory(extern/portable-file-dialogs)
+add_subdirectory(exetern/embree)
 
 add_executable(
     main
@@ -45,3 +46,4 @@ target_link_libraries(main PRIVATE spdlog::spdlog)
 target_link_libraries(main PRIVATE igl::core)
 target_link_libraries(main PRIVATE polyscope)
 target_link_libraries(main PRIVATE portable_file_dialogs)
+target_link_libraries(main PRIVATE OpenMP::OpenMP_CXX)

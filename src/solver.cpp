@@ -4,6 +4,7 @@
 #include <igl/doublearea.h>
 #include <igl/edges.h>
 #include <igl/massmatrix.h>
+#include <omp.h>
 #include <spdlog/spdlog.h>
 
 #include <Eigen/Core>
@@ -179,6 +180,7 @@ void ClothSolver::reset() {
   pV_ = nullptr;
   pF_ = nullptr;
   pconstrain_set = nullptr;
+  thread_num_ = 4;
 }
 
 bool ClothSolver::solve() {
@@ -189,7 +191,14 @@ bool ClothSolver::solve() {
   eg::VectorXf rhs = (M_ / dt_ / dt_) * vec_V + (M_ / dt_) * velocity_ +
                      M_ * constant_acce_field_.replicate(vnum, 1);
 
-  // for each triangle, solve projection then modify the rhs
+  // thread local rhs
+  assert((thread_num_ > 0));
+  std::vector<eg::VectorXf> thread_local_rhs(thread_num_);
+  for (auto& r : thread_local_rhs) {
+    r = eg::VectorXf::Zero(3 * vnum);
+  }
+// for each triangle, solve projection then modify the rhs
+#pragma omp parallel for num_threads(thread_num_)
   for (int f = 0; f < pF_->rows(); ++f) {
     // assemble local vectorized vertex position
     auto vidx = pF_->row(f);
@@ -215,10 +224,15 @@ bool ClothSolver::solve() {
     // compute the elastic rhs, reuse buffer
     buffer = elastic_stiffness_ * area_[f] * jacobians_[f].transpose() *
              T.reshaped();
-    // add it back to global V
-    rhs(eg::seqN(3 * vidx(0), 3)) += buffer(eg::seqN(0, 3));
-    rhs(eg::seqN(3 * vidx(1), 3)) += buffer(eg::seqN(3, 3));
-    rhs(eg::seqN(3 * vidx(2), 3)) += buffer(eg::seqN(6, 3));
+    // add it back to thread local rhs
+    auto& local_rhs = thread_local_rhs[omp_get_thread_num()];
+    local_rhs(eg::seqN(3 * vidx(0), 3)) += buffer(eg::seqN(0, 3));
+    local_rhs(eg::seqN(3 * vidx(1), 3)) += buffer(eg::seqN(3, 3));
+    local_rhs(eg::seqN(3 * vidx(2), 3)) += buffer(eg::seqN(6, 3));
+  }
+  // merge thread local rhs back to global rhs
+  for (auto& r : thread_local_rhs) {
+    rhs += r;
   }
 
   eg::VectorXf b;

@@ -41,6 +41,8 @@ class ClothSolver {
   float zero_prune_threshold_ = 1e-8f;
   Eigen::Vector3f constant_acce_field_ = {0.0f, 0.0f, -1.0f};
 
+  int thread_num_ = 4;
+
   bool init();
   void reset();
   bool solve();
