@@ -36,7 +36,7 @@
       "binaryDir": "${sourceDir}/build/profile",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "CMAKE_CXX_FLAGS": "-pg -fno-omit-frame-pointer",
+        "CMAKE_CXX_FLAGS": "-pg -fno-omit-frame-pointer -march=native",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "1"
       }
     }

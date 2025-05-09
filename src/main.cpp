@@ -10,6 +10,7 @@ namespace py = polyscope;
 int main(int argc, char** argv) {
   py::init();
   py::view::setUpDir(polyscope::UpDir::ZUp);
+  py::view::setFrontDir(polyscope::FrontDir::XFront);
   py::options::groundPlaneMode = py::GroundPlaneMode::None;
   Demo demo_app;
 

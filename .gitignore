@@ -6,3 +6,8 @@ smart*
 default*
 .polyscope.ini
 imgui.ini
+flamegraph.html
+gmon.out
+out.perf
+perf.data
+perf.data.old
