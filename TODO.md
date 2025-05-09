@@ -1,7 +1,5 @@
 # By Friday
 
-- bending is weired
-- mouse drag constrain
 - collision
 
 # By Saturaday

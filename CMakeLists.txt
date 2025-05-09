@@ -5,16 +5,18 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_SCAN_FOR_MODULES 0)
 
 # intel tbb requrie share lib
-set(BUILD_SHARED_LIBS ON CACHE BOOL "Build All Libraries As Shared" FORCE)
+# set(BUILD_SHARED_LIBS ON CACHE BOOL "Build All Libraries As Shared" FORCE)
 
 find_package(OpenMP REQUIRED)
 add_subdirectory(extern/spdlog)
 add_subdirectory(extern/libigl)
 add_subdirectory(extern/polyscope)
 add_subdirectory(extern/portable-file-dialogs)
-add_subdirectory(extern/tbb)
-set(EMBREE_TUTORIALS OFF CACHE BOOL "Disable Embree Tutorial" FORCE)
-add_subdirectory(extern/embree)
+find_package(embree 4 REQUIRED)
+
+# add_subdirectory(extern/tbb)
+# set(EMBREE_TUTORIALS OFF CACHE BOOL "Disable Embree Tutorial" FORCE)
+# add_subdirectory(extern/embree)
 
 add_executable(
     main
