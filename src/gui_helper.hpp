@@ -8,10 +8,13 @@
 #include "flags.hpp"
 
 enum class UIMode { Normal, Paint, ClothSim };
-const std::string NORMAL_MODE_HELP_TXT = "Left Click Rotate / Right Click Move";
-const std::string PAINT_MODE_HELP_TXT = "Left Click Paint / Right Click Erase";
+const std::string NORMAL_MODE_HELP_TXT =
+    "NORMAL MODE | Left Click Rotate / Right Click Move";
+const std::string PAINT_MODE_HELP_TXT =
+    "PAINT MODE | Left Click Paint / Right Click Erase";
 const std::string CLOTH_SIM_MODE_HELP_TXT =
-    "Left Click Rotate / Right Click Move/ Ctrl + Left Click Drag";
+    "CLOTH SIM MODE | Left Click Rotate / Right Click Move/ Ctrl + Left Click "
+    "Drag";
 
 enum class EventFlag : uint32_t { NoEvent = 0, MeshChange = 1 };
 template <>
