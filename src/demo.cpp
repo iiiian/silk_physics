@@ -12,6 +12,11 @@ Demo::Demo() {
 }
 
 void Demo::draw() {
+  ImGui::Text("FPS %f", ImGui::GetIO().Framerate);
+  ImGui::Separator();
+  ImGui::DragFloat("UI Scale", &ImGui::GetIO().FontGlobalScale, 0.1f, 1.0f,
+                   3.0f);
+
   EventFlag event = EventFlag::NoEvent;
 
   event |= mesh_stat_widget_.draw();

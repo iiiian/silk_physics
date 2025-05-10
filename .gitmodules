@@ -10,9 +10,3 @@
 [submodule "extern/portable-file-dialogs"]
 	path = extern/portable-file-dialogs
 	url = https://github.com/samhocevar/portable-file-dialogs.git
-[submodule "extern/embree"]
-	path = extern/embree
-	url = https://github.com/RenderKit/embree.git
-[submodule "extern/tbb"]
-	path = extern/tbb
-	url = https://github.com/uxlfoundation/oneTBB.git
