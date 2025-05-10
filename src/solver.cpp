@@ -15,7 +15,7 @@
 #include <unordered_set>
 #include <unsupported/Eigen/KroneckerProduct>
 
-#include "exact_collision.hpp"
+// #include "exact_collision.hpp"
 #include "vectorized_jacobian.hpp"
 
 namespace eg = Eigen;
@@ -137,99 +137,100 @@ bool ClothSolver::is_neighboring_face(int f1, int f2) {
   return false;
 }
 
-void ClothSolver::rtc_collision_callback(void* data, RTCCollision* collisions,
-                                         unsigned int num_collisions) {
-  ClothSolver* self = static_cast<ClothSolver*>(data);
-  self->velocity_ = (self->future_V_ - *self->pV_) / self->dt_;
-
-  for (unsigned int i = 0; i < num_collisions; ++i) {
-    RTCCollision* pc = (collisions + i);
-    int f1 = pc->primID0;
-    int f2 = pc->primID1;
-
-    if (f1 == f2) {
-      continue;
-    }
-
-    if (self->is_neighboring_face(f1, f2)) {
-      continue;
-    }
-
-    auto weight = [self](int idx) -> float {
-      if (self->pconstrain_set && self->pconstrain_set->contains(idx)) {
-        return 0;
-      }
-      return 1 / self->M_.coeffRef(3 * idx, 3 * idx);
-    };
-
-    auto f1_vidx = self->pF_->row(f1);
-    MovingTriangle t1;
-    t1.v0 = self->future_V_.row(f1_vidx(0));
-    t1.v1 = self->future_V_.row(f1_vidx(1));
-    t1.v2 = self->future_V_.row(f1_vidx(2));
-    t1.w0 = weight(f1_vidx(0));
-    t1.w1 = weight(f1_vidx(1));
-    t1.w2 = weight(f1_vidx(2));
-
-    auto f2_vidx = self->pF_->row(f2);
-    MovingTriangle t2;
-    t2.v0 = self->future_V_.row(f2_vidx(0));
-    t2.v1 = self->future_V_.row(f2_vidx(1));
-    t2.v2 = self->future_V_.row(f2_vidx(2));
-    t2.w0 = weight(f2_vidx(0));
-    t2.w1 = weight(f2_vidx(1));
-    t2.w2 = weight(f2_vidx(2));
-
-    float h = self->collision_thickness_;
-
-    auto update_position = [self, f1_vidx, f2_vidx, t1, t2]() {
-      self->future_V_.row(f1_vidx(0)) = t1.v0;
-      self->future_V_.row(f1_vidx(1)) = t1.v1;
-      self->future_V_.row(f1_vidx(2)) = t1.v2;
-      self->future_V_.row(f2_vidx(0)) = t2.v0;
-      self->future_V_.row(f2_vidx(1)) = t2.v1;
-      self->future_V_.row(f2_vidx(2)) = t2.v2;
-    };
-
-    // test vertex <-> face collision
-    // f1 v0 -- f2
-    if (resolve_vertex_triangle_collision(t1.v0, t1.w0, t2, h)) {
-      self->velocity_.row(f1_vidx(0)) = eg::RowVector3f::Zero();
-      update_position();
-      continue;
-    }
-    // f1 v1 -- f2
-    if (resolve_vertex_triangle_collision(t1.v1, t1.w1, t2, h)) {
-      self->velocity_.row(f1_vidx(1)) = eg::RowVector3f::Zero();
-      update_position();
-      continue;
-    }
-    // f1 v2 -- f2
-    if (resolve_vertex_triangle_collision(t1.v2, t1.w2, t2, h)) {
-      self->velocity_.row(f1_vidx(1)) = eg::RowVector3f::Zero();
-      update_position();
-      continue;
-    }
-    // f2 v0 -- f1
-    if (resolve_vertex_triangle_collision(t2.v0, t2.w0, t1, h)) {
-      self->velocity_.row(f2_vidx(0)) = eg::RowVector3f::Zero();
-      update_position();
-      continue;
-    }
-    // f2 v1 -- f1
-    if (resolve_vertex_triangle_collision(t2.v1, t2.w1, t1, h)) {
-      self->velocity_.row(f2_vidx(1)) = eg::RowVector3f::Zero();
-      update_position();
-      continue;
-    }
-    // f2 v2 -- f1
-    if (resolve_vertex_triangle_collision(t2.v2, t2.w2, t1, h)) {
-      self->velocity_.row(f2_vidx(2)) = eg::RowVector3f::Zero();
-      update_position();
-      continue;
-    }
-  }
-}
+// void ClothSolver::rtc_collision_callback(void* data, RTCCollision*
+// collisions,
+//                                          unsigned int num_collisions) {
+//   ClothSolver* self = static_cast<ClothSolver*>(data);
+//   self->velocity_ = (self->future_V_ - *self->pV_) / self->dt_;
+//
+//   for (unsigned int i = 0; i < num_collisions; ++i) {
+//     RTCCollision* pc = (collisions + i);
+//     int f1 = pc->primID0;
+//     int f2 = pc->primID1;
+//
+//     if (f1 == f2) {
+//       continue;
+//     }
+//
+//     if (self->is_neighboring_face(f1, f2)) {
+//       continue;
+//     }
+//
+//     auto weight = [self](int idx) -> float {
+//       if (self->pconstrain_set && self->pconstrain_set->contains(idx)) {
+//         return 0;
+//       }
+//       return 1 / self->M_.coeffRef(3 * idx, 3 * idx);
+//     };
+//
+//     auto f1_vidx = self->pF_->row(f1);
+//     MovingTriangle t1;
+//     t1.v0 = self->future_V_.row(f1_vidx(0));
+//     t1.v1 = self->future_V_.row(f1_vidx(1));
+//     t1.v2 = self->future_V_.row(f1_vidx(2));
+//     t1.w0 = weight(f1_vidx(0));
+//     t1.w1 = weight(f1_vidx(1));
+//     t1.w2 = weight(f1_vidx(2));
+//
+//     auto f2_vidx = self->pF_->row(f2);
+//     MovingTriangle t2;
+//     t2.v0 = self->future_V_.row(f2_vidx(0));
+//     t2.v1 = self->future_V_.row(f2_vidx(1));
+//     t2.v2 = self->future_V_.row(f2_vidx(2));
+//     t2.w0 = weight(f2_vidx(0));
+//     t2.w1 = weight(f2_vidx(1));
+//     t2.w2 = weight(f2_vidx(2));
+//
+//     float h = self->collision_thickness_;
+//
+//     auto update_position = [self, f1_vidx, f2_vidx, t1, t2]() {
+//       self->future_V_.row(f1_vidx(0)) = t1.v0;
+//       self->future_V_.row(f1_vidx(1)) = t1.v1;
+//       self->future_V_.row(f1_vidx(2)) = t1.v2;
+//       self->future_V_.row(f2_vidx(0)) = t2.v0;
+//       self->future_V_.row(f2_vidx(1)) = t2.v1;
+//       self->future_V_.row(f2_vidx(2)) = t2.v2;
+//     };
+//
+//     // test vertex <-> face collision
+//     // f1 v0 -- f2
+//     if (resolve_vertex_triangle_collision(t1.v0, t1.w0, t2, h)) {
+//       self->velocity_.row(f1_vidx(0)) = eg::RowVector3f::Zero();
+//       update_position();
+//       continue;
+//     }
+//     // f1 v1 -- f2
+//     if (resolve_vertex_triangle_collision(t1.v1, t1.w1, t2, h)) {
+//       self->velocity_.row(f1_vidx(1)) = eg::RowVector3f::Zero();
+//       update_position();
+//       continue;
+//     }
+//     // f1 v2 -- f2
+//     if (resolve_vertex_triangle_collision(t1.v2, t1.w2, t2, h)) {
+//       self->velocity_.row(f1_vidx(1)) = eg::RowVector3f::Zero();
+//       update_position();
+//       continue;
+//     }
+//     // f2 v0 -- f1
+//     if (resolve_vertex_triangle_collision(t2.v0, t2.w0, t1, h)) {
+//       self->velocity_.row(f2_vidx(0)) = eg::RowVector3f::Zero();
+//       update_position();
+//       continue;
+//     }
+//     // f2 v1 -- f1
+//     if (resolve_vertex_triangle_collision(t2.v1, t2.w1, t1, h)) {
+//       self->velocity_.row(f2_vidx(1)) = eg::RowVector3f::Zero();
+//       update_position();
+//       continue;
+//     }
+//     // f2 v2 -- f1
+//     if (resolve_vertex_triangle_collision(t2.v2, t2.w2, t1, h)) {
+//       self->velocity_.row(f2_vidx(2)) = eg::RowVector3f::Zero();
+//       update_position();
+//       continue;
+//     }
+//   }
+// }
 
 bool ClothSolver::init() {
   assert(pV_);
@@ -277,7 +278,7 @@ bool ClothSolver::init() {
   }
 
   future_V_.resize(vnum, 3);
-  collision_detector.init(pF_->rows());
+  // collision_detector.init(pF_->rows());
 
   return true;
 }
@@ -377,14 +378,12 @@ bool ClothSolver::solve() {
 
   // detect and resolve collision and update velocity
   // the collision part is definitely half baked and its pretty janky
-  if (enable_collision) {
-    collision_detector.detect(pV_, &future_V_, pF_,
-                              ClothSolver::rtc_collision_callback, this);
-  }
+  // if (enable_collision) {
+  //   collision_detector.detect(pV_, &future_V_, pF_,
+  //                             ClothSolver::rtc_collision_callback, this);
+  // }
 
-  if (!enable_collision) {
-    velocity_ = (future_V_ - *pV_) / dt_;
-  }
+  velocity_ = (future_V_ - *pV_) / dt_;
   *pV_ = future_V_;
 
   return true;

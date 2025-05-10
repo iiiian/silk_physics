@@ -150,20 +150,33 @@ EventFlag ClothSimulatorWidget::draw() {
     ImGui::BeginDisabled(ui_ctx_.ui_mode == UIMode::ClothSim);
     ImGui::DragInt("Solver Threads", &solver.thread_num_, 1.0f, 1, 24, "%d",
                    ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SetItemTooltip("thread number for local projection step");
+
     ImGui::DragInt("Target FPS", &target_fps_, 1.0f, 1, 500, "%d",
                    ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SetItemTooltip(
+        "FPS of cloth solver, large elastic stiffness require high FPS");
+
     ImGui::DragFloat("Elastic Stiffness", &solver.elastic_stiffness_, 1.0f, 0,
                      1e6, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SetItemTooltip("the in-plane cloth stiffness");
+
     ImGui::DragFloat("Bending Stiffness", &solver.bending_stiffness_, 1.0f, 0,
                      1e6, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SetItemTooltip("the cloth bending stiffness");
+
     ImGui::DragFloat("Density", &solver.density_, 1.0f, 1e-3, 1e2, "%.3f",
                      ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SetItemTooltip("the cloth density");
+
     ImGui::DragFloat("Gravity", &gravity, 1.0f, 1, 100, "%.3f",
                      ImGuiSliderFlags_AlwaysClamp);
-    ImGui::Checkbox("Enable Collision (Pretty Buggy)",
-                    &solver.enable_collision);
-    ImGui::DragFloat("Thickness", &solver.collision_thickness_, 1.0f, 0, 100,
-                     "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SetItemTooltip("gravity acceleration");
+
+    // ImGui::Checkbox("Enable Collision (Pretty Buggy)",
+    //                 &solver.enable_collision);
+    // ImGui::DragFloat("Thickness", &solver.collision_thickness_, 1.0f, 0, 100,
+    //                  "%.3f", ImGuiSliderFlags_AlwaysClamp);
     ImGui::EndDisabled();
   }
   ImGui::EndDisabled();

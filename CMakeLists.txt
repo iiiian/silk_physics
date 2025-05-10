@@ -4,15 +4,12 @@ project(mesh_deform CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_SCAN_FOR_MODULES 0)
 
-# intel tbb requrie share lib
-# set(BUILD_SHARED_LIBS ON CACHE BOOL "Build All Libraries As Shared" FORCE)
-
 find_package(OpenMP REQUIRED)
 add_subdirectory(extern/spdlog)
 add_subdirectory(extern/libigl)
 add_subdirectory(extern/polyscope)
 add_subdirectory(extern/portable-file-dialogs)
-find_package(embree 4 REQUIRED)
+# find_package(embree 4 REQUIRED)
 
 # add_subdirectory(extern/tbb)
 # set(EMBREE_TUTORIALS OFF CACHE BOOL "Disable Embree Tutorial" FORCE)
@@ -24,8 +21,8 @@ add_executable(
     "src/solver.cpp"
     "src/demo.cpp"
     "src/kd_tree.cpp"
-    "src/collision_detector.cpp"
-    "src/exact_collision.cpp"
+    # "src/collision_detector.cpp"
+    # "src/exact_collision.cpp"
     "src/vectorized_jacobian.cpp"
     "src/widgets/selector_widget.cpp"
     "src/widgets/model_loader_widget.cpp"
@@ -50,10 +47,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         PRIVATE SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_DEBUG
     )
 endif()
-# target_link_libraries(main PRIVATE OpenMP::OpenMP_CXX)
+
 target_link_libraries(main PRIVATE spdlog::spdlog)
 target_link_libraries(main PRIVATE igl::core)
 target_link_libraries(main PRIVATE polyscope)
 target_link_libraries(main PRIVATE portable_file_dialogs)
-target_link_libraries(main PRIVATE embree)
+# target_link_libraries(main PRIVATE embree)
 target_link_libraries(main PRIVATE OpenMP::OpenMP_CXX)

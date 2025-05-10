@@ -8,6 +8,9 @@ MeshStatisticWidget::MeshStatisticWidget(EngineContext& engine_context)
 void MeshStatisticWidget::compute_stats() {
   if (engine_ctx_.V.size() == 0 || engine_ctx_.F.size() == 0) return;
 
+  vnum = engine_ctx_.V.rows();
+  fnum = engine_ctx_.F.rows();
+
   // Bounding box
   bbox_min = glm::vec3(INFINITY);
   bbox_max = glm::vec3(-INFINITY);
