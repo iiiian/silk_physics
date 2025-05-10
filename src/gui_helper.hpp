@@ -1,10 +1,12 @@
 #pragma once
+
 #include <polyscope/polyscope.h>
 #include <polyscope/surface_mesh.h>
 
 #include <Eigen/Core>
 #include <cstdint>
 
+#include "common_types.hpp"
 #include "flags.hpp"
 
 enum class UIMode { Normal, Paint, ClothSim };
@@ -32,8 +34,8 @@ struct UIContext {
 struct EngineContext {
   // Basic mesh
   // V needs to be row major for easy vectorization
-  Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajorBit> V;
-  Eigen::MatrixX3i F;
+  RMatrixX3f V;
+  RMatrixX3i F;
 };
 
 class IWidget {

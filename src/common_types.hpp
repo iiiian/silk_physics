@@ -6,6 +6,7 @@
 
 using Matrix69f = Eigen::Matrix<float, 6, 9>;
 using RMatrixX3f = Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajorBit>;
+using RMatrixX3i = Eigen::Matrix<int, Eigen::Dynamic, 3, Eigen::RowMajorBit>;
 
 struct Segment {
   std::string name;

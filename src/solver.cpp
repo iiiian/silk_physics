@@ -121,6 +121,41 @@ bool ClothSolver::cholesky_decomposition(const eg::SparseMatrix<float>& A) {
   return (cholesky_solver_.info() == eg::Success);
 }
 
+bool ClothSolver::is_neighboring_face(int f1, int f2) {
+  auto f1_verts = pF_->row(f1);
+  auto f2_verts = pF_->row(f1);
+
+  for (int v1 : f1_verts) {
+    for (int v2 : f2_verts) {
+      if (v1 == v2) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+void ClothSolver::rtc_collision_callback(void* data, RTCCollision* collisions,
+                                         unsigned int num_collisions) {
+  ClothSolver* self = static_cast<ClothSolver*>(data);
+
+  for (unsigned int i = 0; i < num_collisions; ++i) {
+    RTCCollision* pc = (collisions + i);
+    int f1 = pc->primID0;
+    int f2 = pc->primID1;
+
+    if (f1 == f2) {
+      continue;
+    }
+
+    if (self->is_neighboring_face(f1, f2)) {
+      continue;
+    }
+
+    spdlog::info("potential collision");
+  }
+}
+
 bool ClothSolver::init() {
   assert(pV_);
   assert(pF_);
@@ -130,7 +165,7 @@ bool ClothSolver::init() {
 
   // initialize velocity to 0
   int vnum = pV_->rows();
-  velocity_ = eg::VectorXf::Zero(3 * vnum);
+  velocity_ = RMatrixX3f::Zero(vnum, 3);
 
   // init permutation
   init_constrain_permutation();
@@ -165,6 +200,11 @@ bool ClothSolver::init() {
     spdlog::error("cholesky decomposition fail");
     return false;
   }
+
+  future_V_.resize(vnum, 3);
+  collision_detector.init(pF_->rows());
+  velocity_ = (future_V_ - *pV_) / dt_;
+
   return true;
 }
 
@@ -181,14 +221,16 @@ void ClothSolver::reset() {
   pF_ = nullptr;
   pconstrain_set = nullptr;
   thread_num_ = 4;
+  future_V_ = {};
 }
 
 bool ClothSolver::solve() {
   int vnum = pV_->rows();
   // vectorize vertex matrix
   auto vec_V = pV_->reshaped<eg::RowMajor>();
+  auto vec_veclocity = velocity_.reshaped<eg::RowMajor>();
   // basic linear velocity term
-  eg::VectorXf rhs = (M_ / dt_ / dt_) * vec_V + (M_ / dt_) * velocity_ +
+  eg::VectorXf rhs = (M_ / dt_ / dt_) * vec_V + (M_ / dt_) * vec_veclocity +
                      M_ * constant_acce_field_.replicate(vnum, 1);
 
   // thread local rhs
@@ -210,10 +252,7 @@ bool ClothSolver::solve() {
     // SVD decompose deformation.
     // replacing diagonal term with idenity gives us the projection
     eg::Matrix<float, 3, 2> J = (jacobians_[f] * buffer).reshaped(3, 2);
-    // see https://gitlab.com/libeigen/eigen/-/merge_requests/658
-    // eigen can't compute thin u v for static sized matrix,
-    // above pull request addressed this but was reverted for API
-    // compatibility reason. to work around this compute full U, V.
+    // eigen can't compute thin U and V. so instead compute full UV
     eg::JacobiSVD<eg::Matrix<float, 3, 2>> svd(
         J, eg::ComputeFullV | eg::ComputeFullU);
     // this is the projection, deformation F cause by purely rotation +
@@ -255,16 +294,20 @@ bool ClothSolver::solve() {
   }
 
   if (knum_ == 0) {
-    velocity_ = (sol - vec_V) / dt_;
-    vec_V = sol;
+    future_V_.reshaped<eg::RowMajor>() = sol;
   } else {
     // combine our solution with constrain then permute it back
     // use perm vec V as buffer for new vertex position
     perm_vec_V(eg::seqN(0, 3 * unum_)) = sol;
-    perm_vec_V = (perm_.transpose() * perm_vec_V).eval();
-
-    velocity_ = (perm_vec_V - vec_V) / dt_;
-    vec_V = perm_vec_V;
+    future_V_.reshaped<eg::RowMajor>() = perm_.transpose() * perm_vec_V;
   }
+
+  // detect and resolve collision
+  // collision_detector.detect(pV_, &future_V_, pF_,
+  //                           ClothSolver::rtc_collision_callback, this);
+
+  velocity_ = (future_V_ - *pV_) / dt_;
+  *pV_ = future_V_;
+
   return true;
 }

@@ -24,6 +24,8 @@ add_executable(
     "src/solver.cpp"
     "src/demo.cpp"
     "src/kd_tree.cpp"
+    "src/collision_detector.cpp"
+    "src/exact_collision.cpp"
     "src/vectorized_jacobian.cpp"
     "src/widgets/selector_widget.cpp"
     "src/widgets/model_loader_widget.cpp"
