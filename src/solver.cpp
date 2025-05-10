@@ -140,7 +140,7 @@ bool ClothSolver::is_neighboring_face(int f1, int f2) {
 void ClothSolver::rtc_collision_callback(void* data, RTCCollision* collisions,
                                          unsigned int num_collisions) {
   ClothSolver* self = static_cast<ClothSolver*>(data);
-  std::unordered_set<int> collide_verts;
+  self->velocity_ = (self->future_V_ - *self->pV_) / self->dt_;
 
   for (unsigned int i = 0; i < num_collisions; ++i) {
     RTCCollision* pc = (collisions + i);
@@ -180,72 +180,54 @@ void ClothSolver::rtc_collision_callback(void* data, RTCCollision* collisions,
     t2.w1 = weight(f2_vidx(1));
     t2.w2 = weight(f2_vidx(2));
 
-    bool has_collision = false;
     float h = self->collision_thickness_;
+
+    auto update_position = [self, f1_vidx, f2_vidx, t1, t2]() {
+      self->future_V_.row(f1_vidx(0)) = t1.v0;
+      self->future_V_.row(f1_vidx(1)) = t1.v1;
+      self->future_V_.row(f1_vidx(2)) = t1.v2;
+      self->future_V_.row(f2_vidx(0)) = t2.v0;
+      self->future_V_.row(f2_vidx(1)) = t2.v1;
+      self->future_V_.row(f2_vidx(2)) = t2.v2;
+    };
 
     // test vertex <-> face collision
     // f1 v0 -- f2
     if (resolve_vertex_triangle_collision(t1.v0, t1.w0, t2, h)) {
-      has_collision = true;
-      t1.update_gemotry();
-      t2.update_gemotry();
+      self->velocity_.row(f1_vidx(0)) = eg::RowVector3f::Zero();
+      update_position();
+      continue;
     }
     // f1 v1 -- f2
     if (resolve_vertex_triangle_collision(t1.v1, t1.w1, t2, h)) {
-      has_collision = true;
-      t1.update_gemotry();
-      t2.update_gemotry();
+      self->velocity_.row(f1_vidx(1)) = eg::RowVector3f::Zero();
+      update_position();
+      continue;
     }
     // f1 v2 -- f2
     if (resolve_vertex_triangle_collision(t1.v2, t1.w2, t2, h)) {
-      has_collision = true;
-      t1.update_gemotry();
-      t2.update_gemotry();
+      self->velocity_.row(f1_vidx(1)) = eg::RowVector3f::Zero();
+      update_position();
+      continue;
     }
     // f2 v0 -- f1
     if (resolve_vertex_triangle_collision(t2.v0, t2.w0, t1, h)) {
-      has_collision = true;
-      t1.update_gemotry();
-      t2.update_gemotry();
+      self->velocity_.row(f2_vidx(0)) = eg::RowVector3f::Zero();
+      update_position();
+      continue;
     }
     // f2 v1 -- f1
     if (resolve_vertex_triangle_collision(t2.v1, t2.w1, t1, h)) {
-      has_collision = true;
-      t1.update_gemotry();
-      t2.update_gemotry();
+      self->velocity_.row(f2_vidx(1)) = eg::RowVector3f::Zero();
+      update_position();
+      continue;
     }
     // f2 v2 -- f1
     if (resolve_vertex_triangle_collision(t2.v2, t2.w2, t1, h)) {
-      has_collision = true;
-      t1.update_gemotry();
-      t2.update_gemotry();
-    }
-
-    if (!has_collision) {
+      self->velocity_.row(f2_vidx(2)) = eg::RowVector3f::Zero();
+      update_position();
       continue;
     }
-
-    // update position back
-    self->future_V_.row(f1_vidx(0)) = t1.v0;
-    self->future_V_.row(f1_vidx(1)) = t1.v1;
-    self->future_V_.row(f1_vidx(2)) = t1.v2;
-    self->future_V_.row(f2_vidx(0)) = t2.v0;
-    self->future_V_.row(f2_vidx(1)) = t2.v1;
-    self->future_V_.row(f2_vidx(2)) = t2.v2;
-
-    // instead of properly updating the velocity, just set them to zero
-    // this is pretty bad, but I run out of time
-    for (int i : f1_vidx) {
-      collide_verts.insert(i);
-    }
-    for (int i : f2_vidx) {
-      collide_verts.insert(i);
-    }
-  }
-
-  self->velocity_ = (self->future_V_ - *self->pV_) / self->dt_;
-  for (int i : collide_verts) {
-    self->velocity_.row(i) = eg::RowVector3f::Zero();
   }
 }
 
@@ -401,6 +383,9 @@ bool ClothSolver::solve() {
                               ClothSolver::rtc_collision_callback, this);
   }
 
+  if (!enable_collision) {
+    velocity_ = (future_V_ - *pV_) / dt_;
+  }
   *pV_ = future_V_;
 
   return true;
