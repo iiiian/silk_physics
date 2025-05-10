@@ -18,12 +18,10 @@ void CollisionDetector::rtc_bound_callback(
   assert((f < self->pF_->rows()));
   auto vidx = self->pF_->row(f);
 
-  using Vec = eg::Matrix<float, 1, 3>;
-
   // the bounding box is simply the union bbox of the current triagnle and the
   // future triagnle
-  Vec min = self->pV_->row(vidx(0));
-  Vec max = self->pV_->row(vidx(0));
+  eg::RowVector3f min = self->pV_->row(vidx(0));
+  eg::RowVector3f max = self->pV_->row(vidx(0));
   min = min.cwiseMin(self->pV_->row(vidx(1)));
   max = max.cwiseMax(self->pV_->row(vidx(1)));
   min = min.cwiseMin(self->pV_->row(vidx(2)));

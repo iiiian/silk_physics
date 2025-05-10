@@ -1,5 +1,6 @@
 #include "solver.hpp"
 
+#include <igl/barycentric_coordinates.h>
 #include <igl/cotmatrix.h>
 #include <igl/doublearea.h>
 #include <igl/edges.h>
@@ -14,6 +15,7 @@
 #include <unordered_set>
 #include <unsupported/Eigen/KroneckerProduct>
 
+#include "exact_collision.hpp"
 #include "vectorized_jacobian.hpp"
 
 namespace eg = Eigen;
@@ -123,7 +125,7 @@ bool ClothSolver::cholesky_decomposition(const eg::SparseMatrix<float>& A) {
 
 bool ClothSolver::is_neighboring_face(int f1, int f2) {
   auto f1_verts = pF_->row(f1);
-  auto f2_verts = pF_->row(f1);
+  auto f2_verts = pF_->row(f2);
 
   for (int v1 : f1_verts) {
     for (int v2 : f2_verts) {
@@ -152,9 +154,87 @@ void ClothSolver::rtc_collision_callback(void* data, RTCCollision* collisions,
       continue;
     }
 
-    spdlog::info("potential collision");
+    auto weight = [self](int idx) -> float {
+      if (self->pconstrain_set && self->pconstrain_set->contains(idx)) {
+        return 0;
+      }
+      return 1 / self->M_.coeffRef(3 * idx, 3 * idx);
+    };
+
+    auto f1_vidx = self->pF_->row(f1);
+    Triangle t1;
+    t1.v0 = self->future_V_.row(f1_vidx(0));
+    t1.v1 = self->future_V_.row(f1_vidx(1));
+    t1.v2 = self->future_V_.row(f1_vidx(2));
+    t1.w0 = weight(f1_vidx(0));
+    t1.w1 = weight(f1_vidx(1));
+    t1.w2 = weight(f1_vidx(2));
+
+    auto f2_vidx = self->pF_->row(f2);
+    Triangle t2;
+    t2.v0 = self->future_V_.row(f2_vidx(0));
+    t2.v1 = self->future_V_.row(f2_vidx(1));
+    t2.v2 = self->future_V_.row(f2_vidx(2));
+    t2.w0 = weight(f2_vidx(0));
+    t2.w1 = weight(f2_vidx(1));
+    t2.w2 = weight(f2_vidx(2));
+
+    bool has_collision = false;
+    float h = self->collision_thickness_;
+
+    // test vertex <-> face collision
+    // f1 v0 -- f2
+    if (resolve_vertex_triangle_collision(t1.v0, t1.w0, t2, h)) {
+      has_collision = true;
+      t1.update_gemotry();
+      t2.update_gemotry();
+    }
+    // f1 v1 -- f2
+    if (resolve_vertex_triangle_collision(t1.v1, t1.w1, t2, h)) {
+      has_collision = true;
+      t1.update_gemotry();
+      t2.update_gemotry();
+    }
+    // f1 v2 -- f2
+    if (resolve_vertex_triangle_collision(t1.v2, t1.w2, t2, h)) {
+      has_collision = true;
+      t1.update_gemotry();
+      t2.update_gemotry();
+    }
+    // f2 v0 -- f1
+    if (resolve_vertex_triangle_collision(t2.v0, t2.w0, t1, h)) {
+      has_collision = true;
+      t1.update_gemotry();
+      t2.update_gemotry();
+    }
+    // f2 v1 -- f1
+    if (resolve_vertex_triangle_collision(t2.v1, t2.w1, t1, h)) {
+      has_collision = true;
+      t1.update_gemotry();
+      t2.update_gemotry();
+    }
+    // f2 v2 -- f1
+    if (resolve_vertex_triangle_collision(t2.v2, t2.w2, t1, h)) {
+      has_collision = true;
+      t1.update_gemotry();
+      t2.update_gemotry();
+    }
+
+    if (!has_collision) {
+      continue;
+    }
+
+    // update position back
+    self->future_V_.row(f1_vidx(0)) = t1.v0;
+    self->future_V_.row(f1_vidx(1)) = t1.v1;
+    self->future_V_.row(f1_vidx(2)) = t1.v2;
+    self->future_V_.row(f2_vidx(0)) = t2.v0;
+    self->future_V_.row(f2_vidx(1)) = t2.v1;
+    self->future_V_.row(f2_vidx(2)) = t2.v2;
   }
 }
+
+void ClothSolver::resolve_collision(int f1, int f2) {}
 
 bool ClothSolver::init() {
   assert(pV_);
@@ -203,7 +283,6 @@ bool ClothSolver::init() {
 
   future_V_.resize(vnum, 3);
   collision_detector.init(pF_->rows());
-  velocity_ = (future_V_ - *pV_) / dt_;
 
   return true;
 }
@@ -303,8 +382,8 @@ bool ClothSolver::solve() {
   }
 
   // detect and resolve collision
-  // collision_detector.detect(pV_, &future_V_, pF_,
-  //                           ClothSolver::rtc_collision_callback, this);
+  collision_detector.detect(pV_, &future_V_, pF_,
+                            ClothSolver::rtc_collision_callback, this);
 
   velocity_ = (future_V_ - *pV_) / dt_;
   *pV_ = future_V_;
