@@ -5,6 +5,7 @@
 #include "widgets/help_bar_widget.hpp"
 #include "widgets/model_loader_widget.hpp"
 #include "widgets/selector_widget.hpp"
+#include "widgets/mesh_statistic_widget.hpp"
 
 class Demo {
   UIContext ui_ctx_ = {};
@@ -14,6 +15,7 @@ class Demo {
   SelectorWidget selector_widget_{ui_ctx_};
   ClothSimulatorWidget cloth_sim_widget_{ui_ctx_, engine_ctx_};
   HelpBarWidget help_bar_widget_{ui_ctx_};
+  MeshStatisticWidget mesh_stat_widget_{engine_ctx_};
 
   void draw();
 

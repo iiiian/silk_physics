@@ -31,6 +31,7 @@ add_executable(
     "src/widgets/model_loader_widget.cpp"
     "src/widgets/cloth_simulator_widget.cpp"
     "src/widgets/help_bar_widget.cpp"
+    "src/widgets/mesh_statistic_widget.cpp"
     "extern/polyscope/deps/imgui/imgui/misc/cpp/imgui_stdlib.cpp"
 )
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
