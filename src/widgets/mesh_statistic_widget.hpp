@@ -1,18 +1,21 @@
 #pragma once
-#include "gui_helper.hpp"
+
+#include "../gui_helper.hpp"
 
 class MeshStatisticWidget : public IWidget {
-    EngineContext& engine_ctx_;
-    
-    glm::vec3 bbox_min;
-    glm::vec3 bbox_max;
-    float avg_edge_length;
-    bool stats_dirty = true;
+  EngineContext& engine_ctx_;
 
-    void compute_stats();
+  int vnum = 0;
+  int fnum = 0;
+  glm::vec3 bbox_min = {};
+  glm::vec3 bbox_max = {};
+  float avg_edge_length = 0;
+  bool stats_dirty = true;
 
-public:
-    explicit MeshStatisticWidget(EngineContext& engine_context);
-    EventFlag draw() override;
-    void on_event(EventFlag events) override;
+  void compute_stats();
+
+ public:
+  explicit MeshStatisticWidget(EngineContext& engine_context);
+  EventFlag draw() override;
+  void on_event(EventFlag events) override;
 };

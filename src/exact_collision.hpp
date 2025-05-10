@@ -2,7 +2,7 @@
 
 #include <Eigen/Core>
 
-class Triangle {
+class MovingTriangle {
  public:
   // triange vertices
   Eigen::Vector3f v0;
@@ -21,5 +21,5 @@ class Triangle {
   void update_gemotry();
 };
 
-bool resolve_vertex_triangle_collision(Eigen::Vector3f& p, float w, Triangle& t,
-                                       float h);
+bool resolve_vertex_triangle_collision(Eigen::Vector3f& p, float w,
+                                       MovingTriangle& t, float h);

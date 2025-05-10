@@ -160,6 +160,8 @@ EventFlag ClothSimulatorWidget::draw() {
                      ImGuiSliderFlags_AlwaysClamp);
     ImGui::DragFloat("Gravity", &gravity, 1.0f, 1, 100, "%.3f",
                      ImGuiSliderFlags_AlwaysClamp);
+    ImGui::Checkbox("Enable Collision (Pretty Buggy)",
+                    &solver.enable_collision);
     ImGui::DragFloat("Thickness", &solver.collision_thickness_, 1.0f, 0, 100,
                      "%.3f", ImGuiSliderFlags_AlwaysClamp);
     ImGui::EndDisabled();

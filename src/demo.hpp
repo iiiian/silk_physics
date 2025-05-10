@@ -3,9 +3,9 @@
 #include "gui_helper.hpp"
 #include "widgets/cloth_simulator_widget.hpp"
 #include "widgets/help_bar_widget.hpp"
+#include "widgets/mesh_statistic_widget.hpp"
 #include "widgets/model_loader_widget.hpp"
 #include "widgets/selector_widget.hpp"
-#include "widgets/mesh_statistic_widget.hpp"
 
 class Demo {
   UIContext ui_ctx_ = {};

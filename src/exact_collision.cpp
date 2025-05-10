@@ -6,7 +6,7 @@
 
 namespace eg = Eigen;
 
-void Triangle::update_gemotry() {
+void MovingTriangle::update_gemotry() {
   e1 = v1 - v0;
   e2 = v2 - v1;
   e3 = v0 - v2;
@@ -17,12 +17,12 @@ void Triangle::update_gemotry() {
 }
 
 // barycentric coordinate 0
-inline float bary0(const eg::Vector3f& p, const Triangle& t) {
+inline float bary0(const eg::Vector3f& p, const MovingTriangle& t) {
   return t.e2.cross(p - t.v1).norm() / t.dA;
 }
 
 // barycentric coordinate 1
-inline float bary1(const eg::Vector3f& p, const Triangle& t) {
+inline float bary1(const eg::Vector3f& p, const MovingTriangle& t) {
   return t.e3.cross(p - t.v2).norm() / t.dA;
 }
 
@@ -32,8 +32,8 @@ inline bool is_inside_triangle(float b0, float b1, float b2) {
 }
 
 // return true if collision exist
-bool resolve_vertex_triangle_collision(eg::Vector3f& p, float w, Triangle& t,
-                                       float h) {
+bool resolve_vertex_triangle_collision(eg::Vector3f& p, float w,
+                                       MovingTriangle& t, float h) {
   if (w == 0 && t.w0 == 0 && t.w1 == 0 && t.w2 == 0) {
     return false;
   }

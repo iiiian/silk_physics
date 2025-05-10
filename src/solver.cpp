@@ -140,6 +140,7 @@ bool ClothSolver::is_neighboring_face(int f1, int f2) {
 void ClothSolver::rtc_collision_callback(void* data, RTCCollision* collisions,
                                          unsigned int num_collisions) {
   ClothSolver* self = static_cast<ClothSolver*>(data);
+  std::unordered_set<int> collide_verts;
 
   for (unsigned int i = 0; i < num_collisions; ++i) {
     RTCCollision* pc = (collisions + i);
@@ -162,7 +163,7 @@ void ClothSolver::rtc_collision_callback(void* data, RTCCollision* collisions,
     };
 
     auto f1_vidx = self->pF_->row(f1);
-    Triangle t1;
+    MovingTriangle t1;
     t1.v0 = self->future_V_.row(f1_vidx(0));
     t1.v1 = self->future_V_.row(f1_vidx(1));
     t1.v2 = self->future_V_.row(f1_vidx(2));
@@ -171,7 +172,7 @@ void ClothSolver::rtc_collision_callback(void* data, RTCCollision* collisions,
     t1.w2 = weight(f1_vidx(2));
 
     auto f2_vidx = self->pF_->row(f2);
-    Triangle t2;
+    MovingTriangle t2;
     t2.v0 = self->future_V_.row(f2_vidx(0));
     t2.v1 = self->future_V_.row(f2_vidx(1));
     t2.v2 = self->future_V_.row(f2_vidx(2));
@@ -231,10 +232,22 @@ void ClothSolver::rtc_collision_callback(void* data, RTCCollision* collisions,
     self->future_V_.row(f2_vidx(0)) = t2.v0;
     self->future_V_.row(f2_vidx(1)) = t2.v1;
     self->future_V_.row(f2_vidx(2)) = t2.v2;
+
+    // instead of properly updating the velocity, just set them to zero
+    // this is pretty bad, but I run out of time
+    for (int i : f1_vidx) {
+      collide_verts.insert(i);
+    }
+    for (int i : f2_vidx) {
+      collide_verts.insert(i);
+    }
+  }
+
+  self->velocity_ = (self->future_V_ - *self->pV_) / self->dt_;
+  for (int i : collide_verts) {
+    self->velocity_.row(i) = eg::RowVector3f::Zero();
   }
 }
-
-void ClothSolver::resolve_collision(int f1, int f2) {}
 
 bool ClothSolver::init() {
   assert(pV_);
@@ -381,11 +394,13 @@ bool ClothSolver::solve() {
     future_V_.reshaped<eg::RowMajor>() = perm_.transpose() * perm_vec_V;
   }
 
-  // detect and resolve collision
-  collision_detector.detect(pV_, &future_V_, pF_,
-                            ClothSolver::rtc_collision_callback, this);
+  // detect and resolve collision and update velocity
+  // the collision part is definitely half baked and its pretty janky
+  if (enable_collision) {
+    collision_detector.detect(pV_, &future_V_, pF_,
+                              ClothSolver::rtc_collision_callback, this);
+  }
 
-  velocity_ = (future_V_ - *pV_) / dt_;
   *pV_ = future_V_;
 
   return true;

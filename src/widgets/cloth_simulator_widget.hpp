@@ -23,7 +23,7 @@ class ClothSimulatorWidget : public IWidget {
   void handle_drag_selection();
 
  public:
-  int target_fps_ = 60;
+  int target_fps_ = 180;
 
   explicit ClothSimulatorWidget(UIContext& ui_context,
                                 EngineContext& engine_context);

@@ -14,6 +14,7 @@ Demo::Demo() {
 void Demo::draw() {
   EventFlag event = EventFlag::NoEvent;
 
+  event |= mesh_stat_widget_.draw();
   event |= model_loader_widget_.draw();
   event |= selector_widget_.draw();
   event |= cloth_sim_widget_.draw();
@@ -22,6 +23,7 @@ void Demo::draw() {
   model_loader_widget_.on_event(event);
   selector_widget_.on_event(event);
   cloth_sim_widget_.on_event(event);
+  mesh_stat_widget_.on_event(event);
 }
 
 void Demo::run() { py::show(); }

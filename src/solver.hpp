@@ -37,7 +37,6 @@ class ClothSolver {
 
   static void rtc_collision_callback(void* data, RTCCollision* collisions,
                                      unsigned int num_collisions);
-  void resolve_collision(int f1, int f2);
 
  public:
   RMatrixX3f* pV_ = nullptr;
@@ -48,11 +47,12 @@ class ClothSolver {
   float bending_stiffness_ = 1.0f;
   float density_ = 1.0f;
   float dt_ = 1.0f;
-  float collision_thickness_ = 1;
+  float collision_thickness_ = 0.01;
   float zero_prune_threshold_ = 1e-8f;
   Eigen::Vector3f constant_acce_field_ = {0.0f, 0.0f, -1.0f};
 
   int thread_num_ = 4;
+  bool enable_collision = false;
 
   bool init();
   void reset();
