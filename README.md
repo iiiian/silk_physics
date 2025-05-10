@@ -2,7 +2,7 @@
 
 ![](./assets/showcase.png)
 
-I've implemented a real-time cloth solver using projective dynamic[^1] and discrete quadratic bending energy[^2]. User can drag the cloth via custom handle and play around with different simulation parameters. Collision is not implemented since proper cloth self collision is *really* hard and I just run out of time. 
+I've implemented a real-time cloth solver using projective dynamics[^1] and discrete quadratic bending energy[^2]. User can drag the cloth via custom handle and play around with different simulation parameters. Collision is not implemented since proper cloth self collision is *really* hard and I just run out of time. 
 
 ## Compile From Source
 
@@ -36,7 +36,7 @@ That's it! The binary is located at `build/release/main`.
 1.  **Launch the Application:** Run the compiled executable directly. Optionally, you can pass in the path of a model file as cli arg.
 2.  **Load a Mesh:** Click the "Load Model" button in the Load Mesh panel.
 
-I've provide some default model in the `data` directory. 
+I've provided some default model in the `data` directory. 
 
 ### 2 Paint The Handle
 
@@ -61,11 +61,11 @@ Below are a quick table for all simulation parameters.
 
 ## Technical Detail
 
-### Theoretical Background - Journey to Projective dynamic
+### Theoretical Background - Journey to Projective dynamics
 
 Initially, I intended to adopt position-based techniques such as XPBD. However, during my research, I came across the paper *Discrete Quadratic Curvature Energies*,  which demonstrated that bending energy can be effectively approximated using a bi-Laplacian term[^1]. 
 
-Then a thought immediately struck me. **Wait a moment... Can I somehow simplify elastic energy to quadratic form so the system can be solved in one step? **
+This makes me wonder. **Wait a moment... Can I somehow simplify elastic energy to quadratic from so the system can be solved in one step? **
 
 This motivated me to explore alternative real-time method which eventually led to **Projective Dynamics**[^2]. The gist of it is that if the distance form the current configuration to the rest configuration is small enough, we can approximate any complex energy as quadratic. Combining this with quadratic bending energy, the whole system energy becomes quadratic. This is the method SOTA cloth model use. 
 
@@ -101,15 +101,15 @@ Solving the cloth physics itself is just a small part of the story. Apart from t
 - contact force resolution
 - all of above with GPU parallelization
 
-In a nutshell, cloth simulation is an active and difficult research field in computer graphics.  Even just aiming  for visually convincing simulation requires multiple complex algorithm and huge engineering effort. 
+In a nutshell, cloth simulation is an active and difficult research field in computer graphics.  Even just aiming for visually convincing simulation requires multiple complex algorithm and huge engineering effort. 
 
-Despite only implementing a small part of the simulation pipeline, I’ve learned a lot about physical simulation, numerical methods, and optimization techniques. After this project, I've obtained a rough view of the cloth and physics based simulation landscape.
+Despite only implementing a small part of the simulation pipeline, I’ve learned a lot about physical simulation, numerical methods, and optimization techniques. After this project, I've obtained a rough view of the cloth and physics based simulation landscape. And I now really appreciate those "natural looking" simulations. 
 
 ## Thank you 
 
-I would like to sincerely thank Professor Daniele and all the TAs for this outstanding course. It is exceptionally well-designed, featuring interactive demos and a well-structured curriculum that introduces many fundamental concepts and algorithms in computer graphics. After completing this course, I had a much easier time reading graphics papers, thanks to the solid foundation this course provided.
+I would like to sincerely thank Professor Daniele and all the TAs for this outstanding course. It is exceptionally well-designed, featuring interactive demos and a well-structured curriculum that introduces many fundamental concepts and algorithms in computer graphics. After completing this course, I had a much easier time reading graphics papers, thanks to the solid foundation.
 
-## References
+
 
 [^1]: S. Bouaziz, S. Martin, T. Liu, L. Kavan, and M. Pauly, “Projective dynamics: fusing constraint projections for fast simulation,” *ACM Trans. Graph.*, vol. 33, no. 4, p. 154:1-154:11, Jul. 2014, doi: [10.1145/2601097.2601116](https://doi.org/10.1145/2601097.2601116). 
 [^2]: M. Wardetzky, M. Bergou, D. Harmon, D. Zorin, and E. Grinspun, “Discrete quadratic curvature energies,” *Computer Aided Geometric Design*, vol. 24, no. 8, pp. 499–518, Nov. 2007, doi: [10.1016/j.cagd.2007.07.006](https://doi.org/10.1016/j.cagd.2007.07.006).
