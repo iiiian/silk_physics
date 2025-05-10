@@ -258,7 +258,7 @@ bool ClothSolver::init() {
   eg::SparseMatrix<float> W(vnum, vnum);
   W.setIdentity();
   for (int i = 0; i < vnum; i++) {
-    W.coeffRef(i, i) = bending_stiffness_;
+    W.coeffRef(i, i) = bending_stiffness_ / mass.coeffRef(i, i) / density_;
     // W.coeffRef(i, i) = bending_stiffness_ / mass.coeff(i, i);
   }
   eg::SparseMatrix<float> LWL = cot.transpose() * W * cot;
@@ -294,7 +294,6 @@ void ClothSolver::reset() {
   pV_ = nullptr;
   pF_ = nullptr;
   pconstrain_set = nullptr;
-  thread_num_ = 4;
   future_V_ = {};
 }
 

@@ -49,7 +49,7 @@ void ClothSimulatorWidget::leave_sim_mode() {
 }
 
 void ClothSimulatorWidget::compute_cloth(float elapse_sec) {
-  int substep = elapse_sec / solver.dt_;
+  int substep = elapse_sec / solver.dt_ + 1;
   assert((substep >= 1));
 
   for (int s = 0; s < substep; ++s) {

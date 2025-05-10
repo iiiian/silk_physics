@@ -54,6 +54,7 @@ bool ModelLoaderWidget::load_model_from_path(const std::string& path) {
   ui_ctx_.mesh_diag = (max - min).norm();
   ui_ctx_.selection.clear();
   ui_ctx_.p_surface = py::registerSurfaceMesh("model", V, F);
+  py::view::resetCameraToHomeView();
 
   engine_ctx_.V = std::move(V);
   engine_ctx_.F = std::move(F);
