@@ -1,10 +1,20 @@
-# By Friday
+# how to impress
 
-- collision
+- Best FOSS blender bloth sim plugins
 
-# By Saturaday
+# Roadmap
 
-- final debug
-- fin doc
-- find cool demo
-- film video
+## Tier 1
+
+- spatial hashing collision detection (native grouping)
+- L-BFGS solve 
+- blender integration with easy to use gui
+- cuda solver
+
+## Tier 2
+
+- real collision culling based in IPC
+- auto stiffness tuning
+- subspace conditioning
+- initial curvature
+

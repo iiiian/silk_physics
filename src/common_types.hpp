@@ -17,3 +17,8 @@ struct Segment {
   // α, β, γ rotation angles in radians
   Eigen::Vector3d rotation = Eigen::Vector3d::Zero();
 };
+
+struct Bbox {
+  Eigen::Vector3f max;
+  Eigen::Vector3f min;
+};
