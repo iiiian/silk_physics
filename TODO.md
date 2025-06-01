@@ -6,15 +6,15 @@
 
 ## Tier 1
 
-- spatial hashing collision detection (native grouping)
-- L-BFGS solve 
-- blender integration with easy to use gui
-- cuda solver
+- [x] spatial hashing collision detection (native grouping)
+- [] L-BFGS solve 
+- [] blender integration with easy to use gui
+- [] cuda solver
 
 ## Tier 2
 
-- real collision culling based in IPC
-- auto stiffness tuning
-- subspace conditioning
-- initial curvature
+- [] real collision culling based in IPC
+- [] auto stiffness tuning
+- [] subspace conditioning
+- [] initial curvature
 
