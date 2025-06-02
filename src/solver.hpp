@@ -18,7 +18,16 @@ class ClothSolver {
   // Per-triangle vectorized Jacobians
   std::vector<Matrix69f> jacobians_;
 
-  Eigen::SimplicialLDLT<Eigen::SparseMatrix<float>> cholesky_solver_;
+  Eigen::SparseMatrix<float> lhs_;
+  Eigen::MatrixX3f x0_;
+  Eigen::VectorXf lhs_x0_;
+  Eigen::VectorXf lhs_eigen_val_;
+  Eigen::MatrixXf lhs_eigen_vec_;
+
+  Eigen::ConjugateGradient<Eigen::SparseMatrix<float>,
+                           Eigen::Upper | Eigen::Lower,
+                           Eigen::IncompleteCholesky<float>>
+      iterative_solver_;
 
   void init_constrain_permutation();
   Eigen::SparseMatrix<float> init_position_lhs();
@@ -42,6 +51,9 @@ class ClothSolver {
   // float collision_thickness_ = 0.01;
   float zero_prune_threshold_ = 1e-8f;
   Eigen::Vector3f constant_acce_field_ = {0.0f, 0.0f, -1.0f};
+
+  int low_freq_mode_num = 30;
+  int max_iterations = 5;
 
   int thread_num_ = 4;
   // bool enable_collision = false;

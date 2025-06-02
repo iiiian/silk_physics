@@ -9,10 +9,11 @@
 #include <spdlog/spdlog.h>
 
 #include <Eigen/Core>
+#include <Eigen/IterativeLinearSolvers>
 #include <Eigen/SVD>
 #include <Eigen/Sparse>
 #include <cassert>
-#include <unordered_set>
+#include <unsupported/Eigen/ArpackSupport>
 #include <unsupported/Eigen/KroneckerProduct>
 
 // #include "exact_collision.hpp"
@@ -224,6 +225,9 @@ bool ClothSolver::init() {
   assert((pV_->rows() != 0));
   assert((pF_->rows() != 0));
 
+  // save rest position
+  x0_ = *pV_;
+
   // initialize velocity to 0
   int vnum = pV_->rows();
   velocity_ = RMatrixX3f::Zero(vnum, 3);
@@ -240,11 +244,26 @@ bool ClothSolver::init() {
   eg::SparseMatrix<float> elastic_lhs = init_elastic_lhs();
 
   // cholesky decomposition Ax = b
-  eg::SparseMatrix<float> A =
-      M_ / dt_ / dt_ + position_lhs + bending_lhs + elastic_lhs;
-  cholesky_solver_.compute(A);
-  if (cholesky_solver_.info() != eg::Success) {
-    spdlog::error("cholesky decomposition fail");
+  lhs_ = M_ / dt_ / dt_ + position_lhs + bending_lhs + elastic_lhs;
+
+  eg::ArpackGeneralizedSelfAdjointEigenSolver<
+      eg::SparseMatrix<float>, eg::SimplicialLLT<eg::SparseMatrix<float>>, true>
+      eigen_solver;
+  assert((low_freq_mode_num <= 3 * vnum));
+  eigen_solver.compute(lhs_, low_freq_mode_num, "SM");
+  if (eigen_solver.info() != eg::Success) {
+    spdlog::error("eigen decomposition fail");
+    return false;
+  }
+
+  lhs_x0_ = lhs_ * pV_->reshaped<eg::RowMajor>();
+  lhs_eigen_val_ = eigen_solver.eigenvalues();
+  lhs_eigen_vec_ = eigen_solver.eigenvectors();
+
+  iterative_solver_.setMaxIterations(max_iterations);
+  iterative_solver_.compute(lhs_);
+  if (iterative_solver_.info() != eg::Success) {
+    spdlog::error("iterative solver decomposition fail");
     return false;
   }
 
@@ -314,11 +333,22 @@ bool ClothSolver::solve() {
     rhs += r;
   }
 
-  eg::VectorXf sol = cholesky_solver_.solve(rhs);
-  if (cholesky_solver_.info() != eg::Success) {
-    spdlog::error("cholesky solve fail");
+  // sub space solve
+  eg::VectorXf b = lhs_eigen_vec_.transpose() * (rhs - lhs_x0_);
+  eg::VectorXf q = b.array() / lhs_eigen_val_.array();
+  eg::VectorXf subspace_sol = x0_.reshaped<eg::RowMajor>() + lhs_eigen_vec_ * q;
+
+  // iterative global solve
+  assert((subspace_sol.rows() == 3 * vnum));
+  assert((rhs.rows() == 3 * vnum));
+  // eg::VectorXf sol = subspace_sol;
+  eg::VectorXf sol = iterative_solver_.solveWithGuess(rhs, subspace_sol);
+  if (iterative_solver_.info() != eg::Success &&
+      iterative_solver_.info() != eg::NoConvergence) {
+    spdlog::error("iterative solver solve fail");
     return false;
   }
+  spdlog::info("itertive solver iteration {}", iterative_solver_.iterations());
 
   // detect and resolve collision and update velocity
   // the collision part is definitely half baked and its pretty janky

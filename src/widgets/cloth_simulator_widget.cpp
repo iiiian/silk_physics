@@ -157,6 +157,14 @@ EventFlag ClothSimulatorWidget::draw() {
     ImGui::SetItemTooltip(
         "FPS of cloth solver, large elastic stiffness require high FPS");
 
+    ImGui::DragInt("Max Iterations", &solver.max_iterations, 1.0f, 1, 10, "%d",
+                   ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SetItemTooltip("The higher the better the detail");
+
+    ImGui::DragInt("Low Frequency Mode Number", &solver.low_freq_mode_num, 1.0f,
+                   5, 100, "%d", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SetItemTooltip("Might improve performance?");
+
     ImGui::DragFloat("Elastic Stiffness", &solver.elastic_stiffness_, 1.0f, 0,
                      1e6, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     ImGui::SetItemTooltip("the in-plane cloth stiffness");
