@@ -20,43 +20,47 @@
 
 namespace eg = Eigen;
 
-void ClothSolver::init_constrain_permutation() {
+eg::SparseMatrix<float> ClothSolver::init_position_lhs() {
   assert(pV_);
   assert(pconstrain_set);
+  assert((pV_->rows() != 0));
+
+  std::vector<eg::Triplet<float>> triplets;
+  for (int i : *pconstrain_set) {
+    triplets.emplace_back(3 * i, 3 * i, position_stiffness);
+    triplets.emplace_back(3 * i + 1, 3 * i + 1, position_stiffness);
+    triplets.emplace_back(3 * i + 2, 3 * i + 2, position_stiffness);
+  }
+
+  int vnum = pV_->rows();
+  eg::SparseMatrix<float> lhs(3 * vnum, 3 * vnum);
+  lhs.setFromTriplets(triplets.begin(), triplets.end());
+  return lhs;
+}
+
+eg::SparseMatrix<float> ClothSolver::init_bending_lhs() {
+  assert(pV_);
+  assert(pF_);
+  assert((pV_->rows() != 0));
+  assert((pF_->rows() != 0));
+  assert((M_.rows() != 0));
 
   int vnum = pV_->rows();
 
-  if (pconstrain_set->empty()) {
-    knum_ = 0;
-    unum_ = vnum;
-    return;
+  eg::SparseMatrix<float> cot;
+  igl::cotmatrix(*pV_, *pF_, cot);
+  eg::SparseMatrix<float> W(vnum, vnum);
+  W.setIdentity();
+  for (int i = 0; i < vnum; i++) {
+    // M_ is the vectorized mass mastrix, while W is not vectorized
+    W.coeffRef(i, i) = 1 / M_.coeff(3 * i, 3 * i);
   }
-  // shuffle known and unknow
-  // if idx_map(a) = b that means index a is mapped to index b
-  // we are mapping 3 * nert vnum becuase vertex position needs to be
-  // vectorized in the solving step
-  eg::VectorXi idx_map(3 * vnum);
-  knum_ = pconstrain_set->size();
-  unum_ = vnum - knum_;
-  int u_counter = 0;
-  int k_counter = unum_;
-  for (int i = 0; i < vnum; ++i) {
-    if (pconstrain_set->contains(i)) {
-      idx_map(3 * i) = 3 * k_counter;
-      idx_map(3 * i + 1) = 3 * k_counter + 1;
-      idx_map(3 * i + 2) = 3 * k_counter + 2;
-      k_counter++;
-    } else {
-      idx_map(3 * i) = 3 * u_counter;
-      idx_map(3 * i + 1) = 3 * u_counter + 1;
-      idx_map(3 * i + 2) = 3 * u_counter + 2;
-      u_counter++;
-    }
-  }
-  perm_.indices() = idx_map;
+  eg::SparseMatrix<float> LWL = bending_stiffness_ * cot.transpose() * W * cot;
+  // vectorize to 3vmum x 3vnum
+  return eg::kroneckerProduct(LWL, eg::Matrix3f::Identity());
 }
 
-eg::SparseMatrix<float> ClothSolver::init_elastic_constrain() {
+eg::SparseMatrix<float> ClothSolver::init_elastic_lhs() {
   assert(pV_);
   assert(pF_);
   assert((pV_->rows() != 0));
@@ -68,7 +72,7 @@ eg::SparseMatrix<float> ClothSolver::init_elastic_constrain() {
 
   // compute deformation matrix for each triangle
   jacobians_.resize(pF_->rows());
-  std::vector<eg::Triplet<float>> AA_triplets;
+  std::vector<eg::Triplet<float>> triplets;
   for (int f = 0; f < pF_->rows(); ++f) {
     auto vidx = pF_->row(f);
     std::optional<Matrix69f> J = vectorized_jacobian(
@@ -78,20 +82,20 @@ eg::SparseMatrix<float> ClothSolver::init_elastic_constrain() {
       continue;
     }
     jacobians_[f] = *J;
-    eg::Matrix<float, 9, 9> local_AA = J->transpose() * (*J);
+    eg::Matrix<float, 9, 9> local_AA = (*J).transpose() * (*J);
 
     // convert the local AA to global AA
     for (int vi = 0; vi < 3; ++vi) {
       for (int vj = 0; vj < 3; ++vj) {
         for (int i = 0; i < 3; ++i) {
           for (int j = 0; j < 3; ++j) {
-            // for global AA, add stiffness and area as weight
+            // add stiffness and area as weight
             float val = elastic_stiffness_ * area_(f) *
                         local_AA(3 * vi + i, 3 * vj + j);
             if (abs(val) < zero_prune_threshold_) {
               continue;
             }
-            AA_triplets.emplace_back(3 * vidx(vi) + i, 3 * vidx(vj) + j, val);
+            triplets.emplace_back(3 * vidx(vi) + i, 3 * vidx(vj) + j, val);
           }
         }
       }
@@ -100,27 +104,8 @@ eg::SparseMatrix<float> ClothSolver::init_elastic_constrain() {
 
   int vnum = pV_->rows();
   eg::SparseMatrix<float> AA(3 * vnum, 3 * vnum);
-  AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
+  AA.setFromTriplets(triplets.begin(), triplets.end());
   return AA;
-}
-
-bool ClothSolver::cholesky_decomposition(const eg::SparseMatrix<float>& A) {
-  if (knum_ == 0) {
-    cholesky_solver_.compute(A);
-    return (cholesky_solver_.info() == eg::Success);
-  }
-
-  eg::SparseMatrix<float> G = perm_ * A * perm_.transpose();
-  // to solve with constrain, G is decomposed into
-  // block matrices for unknow and known
-  //
-  //     [ Guu Guk ]
-  // G = [         ]
-  //     [ Gku Gkk ]
-  auto Guu = G.block(0, 0, 3 * unum_, 3 * unum_);
-  Guk_ = G.block(0, 3 * unum_, 3 * unum_, 3 * knum_);
-  cholesky_solver_.compute(Guu);
-  return (cholesky_solver_.info() == eg::Success);
 }
 
 bool ClothSolver::is_neighboring_face(int f1, int f2) {
@@ -243,9 +228,6 @@ bool ClothSolver::init() {
   int vnum = pV_->rows();
   velocity_ = RMatrixX3f::Zero(vnum, 3);
 
-  // init permutation
-  init_constrain_permutation();
-
   // voroni mass
   eg::SparseMatrix<float> mass;
   igl::massmatrix(*pV_, *pF_, igl::MASSMATRIX_TYPE_VORONOI, mass);
@@ -253,32 +235,18 @@ bool ClothSolver::init() {
   // vectorized to 3vnum x 3vnum
   M_ = eg::kroneckerProduct(mass, eg::Matrix3f::Identity());
 
-  // laplacian bending constrain
-  eg::SparseMatrix<float> cot;
-  igl::cotmatrix(*pV_, *pF_, cot);
-  eg::SparseMatrix<float> W(vnum, vnum);
-  W.setIdentity();
-  for (int i = 0; i < vnum; i++) {
-    W.coeffRef(i, i) = bending_stiffness_ / mass.coeffRef(i, i) / density_;
-    // W.coeffRef(i, i) = bending_stiffness_ / mass.coeff(i, i);
-  }
-  eg::SparseMatrix<float> LWL = cot.transpose() * W * cot;
-  // vectorize to 3vmum x 3vnum
-  eg::SparseMatrix<float> vec_LWL =
-      eg::kroneckerProduct(LWL, eg::Matrix3f::Identity());
+  eg::SparseMatrix<float> position_lhs = init_position_lhs();
+  eg::SparseMatrix<float> bending_lhs = init_bending_lhs();
+  eg::SparseMatrix<float> elastic_lhs = init_elastic_lhs();
 
-  // elastic constrain
-  eg::SparseMatrix<float> AA = init_elastic_constrain();
-
-  // cholesky decomposition Gx = b
-  eg::SparseMatrix<float> G = M_ / dt_ / dt_ + AA + vec_LWL;
-  if (!cholesky_decomposition(G)) {
+  // cholesky decomposition Ax = b
+  eg::SparseMatrix<float> A =
+      M_ / dt_ / dt_ + position_lhs + bending_lhs + elastic_lhs;
+  cholesky_solver_.compute(A);
+  if (cholesky_solver_.info() != eg::Success) {
     spdlog::error("cholesky decomposition fail");
     return false;
   }
-
-  future_V_.resize(vnum, 3);
-  // collision_detector.init(pF_->rows());
 
   return true;
 }
@@ -288,14 +256,9 @@ void ClothSolver::reset() {
   area_ = {};
   M_ = {};
   jacobians_ = {};
-  knum_ = 0;
-  unum_ = 0;
-  perm_ = {};
-  Guk_ = {};
   pV_ = nullptr;
   pF_ = nullptr;
   pconstrain_set = nullptr;
-  future_V_ = {};
 }
 
 bool ClothSolver::solve() {
@@ -307,12 +270,15 @@ bool ClothSolver::solve() {
   eg::VectorXf rhs = (M_ / dt_ / dt_) * vec_V + (M_ / dt_) * vec_veclocity +
                      M_ * constant_acce_field_.replicate(vnum, 1);
 
+  // position cosntrain
+  for (int i : *pconstrain_set) {
+    rhs(eg::seqN(3 * i, 3)) = position_stiffness * pV_->row(i);
+  }
+
   // thread local rhs
   assert((thread_num_ > 0));
-  std::vector<eg::VectorXf> thread_local_rhs(thread_num_);
-  for (auto& r : thread_local_rhs) {
-    r = eg::VectorXf::Zero(3 * vnum);
-  }
+  std::vector<eg::VectorXf> thread_local_rhs(thread_num_,
+                                             eg::VectorXf::Zero(3 * vnum));
 // for each triangle, solve projection then modify the rhs
 #pragma omp parallel for num_threads(thread_num_)
   for (int f = 0; f < pF_->rows(); ++f) {
@@ -348,32 +314,10 @@ bool ClothSolver::solve() {
     rhs += r;
   }
 
-  eg::VectorXf b;
-  eg::VectorXf perm_rhs;
-  eg::VectorXf perm_vec_V;
-  // permute and add constrain if necessary
-  if (knum_ == 0) {
-    b = rhs;
-  } else {
-    perm_rhs = perm_ * rhs;
-    perm_vec_V = perm_ * vec_V;
-    b = perm_rhs(eg::seqN(0, 3 * unum_)) -
-        Guk_ * perm_vec_V(eg::seqN(3 * unum_, 3 * knum_));
-  }
-
-  eg::VectorXf sol = cholesky_solver_.solve(b);
+  eg::VectorXf sol = cholesky_solver_.solve(rhs);
   if (cholesky_solver_.info() != eg::Success) {
     spdlog::error("cholesky solve fail");
     return false;
-  }
-
-  if (knum_ == 0) {
-    future_V_.reshaped<eg::RowMajor>() = sol;
-  } else {
-    // combine our solution with constrain then permute it back
-    // use perm vec V as buffer for new vertex position
-    perm_vec_V(eg::seqN(0, 3 * unum_)) = sol;
-    future_V_.reshaped<eg::RowMajor>() = perm_.transpose() * perm_vec_V;
   }
 
   // detect and resolve collision and update velocity
@@ -383,8 +327,8 @@ bool ClothSolver::solve() {
   //                             ClothSolver::rtc_collision_callback, this);
   // }
 
-  velocity_ = (future_V_ - *pV_) / dt_;
-  *pV_ = future_V_;
+  velocity_ = (sol.reshaped<eg::RowMajor>(vnum, 3) - *pV_) / dt_;
+  *pV_ = sol.reshaped<eg::RowMajor>(vnum, 3);
 
   return true;
 }

@@ -18,21 +18,12 @@ class ClothSolver {
   // Per-triangle vectorized Jacobians
   std::vector<Matrix69f> jacobians_;
 
-  // constrain
-  int knum_ = 0;  // constrain vert num
-  int unum_ = 0;  // free vert num
-  Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic> perm_;
-  Eigen::SparseMatrix<float> Guk_;
-
   Eigen::SimplicialLDLT<Eigen::SparseMatrix<float>> cholesky_solver_;
 
-  // collision stuff
-  RMatrixX3f future_V_;
-  // CollisionDetector collision_detector;
-
   void init_constrain_permutation();
-  Eigen::SparseMatrix<float> init_elastic_constrain();
-  bool cholesky_decomposition(const Eigen::SparseMatrix<float>& A);
+  Eigen::SparseMatrix<float> init_position_lhs();
+  Eigen::SparseMatrix<float> init_bending_lhs();
+  Eigen::SparseMatrix<float> init_elastic_lhs();
   bool is_neighboring_face(int f1, int f2);
 
   // static void rtc_collision_callback(void* data, RTCCollision* collisions,
@@ -43,6 +34,7 @@ class ClothSolver {
   RMatrixX3i* pF_ = nullptr;
   std::unordered_set<int>* pconstrain_set = nullptr;
 
+  float position_stiffness = 1e7f;
   float elastic_stiffness_ = 1000.0f;
   float bending_stiffness_ = 1.0f;
   float density_ = 1.0f;
