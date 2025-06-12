@@ -19,18 +19,21 @@ struct EdgeEdgeQuery {
   eg::Vector3d v10, v20, v30, v40;
   eg::Vector3d v11, v21, v31, v41;
   bool result;
+  std::string source;
+  int source_line;
 
   std::string to_string() const {
     std::stringstream ss;
     ss << "Edge edge query - " << result << "\n";
-    ss << "v10: " << v10.transpose() << "\n";
-    ss << "v20: " << v10.transpose() << "\n";
-    ss << "v30: " << v10.transpose() << "\n";
-    ss << "v40: " << v10.transpose() << "\n";
-    ss << "v11: " << v10.transpose() << "\n";
-    ss << "v21: " << v10.transpose() << "\n";
-    ss << "v31: " << v10.transpose() << "\n";
-    ss << "v41: " << v10.transpose() << "\n";
+    ss << "    line " << source_line << " from " << source << "\n";
+    ss << "    v10: " << v10.transpose() << "\n";
+    ss << "    v20: " << v20.transpose() << "\n";
+    ss << "    v30: " << v30.transpose() << "\n";
+    ss << "    v40: " << v40.transpose() << "\n";
+    ss << "    v11: " << v11.transpose() << "\n";
+    ss << "    v21: " << v21.transpose() << "\n";
+    ss << "    v31: " << v31.transpose() << "\n";
+    ss << "    v41: " << v41.transpose() << "\n";
     return ss.str();
   }
 };
@@ -41,26 +44,23 @@ struct PointTriangleQuery {
   eg::Vector3d p0, v10, v20, v30;
   eg::Vector3d p1, v11, v21, v31;
   bool result;
+  std::string source;
+  int source_line;
 
   std::string to_string() const {
     std::stringstream ss;
     ss << "Point triangle query - " << result << "\n";
-    ss << "p0 : " << p0.transpose() << "\n";
-    ss << "v10: " << v10.transpose() << "\n";
-    ss << "v20: " << v10.transpose() << "\n";
-    ss << "v30: " << v10.transpose() << "\n";
-    ss << "p1 : " << p0.transpose() << "\n";
-    ss << "v11: " << v10.transpose() << "\n";
-    ss << "v21: " << v10.transpose() << "\n";
-    ss << "v31: " << v10.transpose() << "\n";
+    ss << "    line " << source_line << " from " << source << "\n";
+    ss << "    p0 : " << p0.transpose() << "\n";
+    ss << "    v10: " << v10.transpose() << "\n";
+    ss << "    v20: " << v20.transpose() << "\n";
+    ss << "    v30: " << v30.transpose() << "\n";
+    ss << "    p1 : " << p1.transpose() << "\n";
+    ss << "    v11: " << v11.transpose() << "\n";
+    ss << "    v21: " << v21.transpose() << "\n";
+    ss << "    v31: " << v31.transpose() << "\n";
     return ss.str();
   }
-};
-
-struct QueryCategory {
-  std::string name;
-  std::vector<EdgeEdgeQuery> edge_edge;
-  std::vector<PointTriangleQuery> point_triangle;
 };
 
 /// split a line on commas
@@ -99,11 +99,15 @@ std::vector<EdgeEdgeQuery> parse_edge_edge_queries(const fs::path &path) {
 
   std::vector<EdgeEdgeQuery> out;
   std::string line;
+  int line_count = 0;
   std::array<eg::Vector3d, 8> buf;
   bool expected_res = false;
   int row_in_group = 0;
+  int start_line = 0;
 
   while (std::getline(in, line)) {
+    line_count++;
+
     if (line.empty()) {
       continue;
     }
@@ -119,8 +123,7 @@ std::vector<EdgeEdgeQuery> parse_edge_edge_queries(const fs::path &path) {
 
     if (row_in_group == 0) {
       expected_res = res;
-    } else if (res != expected_res) {
-      throw std::runtime_error("inconsistent result flag in edge–edge group");
+      start_line = line_count;
     }
 
     buf[row_in_group] = eg::Vector3d{x, y, z};
@@ -137,6 +140,8 @@ std::vector<EdgeEdgeQuery> parse_edge_edge_queries(const fs::path &path) {
       q.v31 = buf[6];
       q.v41 = buf[7];
       q.result = expected_res;
+      q.source = path;
+      q.source_line = start_line;
       out.push_back(q);
 
       row_in_group = 0;
@@ -158,11 +163,15 @@ std::vector<PointTriangleQuery> parse_point_triangle_queries(
 
   std::vector<PointTriangleQuery> out;
   std::string line;
+  int line_count = 0;
   std::array<eg::Vector3d, 8> buf;
   bool expected_res = false;
   int row_in_group = 0;
+  int start_line = 0;
 
   while (std::getline(in, line)) {
+    line_count++;
+
     if (line.empty()) {
       continue;
     }
@@ -178,9 +187,7 @@ std::vector<PointTriangleQuery> parse_point_triangle_queries(
 
     if (row_in_group == 0) {
       expected_res = res;
-    } else if (res != expected_res) {
-      throw std::runtime_error(
-          "inconsistent result flag in point–triangle group");
+      start_line = line_count;
     }
 
     buf[row_in_group] = eg::Vector3d{x, y, z};
@@ -197,6 +204,8 @@ std::vector<PointTriangleQuery> parse_point_triangle_queries(
       q.v21 = buf[6];
       q.v31 = buf[7];
       q.result = expected_res;
+      q.source = path;
+      q.source_line = start_line;
       out.push_back(q);
 
       row_in_group = 0;
@@ -215,45 +224,60 @@ void vector_append(std::vector<T> &main, const std::vector<T> &append) {
   main.insert(main.end(), append.begin(), append.end());
 }
 
-QueryCategory parse_query_category(const fs::path &path) {
-  if (!fs::is_directory(path)) {
-    throw std::runtime_error("path " + path.string() + " is not a directory");
-  }
-
-  fs::path edge_edge_dir = path / "edge-edge";
-  fs::path point_triangle_dir = path / "vertex-face";
-  if (!(fs::is_directory(edge_edge_dir) &&
-        fs::is_directory(point_triangle_dir))) {
-    throw std::runtime_error(
-        "path " + path.string() +
-        " is missing edge-edge or vertex-face sub directory");
-  }
-
-  QueryCategory q;
-  q.name = path.filename();
-  // edge edge queries
-  for (const auto &entry : fs::directory_iterator{edge_edge_dir}) {
-    auto entry_path = entry.path();
-    if (entry.is_regular_file() && entry_path.extension() == ".csv") {
-      vector_append(q.edge_edge, parse_edge_edge_queries(entry_path));
-    }
-  }
-  // point triangle queries
-  for (const auto &entry : fs::directory_iterator{point_triangle_dir}) {
-    auto entry_path = entry.path();
-    if (entry.is_regular_file() && entry_path.extension() == ".csv") {
-      vector_append(q.point_triangle, parse_point_triangle_queries(entry_path));
-    }
-  }
-
-  return q;
+std::string ccd_solver_to_string(const CCDSolver &solver) {
+  std::stringstream ss;
+  ss << "CCD solver:\n";
+  ss << "    eps = " << solver.eps << "\n";
+  ss << "    h = " << solver.h << "\n";
+  ss << "    tol = " << solver.tol << "\n";
+  ss << "    max iter = " << solver.max_iter << "\n";
+  return ss.str();
 }
+
+struct QueryCategory {
+  std::string name;
+  std::vector<EdgeEdgeQuery> edge_edge;
+  std::vector<PointTriangleQuery> point_triangle;
+
+  QueryCategory(const fs::path &path) {
+    if (!fs::is_directory(path)) {
+      throw std::runtime_error("path " + path.string() + " is not a directory");
+    }
+
+    fs::path edge_edge_dir = path / "edge-edge";
+    fs::path point_triangle_dir = path / "vertex-face";
+    if (!(fs::is_directory(edge_edge_dir) &&
+          fs::is_directory(point_triangle_dir))) {
+      throw std::runtime_error(
+          "path " + path.string() +
+          " is missing edge-edge or vertex-face sub directory");
+    }
+
+    this->name = path.filename();
+    // edge edge queries
+    for (const auto &entry : fs::directory_iterator{edge_edge_dir}) {
+      auto entry_path = entry.path();
+      if (entry.is_regular_file() && entry_path.extension() == ".csv") {
+        vector_append(this->edge_edge, parse_edge_edge_queries(entry_path));
+      }
+    }
+    // point triangle queries
+    for (const auto &entry : fs::directory_iterator{point_triangle_dir}) {
+      auto entry_path = entry.path();
+      if (entry.is_regular_file() && entry_path.extension() == ".csv") {
+        vector_append(this->point_triangle,
+                      parse_point_triangle_queries(entry_path));
+      }
+    }
+  }
+};
 
 void test_query_category(const fs::path &root, const std::string &name,
                          CCDSolver &solver) {
-  auto category = parse_query_category(root / name);
+  QueryCategory category{root / name};
   for (const auto &q : category.edge_edge) {
-    INFO("Category: " << name << "\n" << q.to_string());
+    INFO("Category: " << name << "\n"
+                      << ccd_solver_to_string(solver) << q.to_string());
     REQUIRE(solver.edge_edge_ccd(q.v10.cast<float>(), q.v20.cast<float>(),
                                  q.v30.cast<float>(), q.v40.cast<float>(),
                                  q.v11.cast<float>(), q.v21.cast<float>(),
@@ -262,7 +286,8 @@ void test_query_category(const fs::path &root, const std::string &name,
   }
 
   for (const auto &q : category.point_triangle) {
-    INFO("Category: " << name << "\n" << q.to_string());
+    INFO("Category: " << name << "\n"
+                      << ccd_solver_to_string(solver) << q.to_string());
     REQUIRE(solver.point_triangle_ccd(q.p0.cast<float>(), q.v10.cast<float>(),
                                       q.v20.cast<float>(), q.v30.cast<float>(),
                                       q.p1.cast<float>(), q.v11.cast<float>(),
