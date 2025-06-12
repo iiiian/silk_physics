@@ -13,52 +13,49 @@
 namespace fs = std::filesystem;
 namespace eg = Eigen;
 
-struct EdgeEdgeQuery {
-  // edge 1 = v1 v2, edge 2 = v3 v4
+enum class QueryType { EdgeEdge, PointTriangle };
+
+struct Query {
+  QueryType type;
+  bool result;
+  std::string source;
+  int source_line;
+
+  // edge edge case
+  //     edge 1 = v1 v2, edge 2 = v3 v4
+  // point triangle case
+  //     triangle = v1 v2 v3, point = v4
   // suffix 0 = at t0, suffix 1 = at t1
   eg::Vector3d v10, v20, v30, v40;
   eg::Vector3d v11, v21, v31, v41;
-  bool result;
-  std::string source;
-  int source_line;
 
   std::string to_string() const {
     std::stringstream ss;
-    ss << "Edge edge query - " << result << "\n";
+    std::string type_str = (type == QueryType::EdgeEdge)
+                               ? "Edge edge query: "
+                               : "Point triangle query: ";
+    std::string result_str = (result) ? "true" : "false";
+    ss << type_str << "result = " << result_str << "\n";
     ss << "    line " << source_line << " from " << source << "\n";
-    ss << "    v10: " << v10.transpose() << "\n";
-    ss << "    v20: " << v20.transpose() << "\n";
-    ss << "    v30: " << v30.transpose() << "\n";
-    ss << "    v40: " << v40.transpose() << "\n";
-    ss << "    v11: " << v11.transpose() << "\n";
-    ss << "    v21: " << v21.transpose() << "\n";
-    ss << "    v31: " << v31.transpose() << "\n";
-    ss << "    v41: " << v41.transpose() << "\n";
-    return ss.str();
-  }
-};
-
-struct PointTriangleQuery {
-  // point = p, triangle = v1 v2 v3
-  // suffix 0 = at t0, suffix 1 = at t1
-  eg::Vector3d p0, v10, v20, v30;
-  eg::Vector3d p1, v11, v21, v31;
-  bool result;
-  std::string source;
-  int source_line;
-
-  std::string to_string() const {
-    std::stringstream ss;
-    ss << "Point triangle query - " << result << "\n";
-    ss << "    line " << source_line << " from " << source << "\n";
-    ss << "    p0 : " << p0.transpose() << "\n";
-    ss << "    v10: " << v10.transpose() << "\n";
-    ss << "    v20: " << v20.transpose() << "\n";
-    ss << "    v30: " << v30.transpose() << "\n";
-    ss << "    p1 : " << p1.transpose() << "\n";
-    ss << "    v11: " << v11.transpose() << "\n";
-    ss << "    v21: " << v21.transpose() << "\n";
-    ss << "    v31: " << v31.transpose() << "\n";
+    if (type == QueryType::EdgeEdge) {
+      ss << "    v10: " << v10.transpose() << "\n";
+      ss << "    v20: " << v20.transpose() << "\n";
+      ss << "    v30: " << v30.transpose() << "\n";
+      ss << "    v40: " << v40.transpose() << "\n";
+      ss << "    v11: " << v11.transpose() << "\n";
+      ss << "    v21: " << v21.transpose() << "\n";
+      ss << "    v31: " << v31.transpose() << "\n";
+      ss << "    v41: " << v41.transpose() << "\n";
+    } else {
+      ss << "    v10: " << v10.transpose() << "\n";
+      ss << "    v20: " << v20.transpose() << "\n";
+      ss << "    v30: " << v30.transpose() << "\n";
+      ss << "    p0 : " << v40.transpose() << "\n";
+      ss << "    v11: " << v11.transpose() << "\n";
+      ss << "    v21: " << v21.transpose() << "\n";
+      ss << "    v31: " << v31.transpose() << "\n";
+      ss << "    p1 : " << v41.transpose() << "\n";
+    }
     return ss.str();
   }
 };
@@ -91,13 +88,14 @@ double parse_rational(const std::string &num_str, const std::string &den_str) {
   return num / den;
 }
 
-std::vector<EdgeEdgeQuery> parse_edge_edge_queries(const fs::path &path) {
+std::vector<Query> parse_queries_from_csv(const fs::path &path,
+                                          QueryType type) {
   std::ifstream in{path};
   if (!in) {
     throw std::runtime_error("cannot open " + path.string());
   }
 
-  std::vector<EdgeEdgeQuery> out;
+  std::vector<Query> out;
   std::string line;
   int line_count = 0;
   std::array<eg::Vector3d, 8> buf;
@@ -130,90 +128,39 @@ std::vector<EdgeEdgeQuery> parse_edge_edge_queries(const fs::path &path) {
     ++row_in_group;
 
     if (row_in_group == 8) {
-      EdgeEdgeQuery q;
-      q.v10 = buf[0];
-      q.v20 = buf[1];
-      q.v30 = buf[2];
-      q.v40 = buf[3];
-      q.v11 = buf[4];
-      q.v21 = buf[5];
-      q.v31 = buf[6];
-      q.v41 = buf[7];
+      Query q;
+      q.type = type;
       q.result = expected_res;
       q.source = path;
       q.source_line = start_line;
-      out.push_back(q);
 
+      if (type == QueryType::EdgeEdge) {
+        q.v10 = buf[0];
+        q.v20 = buf[1];
+        q.v30 = buf[2];
+        q.v40 = buf[3];
+        q.v11 = buf[4];
+        q.v21 = buf[5];
+        q.v31 = buf[6];
+        q.v41 = buf[7];
+      } else {
+        q.v40 = buf[0];
+        q.v10 = buf[1];
+        q.v20 = buf[2];
+        q.v30 = buf[3];
+        q.v40 = buf[4];
+        q.v11 = buf[5];
+        q.v21 = buf[6];
+        q.v31 = buf[7];
+      }
+
+      out.push_back(q);
       row_in_group = 0;
     }
   }
 
   if (row_in_group != 0) {
-    throw std::runtime_error("trailing incomplete edge–edge group");
-  }
-  return out;
-}
-
-std::vector<PointTriangleQuery> parse_point_triangle_queries(
-    const fs::path &path) {
-  std::ifstream in{path};
-  if (!in) {
-    throw std::runtime_error("cannot open " + path.string());
-  }
-
-  std::vector<PointTriangleQuery> out;
-  std::string line;
-  int line_count = 0;
-  std::array<eg::Vector3d, 8> buf;
-  bool expected_res = false;
-  int row_in_group = 0;
-  int start_line = 0;
-
-  while (std::getline(in, line)) {
-    line_count++;
-
-    if (line.empty()) {
-      continue;
-    }
-    auto f = split(line, ',');
-    if (f.size() != 7) {
-      throw std::runtime_error("bad column count in CSV line");
-    }
-
-    double x = parse_rational(f[0], f[1]);
-    double y = parse_rational(f[2], f[3]);
-    double z = parse_rational(f[4], f[5]);
-    bool res = (f[6] == "1");
-
-    if (row_in_group == 0) {
-      expected_res = res;
-      start_line = line_count;
-    }
-
-    buf[row_in_group] = eg::Vector3d{x, y, z};
-    ++row_in_group;
-
-    if (row_in_group == 8) {
-      PointTriangleQuery q;
-      q.p0 = buf[0];
-      q.v10 = buf[1];
-      q.v20 = buf[2];
-      q.v30 = buf[3];
-      q.p1 = buf[4];
-      q.v11 = buf[5];
-      q.v21 = buf[6];
-      q.v31 = buf[7];
-      q.result = expected_res;
-      q.source = path;
-      q.source_line = start_line;
-      out.push_back(q);
-
-      row_in_group = 0;
-    }
-  }
-
-  if (row_in_group != 0) {
-    throw std::runtime_error("trailing incomplete point–triangle group");
+    throw std::runtime_error("trailing incomplete query group");
   }
   return out;
 }
@@ -236,8 +183,8 @@ std::string ccd_solver_to_string(const CCDSolver &solver) {
 
 struct QueryCategory {
   std::string name;
-  std::vector<EdgeEdgeQuery> edge_edge;
-  std::vector<PointTriangleQuery> point_triangle;
+  std::vector<Query> edge_edge;
+  std::vector<Query> point_triangle;
 
   QueryCategory(const fs::path &path) {
     if (!fs::is_directory(path)) {
@@ -258,15 +205,17 @@ struct QueryCategory {
     for (const auto &entry : fs::directory_iterator{edge_edge_dir}) {
       auto entry_path = entry.path();
       if (entry.is_regular_file() && entry_path.extension() == ".csv") {
-        vector_append(this->edge_edge, parse_edge_edge_queries(entry_path));
+        vector_append(this->edge_edge,
+                      parse_queries_from_csv(entry_path, QueryType::EdgeEdge));
       }
     }
     // point triangle queries
     for (const auto &entry : fs::directory_iterator{point_triangle_dir}) {
       auto entry_path = entry.path();
       if (entry.is_regular_file() && entry_path.extension() == ".csv") {
-        vector_append(this->point_triangle,
-                      parse_point_triangle_queries(entry_path));
+        vector_append(
+            this->point_triangle,
+            parse_queries_from_csv(entry_path, QueryType::PointTriangle));
       }
     }
   }
@@ -278,21 +227,19 @@ void test_query_category(const fs::path &root, const std::string &name,
   for (const auto &q : category.edge_edge) {
     INFO("Category: " << name << "\n"
                       << ccd_solver_to_string(solver) << q.to_string());
-    REQUIRE(solver.edge_edge_ccd(q.v10.cast<float>(), q.v20.cast<float>(),
-                                 q.v30.cast<float>(), q.v40.cast<float>(),
-                                 q.v11.cast<float>(), q.v21.cast<float>(),
-                                 q.v31.cast<float>(), q.v41.cast<float>(), 0.0,
-                                 1.0) == q.result);
+    CHECK(solver.edge_edge_ccd(
+              q.v10.cast<float>(), q.v20.cast<float>(), q.v30.cast<float>(),
+              q.v40.cast<float>(), q.v11.cast<float>(), q.v21.cast<float>(),
+              q.v31.cast<float>(), q.v41.cast<float>(), 0.0, 1.0) == q.result);
   }
 
   for (const auto &q : category.point_triangle) {
     INFO("Category: " << name << "\n"
                       << ccd_solver_to_string(solver) << q.to_string());
-    REQUIRE(solver.point_triangle_ccd(q.p0.cast<float>(), q.v10.cast<float>(),
-                                      q.v20.cast<float>(), q.v30.cast<float>(),
-                                      q.p1.cast<float>(), q.v11.cast<float>(),
-                                      q.v21.cast<float>(), q.v31.cast<float>(),
-                                      0.0, 1.0) == q.result);
+    CHECK(solver.point_triangle_ccd(
+              q.v40.cast<float>(), q.v10.cast<float>(), q.v20.cast<float>(),
+              q.v30.cast<float>(), q.v41.cast<float>(), q.v11.cast<float>(),
+              q.v21.cast<float>(), q.v31.cast<float>(), 0.0, 1.0) == q.result);
   }
 }
 
