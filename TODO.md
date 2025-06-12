@@ -2,6 +2,10 @@
 
 - Best FOSS blender bloth sim plugins
 
+# Next step
+
+- [ ] integrate tight inclusion benchmark/testing -> ccd works correct and efficiently
+
 # Roadmap
 
 ## Tier 1

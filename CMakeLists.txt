@@ -13,11 +13,6 @@ add_subdirectory(extern/libigl)
 add_subdirectory(extern/polyscope)
 add_subdirectory(extern/portable-file-dialogs)
 add_subdirectory(extern/arpack-ng)
-# find_package(embree 4 REQUIRED)
-
-# add_subdirectory(extern/tbb)
-# set(EMBREE_TUTORIALS OFF CACHE BOOL "Disable Embree Tutorial" FORCE)
-# add_subdirectory(extern/embree)
 
 add_executable(
     main
@@ -37,6 +32,7 @@ add_executable(
     "src/widgets/mesh_statistic_widget.cpp"
     "extern/polyscope/deps/imgui/imgui/misc/cpp/imgui_stdlib.cpp"
 )
+
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_options(
         main
@@ -61,3 +57,7 @@ target_link_libraries(main PRIVATE portable_file_dialogs)
 target_link_libraries(main PRIVATE arpack)
 # target_link_libraries(main PRIVATE embree)
 target_link_libraries(main PRIVATE OpenMP::OpenMP_CXX)
+
+enable_testing()
+add_subdirectory(extern/catch2)
+add_subdirectory(test)

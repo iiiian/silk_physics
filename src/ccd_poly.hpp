@@ -32,7 +32,7 @@ class CCDPolynomialSolver {
   // time interval
   float t0_, t1_;
 
-  float tol_ratio_;
+  float tol_;
   int max_iter_;
   float eps_;
 
@@ -45,8 +45,8 @@ class CCDPolynomialSolver {
   CCDPolySolution cubic_ccd() const;
 
  public:
-  CCDPolySolution solve(const NormalizedCCDPoly& poly, float tol_ratio,
-                        int max_iter, float eps);
+  CCDPolySolution solve(const NormalizedCCDPoly& poly, float tol, int max_iter,
+                        float eps);
   CCDPolySolution solve(float a, float b, float c, float d, float t0, float t1,
-                        float tol_ratio, int max_iter, float eps);
+                        float tol, int max_iter, float eps);
 };

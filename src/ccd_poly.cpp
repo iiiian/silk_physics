@@ -36,10 +36,9 @@ inline float CCDPolynomialSolver::eval_derivative(float x) const {
 }
 
 inline float CCDPolynomialSolver::newton(float x) const {
-  float tol = (t1_ - t0_) * tol_ratio_;
   for (int it = 0; it < max_iter_; ++it) {
     float x_next = x - eval(x) / eval_derivative(x);
-    if (std::abs(x_next - x) < tol) {
+    if (std::abs(x_next - x) < tol_) {
       return x_next;
     }
     x = x_next;
@@ -48,16 +47,15 @@ inline float CCDPolynomialSolver::newton(float x) const {
 }
 
 inline CCDPolySolution CCDPolynomialSolver::try_clamp(float x) const {
-  float tol = (t1_ - t0_) * tol_ratio_;
   if (x < t0_) {
-    if (x < t0_ - tol) {
+    if (x < t0_ - tol_) {
       return CCDPolySolution();
     }
     return CCDPolySolution(t0_);
   }
 
   if (x > t1_) {
-    if (x > t1_ + tol) {
+    if (x > t1_ + tol_) {
       return CCDPolySolution();
     }
     return CCDPolySolution(t1_);
@@ -177,15 +175,14 @@ CCDPolySolution CCDPolynomialSolver::cubic_ccd() const {
 }
 
 CCDPolySolution CCDPolynomialSolver::solve(const NormalizedCCDPoly& poly,
-                                           float tol_ratio, int max_iter,
-                                           float eps) {
+                                           float tol, int max_iter, float eps) {
   a_ = poly.a;
   b_ = poly.b;
   c_ = poly.c;
   d_ = poly.d;
   t0_ = 0;
   t1_ = 1;
-  tol_ratio_ = tol_ratio;
+  tol_ = tol;
   max_iter_ = max_iter;
   eps_ = eps;
 
@@ -193,7 +190,7 @@ CCDPolySolution CCDPolynomialSolver::solve(const NormalizedCCDPoly& poly,
 }
 
 CCDPolySolution CCDPolynomialSolver::solve(float a, float b, float c, float d,
-                                           float t0, float t1, float tol_ratio,
+                                           float t0, float t1, float tol,
                                            int max_iter, float eps) {
   assert((t1_ > t0_));
 
@@ -203,7 +200,7 @@ CCDPolySolution CCDPolynomialSolver::solve(float a, float b, float c, float d,
   d_ = d;
   t0_ = t0;
   t1_ = t1;
-  tol_ratio_ = tol_ratio;
+  tol_ = tol;
   max_iter_ = max_iter;
   eps_ = eps;
 

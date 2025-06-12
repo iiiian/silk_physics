@@ -13,3 +13,9 @@
 [submodule "extern/arpack-ng"]
 	path = extern/arpack-ng
 	url = https://github.com/opencollab/arpack-ng.git
+[submodule "extern/catch2"]
+	path = extern/catch2
+	url = https://github.com/catchorg/Catch2.git
+[submodule "misc/ccd-sample-queries"]
+	path = misc/ccd-sample-queries
+	url = https://github.com/Continuous-Collision-Detection/Sample-Queries.git
