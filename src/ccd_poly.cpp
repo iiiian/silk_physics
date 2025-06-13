@@ -161,15 +161,17 @@ CCDPolySolution CCDPolynomialSolver::cubic_ccd() const {
   // one potential collision before p5
   CCDPolySolution result;
   float p8 = eval(p5);
-  if (p8 < eps_) {
+  float p9 = eval(t0_);
+  if (p8 < eps_ && p9 > eps_) {
     result.n++;
     result.t1 = (p8 > -eps_) ? p5 : newton(t0_);
   }
   // one potential collision after p6
-  float p9 = eval(t1_);
-  if (p9 < eps_ && eval(p6) > 0) {
+  float p10 = eval(t1_);
+  if (p10 < eps_ && eval(p6) > 0) {
     result.n++;
-    result.t2 = (p9 > -eps_) ? t1_ : newton(t1_);
+    float& p11 = (result.n == 1) ? result.t1 : result.t2;
+    p11 = (p10 > -eps_) ? t1_ : newton(t1_);
   }
   return result;
 }

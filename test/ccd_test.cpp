@@ -245,7 +245,7 @@ void test_query_category(const fs::path &root, const std::string &name,
 
 TEST_CASE("ccd-tests", "[ccd]") {
   CCDSolver solver;
-  solver.eps = 1e-6;
+  solver.eps = 1e-10;
   solver.max_iter = 10;
   solver.h = 0.01;
   solver.tol = 0.1;
@@ -287,4 +287,5 @@ TEST_CASE("ccd-tests", "[ccd]") {
   SECTION("golf-ball") { test_query_category(root, "golf-ball", solver); }
   SECTION("mat-twist") { test_query_category(root, "mat-twist", solver); }
   SECTION("unit-tests") { test_query_category(root, "unit-tests", solver); }
+  SECTION("fail") { test_query_category(root, "fail", solver); }
 }
