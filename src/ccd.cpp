@@ -156,6 +156,7 @@ bool edge_edge_collision(eg::Ref<const eg::Vector3f> v1,
   // both para are inside
   eg::Vector3f e12c = v1 + e12p * v21;
   eg::Vector3f e34c = v3 + e34p * v43;
+  float ttt = (e12c - e34c).squaredNorm();
   return ((e12c - e34c).squaredNorm() < h * h);
 }
 
@@ -166,33 +167,15 @@ bool CCDSolver::point_triangle_ccd(
     eg::Ref<const eg::Vector3f> v21, eg::Ref<const eg::Vector3f> v31, float t0,
     float t1) {
   NormalizedCCDPoly poly{p0, v10, v20, v30, p1, v11, v21, v31};
-  CCDPolySolution poly_sol = poly_solver_.solve(poly, tol, max_iter, eps);
-  if (poly_sol.n == 0) {
+  auto toi = poly_solver_.solve(poly, tol, max_iter, eps);
+  if (!toi) {
     return false;
   }
 
-  if (poly_sol.n == 1) {
-    float toi = poly_sol.t1;
-    eg::Vector3f v1c = v10 + toi * (v11 - v10);
-    eg::Vector3f v2c = v20 + toi * (v21 - v20);
-    eg::Vector3f v3c = v30 + toi * (v31 - v30);
-    eg::Vector3f pc = p0 + toi * (p1 - p0);
-    return point_triangle_collision(pc, v1c, v2c, v3c, h, eps);
-  }
-
-  // 2 solution
-  float toi = poly_sol.t1;
-  eg::Vector3f v1c = v10 + toi * (v11 - v10);
-  eg::Vector3f v2c = v20 + toi * (v21 - v20);
-  eg::Vector3f v3c = v30 + toi * (v31 - v30);
-  eg::Vector3f pc = p0 + toi * (p1 - p0);
-  return point_triangle_collision(pc, v1c, v2c, v3c, h, eps);
-
-  toi = poly_sol.t2;
-  v1c = v10 + toi * (v11 - v10);
-  v2c = v20 + toi * (v21 - v20);
-  v3c = v30 + toi * (v31 - v30);
-  pc = p0 + toi * (p1 - p0);
+  eg::Vector3f v1c = v10 + toi.value() * (v11 - v10);
+  eg::Vector3f v2c = v20 + toi.value() * (v21 - v20);
+  eg::Vector3f v3c = v30 + toi.value() * (v31 - v30);
+  eg::Vector3f pc = p0 + toi.value() * (p1 - p0);
   return point_triangle_collision(pc, v1c, v2c, v3c, h, eps);
 }
 
@@ -202,33 +185,19 @@ bool CCDSolver::edge_edge_ccd(
     eg::Ref<const eg::Vector3f> v11, eg::Ref<const eg::Vector3f> v21,
     eg::Ref<const eg::Vector3f> v31, eg::Ref<const eg::Vector3f> v41, float t0,
     float t1) {
+  // if (edge_edge_collision(v10, v20, v30, v40, h, eps)) {
+  //   return true;
+  // }
+
   NormalizedCCDPoly poly{v10, v20, v30, v40, v11, v21, v31, v41};
-  CCDPolySolution poly_sol = poly_solver_.solve(poly, tol, max_iter, eps);
-  if (poly_sol.n == 0) {
+  auto toi = poly_solver_.solve(poly, tol, max_iter, eps);
+  if (!toi) {
     return false;
   }
 
-  if (poly_sol.n == 1) {
-    float toi = poly_sol.t1;
-    eg::Vector3f v1c = v10 + toi * (v11 - v10);
-    eg::Vector3f v2c = v20 + toi * (v21 - v20);
-    eg::Vector3f v3c = v30 + toi * (v31 - v30);
-    eg::Vector3f v4c = v40 + toi * (v41 - v40);
-    return edge_edge_collision(v1c, v2c, v3c, v4c, h, eps);
-  }
-
-  // 2 solution
-  float toi = poly_sol.t1;
-  eg::Vector3f v1c = v10 + toi * (v11 - v10);
-  eg::Vector3f v2c = v20 + toi * (v21 - v20);
-  eg::Vector3f v3c = v30 + toi * (v31 - v30);
-  eg::Vector3f v4c = v40 + toi * (v41 - v40);
-  return edge_edge_collision(v1c, v2c, v3c, v4c, h, eps);
-
-  toi = poly_sol.t2;
-  v1c = v10 + toi * (v11 - v10);
-  v2c = v20 + toi * (v21 - v20);
-  v3c = v30 + toi * (v31 - v30);
-  v4c = v40 + toi * (v41 - v40);
+  eg::Vector3f v1c = v10 + toi.value() * (v11 - v10);
+  eg::Vector3f v2c = v20 + toi.value() * (v21 - v20);
+  eg::Vector3f v3c = v30 + toi.value() * (v31 - v30);
+  eg::Vector3f v4c = v40 + toi.value() * (v41 - v40);
   return edge_edge_collision(v1c, v2c, v3c, v4c, h, eps);
 }

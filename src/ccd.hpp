@@ -5,7 +5,7 @@
 #include "ccd_poly.hpp"
 
 class CCDSolver {
-  CCDPolynomialSolver poly_solver_;
+  NormalizedCCDPolySolver poly_solver_;
 
  public:
   float eps;

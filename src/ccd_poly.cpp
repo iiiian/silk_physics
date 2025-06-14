@@ -19,23 +19,26 @@ NormalizedCCDPoly::NormalizedCCDPoly(
   eg::Vector3f p41 = x40 - x10;
   eg::Vector3f v41 = (x41 - x11) - p41;
 
-  a = v21.cross(v31).dot(v41);
-  b = x21.cross(v31).dot(v41) + v21.cross(x31).dot(v41) +
-      v21.cross(v31).dot(x41);
-  c = v21.cross(x31).dot(x41) + x21.cross(v31).dot(x41) +
-      x21.cross(x31).dot(v41);
-  d = x21.cross(x31).dot(x41);
+  eg::Vector3f v21cv31 = v21.cross(v31);
+  eg::Vector3f p21cv31 = p21.cross(v31);
+  eg::Vector3f v21cp31 = v21.cross(p31);
+  eg::Vector3f p21cp31 = p21.cross(p31);
+
+  a = v21cv31.dot(v41);
+  b = p21cv31.dot(v41) + v21cp31.dot(v41) + v21cv31.dot(p41);
+  c = v21cp31.dot(p41) + p21cv31.dot(p41) + p21cp31.dot(v41);
+  d = p21cp31.dot(p41);
 }
 
-inline float CCDPolynomialSolver::eval(float x) const {
+inline float NormalizedCCDPolySolver::eval(float x) const {
   return x * (x * (x * a_ + b_) + c_) + d_;
 }
 
-inline float CCDPolynomialSolver::eval_derivative(float x) const {
+inline float NormalizedCCDPolySolver::eval_derivative(float x) const {
   return x * (x * 3 * a_ + 2 * b_) + c_;
 }
 
-inline float CCDPolynomialSolver::newton(float x) const {
+inline float NormalizedCCDPolySolver::newton(float x) const {
   for (int it = 0; it < max_iter_; ++it) {
     float x_next = x - eval(x) / eval_derivative(x);
     if (std::abs(x_next - x) < tol_) {
@@ -46,162 +49,312 @@ inline float CCDPolynomialSolver::newton(float x) const {
   return x;
 }
 
-inline CCDPolySolution CCDPolynomialSolver::try_clamp(float x) const {
-  if (x < t0_) {
-    if (x < t0_ - tol_) {
-      return CCDPolySolution();
-    }
-    return CCDPolySolution(t0_);
-  }
-
-  if (x > t1_) {
-    if (x > t1_ + tol_) {
-      return CCDPolySolution();
-    }
-    return CCDPolySolution(t1_);
-  }
-
-  return CCDPolySolution(x);
-}
-
-CCDPolySolution CCDPolynomialSolver::linear_ccd() const {
-  // if not even linear ccd exists, its likely the object are stationary.
-  // hence no collision.
+std::optional<float> NormalizedCCDPolySolver::linear_ccd() const {
+  // since coplaner case has already been dealt before, this means object is
+  // stationary
   if (std::abs(c_) < eps_) {
-    return CCDPolySolution();
+    return std::nullopt;
   }
 
-  return try_clamp(-d_ / c_);
+  float tmp = -d_ / c_;
+  // TODO: tol
+  if (tmp > 1 + eps_ || tmp < eps_) {
+    return std::nullopt;
+  }
+  return tmp;
 }
 
-CCDPolySolution CCDPolynomialSolver::quadratic_ccd() const {
+std::optional<float> NormalizedCCDPolySolver::quadratic_ccd() const {
   if (std::abs(b_) < eps_) {
     return linear_ccd();
   }
 
-  // b^2 - 4ac for quadratic
-  float p0 = c_ * c_ - 4 * b_ * d_;
+  float mirror = -c_ / (2 * b_);
+  if (0 > mirror - eps_) {
+    return std::nullopt;
+  }
 
-  if (p0 < -eps_) {
-    return CCDPolySolution();
+  // b^2 - 4ac for quadratic
+  float tmp0 = c_ * c_ - 4 * b_ * d_;
+
+  // no root
+  if (tmp0 < 0) {
+    return std::nullopt;
   }
-  if (p0 < eps_) {
-    return try_clamp(-c_ / (2 * b_));
+
+  // one root
+  float tmp2 = (-c_ - std::sqrt(tmp0)) / (2 * b_);
+  // TODO: tol
+  if (tmp2 > 1 + eps_ || tmp2 < eps_) {
+    return std::nullopt;
   }
-  return try_clamp((-c_ - std::sqrt(p0)) / (2 * b_));
+  return tmp2;
 }
 
-CCDPolySolution CCDPolynomialSolver::cubic_ccd() const {
+std::optional<float> NormalizedCCDPolySolver::coplaner_linear_ccd() const {
+  // complete coplaner motion, we are in big trouble
+  if (std::abs(b_) < eps_) {
+    return std::nullopt;
+  }
+
+  float tmp0 = -c_ / b_;
+  if (tmp0 < eps_ || tmp0 > 1) {
+    return std::nullopt;
+  }
+  return tmp0;
+}
+std::optional<float> NormalizedCCDPolySolver::coplaner_quadratic_ccd() const {
+  if (std::abs(a_) < eps_) {
+    return coplaner_linear_ccd();
+  }
+
+  // b^2 - 4ac for quadratic
+  float tmp0 = b_ * b_ - 4 * a_ * c_;
+
+  // no root
+  if (tmp0 < -eps_) {
+    return std::nullopt;
+  }
+  // one root
+  if (tmp0 < eps_) {
+    float tmp1 = -b_ / (2 * a_);
+    if (tmp1 < eps_ || tmp1 > 1) {
+      return std::nullopt;
+    }
+    return tmp1;
+  }
+
+  // two root
+  float tmp2 = std::sqrt(tmp0);
+  float tmp3 = (-b_ - tmp2) / (2 * a_);
+  // test first root
+  if (tmp3 > 1) {
+    return std::nullopt;
+  }
+  if (tmp3 > eps_) {
+    return tmp3;
+  }
+  // first root fail but second root still possible
+  else {
+    float tmp4 = (-b_ - tmp2) / (2 * a_);
+    if (tmp4 < eps_ || tmp4 > 1) {
+      return std::nullopt;
+    }
+    return tmp4;
+  }
+}
+
+std::optional<float> NormalizedCCDPolySolver::cubic_ccd() {
+  float scale = 1.0f / std::max(std::max(std::abs(a_), std::abs(b_)),
+                                std::max(std::abs(c_), std::abs(d_)));
+  a_ *= scale;
+  b_ *= scale;
+  c_ *= scale;
+  d_ *= scale;
+
+  if (std::abs(d_) < eps_) {
+    return coplaner_quadratic_ccd();
+  }
+
+  // make sure eval(t0) > 0
+  if (d_ < 0) {
+    a_ = -a_;
+    b_ = -b_;
+    c_ = -c_;
+    d_ = -d_;
+  }
+
   if (std::abs(a_) < eps_) {
     return quadratic_ccd();
   }
 
-  // b^2 - 4ac for first derivative
-  float p0 = 4 * b_ * b_ - 12 * a_ * c_;
+  float tmp0 = b_ * b_ - 3 * a_ * c_;
+  float eval_t1 = a_ + b_ + c_ + d_;
   // case 1, 2, 3, 4
-  if (p0 < eps_) {
+  if (tmp0 < eps_) {
     // case 1, 3
     if (a_ > 0) {
-      return CCDPolySolution();
+      return std::nullopt;
     }
 
     // case 2, 4
-    float p1 = eval(t1_);
-    if (p1 > eps_) {
-      return CCDPolySolution();
-    } else if (p1 > -eps_) {
-      return CCDPolySolution(p1);
+    if (eval_t1 > eps_) {
+      return std::nullopt;
+    }
+    if (eval_t1 > -eps_) {
+      return eval_t1;
     }
 
-    float p2 = eval(-b_ / a_ / 3);  // mirror point
+    float eval_mirror = eval(-b_ / a_ / 3);  // mirror point
+    if (std::abs(eval_mirror) < eps_) {
+      return eval_mirror;
+    }
     // collision between mirror point, t1
-    if (p2 > 0) {
-      return CCDPolySolution(newton(t1_));
+    if (eval_mirror > 0) {
+      return newton(1);
     }
     // collision between t0, mirror point
-    return CCDPolySolution(newton(t0_));
+    else {
+      return newton(0);
+    }
   }
 
-  float p3 = -b_ / (3 * a_);
-  float p4 = std::sqrt(p0) / (3 * a_);
+  float tmp1 = -b_ / (3 * a_);
+  float tmp2 = std::sqrt(tmp0) / (3 * a_);
   // root of first derivative
-  float p5 = p3 - p4;
-  float p6 = p3 + p4;
+  float e1 = tmp1 - tmp2;
+  float e2 = tmp1 + tmp2;
 
   // case 5
   if (a_ > 0) {
-    if (t0_ > p6 || t1_ < p5 || eval(p6) > eps_) {
-      return CCDPolySolution();
+    // t0 after e2
+    // no collision
+    if (0 > e2) {
+      return std::nullopt;
     }
 
-    // potential collision between p5, p6
-    float p7 = -b_ / a_ / 3;  // mirror point
-    return try_clamp(newton(p7));
+    // t0 after e1 before e2, t1 before e2
+    // potential collision between t0 t1
+    if (0 > e1 && 1 < e2) {
+      if (eval_t1 > eps_) {
+        return std::nullopt;
+      }
+      if (eval_t1 > -eps_) {
+        return eval_t1;
+      }
+      // start from mirror point
+      return newton(tmp1);
+    }
+
+    // t0 after e1 before e2, t1 after e2
+    // potential collision between t0, e2
+    if (0 > e1 && 1 > e2) {
+      float eval_e2 = eval(e2);
+      if (eval_e2 > eps_) {
+        return std::nullopt;
+      }
+      if (eval_e2 > -eps_) {
+        return eval_e2;
+      }
+      // start from mirror point
+      return newton(tmp1);
+    }
+
+    // t0 before e1, t1 before e1
+    // no collision
+    if (1 < e1) {
+      return std::nullopt;
+    }
+
+    // t0 before e1, t1 after e1 before e2
+    // potential collision between e1 t1
+    if (1 < e2) {
+      if (eval_t1 > eps_) {
+        return std::nullopt;
+      }
+      if (eval_t1 > -eps_) {
+        return eval_t1;
+      }
+      // start from mirror point
+      return newton(tmp1);
+    }
+
+    // t0 before e1, t1 after e2
+    // potential between e1 e2
+    float eval_e2 = eval(e2);
+    if (eval_e2 > eps_) {
+      return std::nullopt;
+    }
+    if (eval_e2 > -eps_) {
+      return eval_e2;
+    }
+    // start from mirror point
+    return newton(tmp1);
   }
 
   // case 6
 
-  // collision after p6
-  if (t0_ > p5) {
-    if (eval(t1_) > eps_) {
-      return CCDPolySolution();
+  // t0 after e2
+  // potential collision between t0 t1
+  if (0 > e2) {
+    if (eval_t1 > eps_) {
+      return std::nullopt;
     }
-    return try_clamp(newton(t1_));
+    if (eval_t1 > -eps_) {
+      return eval_t1;
+    }
+    return newton(1);
   }
 
-  // collision before p5
-  if (t1_ < p6) {
-    if (eval(std::min(t1_, p6)) > eps_) {
-      return CCDPolySolution();
-    }
-    return try_clamp(newton(t0_));
+  // t0 after e1 before e2, t1 before e2
+  // no collision
+  if (0 > e1 && 1 < e2) {
+    return std::nullopt;
   }
 
-  // 2 potential collisions
-  // one potential collision before p5
-  CCDPolySolution result;
-  float p8 = eval(p5);
-  float p9 = eval(t0_);
-  if (p8 < eps_ && p9 > eps_) {
-    result.n++;
-    result.t1 = (p8 > -eps_) ? p5 : newton(t0_);
+  // t0 after e1 before e2 , t1 after e2
+  // potential collision between e2 t1
+  if (0 > e1 && 1 > e2) {
+    if (eval_t1 > eps_) {
+      return std::nullopt;
+    }
+    if (eval_t1 > -eps_) {
+      return eval_t1;
+    }
+    return newton(1);
   }
-  // one potential collision after p6
-  float p10 = eval(t1_);
-  if (p10 < eps_ && eval(p6) > 0) {
-    result.n++;
-    float& p11 = (result.n == 1) ? result.t1 : result.t2;
-    p11 = (p10 > -eps_) ? t1_ : newton(t1_);
+
+  // t0 before e1, t1 before e1
+  // potential collision before t0 t1
+  if (1 < e1) {
+    if (eval_t1 > eps_) {
+      return std::nullopt;
+    }
+    if (eval_t1 > -eps_) {
+      return eval_t1;
+    }
+    return newton(0);
   }
-  return result;
+
+  // t0 before e1, t1 after e1 before e2
+  // potential collision t0 e1
+  if (1 < e2) {
+    float eval_e1 = eval(e1);
+    if (eval_e1 > eps_) {
+      return std::nullopt;
+    }
+    if (eval_e1 > -eps_) {
+      return eval_e1;
+    }
+    return newton(0);
+  }
+
+  // t0 before e1, t1 after e2
+  // potential collision between t0 e1 and e2 t1
+  // test t0 e1 collision
+  float eval_e1 = eval(e1);
+  if (eval_e1 < eps_) {
+    if (eval_e1 > -eps_) {
+      return eval_e1;
+    }
+    return newton(0);
+  }
+  // no collision between t0 e1, test e2 t1
+  if (eval_t1 > eps_) {
+    return std::nullopt;
+  }
+  if (eval_t1 > -eps_) {
+    return eval_t1;
+  }
+  return newton(1);
 }
 
-CCDPolySolution CCDPolynomialSolver::solve(const NormalizedCCDPoly& poly,
-                                           float tol, int max_iter, float eps) {
+std::optional<float> NormalizedCCDPolySolver::solve(
+    const NormalizedCCDPoly& poly, float tol, int max_iter, float eps) {
   a_ = poly.a;
   b_ = poly.b;
   c_ = poly.c;
   d_ = poly.d;
-  t0_ = 0;
-  t1_ = 1;
-  tol_ = tol;
-  max_iter_ = max_iter;
-  eps_ = eps;
-
-  return cubic_ccd();
-}
-
-CCDPolySolution CCDPolynomialSolver::solve(float a, float b, float c, float d,
-                                           float t0, float t1, float tol,
-                                           int max_iter, float eps) {
-  assert((t1_ > t0_));
-
-  a_ = a;
-  b_ = b;
-  c_ = c;
-  d_ = d;
-  t0_ = t0;
-  t1_ = t1;
   tol_ = tol;
   max_iter_ = max_iter;
   eps_ = eps;
