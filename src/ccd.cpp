@@ -156,7 +156,6 @@ bool edge_edge_collision(eg::Ref<const eg::Vector3f> v1,
   // both para are inside
   eg::Vector3f e12c = v1 + e12p * v21;
   eg::Vector3f e34c = v3 + e34p * v43;
-  float ttt = (e12c - e34c).squaredNorm();
   return ((e12c - e34c).squaredNorm() < h * h);
 }
 

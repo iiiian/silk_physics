@@ -226,7 +226,7 @@ void test_query_category(const fs::path &root, const std::string &name) {
   CCDSolver solver;
   solver.tol = 0.1;
   solver.eps = 1e-6;
-  solver.h = 0.01;
+  solver.h = 0.001;
   solver.max_iter = 10;
 
   for (const auto &q : category.edge_edge) {

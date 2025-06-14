@@ -112,36 +112,17 @@ std::optional<float> NormalizedCCDPolySolver::coplaner_quadratic_ccd() const {
   float tmp0 = b_ * b_ - 4 * a_ * c_;
 
   // no root
-  if (tmp0 < -eps_) {
+  if (tmp0 < 0) {
     return std::nullopt;
   }
   // one root
-  if (tmp0 < eps_) {
-    float tmp1 = -b_ / (2 * a_);
-    if (tmp1 < eps_ || tmp1 > 1) {
-      return std::nullopt;
-    }
-    return tmp1;
-  }
-
-  // two root
   float tmp2 = std::sqrt(tmp0);
   float tmp3 = (-b_ - tmp2) / (2 * a_);
   // test first root
-  if (tmp3 > 1) {
+  if (tmp3 < eps_ || tmp3 > 1 + eps_) {
     return std::nullopt;
   }
-  if (tmp3 > eps_) {
-    return tmp3;
-  }
-  // first root fail but second root still possible
-  else {
-    float tmp4 = (-b_ - tmp2) / (2 * a_);
-    if (tmp4 < eps_ || tmp4 > 1) {
-      return std::nullopt;
-    }
-    return tmp4;
-  }
+  return tmp3;
 }
 
 std::optional<float> NormalizedCCDPolySolver::cubic_ccd() {
