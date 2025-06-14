@@ -130,8 +130,9 @@ bool edge_edge_collision(eg::Ref<const eg::Vector3f> v1,
     float e12p_b = std::clamp(v21.dot(e34c_b - v1) / v21dv21, 0.0f, 1.0f);
     eg::Vector3f e12c_b = v1 + e12p_b * v21;
 
-    float dist2 = std::min((e12c_a - e34c_a).squaredNorm(),
-                           (e12c_b - e34c_b).squaredNorm());
+    float dist2a = (e12c_a - e34c_a).squaredNorm();
+    float dist2b = (e12c_b - e34c_b).squaredNorm();
+    float dist2 = std::min(dist2a, dist2b);
     return (dist2 < h * h);
   }
 

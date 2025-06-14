@@ -226,12 +226,17 @@ void test_query_category(const fs::path &root, const std::string &name) {
   CCDSolver solver;
   solver.tol = 0.1;
   solver.eps = 1e-6;
-  solver.h = 0.001;
+  // solver.h = 0.001;
   solver.max_iter = 10;
 
   for (const auto &q : category.edge_edge) {
     INFO("Category: " << name << "\n"
                       << ccd_solver_to_string(solver) << q.to_string());
+
+    double dist2_a = (q.v20 - q.v10).squaredNorm();
+    double dist2_b = (q.v40 - q.v30).squaredNorm();
+    double dist2 = std::min(dist2_a, dist2_b);
+    solver.h = 0.01 * std::sqrt(dist2);
 
     CHECK(solver.edge_edge_ccd(
               q.v10.cast<float>(), q.v20.cast<float>(), q.v30.cast<float>(),
@@ -242,6 +247,12 @@ void test_query_category(const fs::path &root, const std::string &name) {
   for (const auto &q : category.point_triangle) {
     INFO("Category: " << name << "\n"
                       << ccd_solver_to_string(solver) << q.to_string());
+
+    double dist2_a = (q.v20 - q.v10).squaredNorm();
+    double dist2_b = (q.v30 - q.v20).squaredNorm();
+    double dist2_c = (q.v10 - q.v30).squaredNorm();
+    double dist2 = std::min(std::min(dist2_a, dist2_b), dist2_c);
+    solver.h = 0.01 * std::sqrt(dist2);
     CHECK(solver.point_triangle_ccd(
               q.v40.cast<float>(), q.v10.cast<float>(), q.v20.cast<float>(),
               q.v30.cast<float>(), q.v41.cast<float>(), q.v11.cast<float>(),
