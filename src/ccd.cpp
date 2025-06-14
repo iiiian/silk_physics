@@ -166,8 +166,8 @@ bool CCDSolver::point_triangle_ccd(
     eg::Ref<const eg::Vector3f> p1, eg::Ref<const eg::Vector3f> v11,
     eg::Ref<const eg::Vector3f> v21, eg::Ref<const eg::Vector3f> v31, float t0,
     float t1) {
-  NormalizedCCDPoly poly{p0, v10, v20, v30, p1, v11, v21, v31};
-  auto toi = poly_solver_.solve(poly, tol, max_iter, eps);
+  CCDPoly poly{p0, v10, v20, v30, p1, v11, v21, v31};
+  auto toi = poly.solve(tol, max_iter, eps);
   if (!toi) {
     return false;
   }
@@ -189,8 +189,8 @@ bool CCDSolver::edge_edge_ccd(
   //   return true;
   // }
 
-  NormalizedCCDPoly poly{v10, v20, v30, v40, v11, v21, v31, v41};
-  auto toi = poly_solver_.solve(poly, tol, max_iter, eps);
+  CCDPoly poly{v10, v20, v30, v40, v11, v21, v31, v41};
+  auto toi = poly.solve(tol, max_iter, eps);
   if (!toi) {
     return false;
   }

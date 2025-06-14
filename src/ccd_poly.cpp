@@ -4,59 +4,16 @@
 #include <Eigen/Geometry>
 #include <cassert>
 #include <cmath>
+#include <iostream>
 
 namespace eg = Eigen;
 
-NormalizedCCDPoly::NormalizedCCDPoly(
-    eg::Ref<const eg::Vector3f> x10, eg::Ref<const eg::Vector3f> x20,
-    eg::Ref<const eg::Vector3f> x30, eg::Ref<const eg::Vector3f> x40,
-    eg::Ref<const eg::Vector3f> x11, eg::Ref<const eg::Vector3f> x21,
-    eg::Ref<const eg::Vector3f> x31, eg::Ref<const eg::Vector3f> x41) {
-  eg::Vector3f p21 = x20 - x10;
-  eg::Vector3f v21 = (x21 - x11) - p21;
-  eg::Vector3f p31 = x30 - x10;
-  eg::Vector3f v31 = (x31 - x11) - p31;
-  eg::Vector3f p41 = x40 - x10;
-  eg::Vector3f v41 = (x41 - x11) - p41;
-
-  eg::Vector3f v21cv31 = v21.cross(v31);
-  eg::Vector3f p21cv31 = p21.cross(v31);
-  eg::Vector3f v21cp31 = v21.cross(p31);
-  eg::Vector3f p21cp31 = p21.cross(p31);
-
-  a = v21cv31.dot(v41);
-  b = p21cv31.dot(v41) + v21cp31.dot(v41) + v21cv31.dot(p41);
-  c = v21cp31.dot(p41) + p21cv31.dot(p41) + p21cp31.dot(v41);
-  d = p21cp31.dot(p41);
-}
-
-inline float NormalizedCCDPolySolver::eval(float x) const {
-  return x * (x * (x * a_ + b_) + c_) + d_;
-}
-
-inline float NormalizedCCDPolySolver::eval_derivative(float x) const {
-  return x * (x * 3 * a_ + 2 * b_) + c_;
-}
-
-inline float NormalizedCCDPolySolver::newton(float x) const {
-  for (int it = 0; it < max_iter_; ++it) {
-    float x_next = x - eval(x) / eval_derivative(x);
-    if (std::abs(x_next - x) < tol_) {
-      return x_next;
-    }
-    x = x_next;
-  }
-  return x;
-}
-
-std::optional<float> NormalizedCCDPolySolver::linear_ccd() const {
-  // since coplaner case has already been dealt before, this means object is
-  // stationary
-  if (std::abs(c_) < eps_) {
+std::optional<float> CCDPoly::linear_ccd(float a, float b) const {
+  if (std::abs(a) < eps_) {
     return std::nullopt;
   }
 
-  float tmp = -d_ / c_;
+  float tmp = -b / a;
   // TODO: tol
   if (tmp > 1 + eps_ || tmp < eps_) {
     return std::nullopt;
@@ -64,13 +21,12 @@ std::optional<float> NormalizedCCDPolySolver::linear_ccd() const {
   return tmp;
 }
 
-std::optional<float> NormalizedCCDPolySolver::quadratic_ccd() const {
-  if (std::abs(b_) < eps_) {
-    return linear_ccd();
+std::optional<float> CCDPoly::quadratic_ccd(float a, float b, float c) const {
+  if (std::abs(a) < eps_) {
+    return linear_ccd(b, c);
   }
 
-  // b^2 - 4ac for quadratic
-  float tmp0 = c_ * c_ - 4 * b_ * d_;
+  float tmp0 = b * b - 4 * a * c;
 
   // no root
   if (tmp0 < 0) {
@@ -79,66 +35,53 @@ std::optional<float> NormalizedCCDPolySolver::quadratic_ccd() const {
 
   // one root
   float tmp1 = std::sqrt(tmp0);
-  float tmp2 = (-c_ - tmp1) / (2 * b_);
+  float tmp2 = (-b - tmp1) / (2 * a);
   // TODO: tol
   if (tmp2 > 0 && tmp2 < 1) {
     return tmp2;
   }
-  float tmp3 = (-c_ + tmp1) / (2 * b_);
+  float tmp3 = (-b + tmp1) / (2 * a);
   if (tmp3 > 0 && tmp3 < 1) {
     return tmp3;
   }
   return std::nullopt;
 }
 
-std::optional<float> NormalizedCCDPolySolver::coplaner_linear_ccd() const {
-  // complete coplaner motion, we are in big trouble
-  if (std::abs(b_) < eps_) {
-    return std::nullopt;
-  }
-
-  float tmp0 = -c_ / b_;
-  if (tmp0 < eps_ || tmp0 > 1) {
-    return std::nullopt;
-  }
-  return tmp0;
-}
-std::optional<float> NormalizedCCDPolySolver::coplaner_quadratic_ccd() const {
-  if (std::abs(a_) < eps_) {
-    return coplaner_linear_ccd();
-  }
-
-  // b^2 - 4ac for quadratic
-  float tmp0 = b_ * b_ - 4 * a_ * c_;
-
-  // no root
-  if (tmp0 < 0) {
-    return std::nullopt;
-  }
-  // one root
-  float tmp1 = std::sqrt(tmp0);
-  float tmp2 = (-b_ - tmp1) / (2 * a_);
-  // TODO: tol
-  if (tmp2 > 0 && tmp2 < 1) {
-    return tmp2;
-  }
-  float tmp3 = (-b_ + tmp1) / (2 * a_);
-  if (tmp3 > 0 && tmp3 < 1) {
-    return tmp3;
-  }
-  return std::nullopt;
+inline float CCDPoly::eval(float x) const {
+  return x * (x * (x * a_ + b_) + c_) + d_;
 }
 
-std::optional<float> NormalizedCCDPolySolver::cubic_ccd() {
-  float scale = 1.0f / std::max(std::max(std::abs(a_), std::abs(b_)),
-                                std::max(std::abs(c_), std::abs(d_)));
+inline float CCDPoly::eval_derivative(float x) const {
+  return x * (x * 3 * a_ + 2 * b_) + c_;
+}
+
+inline float CCDPoly::newton(float x) const {
+  for (int it = 0; it < max_iter_; ++it) {
+    float x_next = x - eval(x) / eval_derivative(x);
+    if (std::abs(x_next - x) < tol_) {
+      // std::cout << "newton it: " << it + 1 << "\n";
+      return x_next;
+    }
+    x = x_next;
+  }
+  // std::cout << "newton it: " << max_iter_ << "\n";
+  return x;
+}
+
+std::optional<float> CCDPoly::cubic_ccd() {
+  float max_coeff = std::max(std::max(std::abs(a_), std::abs(b_)),
+                             std::max(std::abs(c_), std::abs(d_)));
+  if (std::abs(max_coeff) < eps_) {
+    // Big trouble, complete parallel ccd
+  }
+  float scale = 1 / max_coeff;
   a_ *= scale;
   b_ *= scale;
   c_ *= scale;
   d_ *= scale;
 
   if (std::abs(d_) < eps_) {
-    return coplaner_quadratic_ccd();
+    return quadratic_ccd(a_, b_, c_);
   }
 
   // make sure eval(t0) > 0
@@ -150,7 +93,7 @@ std::optional<float> NormalizedCCDPolySolver::cubic_ccd() {
   }
 
   if (std::abs(a_) < eps_) {
-    return quadratic_ccd();
+    return quadratic_ccd(b_, c_, d_);
   }
 
   float tmp0 = b_ * b_ - 3 * a_ * c_;
@@ -334,12 +277,30 @@ std::optional<float> NormalizedCCDPolySolver::cubic_ccd() {
   return newton(1);
 }
 
-std::optional<float> NormalizedCCDPolySolver::solve(
-    const NormalizedCCDPoly& poly, float tol, int max_iter, float eps) {
-  a_ = poly.a;
-  b_ = poly.b;
-  c_ = poly.c;
-  d_ = poly.d;
+CCDPoly::CCDPoly(
+    eg::Ref<const eg::Vector3f> x10, eg::Ref<const eg::Vector3f> x20,
+    eg::Ref<const eg::Vector3f> x30, eg::Ref<const eg::Vector3f> x40,
+    eg::Ref<const eg::Vector3f> x11, eg::Ref<const eg::Vector3f> x21,
+    eg::Ref<const eg::Vector3f> x31, eg::Ref<const eg::Vector3f> x41) {
+  eg::Vector3f p21 = x20 - x10;
+  eg::Vector3f v21 = (x21 - x11) - p21;
+  eg::Vector3f p31 = x30 - x10;
+  eg::Vector3f v31 = (x31 - x11) - p31;
+  eg::Vector3f p41 = x40 - x10;
+  eg::Vector3f v41 = (x41 - x11) - p41;
+
+  eg::Vector3f v21cv31 = v21.cross(v31);
+  eg::Vector3f p21cv31 = p21.cross(v31);
+  eg::Vector3f v21cp31 = v21.cross(p31);
+  eg::Vector3f p21cp31 = p21.cross(p31);
+
+  a_ = v21cv31.dot(v41);
+  b_ = p21cv31.dot(v41) + v21cp31.dot(v41) + v21cv31.dot(p41);
+  c_ = v21cp31.dot(p41) + p21cv31.dot(p41) + p21cp31.dot(v41);
+  d_ = p21cp31.dot(p41);
+}
+
+std::optional<float> CCDPoly::solve(float tol, int max_iter, float eps) {
   tol_ = tol;
   max_iter_ = max_iter;
   eps_ = eps;

@@ -2,11 +2,7 @@
 
 #include <Eigen/Core>
 
-#include "ccd_poly.hpp"
-
 class CCDSolver {
-  NormalizedCCDPolySolver poly_solver_;
-
  public:
   float eps;
   float h;
