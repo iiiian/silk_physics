@@ -69,11 +69,6 @@ std::optional<float> NormalizedCCDPolySolver::quadratic_ccd() const {
     return linear_ccd();
   }
 
-  float mirror = -c_ / (2 * b_);
-  if (0 > mirror - eps_) {
-    return std::nullopt;
-  }
-
   // b^2 - 4ac for quadratic
   float tmp0 = c_ * c_ - 4 * b_ * d_;
 
@@ -83,12 +78,17 @@ std::optional<float> NormalizedCCDPolySolver::quadratic_ccd() const {
   }
 
   // one root
-  float tmp2 = (-c_ - std::sqrt(tmp0)) / (2 * b_);
+  float tmp1 = std::sqrt(tmp0);
+  float tmp2 = (-c_ - tmp1) / (2 * b_);
   // TODO: tol
-  if (tmp2 > 1 + eps_ || tmp2 < eps_) {
-    return std::nullopt;
+  if (tmp2 > 0 && tmp2 < 1) {
+    return tmp2;
   }
-  return tmp2;
+  float tmp3 = (-c_ + tmp1) / (2 * b_);
+  if (tmp3 > 0 && tmp3 < 1) {
+    return tmp3;
+  }
+  return std::nullopt;
 }
 
 std::optional<float> NormalizedCCDPolySolver::coplaner_linear_ccd() const {
