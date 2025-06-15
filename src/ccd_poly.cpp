@@ -1,6 +1,6 @@
 #include "ccd_poly.hpp"
 
-#include <Eigen/Core>
+#include <Eigen/Dense>
 #include <Eigen/Geometry>
 #include <cassert>
 #include <cmath>
@@ -47,15 +47,13 @@ std::optional<float> CCDPoly::quadratic_ccd(float a, float b, float c) const {
   return std::nullopt;
 }
 
-inline float CCDPoly::eval(float x) const {
-  return x * (x * (x * a_ + b_) + c_) + d_;
-}
+float CCDPoly::eval(float x) const { return x * (x * (x * a_ + b_) + c_) + d_; }
 
-inline float CCDPoly::eval_derivative(float x) const {
+float CCDPoly::eval_derivative(float x) const {
   return x * (x * 3 * a_ + 2 * b_) + c_;
 }
 
-inline float CCDPoly::newton(float x) const {
+float CCDPoly::newton(float x) const {
   for (int it = 0; it < max_iter_; ++it) {
     float x_next = x - eval(x) / eval_derivative(x);
     if (std::abs(x_next - x) < tol_) {
@@ -68,28 +66,9 @@ inline float CCDPoly::newton(float x) const {
   return x;
 }
 
-std::optional<float> CCDPoly::cubic_ccd() {
-  float max_coeff = std::max(std::max(std::abs(a_), std::abs(b_)),
-                             std::max(std::abs(c_), std::abs(d_)));
-  if (std::abs(max_coeff) < eps_) {
-    // Big trouble, complete parallel ccd
-  }
-  float scale = 1 / max_coeff;
-  a_ *= scale;
-  b_ *= scale;
-  c_ *= scale;
-  d_ *= scale;
-
+std::optional<float> CCDPoly::cubic_ccd() const {
   if (std::abs(d_) < eps_) {
     return quadratic_ccd(a_, b_, c_);
-  }
-
-  // make sure eval(t0) > 0
-  if (d_ < 0) {
-    a_ = -a_;
-    b_ = -b_;
-    c_ = -c_;
-    d_ = -d_;
   }
 
   if (std::abs(a_) < eps_) {
@@ -277,11 +256,12 @@ std::optional<float> CCDPoly::cubic_ccd() {
   return newton(1);
 }
 
-CCDPoly::CCDPoly(
+std::optional<CCDPoly> CCDPoly::try_make_ccd_poly(
     eg::Ref<const eg::Vector3f> x10, eg::Ref<const eg::Vector3f> x20,
     eg::Ref<const eg::Vector3f> x30, eg::Ref<const eg::Vector3f> x40,
     eg::Ref<const eg::Vector3f> x11, eg::Ref<const eg::Vector3f> x21,
-    eg::Ref<const eg::Vector3f> x31, eg::Ref<const eg::Vector3f> x41) {
+    eg::Ref<const eg::Vector3f> x31, eg::Ref<const eg::Vector3f> x41, float tol,
+    int max_iter, float eps) {
   eg::Vector3f p21 = x20 - x10;
   eg::Vector3f v21 = (x21 - x11) - p21;
   eg::Vector3f p31 = x30 - x10;
@@ -294,16 +274,42 @@ CCDPoly::CCDPoly(
   eg::Vector3f v21cp31 = v21.cross(p31);
   eg::Vector3f p21cp31 = p21.cross(p31);
 
-  a_ = v21cv31.dot(v41);
-  b_ = p21cv31.dot(v41) + v21cp31.dot(v41) + v21cv31.dot(p41);
-  c_ = v21cp31.dot(p41) + p21cv31.dot(p41) + p21cp31.dot(v41);
-  d_ = p21cp31.dot(p41);
+  float a = v21cv31.dot(v41);
+  float b = p21cv31.dot(v41) + v21cp31.dot(v41) + v21cv31.dot(p41);
+  float c = v21cp31.dot(p41) + p21cv31.dot(p41) + p21cp31.dot(v41);
+  float d = p21cp31.dot(p41);
+
+  float max_coeff =
+      std::max({std::abs(a), std::abs(b), std::abs(c), std::abs(d)});
+  // Big trouble, complete coplaner ccd
+  if (std::abs(max_coeff) < eps) {
+    return std::nullopt;
+  }
+
+  float scale = 1 / max_coeff;
+  a *= scale;
+  b *= scale;
+  c *= scale;
+  d *= scale;
+
+  // make sure eval(t0) > 0
+  if (d < 0) {
+    a = -a;
+    b = -b;
+    c = -c;
+    d = -d;
+  }
+
+  CCDPoly poly;
+  poly.a_ = a;
+  poly.b_ = b;
+  poly.c_ = c;
+  poly.d_ = d;
+  poly.tol_ = tol;
+  poly.max_iter_ = max_iter;
+  poly.eps_ = eps;
+
+  return poly;
 }
 
-std::optional<float> CCDPoly::solve(float tol, int max_iter, float eps) {
-  tol_ = tol;
-  max_iter_ = max_iter;
-  eps_ = eps;
-
-  return cubic_ccd();
-}
+std::optional<float> CCDPoly::solve() const { return cubic_ccd(); }

@@ -5,8 +5,87 @@
 #include <cmath>
 
 #include "ccd_poly.hpp"
+#include "interval.hpp"
 
 namespace eg = Eigen;
+
+std::optional<float> CCDSolver::coplaner_point_triangle_ccd(
+    eg::Ref<const eg::Vector3f> p0, eg::Ref<const eg::Vector3f> v10,
+    eg::Ref<const eg::Vector3f> v20, eg::Ref<const eg::Vector3f> v30,
+    eg::Ref<const eg::Vector3f> p1, eg::Ref<const eg::Vector3f> v11,
+    eg::Ref<const eg::Vector3f> v21, eg::Ref<const eg::Vector3f> v31) const {
+  // in coplaner ccd case, convert the problem to barycentric coordinate
+  auto bary_coor = [](eg::Ref<const eg::Vector3f> p,
+                      eg::Ref<const eg::Vector3f> v1,
+                      eg::Ref<const eg::Vector3f> v2,
+                      eg::Ref<const eg::Vector3f> v3) -> eg::Vector2f {
+    eg::Matrix<float, 3, 2> A;
+    A.col(0) = v1 - v3;
+    A.col(1) = v2 - v3;
+    return A.ldlt().solve(p - v3);
+  };
+  eg::Vector2f bary_t0 = bary_coor(p0, v10, v20, v30);
+  eg::Vector2f bary_t1 = bary_coor(p1, v11, v21, v31);
+  eg::Vector2f bary_delta = bary_t1 - bary_t0;
+
+  float a = bary_delta(0);
+  float b = bary_t0(0);
+  float c = bary_delta(1);
+  float d = bary_t0(1);
+
+  // valid time interval for 0 < bary1 < 1
+  Interval it1;
+  if (std::abs(a) < eps) {
+    if (b < 0 || b > 1) {
+      return std::nullopt;
+    }
+    it1 = Interval{0, 1};
+  } else {
+    it1 = Interval{-b / a, (1 - b) / a};
+  }
+
+  // valid time interval for 0 < bary2 < 1
+  Interval it2;
+  if (std::abs(c) < eps) {
+    if (d < 0 || d > 1) {
+      return std::nullopt;
+    }
+    it1 = Interval{0, 1};
+  } else {
+    it1 = Interval{-d / c, (1 - d) / c};
+  }
+
+  // valid time interval for bary1 + bary2 < 1
+  Interval it3;
+  float tmp = a + c;
+  if (std::abs(tmp) < eps) {
+    if (b + d > 1) {
+      return std::nullopt;
+    }
+    it3 = Interval{0, 1};
+  } else {
+    it3 = Interval{-std::numeric_limits<float>::infinity(), (1 - b - d) / tmp};
+  }
+
+  Interval it4 =
+      it1.intersection(it2).intersection(it3).intersection(Interval{0, 1});
+  if (it4.is_empty()) {
+    return std::nullopt;
+  }
+  return it4.lower_bound();
+}
+
+std::optional<float> CCDSolver::coplaner_edge_edge_ccd(
+    Eigen::Ref<const Eigen::Vector3f> v10,
+    Eigen::Ref<const Eigen::Vector3f> v20,
+    Eigen::Ref<const Eigen::Vector3f> v30,
+    Eigen::Ref<const Eigen::Vector3f> v40,
+    Eigen::Ref<const Eigen::Vector3f> v11,
+    Eigen::Ref<const Eigen::Vector3f> v21,
+    Eigen::Ref<const Eigen::Vector3f> v31,
+    Eigen::Ref<const Eigen::Vector3f> v41) const {
+  // in coplanar ccd case, convert the problem to 4 point edge query
+}
 
 bool point_triangle_collision(eg::Ref<const eg::Vector3f> p,
                               eg::Ref<const eg::Vector3f> v1,
@@ -166,8 +245,14 @@ bool CCDSolver::point_triangle_ccd(
     eg::Ref<const eg::Vector3f> p1, eg::Ref<const eg::Vector3f> v11,
     eg::Ref<const eg::Vector3f> v21, eg::Ref<const eg::Vector3f> v31, float t0,
     float t1) {
-  CCDPoly poly{p0, v10, v20, v30, p1, v11, v21, v31};
-  auto toi = poly.solve(tol, max_iter, eps);
+  auto poly = CCDPoly::try_make_ccd_poly(p0, v10, v20, v30, p1, v11, v21, v31,
+                                         tol, max_iter, eps);
+  if (!poly) {
+    return coplaner_point_triangle_ccd(p0, v10, v20, v30, p1, v11, v21, v31)
+        .has_value();
+  }
+
+  auto toi = poly->solve();
   if (!toi) {
     return false;
   }
@@ -185,12 +270,14 @@ bool CCDSolver::edge_edge_ccd(
     eg::Ref<const eg::Vector3f> v11, eg::Ref<const eg::Vector3f> v21,
     eg::Ref<const eg::Vector3f> v31, eg::Ref<const eg::Vector3f> v41, float t0,
     float t1) {
-  // if (edge_edge_collision(v10, v20, v30, v40, h, eps)) {
-  //   return true;
-  // }
+  auto poly = CCDPoly::try_make_ccd_poly(v10, v20, v30, v40, v11, v21, v31, v41,
+                                         tol, max_iter, eps);
+  if (!poly) {
+    return coplaner_edge_edge_ccd(v10, v20, v30, v40, v11, v21, v31, v41)
+        .has_value();
+  }
 
-  CCDPoly poly{v10, v20, v30, v40, v11, v21, v31, v41};
-  auto toi = poly.solve(tol, max_iter, eps);
+  auto toi = poly->solve();
   if (!toi) {
     return false;
   }
