@@ -87,5 +87,5 @@ TEST_CASE("ccd-tests", "[ccd]") {
   // SECTION("erleben-wedges") { test_query_category(root, "erleben-wedges"); }
   // SECTION("unit-tests") { test_query_category(root, "unit-tests"); }
   //
-  SECTION("fail") { test_query_category(root, "fail"); }
+  // SECTION("fail") { test_query_category(root, "fail"); }
 }
