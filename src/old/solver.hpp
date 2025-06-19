@@ -3,6 +3,7 @@
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 #include <Eigen/SparseCholesky>
+#include <optional>
 #include <unordered_set>
 #include <vector>
 
@@ -34,6 +35,9 @@ class ClothSolver {
   Eigen::SparseMatrix<float> init_bending_lhs();
   Eigen::SparseMatrix<float> init_elastic_lhs();
   bool is_neighboring_face(int f1, int f2);
+  Eigen::VectorXf project(const Eigen::VectorXf& V) const;
+  std::optional<Eigen::MatrixX3f> pd_solve();
+  std::optional<Eigen::MatrixX3f> solve_outer();
 
   // static void rtc_collision_callback(void* data, RTCCollision* collisions,
   //                                    unsigned int num_collisions);

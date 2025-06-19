@@ -13,6 +13,7 @@
 #include <Eigen/SVD>
 #include <Eigen/Sparse>
 #include <cassert>
+#include <limits>
 #include <unsupported/Eigen/ArpackSupport>
 #include <unsupported/Eigen/KroneckerProduct>
 
@@ -278,6 +279,91 @@ void ClothSolver::reset() {
   pV_ = nullptr;
   pF_ = nullptr;
   pconstrain_set = nullptr;
+}
+
+Eigen::VectorXf ClothSolver::project(const Eigen::VectorXf& V) const {
+  int vnum = V.rows();
+  // vectorize vertex matrix
+  auto vec_V = V.reshaped<eg::RowMajor>();
+
+  // thread local rhs
+  assert((thread_num_ > 0));
+  std::vector<eg::VectorXf> thread_proj(thread_num_,
+                                        eg::VectorXf::Zero(3 * vnum));
+// for each triangle, solve projection then modify the rhs
+#pragma omp parallel for num_threads(thread_num_)
+  for (int f = 0; f < pF_->rows(); ++f) {
+    // assemble local vectorized vertex position
+    auto vidx = pF_->row(f);
+    eg::Matrix<float, 9, 1> buffer;
+    buffer(eg::seqN(0, 3)) = vec_V(eg::seqN(3 * vidx(0), 3));
+    buffer(eg::seqN(3, 3)) = vec_V(eg::seqN(3 * vidx(1), 3));
+    buffer(eg::seqN(6, 3)) = vec_V(eg::seqN(3 * vidx(2), 3));
+
+    // SVD decompose deformation.
+    // replacing diagonal term with idenity gives us the projection
+    eg::Matrix<float, 3, 2> J = (jacobians_[f] * buffer).reshaped(3, 2);
+    // eigen can't compute thin U and V. so instead compute full UV
+    eg::JacobiSVD<eg::Matrix<float, 3, 2>> svd(
+        J, eg::ComputeFullV | eg::ComputeFullU);
+    // this is the projection, deformation F cause by purely rotation +
+    // translation
+    eg::Matrix<float, 3, 2> T =
+        svd.matrixU().block<3, 2>(0, 0) * svd.matrixV().transpose();
+
+    // compute the elastic rhs, reuse buffer
+    buffer = elastic_stiffness_ * area_[f] * jacobians_[f].transpose() *
+             T.reshaped();
+    // add it back to thread local rhs
+    auto& local_rhs = thread_proj[omp_get_thread_num()];
+    local_rhs(eg::seqN(3 * vidx(0), 3)) += buffer(eg::seqN(0, 3));
+    local_rhs(eg::seqN(3 * vidx(1), 3)) += buffer(eg::seqN(3, 3));
+    local_rhs(eg::seqN(3 * vidx(2), 3)) += buffer(eg::seqN(6, 3));
+  }
+
+  // merge thread local rhs back to global rhs
+  eg::VectorXf proj = eg::VectorXf::Zero(3 * vnum);
+  for (auto& r : thread_proj) {
+    proj += r;
+  }
+
+  // position constrain
+  for (int i : *pconstrain_set) {
+    proj(eg::seqN(3 * i, 3)) = position_stiffness * pV_->row(i);
+  }
+
+  return proj;
+}
+
+std::optional<Eigen::MatrixX3f> ClothSolver::pd_solve() {
+  int vnum = pV_->rows();
+  // vectorize vertex matrix
+  auto vec_V = pV_->reshaped<eg::RowMajor>();
+  auto vec_veclocity = velocity_.reshaped<eg::RowMajor>();
+  // basic linear velocity term
+  eg::VectorXf rhs_base = (M_ / dt_ / dt_) * vec_V +
+                          (M_ / dt_) * vec_veclocity +
+                          M_ * constant_acce_field_.replicate(vnum, 1);
+
+  eg::VectorXf V_next = vec_V + dt_ * vec_veclocity;
+
+  eg::VectorXf rhs = rhs_base + project(*pV_);
+  // sub space solve
+  eg::VectorXf b = lhs_eigen_vec_.transpose() * (rhs - lhs_x0_);
+  eg::VectorXf q = b.array() / lhs_eigen_val_.array();
+  eg::VectorXf subspace_sol = x0_.reshaped<eg::RowMajor>() + lhs_eigen_vec_ * q;
+
+  // iterative global solve
+  assert((subspace_sol.rows() == 3 * vnum));
+  assert((rhs.rows() == 3 * vnum));
+  // eg::VectorXf sol = subspace_sol;
+  eg::VectorXf sol = iterative_solver_.solveWithGuess(rhs, subspace_sol);
+  if (iterative_solver_.info() != eg::Success &&
+      iterative_solver_.info() != eg::NoConvergence) {
+    spdlog::error("iterative solver solve fail");
+    return std::nullopt;
+  }
+  spdlog::info("itertive solver iteration {}", iterative_solver_.iterations());
 }
 
 bool ClothSolver::solve() {

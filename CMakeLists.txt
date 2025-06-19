@@ -14,23 +14,11 @@ add_subdirectory(extern/polyscope)
 add_subdirectory(extern/portable-file-dialogs)
 add_subdirectory(extern/arpack-ng)
 
+file(GLOB SOURCES "src/*.cpp")
 add_executable(
     main
-    "src/main.cpp"
-    "src/solver.cpp"
-    "src/demo.cpp"
-    "src/kd_tree.cpp"
-    # "src/collision_detector.cpp"
-    "src/ccd.cpp"
-    "src/ccd_poly.cpp"
-    "src/collision_helper.cpp"
-    "src/vectorized_jacobian.cpp"
-    "src/widgets/selector_widget.cpp"
-    "src/widgets/model_loader_widget.cpp"
-    "src/widgets/cloth_simulator_widget.cpp"
-    "src/widgets/help_bar_widget.cpp"
-    "src/widgets/mesh_statistic_widget.cpp"
     "extern/polyscope/deps/imgui/imgui/misc/cpp/imgui_stdlib.cpp"
+    ${SOURCES}
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
