@@ -6,6 +6,7 @@
 #include <spdlog/spdlog.h>
 
 #include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -102,8 +103,8 @@ std::optional<Matrix69f> Cloth::vectorized_jacobian_operator(
   // clang-format on
 
   // deformation F = dx * (dX)^-1 = x * D * (dX)^-1
-  // here we ignore the differnt basis of dx and dX since the additional
-  // transformation will be canceled out in later stage of algorithm.
+  // here we ignore the difference in basis between dx and dX since the
+  // additional transformation will be canceled out in later stage of algorithm.
   // use kronecker product to vectorize above equation:
   // given (B^T ⊗  A) vec(X) = vec(AXB),
   // F = x * D * (dX)^-1 = ((D * (dX)^-1)^T ⊗ I3 * vec(x).
@@ -171,10 +172,10 @@ SolverInitData Cloth::compute_solver_init_data() const {
         for (int i = 0; i < 3; ++i) {
           for (int j = 0; j < 3; ++j) {
             float val = weight * local_AA(3 * vi + i, 3 * vj + j);
-            // TODO: zero prune threshold
-            // if (abs(val) < zero_prune_threshold_) {
-            //   continue;
-            // }
+            if (std::abs(val) == 0) {
+              continue;
+            }
+            // TODO: consider purging value near zero to save compute
             init_data.weighted_AA.emplace_back(3 * vidx(vi) + i,
                                                3 * vidx(vj) + j, val);
           }

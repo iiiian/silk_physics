@@ -8,3 +8,5 @@ class ClothConfig {
 
   bool is_valid() const;
 };
+
+struct ClothHandle

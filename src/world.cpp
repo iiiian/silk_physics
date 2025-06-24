@@ -11,18 +11,13 @@
 #include "physical_body.hpp"
 #include "resource_manager.hpp"
 
-class RigidBody : public PhysicalBody {
- public:
-  SolverInitData compute_solver_init_data() const override;
-};
-
 struct PhysicalBodyPositionOffset {
   PhysicalBody* body;
   uint32_t offset;
 };
 
-class Collider;
-class PositionConstrain;
+struct PositionConstrain {
+}
 
 enum class WorldResult : int {
   Success,
@@ -135,4 +130,6 @@ class World {
 
     return WorldResult::Success;
   }
+
+  void step() {}
 };
