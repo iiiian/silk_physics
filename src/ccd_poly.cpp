@@ -257,22 +257,22 @@ std::optional<float> CCDPoly::cubic_ccd() const {
 }
 
 std::optional<CCDPoly> CCDPoly::try_make_ccd_poly(
-    eg::Ref<const eg::Vector3f> x10, eg::Ref<const eg::Vector3f> x20,
-    eg::Ref<const eg::Vector3f> x30, eg::Ref<const eg::Vector3f> x40,
-    eg::Ref<const eg::Vector3f> x11, eg::Ref<const eg::Vector3f> x21,
-    eg::Ref<const eg::Vector3f> x31, eg::Ref<const eg::Vector3f> x41, float tol,
+    Eigen::Ref<const Eigen::Vector3f> x10, Eigen::Ref<const Eigen::Vector3f> x20,
+    Eigen::Ref<const Eigen::Vector3f> x30, Eigen::Ref<const Eigen::Vector3f> x40,
+    Eigen::Ref<const Eigen::Vector3f> x11, Eigen::Ref<const Eigen::Vector3f> x21,
+    Eigen::Ref<const Eigen::Vector3f> x31, Eigen::Ref<const Eigen::Vector3f> x41, float tol,
     int max_iter, float eps) {
-  eg::Vector3f p21 = x20 - x10;
-  eg::Vector3f v21 = (x21 - x11) - p21;
-  eg::Vector3f p31 = x30 - x10;
-  eg::Vector3f v31 = (x31 - x11) - p31;
-  eg::Vector3f p41 = x40 - x10;
-  eg::Vector3f v41 = (x41 - x11) - p41;
+  Eigen::Vector3f p21 = x20 - x10;
+  Eigen::Vector3f v21 = (x21 - x11) - p21;
+  Eigen::Vector3f p31 = x30 - x10;
+  Eigen::Vector3f v31 = (x31 - x11) - p31;
+  Eigen::Vector3f p41 = x40 - x10;
+  Eigen::Vector3f v41 = (x41 - x11) - p41;
 
-  eg::Vector3f v21cv31 = v21.cross(v31);
-  eg::Vector3f p21cv31 = p21.cross(v31);
-  eg::Vector3f v21cp31 = v21.cross(p31);
-  eg::Vector3f p21cp31 = p21.cross(p31);
+  Eigen::Vector3f v21cv31 = v21.cross(v31);
+  Eigen::Vector3f p21cv31 = p21.cross(v31);
+  Eigen::Vector3f v21cp31 = v21.cross(p31);
+  Eigen::Vector3f p21cp31 = p21.cross(p31);
 
   float a = v21cv31.dot(v41);
   float b = p21cv31.dot(v41) + v21cp31.dot(v41) + v21cv31.dot(p41);

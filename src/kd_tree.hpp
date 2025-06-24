@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Eigen/Core>
-#include <span>
 #include <vector>
 
 struct KDNode {
@@ -27,20 +26,20 @@ struct KDTreeStatistic {
 };
 
 class KDTree {
+  using Iter = std::vector<Eigen::Index>::iterator;
+
   KDNode *_p_root = nullptr;
   const Eigen::MatrixX3f *_p_verts = nullptr;
   KDTreeStatistic _stats;
 
   Eigen::Index next_axis(Eigen::Index idx);
   // choose n element randomly and place them at the begining of the span
-  void fisher_yates_shuffle(std::span<Eigen::Index> verts_idx, size_t n) const;
+  void fisher_yates_shuffle(Iter begin, Iter end, size_t n) const;
   // select medium based on random samples and shuffle the span,
   // the medium will always be at the begining
-  Eigen::Index heuristic_median(std::span<Eigen::Index> verts_idx,
-                                Eigen::Index axis) const;
+  Eigen::Index heuristic_median(Iter begin, Iter end, Eigen::Index axis) const;
 
-  KDNode *build_sub_tree(std::span<Eigen::Index> verts_idx, size_t depth,
-                         KDNode *parent);
+  KDNode *build_sub_tree(Iter begin, Iter end, size_t depth, KDNode *parent);
 
   void delete_tree(KDNode *p_node);
   void update_closest(const Eigen::RowVector3f &point, const KDNode *p_node,

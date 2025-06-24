@@ -1,8 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 project(mesh_deform CXX Fortran)
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_SCAN_FOR_MODULES 0)
+set(CMAKE_CXX_STANDARD 17)
 
 find_package(OpenMP REQUIRED)
 find_package(BLAS REQUIRED)

@@ -26,7 +26,7 @@ bool ModelLoaderWidget::load_model_from_path(const std::string& path) {
   bool success = false;
   RMatrixX3f V;
   RMatrixX3i F;
-  eg::MatrixX3f N;
+  Eigen::MatrixX3f N;
   if (path.ends_with(".off")) {
     success = igl::readOFF(path, V, F);
   } else if (path.ends_with(".obj")) {

@@ -86,7 +86,7 @@ void ClothSimulatorWidget::handle_drag_selection() {
 
   py::CameraParameters camera = py::view::getCameraParametersForCurrentView();
   // choose a random selected vertex to calculate distance
-  eg::Vector3f eg_pos = engine_ctx_.V.row(*ui_ctx_.selection.begin());
+  Eigen::Vector3f eg_pos = engine_ctx_.V.row(*ui_ctx_.selection.begin());
   glm::vec3 pos(eg_pos(0), eg_pos(1), eg_pos(2));
   float plane_dist = glm::dot(camera.getLookDir(), pos - camera.getPosition());
 
@@ -102,7 +102,7 @@ void ClothSimulatorWidget::handle_drag_selection() {
   glm::vec3 camera_up = camera.getUpDir();
   glm::vec3 delta = mouse_dx_ratio * span_x * camera_right -
                     mouse_dy_ratio * span_y * camera_up;
-  auto eg_delta = eg::Map<eg::Vector3f>(glm::value_ptr(delta));
+  auto eg_delta = Eigen::Map<Eigen::Vector3f>(glm::value_ptr(delta));
 
   // update both ui and engine mesh
   auto& mesh_verts = ui_ctx_.p_surface->vertexPositions;

@@ -56,9 +56,9 @@ void SelectorWidget::select_vertices_in_sphere(bool add_to_selection) {
   assert(ctx_.ui_mode == UIMode::Paint);
   assert(ctx_.p_surface->nVertices() != 0);
 
-  eg::Vector3f center(selector_center_.x, selector_center_.y,
+  Eigen::Vector3f center(selector_center_.x, selector_center_.y,
                       selector_center_.z);
-  std::vector<eg::Index> matches =
+  std::vector<Eigen::Index> matches =
       kd_tree_.find_neighbors(center, selector_radius_);
 
   size_t changed_count = 0;
