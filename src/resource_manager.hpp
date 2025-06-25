@@ -9,17 +9,17 @@
 // a non owning 32bit resource handle
 // bit layout: | padding (1) | generation (11) | slot_index (20) |
 struct ResourceHandle {
-  static constexpr uint32_t GENERATION_BITS = 11;
-  static constexpr uint32_t SLOT_INDEX_BITS = 20;
-  static constexpr uint32_t GENERATION_MAX = 1u << GENERATION_BITS;
-  static constexpr uint32_t SLOT_INDEX_MAX = 1u << SLOT_INDEX_BITS;
-  static constexpr uint32_t GENERATION_MASK = (GENERATION_MAX - 1u)
-                                              << SLOT_INDEX_BITS;
-  static constexpr uint32_t SLOT_INDEX_MASK = SLOT_INDEX_MAX - 1u;
+  static constexpr uint32_t GEN_BITS = 11;
+  static constexpr uint32_t SLOT_BITS = 20;
+  static constexpr uint32_t GEN_MAX = 1u << GEN_BITS;
+  static constexpr uint32_t SLOT_MAX = 1u << SLOT_BITS;
+  static constexpr uint32_t GEN_MASK = (GEN_MAX - 1u) << SLOT_BITS;
+  static constexpr uint32_t SLOT_MASK = SLOT_MAX - 1u;
 
   uint32_t value = 0;
 
   ResourceHandle() = default;
+  explicit ResourceHandle(uint32_t value);
   ResourceHandle(uint32_t generation, uint32_t slot_index);
 
   uint32_t generation() const;
@@ -30,15 +30,13 @@ struct ResourceHandle {
 // maps resource handle to internal dense data array
 // bit layout: | is_valid (1) | generation (11) | data_index (20) |
 struct ResourceSlot {
-  static constexpr uint32_t GENERATION_BITS = 11;
-  static constexpr uint32_t DATA_INDEX_BITS = 20;
-  static constexpr uint32_t GENERATION_MAX = 1u << GENERATION_BITS;
-  static constexpr uint32_t DATA_INDEX_MAX = 1u << DATA_INDEX_BITS;
-  static constexpr uint32_t GENERATION_MASK = (GENERATION_MAX - 1u)
-                                              << DATA_INDEX_BITS;
-  static constexpr uint32_t DATA_INDEX_MASK = DATA_INDEX_MAX - 1u;
-  static constexpr uint32_t IS_VALID_MASK =
-      1u << (GENERATION_BITS + DATA_INDEX_BITS);
+  static constexpr uint32_t GEN_BITS = 11;
+  static constexpr uint32_t DATA_BITS = 20;
+  static constexpr uint32_t GEN_MAX = 1u << GEN_BITS;
+  static constexpr uint32_t DATA_MAX = 1u << DATA_BITS;
+  static constexpr uint32_t GEN_MASK = (GEN_MAX - 1u) << DATA_BITS;
+  static constexpr uint32_t DATA_MASK = DATA_MAX - 1u;
+  static constexpr uint32_t IS_VALID_MASK = 1u << (GEN_BITS + DATA_BITS);
 
   uint32_t value = 0;
 

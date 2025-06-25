@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 class ClothConfig {
  public:
   float elastic_stiffness = 1.0f;
@@ -9,4 +11,6 @@ class ClothConfig {
   bool is_valid() const;
 };
 
-struct ClothHandle
+struct ClothHandle {
+  uint32_t value = 0;
+};
