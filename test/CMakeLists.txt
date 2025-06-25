@@ -30,6 +30,15 @@ target_compile_definitions(
     PRIVATE SAMPLE_QUERY_ROOT="${CMAKE_SOURCE_DIR}/misc/ccd-sample-queries"
 )
 
+# resource manager test
+add_executable(
+    resource_manager_test
+    resource_manager_test.cpp
+    ../src/resource_manager.cpp
+)
+target_include_directories(resource_manager_test PRIVATE ../src)
+target_link_libraries(resource_manager_test PRIVATE Catch2::Catch2WithMain)
+
 include(CTest)
 include(Catch)
-catch_discover_tests(ccd_correctness_test ccd_performance_test)
+catch_discover_tests(ccd_correctness_test ccd_performance_test resource_manager_test)

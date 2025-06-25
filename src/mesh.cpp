@@ -1,16 +1,14 @@
-#include "mesh.hpp"
-
 #include <Eigen/Core>
 #include <cstdint>
 
-#include "common_types.hpp"
+#include "api.hpp"
 
-Mesh::Mesh(const RMatrixX3f& V, const RMatrixX3i& F) : V(V), F(F) {}
+Mesh::Mesh(const Verts& verts, const Faces& faces) : V(verts), F(faces) {}
 
-Mesh::Mesh(float* vertices, uint32_t vert_num, int* faces, uint32_t face_num) {
-  Eigen::Map<const RMatrixX3f> V_map{vertices, vert_num, 3};
+Mesh::Mesh(float* verts, uint32_t vert_num, int* faces, uint32_t face_num) {
+  Eigen::Map<const Verts> V_map{verts, vert_num, 3};
   V = V_map;
-  Eigen::Map<const RMatrixX3i> F_map{faces, face_num, 3};
+  Eigen::Map<const Faces> F_map{faces, face_num, 3};
   F = F_map;
 }
 
@@ -23,14 +21,14 @@ bool Mesh::is_valid() const {
     return false;
   }
 
-  for (auto face : F.rowwise()) {
+  for (auto f : F.rowwise()) {
     // vertex index out of range
-    if (face(0) >= vnum || face(1) >= vnum || face(2) >= vnum) {
+    if (f(0) >= vnum || f(1) >= vnum || f(2) >= vnum) {
       return false;
     }
 
     // triangle with repeated vertices
-    if (face(0) == face(1) || face(1) == face(2) || face(2) == face(0)) {
+    if (f(0) == f(1) || f(1) == f(2) || f(2) == f(0)) {
       return false;
     }
   }

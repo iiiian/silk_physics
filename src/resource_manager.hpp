@@ -8,7 +8,7 @@
 
 // a non owning 32bit resource handle
 // bit layout: | padding (1) | generation (11) | slot_index (20) |
-struct ResourceHandle {
+class ResourceHandle {
   static constexpr uint32_t GEN_BITS = 11;
   static constexpr uint32_t SLOT_BITS = 20;
   static constexpr uint32_t GEN_MAX = 1u << GEN_BITS;
@@ -18,18 +18,20 @@ struct ResourceHandle {
 
   uint32_t value = 0;
 
+ public:
   ResourceHandle() = default;
   explicit ResourceHandle(uint32_t value);
   ResourceHandle(uint32_t generation, uint32_t slot_index);
 
-  uint32_t generation() const;
-  uint32_t slot_index() const;
+  uint32_t get_value() const;
+  uint32_t get_generation() const;
+  uint32_t get_slot_index() const;
 };
 
 // an internal mapping data structure for resource manager,
 // maps resource handle to internal dense data array
 // bit layout: | is_valid (1) | generation (11) | data_index (20) |
-struct ResourceSlot {
+class ResourceSlot {
   static constexpr uint32_t GEN_BITS = 11;
   static constexpr uint32_t DATA_BITS = 20;
   static constexpr uint32_t GEN_MAX = 1u << GEN_BITS;
@@ -40,22 +42,17 @@ struct ResourceSlot {
 
   uint32_t value = 0;
 
+ public:
   ResourceSlot() = default;
   ResourceSlot(bool is_valid, uint32_t generation, uint32_t data_index);
 
-  bool is_valid() const;
+  bool get_is_valid() const;
   void set_is_valid(bool is_valid);
-  uint32_t generation() const;
+  uint32_t get_generation() const;
   void set_generation(uint32_t generation);
   void increment_generation();
-  uint32_t data_index() const;
+  uint32_t get_data_index() const;
   void set_data_index(uint32_t data_index);
-};
-
-enum class ResourceManagerResult : int {
-  Success = 0,
-  InvalidHandle = 1,
-  ResourceFull = 2
 };
 
 template <typename T>
@@ -91,24 +88,29 @@ class ResourceManager {
     slot_of_data_.clear();
   }
 
-  std::optional<T*> get_resources(const ResourceHandle& handle) {
-    auto& slot = slots_[handle.slot_index()];
-    if (!slot.is_valid() || slot.generation() != handle.generation()) {
-      return std::nullopt;
+  // return nullptr if handle is invalid
+  T* get_resources(const ResourceHandle& handle) {
+    auto& slot = slots_[handle.get_slot_index()];
+    if (!slot.get_is_valid() ||
+        slot.get_generation() != handle.get_generation()) {
+      return nullptr;
     }
 
-    return &data_[slot.data_index()];
+    return &data_[slot.get_data_index()];
   }
 
-  std::optional<const T*> get_resources(const ResourceHandle& handle) const {
-    auto& slot = slots_[handle.slot_index()];
-    if (!slot.is_valid() || slot.generation() != handle.generation()) {
-      return std::nullopt;
+  // return nullptr if handle is invalid
+  const T* get_resources(const ResourceHandle& handle) const {
+    auto& slot = slots_[handle.get_slot_index()];
+    if (!slot.get_is_valid() ||
+        slot.get_generation() != handle.get_generation()) {
+      return nullptr;
     }
 
-    return &data_[slot.data_index()];
+    return &data_[slot.get_data_index()];
   }
 
+  // return nullopt if ready max resource
   std::optional<ResourceHandle> add_resource(T resource) {
     if (free_slots_.empty()) {
       return std::nullopt;
@@ -122,26 +124,26 @@ class ResourceManager {
     slot.set_data_index(data_.size());
     data_.emplace_back(std::move(resource));
     slot_of_data_.push_back(slot_idx);
-    return ResourceHandle{slot.generation(), slot_idx};
+    return ResourceHandle{slot.get_generation(), slot_idx};
   }
 
   bool remove_resource(const ResourceHandle& handle) {
-    auto& dead_slot = slots_[handle.slot_index()];
-    if (!dead_slot.is_valid() ||
-        dead_slot.generation() != handle.generation()) {
+    auto& dead_slot = slots_[handle.get_slot_index()];
+    if (!dead_slot.get_is_valid() ||
+        dead_slot.get_generation() != handle.get_generation()) {
       return false;
     }
 
     // swap removed data element with the last element
-    std::swap(data_[dead_slot.data_index()], data_.back());
-    slots_[slot_of_data_.back()].set_data_index(dead_slot.data_index());
-    slot_of_data_[dead_slot.data_index()] = slot_of_data_.back();
+    std::swap(data_[dead_slot.get_data_index()], data_.back());
+    slots_[slot_of_data_.back()].set_data_index(dead_slot.get_data_index());
+    slot_of_data_[dead_slot.get_data_index()] = slot_of_data_.back();
     data_.pop_back();
     slot_of_data_.pop_back();
 
     dead_slot.set_is_valid(false);
     dead_slot.increment_generation();
-    free_slots_.push_front(handle.slot_index());
+    free_slots_.push_front(handle.get_slot_index());
 
     return true;
   }
