@@ -19,6 +19,8 @@ class Mesh {
 
 class ClothConfig {
  public:
+  bool enable_collision = true;
+  bool enable_self_collision = true;
   float elastic_stiffness = 1.0f;
   float bending_stiffness = 1.0f;
   float density = 1.0f;
@@ -36,7 +38,7 @@ struct Handle {
   uint32_t value;
 };
 
-enum class WorldResult : int {
+enum class WorldResult {
   Success,
   InvalidTimeStep,
   InvalidLowFreqModeNum,

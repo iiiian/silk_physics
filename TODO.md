@@ -24,3 +24,52 @@
 - [] subspace conditioning
 - [] initial curvature
 
+# notes
+
+## 0622
+
+1. add obj (invalid solver)
+2. delete obj (invalid solver)
+3. update obj property
+ - update init position (invalid solver)
+ - pin position
+ - colliding?
+ - simulation parameter (invalid solver)
+4. get current obj vertex position
+
+- handle needs to be typed
+- access can return err
+
+- cloth
+  - init position
+  - mesh topo
+  - vertex map to global vec
+  - cloth para
+- softbody
+  - init position
+  - mesh topo
+  - vertex map to global vec
+  - softbody para
+- rigid body
+  - init position
+  - mesh topo
+  - vertex map to global vec
+  - rigid para
+- hair
+  - init position
+  - mesh topo
+  - vertex map to global vec
+  - hair para
+- collider
+  - init position
+  - mesh topo
+
+## 0625
+
+- demo test
+- separate engine/demo
+- collision pipeline
+- rigidbody
+- gpu solver
+- softbody
+- hair
