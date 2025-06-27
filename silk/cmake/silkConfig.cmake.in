@@ -1,0 +1,6 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/silkTargets.cmake")
+
+# Optionally propagate variables, e.g. version, compile defs, etc.
+
