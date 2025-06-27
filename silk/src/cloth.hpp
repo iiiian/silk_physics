@@ -1,8 +1,8 @@
 #pragma once
 
 #include <optional>
+#include <silk/silk.hpp>
 
-#include "api.hpp"
 #include "common_types.hpp"
 #include "physical_body.hpp"
 #include "solver.hpp"

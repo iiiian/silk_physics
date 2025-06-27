@@ -3,18 +3,17 @@
 #include <igl/cotmatrix.h>
 #include <igl/doublearea.h>
 #include <igl/massmatrix.h>
-#include <spdlog/spdlog.h>
 
 #include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <silk/silk.hpp>
 #include <unordered_set>
 #include <unsupported/Eigen/KroneckerProduct>
 #include <vector>
 
-#include "api.hpp"
 #include "eigen_helper.hpp"
 #include "physical_body.hpp"
 
@@ -184,7 +183,7 @@ SolverInitData Cloth::compute_solver_init_data() const {
         mesh.V.row(vidx(0)), mesh.V.row(vidx(1)), mesh.V.row(vidx(2)));
     if (!jacobian_op) {
       // TODO: handle degenerate triangle better
-      spdlog::warn("degenerate triangle {}", f);
+      // spdlog::warn("degenerate triangle {}", f);
       continue;
     }
 

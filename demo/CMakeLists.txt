@@ -1,13 +1,9 @@
-add_subdirectory(${CMAKE_SOURCE_DIR}/extern/spdlog)
-add_subdirectory(${CMAKE_SOURCE_DIR}/extern/libigl)
-add_subdirectory(${CMAKE_SOURCE_DIR}/extern/polyscope)
-add_subdirectory(${CMAKE_SOURCE_DIR}/extern/portable-file-dialogs)
+file(GLOB DEMO_SOURCES "src/*.cpp")
 
-file(GLOB SOURCES "src/*.cpp")
 add_executable(
     demo
     "${CMAKE_SOURCE_DIR}/extern/polyscope/deps/imgui/imgui/misc/cpp/imgui_stdlib.cpp"
-    ${SOURCES}
+    ${DEMO_SOURCES}
 )
 
 # set debug flag

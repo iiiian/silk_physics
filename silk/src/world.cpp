@@ -1,4 +1,3 @@
-#include <spdlog/spdlog.h>
 
 #include <Eigen/Core>
 #include <Eigen/Sparse>
@@ -243,7 +242,8 @@ class World::WorldImpl {
         eigen_solver;
     eigen_solver.compute(H, low_freq_mode_num_, "SM");
     if (eigen_solver.info() != Eigen::Success) {
-      spdlog::error("eigen decomposition fail");
+      // spdlog::error("eigen decomposition fail");
+      // TODO: better signal warning
       return WorldResult::EigenDecompositionfail;
     }
     U_ = eigen_solver.eigenvectors();
@@ -252,7 +252,8 @@ class World::WorldImpl {
 
     iterative_solver_.compute(H);
     if (iterative_solver_.info() != Eigen::Success) {
-      spdlog::error("iterative solver decomposition fail");
+      // spdlog::error("iterative solver decomposition fail");
+      // TODO: signal warning
       return WorldResult::IterativeSolverInitFail;
     }
 
@@ -296,8 +297,8 @@ class World::WorldImpl {
       return WorldResult::IterativeSolveFail;
     }
 
-    spdlog::info("itertive solver iteration {}",
-                 iterative_solver_.iterations());
+    // spdlog::info("itertive solver iteration {}",
+    //              iterative_solver_.iterations());
 
     // detect and resolve collision and update velocity
     // the collision part is definitely half baked and its pretty janky

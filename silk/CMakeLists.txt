@@ -1,20 +1,10 @@
 # -------------------------------------------------
-# Library deps
-# -------------------------------------------------
-
-find_package(OpenMP REQUIRED)
-find_package(BLAS REQUIRED)
-find_package(LAPACK REQUIRED)
-add_subdirectory(${CMAKE_SOURCE_DIR}/extern/libigl)
-add_subdirectory(${CMAKE_SOURCE_DIR}/extern/arpack-ng)
-
-# -------------------------------------------------
 # Library config
 # -------------------------------------------------
 
 file(GLOB SILK_SOURCES "src/*.cpp")
 
-add_library(silk ${SILK_SOURCE})
+add_library(silk ${SILK_SOURCES})
 add_library(silk::silk ALIAS silk)
 
 set_target_properties(silk PROPERTIES VERSION 0.1.0)

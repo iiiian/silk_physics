@@ -1,7 +1,6 @@
 #include <Eigen/Core>
 #include <cstdint>
-
-#include "api.hpp"
+#include <silk/silk.hpp>
 
 Mesh::Mesh(const Verts& verts, const Faces& faces) : V(verts), F(faces) {}
 
