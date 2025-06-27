@@ -6,7 +6,7 @@
 #include <cmath>
 #include <iostream>
 
-namespace eg = Eigen;
+namespace silk {
 
 std::optional<float> CCDPoly::linear_ccd(float a, float b) const {
   if (std::abs(a) < eps_) {
@@ -257,11 +257,14 @@ std::optional<float> CCDPoly::cubic_ccd() const {
 }
 
 std::optional<CCDPoly> CCDPoly::try_make_ccd_poly(
-    Eigen::Ref<const Eigen::Vector3f> x10, Eigen::Ref<const Eigen::Vector3f> x20,
-    Eigen::Ref<const Eigen::Vector3f> x30, Eigen::Ref<const Eigen::Vector3f> x40,
-    Eigen::Ref<const Eigen::Vector3f> x11, Eigen::Ref<const Eigen::Vector3f> x21,
-    Eigen::Ref<const Eigen::Vector3f> x31, Eigen::Ref<const Eigen::Vector3f> x41, float tol,
-    int max_iter, float eps) {
+    Eigen::Ref<const Eigen::Vector3f> x10,
+    Eigen::Ref<const Eigen::Vector3f> x20,
+    Eigen::Ref<const Eigen::Vector3f> x30,
+    Eigen::Ref<const Eigen::Vector3f> x40,
+    Eigen::Ref<const Eigen::Vector3f> x11,
+    Eigen::Ref<const Eigen::Vector3f> x21,
+    Eigen::Ref<const Eigen::Vector3f> x31,
+    Eigen::Ref<const Eigen::Vector3f> x41, float tol, int max_iter, float eps) {
   Eigen::Vector3f p21 = x20 - x10;
   Eigen::Vector3f v21 = (x21 - x11) - p21;
   Eigen::Vector3f p31 = x30 - x10;
@@ -313,3 +316,5 @@ std::optional<CCDPoly> CCDPoly::try_make_ccd_poly(
 }
 
 std::optional<float> CCDPoly::solve() const { return cubic_ccd(); }
+
+}  // namespace silk

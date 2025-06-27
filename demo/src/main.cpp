@@ -8,24 +8,27 @@
 namespace py = polyscope;
 
 int main(int argc, char** argv) {
+  spdlog::set_level(spdlog::level::debug);
+
   py::init();
   py::view::setUpDir(polyscope::UpDir::ZUp);
   py::view::setFrontDir(polyscope::FrontDir::XFront);
   py::options::groundPlaneMode = py::GroundPlaneMode::None;
+
   Demo demo_app;
 
   if (argc > 1) {
     std::string initial_model_path = argv[1];
-    spdlog::info("Attempting to load model from command line argument: {}",
-                 initial_model_path);
+    SPDLOG_INFO("Attempting to load model from command line argument: {}",
+                initial_model_path);
     if (!demo_app.load_model_from_path(initial_model_path)) {
-      spdlog::warn(
+      SPDLOG_WARN(
           "Could not load initial model specified via command line: {}. "
           "Application will continue without it.",
           initial_model_path);
     }
   } else {
-    spdlog::info(
+    SPDLOG_INFO(
         "No initial model path provided via command line arguments. "
         "Load a model using the GUI.");
   }

@@ -6,6 +6,8 @@
 #include <memory>
 #include <vector>
 
+namespace silk {
+
 class SolverConstrain {
  public:
   virtual ~SolverConstrain() = default;
@@ -33,3 +35,5 @@ struct SolverInitData {
   std::vector<Eigen::Triplet<float>> weighted_AA;
   std::vector<std::unique_ptr<SolverConstrain>> constrains;
 };
+
+}  // namespace silk

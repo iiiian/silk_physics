@@ -3,13 +3,15 @@
 #include <Eigen/SparseCore>
 #include <vector>
 
+namespace silk {
+
 template <typename Scalar>
 void sparse_to_triplets(const Eigen::SparseMatrix<Scalar>& m,
                         std::vector<Eigen::Triplet<Scalar>>& triplets,
                         int row_offset = 0, int col_offset = 0) {
   using Iter = typename Eigen::SparseMatrix<Scalar>::InnerIterator;
   for (int i = 0; i < m.outerSize(); i++) {
-    for (Iter it(m, i); it; ++it) { // it++ doesn't work
+    for (Iter it(m, i); it; ++it) {  // it++ doesn't work
       triplets.emplace_back(row_offset + it.row(), col_offset + it.col(),
                             it.value());
     }
@@ -31,3 +33,5 @@ void vectorize_sparse_to_triplets(const Eigen::SparseMatrix<Scalar>& m,
     }
   }
 }
+
+}  // namespace silk

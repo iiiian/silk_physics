@@ -6,6 +6,8 @@
 #include <optional>
 #include <vector>
 
+namespace silk {
+
 // a non owning 32bit resource handle
 // bit layout: | padding (1) | generation (11) | slot_index (20) |
 class ResourceHandle {
@@ -154,3 +156,5 @@ class ResourceManager {
 
   const std::vector<T>& get_dense_data() const { return data_; }
 };
+
+};  // namespace silk

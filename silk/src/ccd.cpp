@@ -7,20 +7,23 @@
 #include "ccd_poly.hpp"
 #include "interval.hpp"
 
-namespace eg = Eigen;
+namespace silk {
 
 std::optional<float> CCDSolver::coplaner_point_triangle_ccd(
     Eigen::Ref<const Eigen::Vector3f> p0, Eigen::Ref<const Eigen::Vector3f> v10,
-    Eigen::Ref<const Eigen::Vector3f> v20, Eigen::Ref<const Eigen::Vector3f> v30,
-    Eigen::Ref<const Eigen::Vector3f> p1, Eigen::Ref<const Eigen::Vector3f> v11,
-    Eigen::Ref<const Eigen::Vector3f> v21, Eigen::Ref<const Eigen::Vector3f> v31) const {
+    Eigen::Ref<const Eigen::Vector3f> v20,
+    Eigen::Ref<const Eigen::Vector3f> v30, Eigen::Ref<const Eigen::Vector3f> p1,
+    Eigen::Ref<const Eigen::Vector3f> v11,
+    Eigen::Ref<const Eigen::Vector3f> v21,
+    Eigen::Ref<const Eigen::Vector3f> v31) const {
   // TODO: handle coplaner point triangle ccd
   return std::nullopt;
   // // in coplaner ccd case, convert the problem to barycentric coordinate
   // auto bary_coor = [](Eigen::Ref<const Eigen::Vector3f> p,
   //                     Eigen::Ref<const Eigen::Vector3f> v1,
   //                     Eigen::Ref<const Eigen::Vector3f> v2,
-  //                     Eigen::Ref<const Eigen::Vector3f> v3) -> Eigen::Vector2f {
+  //                     Eigen::Ref<const Eigen::Vector3f> v3) ->
+  //                     Eigen::Vector2f {
   //   Eigen::Matrix<float, 3, 2> A;
   //   A.col(0) = v1 - v3;
   //   A.col(1) = v2 - v3;
@@ -130,7 +133,8 @@ bool point_triangle_collision(Eigen::Ref<const Eigen::Vector3f> p,
 bool edge_edge_collision(Eigen::Ref<const Eigen::Vector3f> v1,
                          Eigen::Ref<const Eigen::Vector3f> v2,
                          Eigen::Ref<const Eigen::Vector3f> v3,
-                         Eigen::Ref<const Eigen::Vector3f> v4, float h, float eps) {
+                         Eigen::Ref<const Eigen::Vector3f> v4, float h,
+                         float eps) {
   Eigen::Vector3f v21 = v2 - v1;
   Eigen::Vector3f v43 = v4 - v3;
   Eigen::Vector3f v31 = v3 - v1;
@@ -243,12 +247,15 @@ bool edge_edge_collision(Eigen::Ref<const Eigen::Vector3f> v1,
   return ((e12c - e34c).squaredNorm() < h * h);
 }
 
-bool CCDSolver::point_triangle_ccd(
-    Eigen::Ref<const Eigen::Vector3f> p0, Eigen::Ref<const Eigen::Vector3f> v10,
-    Eigen::Ref<const Eigen::Vector3f> v20, Eigen::Ref<const Eigen::Vector3f> v30,
-    Eigen::Ref<const Eigen::Vector3f> p1, Eigen::Ref<const Eigen::Vector3f> v11,
-    Eigen::Ref<const Eigen::Vector3f> v21, Eigen::Ref<const Eigen::Vector3f> v31, float t0,
-    float t1) {
+bool CCDSolver::point_triangle_ccd(Eigen::Ref<const Eigen::Vector3f> p0,
+                                   Eigen::Ref<const Eigen::Vector3f> v10,
+                                   Eigen::Ref<const Eigen::Vector3f> v20,
+                                   Eigen::Ref<const Eigen::Vector3f> v30,
+                                   Eigen::Ref<const Eigen::Vector3f> p1,
+                                   Eigen::Ref<const Eigen::Vector3f> v11,
+                                   Eigen::Ref<const Eigen::Vector3f> v21,
+                                   Eigen::Ref<const Eigen::Vector3f> v31,
+                                   float t0, float t1) {
   auto poly = CCDPoly::try_make_ccd_poly(p0, v10, v20, v30, p1, v11, v21, v31,
                                          tol, max_iter, eps);
   if (!poly) {
@@ -268,12 +275,15 @@ bool CCDSolver::point_triangle_ccd(
   return point_triangle_collision(pc, v1c, v2c, v3c, h, eps);
 }
 
-bool CCDSolver::edge_edge_ccd(
-    Eigen::Ref<const Eigen::Vector3f> v10, Eigen::Ref<const Eigen::Vector3f> v20,
-    Eigen::Ref<const Eigen::Vector3f> v30, Eigen::Ref<const Eigen::Vector3f> v40,
-    Eigen::Ref<const Eigen::Vector3f> v11, Eigen::Ref<const Eigen::Vector3f> v21,
-    Eigen::Ref<const Eigen::Vector3f> v31, Eigen::Ref<const Eigen::Vector3f> v41, float t0,
-    float t1) {
+bool CCDSolver::edge_edge_ccd(Eigen::Ref<const Eigen::Vector3f> v10,
+                              Eigen::Ref<const Eigen::Vector3f> v20,
+                              Eigen::Ref<const Eigen::Vector3f> v30,
+                              Eigen::Ref<const Eigen::Vector3f> v40,
+                              Eigen::Ref<const Eigen::Vector3f> v11,
+                              Eigen::Ref<const Eigen::Vector3f> v21,
+                              Eigen::Ref<const Eigen::Vector3f> v31,
+                              Eigen::Ref<const Eigen::Vector3f> v41, float t0,
+                              float t1) {
   auto poly = CCDPoly::try_make_ccd_poly(v10, v20, v30, v40, v11, v21, v31, v41,
                                          tol, max_iter, eps);
   if (!poly) {
@@ -292,3 +302,5 @@ bool CCDSolver::edge_edge_ccd(
   Eigen::Vector3f v4c = v40 + toi.value() * (v41 - v40);
   return edge_edge_collision(v1c, v2c, v3c, v4c, h, eps);
 }
+
+}  // namespace silk

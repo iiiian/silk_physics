@@ -25,7 +25,7 @@ void SelectorWidget::enter_paint_mode() {
   selector_sphere_->setTransparency(0.5f);
 
   ctx_.ui_mode = UIMode::Paint;
-  spdlog::info("Entered paint mode.");
+  SPDLOG_INFO("Entered paint mode.");
 }
 
 void SelectorWidget::leave_paint_mode() {
@@ -37,7 +37,7 @@ void SelectorWidget::leave_paint_mode() {
   ctx_.help_text = NORMAL_MODE_HELP_TXT;
 
   ctx_.ui_mode = UIMode::Normal;
-  spdlog::info("Left paint mode.");
+  SPDLOG_INFO("Left paint mode.");
 }
 
 void SelectorWidget::update_selection_visual() {

@@ -6,7 +6,7 @@
 #include <Eigen/Core>
 #include <cstdint>
 
-#include "common_types.hpp"
+#include "eigen_alias.hpp"
 #include "flags.hpp"
 
 enum class UIMode { Normal, Paint, ClothSim };
@@ -34,8 +34,8 @@ struct UIContext {
 struct EngineContext {
   // Basic mesh
   // V needs to be row major for easy vectorization
-  RMatrixX3f V;
-  RMatrixX3i F;
+  Verts V;
+  Faces F;
 };
 
 class IWidget {

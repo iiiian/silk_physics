@@ -1,5 +1,7 @@
 #pragma once
 
+namespace silk {
+
 class Interval {
   bool is_empty_;
   float lb_;
@@ -14,3 +16,5 @@ class Interval {
   float upper_bound() const;
   Interval intersection(const Interval& other) const;
 };
+
+}  // namespace silk

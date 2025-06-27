@@ -9,34 +9,36 @@
 #include <spdlog/spdlog.h>
 
 #include <Eigen/Core>
+#include <filesystem>
 #include <fstream>
 
-#include "../common_types.hpp"
+#include "../eigen_alias.hpp"
 
 namespace py = polyscope;
-namespace eg = Eigen;
 
 ModelLoaderWidget::ModelLoaderWidget(UIContext& ui_context,
                                      EngineContext& engine_context)
     : ui_ctx_(ui_context), engine_ctx_(engine_context) {}
 
 bool ModelLoaderWidget::load_model_from_path(const std::string& path) {
-  spdlog::info("Loading model from: {}", path);
+  SPDLOG_INFO("Loading model from: {}", path);
+
+  std::filesystem::path p{path};
 
   bool success = false;
-  RMatrixX3f V;
-  RMatrixX3i F;
+  Verts V;
+  Faces F;
   Eigen::MatrixX3f N;
-  if (path.ends_with(".off")) {
+  if (p.extension() == ".off") {
     success = igl::readOFF(path, V, F);
-  } else if (path.ends_with(".obj")) {
+  } else if (p.extension() == ".obj") {
     success = igl::readOBJ(path, V, F);
-  } else if (path.ends_with(".ply")) {
+  } else if (p.extension() == ".ply") {
     success = igl::readPLY(path, V, F);
-  } else if (path.ends_with(".stl")) {
+  } else if (p.extension() == ".stl") {
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) {
-      spdlog::error("Failed to open STL file: {}", path);
+      SPDLOG_ERROR("Failed to open STL file: {}", path);
     } else {
       success = igl::readSTL(file, V, F, N);
       file.close();
@@ -44,7 +46,7 @@ bool ModelLoaderWidget::load_model_from_path(const std::string& path) {
   }
 
   if (!success || V.rows() == 0 || F.rows() == 0) {
-    spdlog::error("Failed to load model or empty mesh from: {}", path);
+    SPDLOG_ERROR("Failed to load model or empty mesh from: {}", path);
     return false;
   }
 
@@ -59,7 +61,7 @@ bool ModelLoaderWidget::load_model_from_path(const std::string& path) {
   engine_ctx_.V = std::move(V);
   engine_ctx_.F = std::move(F);
 
-  spdlog::info("Loaded model with {} vertices and {} faces",
+  SPDLOG_INFO("Loaded model with {} vertices and {} faces",
                engine_ctx_.V.rows(), engine_ctx_.F.rows());
 
   return true;

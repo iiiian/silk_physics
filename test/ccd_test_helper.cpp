@@ -156,7 +156,7 @@ void vector_append(std::vector<T> &main, const std::vector<T> &append) {
   main.insert(main.end(), append.begin(), append.end());
 }
 
-std::string ccd_solver_to_string(const CCDSolver &solver) {
+std::string ccd_solver_to_string(const silk::CCDSolver &solver) {
   std::stringstream ss;
   ss << "CCD solver:\n";
   ss << "    eps = " << solver.eps << "\n";

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+namespace silk {
+
 Interval::Interval() {
   is_empty_ = true;
   lb_ = 0;
@@ -40,3 +42,5 @@ Interval Interval::intersection(const Interval& other) const {
   }
   return Interval(new_lb, new_ub);
 }
+
+}  // namespace silk

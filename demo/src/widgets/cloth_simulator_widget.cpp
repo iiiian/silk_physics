@@ -6,38 +6,81 @@
 #include <Eigen/Core>
 #include <cassert>
 #include <cmath>
-#include <numbers>
 
 namespace py = polyscope;
-namespace eg = Eigen;
 
 void ClothSimulatorWidget::enter_sim_mode() {
   assert((ui_ctx_.ui_mode == UIMode::Normal));
   assert((engine_ctx_.V.rows() != 0));
   assert((engine_ctx_.F.rows() != 0));
 
-  solver.pV_ = &engine_ctx_.V;
-  solver.pF_ = &engine_ctx_.F;
-  solver.pconstrain_set = &ui_ctx_.selection;
-  solver.dt_ = 1.0f / target_fps_;
-  solver.constant_acce_field_ = {0, 0, -gravity};
-  if (!solver.init()) {
-    solver.reset();
-    spdlog::error("Fail to enter cloth sim mode");
+  // update mesh any way
+  cloth_cfg_.mesh = silk::Mesh(engine_ctx_.V, engine_ctx_.F);
+
+  // convert selection to pinned group
+  int selection_size = ui_ctx_.selection.size();
+  cloth_cfg_.pinned_verts = Eigen::VectorXi::Zero(selection_size);
+  int idx = 0;
+  for (auto v : ui_ctx_.selection) {
+    cloth_cfg_.pinned_verts(idx) = v;
+    idx++;
+  }
+
+  silk::WorldResult result;
+  if (cloth_handle_) {
+    result = solver_.update_cloth(cloth_cfg_, *cloth_handle_);
+    if (result != silk::WorldResult::Success) {
+      SPDLOG_ERROR("Fail to enter cloth sim mode, Reason: {}",
+                    silk::to_string(result));
+      return;
+    }
+  } else {
+    silk::Handle h;
+    result = solver_.add_cloth(cloth_cfg_, h);
+    if (result != silk::WorldResult::Success) {
+      SPDLOG_ERROR("Fail to enter cloth sim mode, Reason: {}",
+                    silk::to_string(result));
+      return;
+    }
+
+    cloth_handle_ = h;
+  }
+
+  solver_.set_constant_acce_field({0, 0, -gravity_});
+  solver_.set_max_iterations(solver_max_iter_);
+  solver_.set_thread_num(solver_thread_num_);
+  result = solver_.set_dt(1.0f / target_fps_);
+  if (result != silk::WorldResult::Success) {
+    SPDLOG_ERROR("Fail to enter cloth sim mode, Reason: {}",
+                  silk::to_string(result));
+    return;
+  }
+  result = solver_.set_low_freq_mode_num(solver_low_freq_mode_num_);
+  if (result != silk::WorldResult::Success) {
+    SPDLOG_ERROR("Fail to enter cloth sim mode, Reason: {}",
+                  silk::to_string(result));
+    return;
+  }
+
+  result = solver_.solver_init();
+  if (result != silk::WorldResult::Success) {
+    solver_.solver_reset();
+    SPDLOG_ERROR("Fail to enter cloth sim mode: Reason: {}",
+                  silk::to_string(result));
     return;
   }
 
   original_V = engine_ctx_.V;
-  prev_update_time = std::chrono::steady_clock::now();
+  prev_update_time_ = std::chrono::steady_clock::now();
   prev_mouse_pos_ = ImGui::GetMousePos();
   ui_ctx_.help_text = CLOTH_SIM_MODE_HELP_TXT;
 
   ui_ctx_.ui_mode = UIMode::ClothSim;
-  spdlog::info("Enter cloth sim mode");
+  SPDLOG_INFO("Enter cloth sim mode");
 }
 
 void ClothSimulatorWidget::leave_sim_mode() {
-  solver.reset();
+  solver_.solver_reset();
   engine_ctx_.V = original_V;
   ui_ctx_.p_surface->updateVertexPositions(original_V);
   original_V = {};
@@ -45,16 +88,33 @@ void ClothSimulatorWidget::leave_sim_mode() {
   ui_ctx_.help_text = NORMAL_MODE_HELP_TXT;
 
   ui_ctx_.ui_mode = UIMode::Normal;
-  spdlog::info("Leave cloth sim mode");
+  SPDLOG_INFO("Leave cloth sim mode");
 }
 
 void ClothSimulatorWidget::compute_cloth(float elapse_sec) {
-  int substep = elapse_sec / solver.dt_ + 1;
+  int substep = elapse_sec / solver_.get_dt() + 1;
   assert((substep >= 1));
 
+  // convert selection to pinned group
+  int selection_size = ui_ctx_.selection.size();
+  Eigen::VectorXf pinned_positions = Eigen::VectorXf::Zero(3 * selection_size);
+  int idx = 0;
+  for (auto v : ui_ctx_.selection) {
+    pinned_positions(Eigen::seqN(3 * idx, 3)) = engine_ctx_.V.row(v);
+    idx++;
+  }
+
+  auto result =
+      solver_.update_position_constrain(*cloth_handle_, pinned_positions);
+  if (result != silk::WorldResult::Success) {
+    SPDLOG_ERROR("Cloth solve fail, Reason: {}", silk::to_string(result));
+    return;
+  }
+
   for (int s = 0; s < substep; ++s) {
-    if (!solver.solve()) {
-      spdlog::error("Cloth solve fail");
+    auto result = solver_.step();
+    if (result != silk::WorldResult::Success) {
+      SPDLOG_ERROR("Cloth solve fail, Reason: {}", silk::to_string(result));
       leave_sim_mode();
     }
   }
@@ -91,7 +151,8 @@ void ClothSimulatorWidget::handle_drag_selection() {
   float plane_dist = glm::dot(camera.getLookDir(), pos - camera.getPosition());
 
   float fov_y = camera.getFoVVerticalDegrees();
-  float span_y = plane_dist * std::tan(std::numbers::pi * fov_y / 360);
+  // TODO: use proper pi
+  float span_y = plane_dist * std::tan(3.14 * fov_y / 360);
   float span_x = camera.getAspectRatioWidthOverHeight() * span_y;
 
   ImVec2 win_size = ImGui::GetMainViewport()->Size;
@@ -148,7 +209,7 @@ EventFlag ClothSimulatorWidget::draw() {
 
     // During simulation these parameters can't be adjuested
     ImGui::BeginDisabled(ui_ctx_.ui_mode == UIMode::ClothSim);
-    ImGui::DragInt("Solver Threads", &solver.thread_num_, 1.0f, 1, 24, "%d",
+    ImGui::DragInt("Solver Threads", &solver_thread_num_, 1.0f, 1, 24, "%d",
                    ImGuiSliderFlags_AlwaysClamp);
     ImGui::SetItemTooltip("thread number for local projection step");
 
@@ -157,27 +218,27 @@ EventFlag ClothSimulatorWidget::draw() {
     ImGui::SetItemTooltip(
         "FPS of cloth solver, large elastic stiffness require high FPS");
 
-    ImGui::DragInt("Max Iterations", &solver.max_iterations, 1.0f, 1, 10, "%d",
+    ImGui::DragInt("Max Iterations", &solver_max_iter_, 1.0f, 1, 10, "%d",
                    ImGuiSliderFlags_AlwaysClamp);
     ImGui::SetItemTooltip("The higher the better the detail");
 
-    ImGui::DragInt("Low Frequency Mode Number", &solver.low_freq_mode_num, 1.0f,
-                   5, 100, "%d", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::DragInt("Low Frequency Mode Number", &solver_low_freq_mode_num_,
+                   1.0f, 5, 100, "%d", ImGuiSliderFlags_AlwaysClamp);
     ImGui::SetItemTooltip("Might improve performance?");
 
-    ImGui::DragFloat("Elastic Stiffness", &solver.elastic_stiffness_, 1.0f, 0,
-                     1e6, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::DragFloat("Elastic Stiffness", &cloth_cfg_.elastic_stiffness, 1.0f,
+                     0, 1e6, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     ImGui::SetItemTooltip("the in-plane cloth stiffness");
 
-    ImGui::DragFloat("Bending Stiffness", &solver.bending_stiffness_, 1.0f, 0,
-                     1e6, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::DragFloat("Bending Stiffness", &cloth_cfg_.bending_stiffness, 1.0f,
+                     0, 1e6, "%.3f", ImGuiSliderFlags_AlwaysClamp);
     ImGui::SetItemTooltip("the cloth bending stiffness");
 
-    ImGui::DragFloat("Density", &solver.density_, 1.0f, 1e-3, 1e2, "%.3f",
+    ImGui::DragFloat("Density", &cloth_cfg_.density, 1.0f, 1e-3, 1e2, "%.3f",
                      ImGuiSliderFlags_AlwaysClamp);
     ImGui::SetItemTooltip("the cloth density");
 
-    ImGui::DragFloat("Gravity", &gravity, 1.0f, 1, 100, "%.3f",
+    ImGui::DragFloat("Gravity", &gravity_, 1.0f, 1, 100, "%.3f",
                      ImGuiSliderFlags_AlwaysClamp);
     ImGui::SetItemTooltip("gravity acceleration");
 
@@ -195,10 +256,10 @@ EventFlag ClothSimulatorWidget::draw() {
   // update cloth
   if (ui_ctx_.ui_mode == UIMode::ClothSim) {
     auto now = std::chrono::steady_clock::now();
-    std::chrono::duration<float> elapse_sec = now - prev_update_time;
-    if (elapse_sec.count() >= solver.dt_) {
+    std::chrono::duration<float> elapse_sec = now - prev_update_time_;
+    if (elapse_sec.count() >= solver_.get_dt()) {
       compute_cloth(elapse_sec.count());
-      prev_update_time = std::chrono::steady_clock::now();
+      prev_update_time_ = std::chrono::steady_clock::now();
     }
   }
 

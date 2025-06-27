@@ -3,6 +3,8 @@
 #include <Eigen/Core>
 #include <optional>
 
+namespace silk {
+
 class CCDSolver {
   std::optional<float> coplaner_point_triangle_ccd(
       Eigen::Ref<const Eigen::Vector3f> p0,
@@ -49,3 +51,5 @@ class CCDSolver {
                      Eigen::Ref<const Eigen::Vector3f> v31,
                      Eigen::Ref<const Eigen::Vector3f> v41, float t0, float t1);
 };
+
+}  // namespace silk

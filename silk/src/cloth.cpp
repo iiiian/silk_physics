@@ -15,7 +15,8 @@
 #include <vector>
 
 #include "eigen_helper.hpp"
-#include "physical_body.hpp"
+
+namespace silk {
 
 bool ClothConfig::is_valid() const {
   if (elastic_stiffness <= 0 || elastic_stiffness > 1000) {
@@ -183,7 +184,7 @@ SolverInitData Cloth::compute_solver_init_data() const {
         mesh.V.row(vidx(0)), mesh.V.row(vidx(1)), mesh.V.row(vidx(2)));
     if (!jacobian_op) {
       // TODO: handle degenerate triangle better
-      // spdlog::warn("degenerate triangle {}", f);
+      // SPDLOG_WARN("degenerate triangle {}", f);
       continue;
     }
 
@@ -227,3 +228,5 @@ SolverInitData Cloth::compute_solver_init_data() const {
 
   return init_data;
 }
+
+}  // namespace silk

@@ -3,9 +3,12 @@
 #include <optional>
 #include <silk/silk.hpp>
 
-#include "common_types.hpp"
 #include "physical_body.hpp"
 #include "solver.hpp"
+
+namespace silk {
+
+using Matrix69f = Eigen::Matrix<float, 6, 9>;
 
 class ClothElasticConstrain : public SolverConstrain {
   Matrix69f jacobian_op_;
@@ -46,3 +49,5 @@ class Cloth : public PhysicalBody {
 
   SolverInitData compute_solver_init_data() const override;
 };
+
+}  // namespace silk

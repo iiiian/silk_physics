@@ -5,6 +5,8 @@
 
 #include "solver.hpp"
 
+namespace silk {
+
 class PhysicalBody {
  public:
   virtual ~PhysicalBody() = default;
@@ -17,3 +19,5 @@ class PhysicalBody {
 
   virtual SolverInitData compute_solver_init_data() const = 0;
 };
+
+}  // namespace silk

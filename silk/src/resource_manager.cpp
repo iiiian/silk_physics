@@ -2,6 +2,8 @@
 
 #include <cassert>
 
+namespace silk {
+
 ResourceHandle::ResourceHandle(uint32_t value) : value(value) {}
 
 ResourceHandle::ResourceHandle(uint32_t generation, uint32_t slot_index) {
@@ -64,3 +66,5 @@ void ResourceSlot::set_data_index(uint32_t data_index) {
   uint32_t data_index_bit = data_index & DATA_MASK;
   value = data_index_bit | (value & ~DATA_MASK);
 }
+
+}  // namespace silk

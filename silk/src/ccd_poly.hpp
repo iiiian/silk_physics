@@ -3,6 +3,8 @@
 #include <Eigen/Core>
 #include <optional>
 
+namespace silk {
+
 class CCDPoly {
   // CCD polynomial: ax^3 + bx^2 + cx + d = 0.
   float a_, b_, c_, d_;
@@ -35,3 +37,5 @@ class CCDPoly {
 
   std::optional<float> solve() const;
 };
+
+}  // namespace silk

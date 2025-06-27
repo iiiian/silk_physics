@@ -4,10 +4,14 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
-#include <span>
 #include <vector>
 
-#include "common_types.hpp"
+namespace silk {
+
+struct Bbox {
+  Eigen::Vector3f max;
+  Eigen::Vector3f min;
+};
 
 struct CellInfo {
   uint32_t time = 0;   // time stamp
@@ -68,13 +72,13 @@ class SpatialHasher {
     }
   }
 
-  void batch_populate_cell_info(std::span<const Bbox> bboxes) {
+  void batch_populate_cell_info(const std::vector<Bbox>& bboxes) {
     assert(hash_map_size != 0);
     assert(!bboxes.empty());
 
     if (cell_infos_.size() != hash_map_size) {
       cell_infos_.resize(hash_map_size);
-      std::ranges::fill(cell_infos_, CellInfo{0, 0, 0, 0});
+      std::fill(cell_infos_.begin(), cell_infos_.end(), CellInfo{0, 0, 0, 0});
     }
     active_cell_hashes.clear();
     cell_primitives_count_ = 0;
@@ -115,8 +119,8 @@ class SpatialHasher {
     }
   }
 
-  void batch_cell_insert(std::span<const T> values,
-                         std::span<const Bbox> bboxes) {
+  void batch_cell_insert(const std::vector<T>& values,
+                         const std::vector<Bbox>& bboxes) {
     assert(!values.empty());
     assert(values.size() == bboxes.size());
     assert(!cell_infos_.empty());
@@ -139,7 +143,7 @@ class SpatialHasher {
     cells_ = {};
   }
 
-  void update(std::span<const T> values, std::span<const Bbox> bboxes) {
+  void update(const std::vector<T>& values, const std::vector<Bbox>& bboxes) {
     assert(!values.empty());
     assert(values.size() == bboxes.size());
 
@@ -163,7 +167,8 @@ class SpatialHasher {
           auto& info = cell_infos_[h];
           for (uint32_t idx = info.start; idx < info.start + info.size; idx++) {
             const T& value = cells_[idx];
-            if (std::ranges::find(neighbors, value) == neighbors.end()) {
+            if (std::find(neighbors.begin(), neighbors.end(), value) ==
+                neighbors.end()) {
               neighbors.push_back(value);
             }
           }
@@ -174,3 +179,5 @@ class SpatialHasher {
     return neighbors;
   }
 };
+
+}  // namespace silk

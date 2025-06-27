@@ -5,9 +5,9 @@
 #include <limits>
 #include <random>
 
-namespace eg = Eigen;
-
-Eigen::Index KDTree::next_axis(Eigen::Index idx) { return (idx == 2) ? 0 : idx + 1; }
+Eigen::Index KDTree::next_axis(Eigen::Index idx) {
+  return (idx == 2) ? 0 : idx + 1;
+}
 
 void KDTree::fisher_yates_shuffle(Iter begin, Iter end, size_t n) const {
   size_t size = std::distance(begin, end);
@@ -26,7 +26,8 @@ void KDTree::fisher_yates_shuffle(Iter begin, Iter end, size_t n) const {
   }
 }
 
-Eigen::Index KDTree::heuristic_median(Iter begin, Iter end, Eigen::Index axis) const {
+Eigen::Index KDTree::heuristic_median(Iter begin, Iter end,
+                                      Eigen::Index axis) const {
   size_t size = std::distance(begin, end);
   assert((median_sample_num != 0));
   assert((size != 0));
@@ -40,7 +41,8 @@ Eigen::Index KDTree::heuristic_median(Iter begin, Iter end, Eigen::Index axis) c
   }
 
   // sort random samples based on axis
-  auto comp = [this, &axis](const Eigen::Index &a, const Eigen::Index &b) -> bool {
+  auto comp = [this, &axis](const Eigen::Index &a,
+                            const Eigen::Index &b) -> bool {
     const Eigen::MatrixX3f &verts = *this->_p_verts;
     return (verts(a, axis) < verts(b, axis));
   };
@@ -116,8 +118,8 @@ void KDTree::delete_tree(KDNode *p_node) {
 
 KDTree::~KDTree() { delete_tree(_p_root); }
 
-void KDTree::update_closest(const Eigen::RowVector3f &point, const KDNode *p_node,
-                            float &min_dist_square,
+void KDTree::update_closest(const Eigen::RowVector3f &point,
+                            const KDNode *p_node, float &min_dist_square,
                             Eigen::Index &target_idx) const {
   if (p_node == nullptr) {
     return;
@@ -154,8 +156,8 @@ void KDTree::update_closest(const Eigen::RowVector3f &point, const KDNode *p_nod
   }
 }
 
-void KDTree::update_neighbors(const Eigen::RowVector3f &point, float radius_square,
-                              const KDNode *p_node,
+void KDTree::update_neighbors(const Eigen::RowVector3f &point,
+                              float radius_square, const KDNode *p_node,
                               std::vector<Eigen::Index> &result) const {
   if (p_node == nullptr) {
     return;
@@ -213,8 +215,8 @@ void KDTree::clear() {
   _stats = {};
 }
 
-std::vector<Eigen::Index> KDTree::find_neighbors(const Eigen::RowVector3f &point,
-                                              float radius) const {
+std::vector<Eigen::Index> KDTree::find_neighbors(
+    const Eigen::RowVector3f &point, float radius) const {
   assert((_p_root != nullptr));
 
   std::vector<Eigen::Index> result;

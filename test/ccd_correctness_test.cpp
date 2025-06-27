@@ -10,7 +10,7 @@ namespace fs = std::filesystem;
 
 void test_query_category(const fs::path &root, const std::string &name) {
   QueryCategory category{root / name};
-  CCDSolver solver;
+  silk::CCDSolver solver;
   solver.tol = 0.1;
   solver.eps = 1e-6;
   // solver.h = 0.001;

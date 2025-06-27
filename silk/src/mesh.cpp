@@ -2,6 +2,8 @@
 #include <cstdint>
 #include <silk/silk.hpp>
 
+namespace silk {
+
 Mesh::Mesh(const Verts& verts, const Faces& faces) : V(verts), F(faces) {}
 
 Mesh::Mesh(float* verts, uint32_t vert_num, int* faces, uint32_t face_num) {
@@ -34,3 +36,5 @@ bool Mesh::is_valid() const {
 
   return true;
 }
+
+}  // namespace silk

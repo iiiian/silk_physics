@@ -4,7 +4,7 @@ project(silk VERSION 0.1.0 LANGUAGES CXX Fortran)
 
 set(CMAKE_CXX_STANDARD 17)
 
-option(SILK_BUILD_DEMO "Build the GUI demo application" OFF)
+option(SILK_BUILD_DEMO "Build the GUI demo application" ON)
 
 find_package(OpenMP REQUIRED)
 find_package(BLAS REQUIRED)
