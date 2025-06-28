@@ -28,9 +28,11 @@ target_include_directories(
         $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(silk PRIVATE igl::core)
-target_link_libraries(silk PRIVATE arpack)
-target_link_libraries(silk PRIVATE OpenMP::OpenMP_CXX)
+target_link_libraries(
+    silk
+    PUBLIC Eigen3::Eigen
+    PRIVATE igl::core arpack OpenMP::OpenMP_CXX
+)
 
 # -------------------------------------------------
 # Installation rules

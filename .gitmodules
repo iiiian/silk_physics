@@ -19,3 +19,6 @@
 [submodule "misc/ccd-sample-queries"]
 	path = misc/ccd-sample-queries
 	url = https://github.com/Continuous-Collision-Detection/Sample-Queries.git
+[submodule "extern/eigen"]
+	path = extern/eigen
+	url = https://gitlab.com/libeigen/eigen.git

@@ -41,6 +41,7 @@ target_compile_definitions(
 )
 
 target_link_libraries(demo PRIVATE spdlog::spdlog)
+target_link_libraries(demo PRIVATE Eigen3::Eigen)
 target_link_libraries(demo PRIVATE igl::core)
 target_link_libraries(demo PRIVATE polyscope)
 target_link_libraries(demo PRIVATE portable_file_dialogs)
