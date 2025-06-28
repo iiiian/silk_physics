@@ -71,6 +71,7 @@ class World::WorldImpl {
   Eigen::VectorXf init_position_;
   Eigen::VectorXf velocity_;
   Eigen::SparseMatrix<float> mass_;
+  Eigen::SparseMatrix<float> H_;  // iterative solver depends on this matrix !!
   Eigen::MatrixXf UHU_;
   Eigen::MatrixXf U_;
   Eigen::VectorXf HX_;
@@ -107,10 +108,10 @@ class World::WorldImpl {
   void init_solver_position_and_velocity() {
     velocity_ = Eigen::VectorXf::Zero(3 * total_vert_num_);
     position_.resize(3 * total_vert_num_);
-    for (auto& offset : body_position_offsets_) {
-      uint32_t len = 3 * offset.body->get_vert_num();
-      position_(Eigen::seqN(offset.offset, len)) =
-          offset.body->get_init_position();
+    for (auto& body_offset : body_position_offsets_) {
+      uint32_t len = 3 * body_offset.body->get_vert_num();
+      position_(Eigen::seqN(body_offset.offset, len)) =
+          body_offset.body->get_init_position();
     }
     init_position_ = position_;
   }
@@ -246,6 +247,7 @@ class World::WorldImpl {
     init_position_ = {};
     velocity_ = {};
     mass_ = {};
+    H_ = {};
     UHU_ = {};
     U_ = {};
     HX_ = {};
@@ -284,12 +286,13 @@ class World::WorldImpl {
     mass_.setFromTriplets(mass_triplets.begin(), mass_triplets.end());
     Eigen::SparseMatrix<float> AA(dim, dim);
     AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
-    Eigen::SparseMatrix<float> H = (mass_ / (dt_ * dt_) + AA);
+    H_ = (mass_ / (dt_ * dt_) + AA);
     Eigen::ArpackGeneralizedSelfAdjointEigenSolver<
         Eigen::SparseMatrix<float>,
-        Eigen::SimplicialLLT<Eigen::SparseMatrix<float>>, true>
+        Eigen::SimplicialLLT<Eigen::SparseMatrix<float>>>
         eigen_solver;
-    eigen_solver.compute(H, low_freq_mode_num_, "SM");
+    low_freq_mode_num_ = std::min(low_freq_mode_num_, dim);
+    eigen_solver.compute(H_, low_freq_mode_num_, "SM");
     if (eigen_solver.info() != Eigen::Success) {
       // SPDLOG_ERROR("eigen decomposition fail");
       // TODO: better signal warning
@@ -297,9 +300,11 @@ class World::WorldImpl {
     }
     U_ = eigen_solver.eigenvectors();
     UHU_ = eigen_solver.eigenvalues();
-    HX_ = H * init_position_;
+    HX_ = H_ * init_position_;
 
-    iterative_solver_.compute(H);
+    // conjugate gradient solver depends on H_ !!
+    iterative_solver_.setMaxIterations(max_iterations);
+    iterative_solver_.compute(H_);
     if (iterative_solver_.info() != Eigen::Success) {
       // SPDLOG_ERROR("iterative solver decomposition fail");
       // TODO: signal warning
@@ -317,34 +322,35 @@ class World::WorldImpl {
 
     // basic linear velocity term
     Eigen::VectorXf rhs =
-        (mass_ / dt_ / dt_) * velocity_ + (mass_ / dt_) * velocity_ +
+        (mass_ / dt_ / dt_) * position_ + (mass_ / dt_) * velocity_ +
         mass_ * constant_acce_field.replicate(total_vert_num_, 1);
-
-    // thread local rhs
-    std::vector<Eigen::VectorXf> thread_local_rhs(
-        thread_num, Eigen::VectorXf::Zero(3 * total_vert_num_));
-    // project constrains
-#pragma omp parallel for num_threads(thread_num)
-    for (const auto& c : constrains_) {
-      auto& local_rhs = thread_local_rhs[omp_get_thread_num()];
-      c->project(position_, local_rhs);
-    }
-    // merge thread local rhs back to global rhs
-    for (auto& r : thread_local_rhs) {
-      rhs += r;
-    }
-
-    // sub space solve
-    Eigen::VectorXf b = U_.transpose() * (rhs - HX_);
-    Eigen::VectorXf q = b.array() / UHU_.array();
-    Eigen::VectorXf subspace_sol = init_position_ + U_ * q;
+    //
+    //     // thread local rhs
+    //     std::vector<Eigen::VectorXf> thread_local_rhs(
+    //         thread_num, Eigen::VectorXf::Zero(3 * total_vert_num_));
+    //     // project constrains
+    // #pragma omp parallel for num_threads(thread_num)
+    //     for (const auto& c : constrains_) {
+    //       auto& local_rhs = thread_local_rhs[omp_get_thread_num()];
+    //       c->project(position_, local_rhs);
+    //     }
+    //     // merge thread local rhs back to global rhs
+    //     for (auto& r : thread_local_rhs) {
+    //       rhs += r;
+    //     }
+    //
+    //     // sub space solve
+    //     Eigen::VectorXf b = U_.transpose() * (rhs - HX_);
+    //     Eigen::VectorXf q = b.array() / UHU_.array();
+    //     Eigen::VectorXf subspace_sol = init_position_ + U_ * q;
 
     // iterative global solve
-    Eigen::VectorXf sol = iterative_solver_.solveWithGuess(rhs, subspace_sol);
-    if (iterative_solver_.info() != Eigen::Success &&
-        iterative_solver_.info() != Eigen::NoConvergence) {
-      return WorldResult::IterativeSolveFail;
-    }
+    // Eigen::VectorXf sol = subspace_sol;
+    // Eigen::VectorXf sol = iterative_solver_.solveWithGuess(rhs,
+    // subspace_sol); if (iterative_solver_.info() != Eigen::Success &&
+    //     iterative_solver_.info() != Eigen::NoConvergence) {
+    //   return WorldResult::IterativeSolveFail;
+    // }
 
     // spdlog::info("itertive solver iteration {}",
     //              iterative_solver_.iterations());
@@ -356,8 +362,8 @@ class World::WorldImpl {
     //                             ClothSolver::rtc_collision_callback, this);
     // }
 
-    velocity_ = (sol - position_) / dt_;
-    position_ = sol;
+    velocity_ = (rhs - position_) / dt_;
+    position_ = rhs;
 
     return WorldResult::Success;
   }
@@ -370,12 +376,12 @@ class World::WorldImpl {
     }
 
     auto pinned_verts = body->get_pinned_verts();
-    if (position_.size() != pinned_verts.size()) {
+    if (positions.size() != 3 * pinned_verts.size()) {
       return WorldResult::IncorrectPositionConstrainLength;
     }
     uint32_t offset = body->get_position_offset();
-    for (auto idx : pinned_verts) {
-      position_(Eigen::seqN(offset + 3 * idx, 3)) =
+    for (uint32_t idx = 0; idx < pinned_verts.size(); ++idx) {
+      position_(Eigen::seqN(offset + 3 * pinned_verts(idx), 3)) =
           positions(Eigen::seqN(3 * idx, 3));
     }
 
@@ -390,12 +396,12 @@ class World::WorldImpl {
     }
 
     uint32_t offset = body->get_position_offset();
-    uint32_t len = 3 * body->get_vert_num();
-    if (positions.size() != len) {
+    uint32_t size = 3 * body->get_vert_num();
+    if (positions.size() != size) {
       return WorldResult::IncorrentOutputPositionLength;
     }
 
-    positions = position_(Eigen::seqN(offset, len));
+    positions = position_(Eigen::seqN(offset, size));
     return WorldResult::Success;
   }
 };

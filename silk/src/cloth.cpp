@@ -131,7 +131,7 @@ Cloth::Cloth(ClothConfig config) : cfg_(std::move(config)) {}
 uint32_t Cloth::get_vert_num() const { return cfg_.mesh.V.rows(); }
 
 Eigen::Ref<const Eigen::VectorXf> Cloth::get_init_position() const {
-  return cfg_.mesh.V.reshaped<Eigen::RowMajorBit>();
+  return cfg_.mesh.V.reshaped<Eigen::RowMajor>();
 }
 
 uint32_t Cloth::get_position_offset() const { return solver_position_offset_; }
@@ -155,76 +155,77 @@ SolverInitData Cloth::compute_solver_init_data() const {
   igl::massmatrix(mesh.V, mesh.F, igl::MASSMATRIX_TYPE_VORONOI, mass);
   mass *= cfg_.density;
   vectorize_sparse_to_triplets(mass, init_data.mass, solver_position_offset_,
-                               0);
-
-  // cotangent laplacian with inverse mass as weight
-  Eigen::SparseMatrix<float> C;  // cotangent matrix
-  igl::cotmatrix(mesh.V, mesh.F, C);
-  Eigen::SparseMatrix<float> W(vnum, vnum);  // cotangent laplacian weight
-  W.setIdentity();
-  for (int i = 0; i < vnum; i++) {
-    W.coeffRef(i, i) = 1 / mass.coeff(i, i);
-  }
-  // this is the weighted AA for bending energy.
-  // assume initial curvature is 0 so there is no solver constrain for bending
-  Eigen::SparseMatrix<float> CWC =
-      cfg_.bending_stiffness * C.transpose() * W * C;
-  vectorize_sparse_to_triplets(CWC, init_data.weighted_AA,
-                               solver_position_offset_, 0);
-
-  // triangle area
-  Eigen::VectorXf area;
-  igl::doublearea(mesh.V, mesh.F, area);
-  area /= 2;
-
-  // in-plane deformation
-  for (int f = 0; f < fnum; ++f) {
-    auto vidx = mesh.F.row(f);
-    auto jacobian_op = vectorized_jacobian_operator(
-        mesh.V.row(vidx(0)), mesh.V.row(vidx(1)), mesh.V.row(vidx(2)));
-    if (!jacobian_op) {
-      // TODO: handle degenerate triangle better
-      // SPDLOG_WARN("degenerate triangle {}", f);
-      continue;
-    }
-
-    float weight = cfg_.elastic_stiffness * area(f);
-    init_data.constrains.emplace_back(std::make_unique<ClothElasticConstrain>(
-        *jacobian_op, vidx, solver_position_offset_, weight));
-    Eigen::Matrix<float, 9, 9> local_AA =
-        (*jacobian_op).transpose() * (*jacobian_op);
-
-    // convert the local AA to global AA
-    for (int vi = 0; vi < 3; ++vi) {
-      for (int vj = 0; vj < 3; ++vj) {
-        for (int i = 0; i < 3; ++i) {
-          for (int j = 0; j < 3; ++j) {
-            float val = weight * local_AA(3 * vi + i, 3 * vj + j);
-            if (std::abs(val) == 0) {
-              continue;
-            }
-            // TODO: consider purging value near zero to save compute
-            init_data.weighted_AA.emplace_back(
-                solver_position_offset_ + 3 * vidx(vi) + i,
-                solver_position_offset_ + 3 * vidx(vj) + j, val);
-          }
-        }
-      }
-    }
-  }
-
-  // pinned vertices
-  if (cfg_.pinned_verts.size() != 0) {
-    // TODO: remove hard coded position constrain stiffness
-    for (auto idx : cfg_.pinned_verts) {
-      uint32_t offset = solver_position_offset_ + 3 * idx;
-      init_data.weighted_AA.emplace_back(offset, offset, 1e6);
-      init_data.weighted_AA.emplace_back(offset + 1, offset + 1, 1e6);
-      init_data.weighted_AA.emplace_back(offset + 2, offset + 2, 1e6);
-    }
-    init_data.constrains.emplace_back(std::make_unique<PositionConstrain>(
-        cfg_.pinned_verts, solver_position_offset_, 1e6));
-  }
+                               solver_position_offset_);
+  //
+  // // cotangent laplacian with inverse mass as weight
+  // Eigen::SparseMatrix<float> C;  // cotangent matrix
+  // igl::cotmatrix(mesh.V, mesh.F, C);
+  // Eigen::SparseMatrix<float> W(vnum, vnum);  // cotangent laplacian weight
+  // W.setIdentity();
+  // for (int i = 0; i < vnum; i++) {
+  //   W.coeffRef(i, i) = 1 / mass.coeff(i, i);
+  // }
+  // // this is the weighted AA for bending energy.
+  // // assume initial curvature is 0 so there is no solver constrain for
+  // bending Eigen::SparseMatrix<float> CWC =
+  //     cfg_.bending_stiffness * C.transpose() * W * C;
+  // vectorize_sparse_to_triplets(CWC, init_data.weighted_AA,
+  //                              solver_position_offset_,
+  //                              solver_position_offset_);
+  //
+  // // triangle area
+  // Eigen::VectorXf area;
+  // igl::doublearea(mesh.V, mesh.F, area);
+  // area /= 2;
+  //
+  // // in-plane deformation
+  // for (int f = 0; f < fnum; ++f) {
+  //   auto vidx = mesh.F.row(f);
+  //   auto jacobian_op = vectorized_jacobian_operator(
+  //       mesh.V.row(vidx(0)), mesh.V.row(vidx(1)), mesh.V.row(vidx(2)));
+  //   if (!jacobian_op) {
+  //     // TODO: handle degenerate triangle better
+  //     // SPDLOG_WARN("degenerate triangle {}", f);
+  //     continue;
+  //   }
+  //
+  //   float weight = cfg_.elastic_stiffness * area(f);
+  //   init_data.constrains.emplace_back(std::make_unique<ClothElasticConstrain>(
+  //       *jacobian_op, vidx, solver_position_offset_, weight));
+  //   Eigen::Matrix<float, 9, 9> local_AA =
+  //       (*jacobian_op).transpose() * (*jacobian_op);
+  //
+  //   // convert the local AA to global AA
+  //   for (int vi = 0; vi < 3; ++vi) {
+  //     for (int vj = 0; vj < 3; ++vj) {
+  //       for (int i = 0; i < 3; ++i) {
+  //         for (int j = 0; j < 3; ++j) {
+  //           float val = weight * local_AA(3 * vi + i, 3 * vj + j);
+  //           if (std::abs(val) == 0) {
+  //             continue;
+  //           }
+  //           // TODO: consider purging value near zero to save compute
+  //           init_data.weighted_AA.emplace_back(
+  //               solver_position_offset_ + 3 * vidx(vi) + i,
+  //               solver_position_offset_ + 3 * vidx(vj) + j, val);
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
+  //
+  // // pinned vertices
+  // if (cfg_.pinned_verts.size() != 0) {
+  //   // TODO: remove hard coded position constrain stiffness
+  //   for (auto idx : cfg_.pinned_verts) {
+  //     uint32_t offset = solver_position_offset_ + 3 * idx;
+  //     init_data.weighted_AA.emplace_back(offset, offset, 1e6);
+  //     init_data.weighted_AA.emplace_back(offset + 1, offset + 1, 1e6);
+  //     init_data.weighted_AA.emplace_back(offset + 2, offset + 2, 1e6);
+  //   }
+  //   init_data.constrains.emplace_back(std::make_unique<PositionConstrain>(
+  //       cfg_.pinned_verts, solver_position_offset_, 1e6));
+  // }
 
   return init_data;
 }

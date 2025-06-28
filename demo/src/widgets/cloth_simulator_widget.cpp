@@ -31,7 +31,7 @@ void ClothSimulatorWidget::enter_sim_mode() {
     result = solver_.update_cloth(cloth_cfg_, *cloth_handle_);
     if (result != silk::WorldResult::Success) {
       SPDLOG_ERROR("Fail to enter cloth sim mode, Reason: {}",
-                    silk::to_string(result));
+                   silk::to_string(result));
       return;
     }
   } else {
@@ -39,7 +39,7 @@ void ClothSimulatorWidget::enter_sim_mode() {
     result = solver_.add_cloth(cloth_cfg_, h);
     if (result != silk::WorldResult::Success) {
       SPDLOG_ERROR("Fail to enter cloth sim mode, Reason: {}",
-                    silk::to_string(result));
+                   silk::to_string(result));
       return;
     }
 
@@ -52,13 +52,13 @@ void ClothSimulatorWidget::enter_sim_mode() {
   result = solver_.set_dt(1.0f / target_fps_);
   if (result != silk::WorldResult::Success) {
     SPDLOG_ERROR("Fail to enter cloth sim mode, Reason: {}",
-                  silk::to_string(result));
+                 silk::to_string(result));
     return;
   }
   result = solver_.set_low_freq_mode_num(solver_low_freq_mode_num_);
   if (result != silk::WorldResult::Success) {
     SPDLOG_ERROR("Fail to enter cloth sim mode, Reason: {}",
-                  silk::to_string(result));
+                 silk::to_string(result));
     return;
   }
 
@@ -66,7 +66,7 @@ void ClothSimulatorWidget::enter_sim_mode() {
   if (result != silk::WorldResult::Success) {
     solver_.solver_reset();
     SPDLOG_ERROR("Fail to enter cloth sim mode: Reason: {}",
-                  silk::to_string(result));
+                 silk::to_string(result));
     return;
   }
 
@@ -96,10 +96,10 @@ void ClothSimulatorWidget::compute_cloth(float elapse_sec) {
   assert((substep >= 1));
 
   // convert selection to pinned group
-  int selection_size = ui_ctx_.selection.size();
-  Eigen::VectorXf pinned_positions = Eigen::VectorXf::Zero(3 * selection_size);
+  int pinned_size = cloth_cfg_.pinned_verts.size();
+  Eigen::VectorXf pinned_positions = Eigen::VectorXf::Zero(3 * pinned_size);
   int idx = 0;
-  for (auto v : ui_ctx_.selection) {
+  for (auto v : cloth_cfg_.pinned_verts) {
     pinned_positions(Eigen::seqN(3 * idx, 3)) = engine_ctx_.V.row(v);
     idx++;
   }
@@ -108,6 +108,7 @@ void ClothSimulatorWidget::compute_cloth(float elapse_sec) {
       solver_.update_position_constrain(*cloth_handle_, pinned_positions);
   if (result != silk::WorldResult::Success) {
     SPDLOG_ERROR("Cloth solve fail, Reason: {}", silk::to_string(result));
+    leave_sim_mode();
     return;
   }
 
@@ -116,7 +117,18 @@ void ClothSimulatorWidget::compute_cloth(float elapse_sec) {
     if (result != silk::WorldResult::Success) {
       SPDLOG_ERROR("Cloth solve fail, Reason: {}", silk::to_string(result));
       leave_sim_mode();
+      return;
     }
+  }
+
+  // copy the simulation result back to engine ctx
+  Eigen::Map<Eigen::VectorXf> vert_view{engine_ctx_.V.data(),
+                                        3 * engine_ctx_.V.rows()};
+  result = solver_.get_current_position(*cloth_handle_, vert_view);
+  if (result != silk::WorldResult::Success) {
+    SPDLOG_ERROR("Cloth solve fail, Reason: {}", silk::to_string(result));
+    leave_sim_mode();
+    return;
   }
 
   ui_ctx_.p_surface->updateVertexPositions(engine_ctx_.V);
