@@ -10,7 +10,7 @@ void PositionConstrain::project(const Eigen::VectorXf& verts,
                                 Eigen::VectorXf& out) const {
   for (auto idx : vidx_) {
     auto seg = Eigen::seqN(offset_ + 3 * idx, 3);
-    out(seg) = weight_ * verts(seg);
+    out(seg) += weight_ * verts(seg);
   }
 }
 

@@ -1,4 +1,3 @@
-
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 #include <Eigen/SparseCholesky>
@@ -324,36 +323,32 @@ class World::WorldImpl {
     Eigen::VectorXf rhs =
         (mass_ / dt_ / dt_) * position_ + (mass_ / dt_) * velocity_ +
         mass_ * constant_acce_field.replicate(total_vert_num_, 1);
-    //
-    //     // thread local rhs
-    //     std::vector<Eigen::VectorXf> thread_local_rhs(
-    //         thread_num, Eigen::VectorXf::Zero(3 * total_vert_num_));
-    //     // project constrains
-    // #pragma omp parallel for num_threads(thread_num)
-    //     for (const auto& c : constrains_) {
-    //       auto& local_rhs = thread_local_rhs[omp_get_thread_num()];
-    //       c->project(position_, local_rhs);
-    //     }
-    //     // merge thread local rhs back to global rhs
-    //     for (auto& r : thread_local_rhs) {
-    //       rhs += r;
-    //     }
-    //
-    //     // sub space solve
-    //     Eigen::VectorXf b = U_.transpose() * (rhs - HX_);
-    //     Eigen::VectorXf q = b.array() / UHU_.array();
-    //     Eigen::VectorXf subspace_sol = init_position_ + U_ * q;
+
+    // thread local rhs
+    std::vector<Eigen::VectorXf> thread_local_rhs(
+        thread_num, Eigen::VectorXf::Zero(3 * total_vert_num_));
+    // project constrains
+#pragma omp parallel for num_threads(thread_num)
+    for (const auto& c : constrains_) {
+      auto& local_rhs = thread_local_rhs[omp_get_thread_num()];
+      c->project(position_, local_rhs);
+    }
+    // merge thread local rhs back to global rhs
+    for (auto& r : thread_local_rhs) {
+      rhs += r;
+    }
+
+    // sub space solve
+    Eigen::VectorXf b = U_.transpose() * (rhs - HX_);
+    Eigen::VectorXf q = b.array() / UHU_.array();
+    Eigen::VectorXf subspace_sol = init_position_ + U_ * q;
 
     // iterative global solve
-    // Eigen::VectorXf sol = subspace_sol;
-    // Eigen::VectorXf sol = iterative_solver_.solveWithGuess(rhs,
-    // subspace_sol); if (iterative_solver_.info() != Eigen::Success &&
-    //     iterative_solver_.info() != Eigen::NoConvergence) {
-    //   return WorldResult::IterativeSolveFail;
-    // }
-
-    // spdlog::info("itertive solver iteration {}",
-    //              iterative_solver_.iterations());
+    Eigen::VectorXf sol = iterative_solver_.solveWithGuess(rhs, subspace_sol);
+    if (iterative_solver_.info() != Eigen::Success &&
+        iterative_solver_.info() != Eigen::NoConvergence) {
+      return WorldResult::IterativeSolveFail;
+    }
 
     // detect and resolve collision and update velocity
     // the collision part is definitely half baked and its pretty janky
@@ -362,8 +357,8 @@ class World::WorldImpl {
     //                             ClothSolver::rtc_collision_callback, this);
     // }
 
-    velocity_ = (rhs - position_) / dt_;
-    position_ = rhs;
+    velocity_ = (sol - position_) / dt_;
+    position_ = sol;
 
     return WorldResult::Success;
   }
