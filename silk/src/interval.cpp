@@ -6,41 +6,41 @@ namespace silk {
 
 Interval::Interval() {
   is_empty_ = true;
-  lb_ = 0;
-  ub_ = 0;
+  lower_ = 0;
+  upper_ = 0;
 };
 
 Interval::Interval(float a, float b) {
   if (a < b) {
     is_empty_ = false;
-    lb_ = a;
-    ub_ = b;
+    lower_ = a;
+    upper_ = b;
   } else if (a == b) {
     Interval();
   } else {
     is_empty_ = false;
-    lb_ = b;
-    ub_ = a;
+    lower_ = b;
+    upper_ = a;
   }
 }
 
 bool Interval::is_empty() const { return is_empty_; }
 
-float Interval::lower_bound() const { return lb_; }
+float Interval::lower_bound() const { return lower_; }
 
-float Interval::upper_bound() const { return ub_; }
+float Interval::upper_bound() const { return upper_; }
 
 Interval Interval::intersection(const Interval& other) const {
   if (is_empty_ || other.is_empty_) {
     return Interval();
   }
 
-  float new_lb = std::max(lb_, other.lb_);
-  float new_ub = std::min(ub_, other.ub_);
-  if (new_lb >= new_ub) {
+  float new_lower = std::max(lower_, other.lower_);
+  float new_upper = std::min(upper_, other.upper_);
+  if (new_lower >= new_upper) {
     return Interval();
   }
-  return Interval(new_lb, new_ub);
+  return Interval(new_lower, new_upper);
 }
 
 }  // namespace silk

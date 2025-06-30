@@ -2,15 +2,15 @@
 
 namespace silk {
 
-PositionConstrain::PositionConstrain(Eigen::VectorXi vert_indexes,
-                                     uint32_t offset, float weight)
-    : vidx_(vert_indexes), offset_(offset), weight_(weight) {};
+PositionConstrain::PositionConstrain(Eigen::VectorXi vert_indexes, int offset,
+                                     float weight)
+    : vert_indexes_(vert_indexes), offset_(offset), weight_(weight) {};
 
-void PositionConstrain::project(const Eigen::VectorXf& verts,
+void PositionConstrain::project(const Eigen::VectorXf& positions,
                                 Eigen::VectorXf& out) const {
-  for (auto idx : vidx_) {
+  for (int idx : vert_indexes_) {
     auto seg = Eigen::seqN(offset_ + 3 * idx, 3);
-    out(seg) += weight_ * verts(seg);
+    out(seg) += weight_ * positions(seg);
   }
 }
 

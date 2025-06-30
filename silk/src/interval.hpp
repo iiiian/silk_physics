@@ -4,8 +4,8 @@ namespace silk {
 
 class Interval {
   bool is_empty_;
-  float lb_;
-  float ub_;
+  float lower_;
+  float upper_;
 
  public:
   Interval();

@@ -4,7 +4,6 @@
 #include <Eigen/Geometry>
 #include <cassert>
 #include <cmath>
-#include <iostream>
 
 namespace silk {
 
@@ -13,12 +12,12 @@ std::optional<float> CCDPoly::linear_ccd(float a, float b) const {
     return std::nullopt;
   }
 
-  float tmp = -b / a;
+  float tmp0 = -b / a;
   // TODO: tol
-  if (tmp > 1 + eps_ || tmp < eps_) {
+  if (tmp0 > 1 + eps_ || tmp0 < eps_) {
     return std::nullopt;
   }
-  return tmp;
+  return tmp0;
 }
 
 std::optional<float> CCDPoly::quadratic_ccd(float a, float b, float c) const {

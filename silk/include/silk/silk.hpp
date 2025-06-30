@@ -17,7 +17,7 @@ class Mesh {
 
   Mesh() = default;
   Mesh(const Verts& verts, const Faces& faces);
-  Mesh(float* verts, uint32_t vert_num, int* faces, uint32_t face_num);
+  Mesh(float* verts, int vert_num, int* faces, int face_num);
 
   bool is_valid() const;
 };
@@ -83,17 +83,17 @@ class World {
   Eigen::Vector3f get_constant_acce_field() const;
   void set_constant_acce_field(Eigen::Vector3f acce);
 
-  uint32_t get_max_iterations() const;
-  void set_max_iterations(uint32_t iter);
+  int get_max_iteration() const;
+  void set_max_iterations(int iter);
 
-  uint32_t get_thread_num() const;
-  void set_thread_num(uint32_t num);
+  int get_thread_num() const;
+  void set_thread_num(int num);
 
   float get_dt() const;
   [[nodiscard]] WorldResult set_dt(float dt);
 
-  uint32_t get_low_freq_mode_num() const;
-  [[nodiscard]] WorldResult set_low_freq_mode_num(uint32_t num);
+  int get_low_freq_mode_num() const;
+  [[nodiscard]] WorldResult set_low_freq_mode_num(int num);
 
   void solver_reset();
   [[nodiscard]] WorldResult solver_init();

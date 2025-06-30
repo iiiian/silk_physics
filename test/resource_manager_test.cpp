@@ -24,16 +24,16 @@ TEST_CASE("Construction and Value Extraction", "[resource_handle]") {
   }
 
   SECTION("Generation and Slot Index constructor") {
-    uint32_t generation = 15;
-    uint32_t slot_index = 456;
+    int generation = 15;
+    int slot_index = 456;
     silk::ResourceHandle handle(generation, slot_index);
     REQUIRE(handle.get_generation() == generation);
     REQUIRE(handle.get_slot_index() == slot_index);
   }
 
   SECTION("Max values") {
-    uint32_t max_gen = (1u << 11) - 1u;
-    uint32_t max_slot = (1u << 20) - 1u;
+    int max_gen = int((1u << 11) - 1u);
+    int max_slot = int((1u << 20) - 1u);
     silk::ResourceHandle handle(max_gen, max_slot);
     REQUIRE(handle.get_generation() == max_gen);
     REQUIRE(handle.get_slot_index() == max_slot);
@@ -77,7 +77,7 @@ TEST_CASE("Construction and Field Manipulation", "[resource_slot]") {
     slot.increment_generation();
     REQUIRE(slot.get_generation() == 6);
     // Check wrap-around
-    uint32_t max_gen = (1u << 11) - 1u;
+    int max_gen = int((1u << 11) - 1u);
     slot.set_generation(max_gen);
     slot.increment_generation();
     REQUIRE(slot.get_generation() == 0);
@@ -262,11 +262,11 @@ TEST_CASE("Edge Cases", "[resource_manager]") {
     // This is a slow test, but necessary for checking capacity.
     // It uses the public constants from ResourceManager if they exist,
     // otherwise it uses the local ones from the header.
-    constexpr uint32_t max_res = 1u << 20;
+    constexpr int max_res = int(1u << 20);
     std::vector<silk::ResourceHandle> handles;
     handles.reserve(max_res);
 
-    for (uint32_t i = 0; i < max_res; ++i) {
+    for (int i = 0; i < max_res; ++i) {
       auto h_opt = rm_full.add_resource(i);
       REQUIRE(h_opt.has_value());
       handles.push_back(h_opt.value());

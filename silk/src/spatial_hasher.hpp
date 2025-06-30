@@ -13,28 +13,27 @@ struct Bbox {
   Eigen::Vector3f min;
 };
 
-struct CellInfo {
-  uint32_t time = 0;   // time stamp
-  uint32_t start = 0;  // cell start
-  uint32_t size = 0;   // cell size
-  uint32_t fill = 0;   // the current empty slot
+struct SpatialCellInfo {
+  uint32_t time = 0;  // time stamp
+  int start = 0;      // cell start
+  int size = 0;       // cell size
+  int fill = 0;       // the current empty slot
 };
 
-struct CellMinMax {
-  using Vec3i32 = Eigen::Matrix<int32_t, 1, 3>;
-  Vec3i32 min;
-  Vec3i32 max;
+struct SpatialCellMinMax {
+  Eigen::Vector3i min;
+  Eigen::Vector3i max;
 };
 
 template <typename T>
 class SpatialHasher {
-  std::vector<CellInfo> cell_infos_;
+  std::vector<SpatialCellInfo> cell_infos_;
   std::vector<uint32_t> active_cell_hashes;
-  uint32_t cell_primitives_count_ = 0;
-  uint32_t time = 0;
+  int cell_primitives_count_ = 0;
+  uint32_t time = 0;  // time will wrap around when overflow
   std::vector<T> cells_;
 
-  inline uint32_t spatial_hash(int32_t i, int32_t j, int32_t k) const {
+  inline uint32_t spatial_hash(int i, int j, int k) const {
     assert(hash_map_size != 0);
 
     return static_cast<uint32_t>((73856093 * i) ^ (19349663 * j) ^
@@ -42,9 +41,9 @@ class SpatialHasher {
            hash_map_size;
   }
 
-  inline CellMinMax get_cell_minmax(const Bbox& bbox) const {
-    return {.min = (bbox.min / cell_size).array().floor().cast<int32_t>(),
-            .max = (bbox.max / cell_size).array().floor().cast<int32_t>()};
+  inline SpatialCellMinMax get_cell_minmax(const Bbox& bbox) const {
+    return {.min = (bbox.min / cell_size).array().floor().cast<int>(),
+            .max = (bbox.max / cell_size).array().floor().cast<int>()};
   }
 
   void populate_cell_info(const Bbox& bbox) {
@@ -53,11 +52,11 @@ class SpatialHasher {
 
     auto [cell_min, cell_max] = get_cell_minmax(bbox);
 
-    for (int32_t i = cell_min[0]; i <= cell_max[0]; i++) {
-      for (int32_t j = cell_min[1]; j <= cell_max[1]; j++) {
-        for (int32_t k = cell_min[2]; k <= cell_max[2]; k++) {
+    for (int i = cell_min[0]; i <= cell_max[0]; i++) {
+      for (int j = cell_min[1]; j <= cell_max[1]; j++) {
+        for (int k = cell_min[2]; k <= cell_max[2]; k++) {
           uint32_t h = spatial_hash(i, j, k);
-          auto& info = cell_infos_[h];
+          SpatialCellInfo& info = cell_infos_[h];
 
           // if time stamp is not the current one, this cell info is outdated
           if (info.time != time) {
@@ -78,22 +77,23 @@ class SpatialHasher {
 
     if (cell_infos_.size() != hash_map_size) {
       cell_infos_.resize(hash_map_size);
-      std::fill(cell_infos_.begin(), cell_infos_.end(), CellInfo{0, 0, 0, 0});
+      std::fill(cell_infos_.begin(), cell_infos_.end(),
+                SpatialCellInfo{0, 0, 0, 0});
     }
     active_cell_hashes.clear();
     cell_primitives_count_ = 0;
 
     // calculate cell primative count
-    for (auto& bbox : bboxes) {
+    for (const Bbox& bbox : bboxes) {
       populate_cell_info(bbox);
     }
 
     // calculate cell start
-    uint32_t start = 0;
+    int start = 0;
     // TODO: maybe scanning cell_infos_ directly is faster due to cache
     // locality, need profiling
     for (uint32_t h : active_cell_hashes) {
-      auto& info = cell_infos_[h];
+      SpatialCellInfo& info = cell_infos_[h];
       info.start = start;
       info.fill = start;
       start += info.size;
@@ -107,11 +107,11 @@ class SpatialHasher {
 
     auto [cell_min, cell_max] = get_cell_minmax(bbox);
 
-    for (int32_t i = cell_min[0]; i <= cell_max[0]; i++) {
-      for (int32_t j = cell_min[1]; j <= cell_max[1]; j++) {
-        for (int32_t k = cell_min[2]; k <= cell_max[2]; k++) {
+    for (int i = cell_min[0]; i <= cell_max[0]; i++) {
+      for (int j = cell_min[1]; j <= cell_max[1]; j++) {
+        for (int k = cell_min[2]; k <= cell_max[2]; k++) {
           uint32_t h = spatial_hash(i, j, k);
-          auto& info = cell_infos_[h];
+          SpatialCellInfo& info = cell_infos_[h];
           cells_[info.fill] = value;
           info.fill++;
         }
@@ -126,14 +126,14 @@ class SpatialHasher {
     assert(!cell_infos_.empty());
 
     cells_.resize(cell_primitives_count_);
-    for (uint32_t i = 0; i < values.size(); i++) {
+    for (int i = 0; i < values.size(); i++) {
       cell_insert(values[i], bboxes[i]);
     }
   }
 
  public:
   float cell_size = 1;
-  uint32_t hash_map_size = 1999;
+  int hash_map_size = 1999;
 
   void clear() {
     cell_infos_ = {};
@@ -160,12 +160,12 @@ class SpatialHasher {
     auto [cell_min, cell_max] = get_cell_minmax(bbox);
 
     std::vector<T> neighbors;
-    for (int32_t i = cell_min[0] - 1; i <= cell_max[0] + 1; i++) {
-      for (int32_t j = cell_min[1] - 1; j <= cell_max[1] + 1; j++) {
-        for (int32_t k = cell_min[2] - 1; k <= cell_max[2] + 1; k++) {
+    for (int i = cell_min[0] - 1; i <= cell_max[0] + 1; i++) {
+      for (int j = cell_min[1] - 1; j <= cell_max[1] + 1; j++) {
+        for (int k = cell_min[2] - 1; k <= cell_max[2] + 1; k++) {
           uint32_t h = spatial_hash(i, j, k);
-          auto& info = cell_infos_[h];
-          for (uint32_t idx = info.start; idx < info.start + info.size; idx++) {
+          const SpatialCellInfo& info = cell_infos_[h];
+          for (int idx = info.start; idx < info.start + info.size; idx++) {
             const T& value = cells_[idx];
             if (std::find(neighbors.begin(), neighbors.end(), value) ==
                 neighbors.end()) {

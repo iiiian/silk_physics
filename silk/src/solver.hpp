@@ -2,7 +2,6 @@
 
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
-#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -12,21 +11,20 @@ class SolverConstrain {
  public:
   virtual ~SolverConstrain() = default;
 
-  virtual void project(const Eigen::VectorXf& verts,
+  virtual void project(const Eigen::VectorXf& positions,
                        Eigen::VectorXf& out) const = 0;
 };
 
 class PositionConstrain : public SolverConstrain {
-  Eigen::VectorXi vidx_;
-  uint32_t offset_;
+  Eigen::VectorXi vert_indexes_;
+  int offset_;
   float weight_;
 
  public:
-  PositionConstrain(Eigen::VectorXi vert_indexes, uint32_t offset,
-                    float weight);
+  PositionConstrain(Eigen::VectorXi vert_indexes, int offset, float weight);
 
   // impl solver constrain interface
-  void project(const Eigen::VectorXf& verts,
+  void project(const Eigen::VectorXf& positions,
                Eigen::VectorXf& out) const override;
 };
 

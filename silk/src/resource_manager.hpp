@@ -23,11 +23,11 @@ class ResourceHandle {
  public:
   ResourceHandle() = default;
   explicit ResourceHandle(uint32_t value);
-  ResourceHandle(uint32_t generation, uint32_t slot_index);
+  ResourceHandle(int generation, int slot_index);
 
   uint32_t get_value() const;
-  uint32_t get_generation() const;
-  uint32_t get_slot_index() const;
+  int get_generation() const;
+  int get_slot_index() const;
 };
 
 // an internal mapping data structure for resource manager,
@@ -46,15 +46,15 @@ class ResourceSlot {
 
  public:
   ResourceSlot() = default;
-  ResourceSlot(bool is_valid, uint32_t generation, uint32_t data_index);
+  ResourceSlot(bool is_valid, int generation, int data_index);
 
   bool get_is_valid() const;
   void set_is_valid(bool is_valid);
-  uint32_t get_generation() const;
-  void set_generation(uint32_t generation);
+  int get_generation() const;
+  void set_generation(int generation);
   void increment_generation();
-  uint32_t get_data_index() const;
-  void set_data_index(uint32_t data_index);
+  int get_data_index() const;
+  void set_data_index(int data_index);
 };
 
 template <typename T>
@@ -63,26 +63,26 @@ class ResourceManager {
   static constexpr uint32_t MAX_RESOURCE = 1u << 20;    // 2^20
 
   std::vector<ResourceSlot> slots_;
-  std::deque<uint32_t> free_slots_;
+  std::deque<int> free_slots_;
   std::vector<T> data_;
-  std::vector<uint32_t> slot_of_data_;
+  std::vector<int> slot_of_data_;
 
  public:
   ResourceManager() {
     slots_.resize(MAX_RESOURCE);
-    for (uint32_t i = 0; i < MAX_RESOURCE; ++i) {
+    for (int i = 0; i < MAX_RESOURCE; ++i) {
       free_slots_.push_back(i);
     }
   }
 
   void clear() {
-    for (auto& s : slots_) {
+    for (ResourceSlot& s : slots_) {
       s.set_is_valid(true);
       s.increment_generation();
     }
 
     free_slots_.clear();
-    for (uint32_t i = 0; i < MAX_RESOURCE; ++i) {
+    for (int i = 0; i < MAX_RESOURCE; ++i) {
       free_slots_.push_back(i);
     }
 
@@ -92,7 +92,7 @@ class ResourceManager {
 
   // return nullptr if handle is invalid
   T* get_resources(const ResourceHandle& handle) {
-    auto& slot = slots_[handle.get_slot_index()];
+    ResourceSlot& slot = slots_[handle.get_slot_index()];
     if (!slot.get_is_valid() ||
         slot.get_generation() != handle.get_generation()) {
       return nullptr;
@@ -103,7 +103,7 @@ class ResourceManager {
 
   // return nullptr if handle is invalid
   const T* get_resources(const ResourceHandle& handle) const {
-    auto& slot = slots_[handle.get_slot_index()];
+    const ResourceSlot& slot = slots_[handle.get_slot_index()];
     if (!slot.get_is_valid() ||
         slot.get_generation() != handle.get_generation()) {
       return nullptr;
@@ -118,10 +118,10 @@ class ResourceManager {
       return std::nullopt;
     }
 
-    uint32_t slot_idx = free_slots_.front();
+    int slot_idx = free_slots_.front();
     free_slots_.pop_front();
 
-    auto& slot = slots_[slot_idx];
+    ResourceSlot& slot = slots_[slot_idx];
     slot.set_is_valid(true);
     slot.set_data_index(data_.size());
     data_.emplace_back(std::move(resource));
@@ -130,7 +130,7 @@ class ResourceManager {
   }
 
   bool remove_resource(const ResourceHandle& handle) {
-    auto& dead_slot = slots_[handle.get_slot_index()];
+    ResourceSlot& dead_slot = slots_[handle.get_slot_index()];
     if (!dead_slot.get_is_valid() ||
         dead_slot.get_generation() != handle.get_generation()) {
       return false;
@@ -150,7 +150,7 @@ class ResourceManager {
     return true;
   }
 
-  uint32_t size() const { return static_cast<uint32_t>(data_.size()); }
+  int size() const { return int(data_.size()); }
 
   std::vector<T>& get_dense_data() { return data_; }
 

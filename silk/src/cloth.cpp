@@ -6,7 +6,6 @@
 
 #include <cassert>
 #include <cmath>
-#include <cstdint>
 #include <memory>
 #include <optional>
 #include <silk/silk.hpp>
@@ -32,9 +31,9 @@ bool ClothConfig::is_valid() const {
     return false;
   }
   // pinned vert index should be unique and in range
-  uint32_t idx_max = mesh.V.rows();
-  std::unordered_set<uint32_t> idx_set;
-  for (auto idx : pinned_verts) {
+  int idx_max = mesh.V.rows();
+  std::unordered_set<int> idx_set;
+  for (int idx : pinned_verts) {
     if (idx >= idx_max || idx_set.count(idx) != 0) {
       return false;
     }
@@ -46,19 +45,22 @@ bool ClothConfig::is_valid() const {
 
 ClothElasticConstrain::ClothElasticConstrain(Matrix69f jacobian_op,
                                              Eigen::Vector3i vert_indexes,
-                                             uint32_t offset, float weight)
+                                             int offset, float weight)
     : jacobian_op_(std::move(jacobian_op)),
-      vidx_(std::move(vert_indexes)),
+      vert_indexes_(std::move(vert_indexes)),
       offset_(offset),
       weight_(weight) {}
 
-void ClothElasticConstrain::project(const Eigen::VectorXf& verts,
+void ClothElasticConstrain::project(const Eigen::VectorXf& positions,
                                     Eigen::VectorXf& out) const {
   // assemble local vectorized vertex position
   Eigen::Matrix<float, 9, 1> buffer;
-  buffer(Eigen::seqN(0, 3)) = verts(Eigen::seqN(offset_ + 3 * vidx_(0), 3));
-  buffer(Eigen::seqN(3, 3)) = verts(Eigen::seqN(offset_ + 3 * vidx_(1), 3));
-  buffer(Eigen::seqN(6, 3)) = verts(Eigen::seqN(offset_ + 3 * vidx_(2), 3));
+  buffer(Eigen::seqN(0, 3)) =
+      positions(Eigen::seqN(offset_ + 3 * vert_indexes_(0), 3));
+  buffer(Eigen::seqN(3, 3)) =
+      positions(Eigen::seqN(offset_ + 3 * vert_indexes_(1), 3));
+  buffer(Eigen::seqN(6, 3)) =
+      positions(Eigen::seqN(offset_ + 3 * vert_indexes_(2), 3));
 
   // deformation matrix
   Eigen::Matrix<float, 3, 2> F = (jacobian_op_ * buffer).reshaped(3, 2);
@@ -75,9 +77,12 @@ void ClothElasticConstrain::project(const Eigen::VectorXf& verts,
   // compute the elastic rhs, reuse buffer
   buffer = weight_ * jacobian_op_.transpose() * T.reshaped();
   // add it back to thread local rhs
-  out(Eigen::seqN(offset_ + 3 * vidx_(0), 3)) += buffer(Eigen::seqN(0, 3));
-  out(Eigen::seqN(offset_ + 3 * vidx_(1), 3)) += buffer(Eigen::seqN(3, 3));
-  out(Eigen::seqN(offset_ + 3 * vidx_(2), 3)) += buffer(Eigen::seqN(6, 3));
+  out(Eigen::seqN(offset_ + 3 * vert_indexes_(0), 3)) +=
+      buffer(Eigen::seqN(0, 3));
+  out(Eigen::seqN(offset_ + 3 * vert_indexes_(1), 3)) +=
+      buffer(Eigen::seqN(3, 3));
+  out(Eigen::seqN(offset_ + 3 * vert_indexes_(2), 3)) +=
+      buffer(Eigen::seqN(6, 3));
 }
 
 std::optional<Matrix69f> Cloth::vectorized_jacobian_operator(
@@ -128,15 +133,15 @@ std::optional<Matrix69f> Cloth::vectorized_jacobian_operator(
 
 Cloth::Cloth(ClothConfig config) : cfg_(std::move(config)) {}
 
-uint32_t Cloth::get_vert_num() const { return cfg_.mesh.V.rows(); }
+int Cloth::get_vert_num() const { return cfg_.mesh.V.rows(); }
 
 Eigen::Ref<const Eigen::VectorXf> Cloth::get_init_position() const {
   return cfg_.mesh.V.reshaped<Eigen::RowMajor>();
 }
 
-uint32_t Cloth::get_position_offset() const { return solver_position_offset_; }
+int Cloth::get_position_offset() const { return solver_position_offset_; }
 
-void Cloth::set_position_offset(uint32_t offset) {
+void Cloth::set_position_offset(int offset) {
   solver_position_offset_ = offset;
 }
 
@@ -146,8 +151,8 @@ Eigen::Ref<const Eigen::VectorXi> Cloth::get_pinned_verts() const {
 
 SolverInitData Cloth::compute_solver_init_data() const {
   const Mesh& mesh = cfg_.mesh;
-  int vnum = mesh.V.rows();
-  int fnum = mesh.F.rows();
+  int vert_num = mesh.V.rows();
+  int face_num = mesh.F.rows();
   SolverInitData init_data;
 
   // vertex mass based on voroni area
@@ -160,9 +165,10 @@ SolverInitData Cloth::compute_solver_init_data() const {
   // cotangent laplacian with inverse mass as weight
   Eigen::SparseMatrix<float> C;  // cotangent matrix
   igl::cotmatrix(mesh.V, mesh.F, C);
-  Eigen::SparseMatrix<float> W(vnum, vnum);  // cotangent laplacian weight
+  Eigen::SparseMatrix<float> W(vert_num,
+                               vert_num);  // cotangent laplacian weight
   W.setIdentity();
-  for (int i = 0; i < vnum; i++) {
+  for (int i = 0; i < vert_num; i++) {
     W.coeffRef(i, i) = 1 / mass.coeff(i, i);
   }
   // this is the weighted AA for bending energy.
@@ -179,10 +185,11 @@ SolverInitData Cloth::compute_solver_init_data() const {
   area /= 2;
 
   // in-plane deformation
-  for (int f = 0; f < fnum; ++f) {
-    auto vidx = mesh.F.row(f);
-    auto jacobian_op = vectorized_jacobian_operator(
-        mesh.V.row(vidx(0)), mesh.V.row(vidx(1)), mesh.V.row(vidx(2)));
+  for (int f = 0; f < face_num; ++f) {
+    auto vert_idx = mesh.F.row(f);
+    auto jacobian_op = vectorized_jacobian_operator(mesh.V.row(vert_idx(0)),
+                                                    mesh.V.row(vert_idx(1)),
+                                                    mesh.V.row(vert_idx(2)));
     if (!jacobian_op) {
       // TODO: handle degenerate triangle better
       // SPDLOG_WARN("degenerate triangle {}", f);
@@ -191,7 +198,7 @@ SolverInitData Cloth::compute_solver_init_data() const {
 
     float weight = cfg_.elastic_stiffness * area(f);
     init_data.constrains.emplace_back(std::make_unique<ClothElasticConstrain>(
-        *jacobian_op, vidx, solver_position_offset_, weight));
+        *jacobian_op, vert_idx, solver_position_offset_, weight));
     Eigen::Matrix<float, 9, 9> local_AA =
         (*jacobian_op).transpose() * (*jacobian_op);
 
@@ -206,8 +213,8 @@ SolverInitData Cloth::compute_solver_init_data() const {
             }
             // TODO: consider purging value near zero to save compute
             init_data.weighted_AA.emplace_back(
-                solver_position_offset_ + 3 * vidx(vi) + i,
-                solver_position_offset_ + 3 * vidx(vj) + j, val);
+                solver_position_offset_ + 3 * vert_idx(vi) + i,
+                solver_position_offset_ + 3 * vert_idx(vj) + j, val);
           }
         }
       }
@@ -218,7 +225,7 @@ SolverInitData Cloth::compute_solver_init_data() const {
   if (cfg_.pinned_verts.size() != 0) {
     // TODO: remove hard coded position constrain stiffness
     for (auto idx : cfg_.pinned_verts) {
-      uint32_t offset = solver_position_offset_ + 3 * idx;
+      int offset = solver_position_offset_ + 3 * idx;
       init_data.weighted_AA.emplace_back(offset, offset, 1e6);
       init_data.weighted_AA.emplace_back(offset + 1, offset + 1, 1e6);
       init_data.weighted_AA.emplace_back(offset + 2, offset + 2, 1e6);

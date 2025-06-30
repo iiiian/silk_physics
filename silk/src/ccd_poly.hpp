@@ -23,7 +23,7 @@ class CCDPoly {
   CCDPoly() = default;
 
  public:
-  // fail when poly is completely degenerate. aka always coplanar case
+  // fail when poly completely degenerate. aka always coplanar case
   static std::optional<CCDPoly> try_make_ccd_poly(
       Eigen::Ref<const Eigen::Vector3f> x10,
       Eigen::Ref<const Eigen::Vector3f> x20,
