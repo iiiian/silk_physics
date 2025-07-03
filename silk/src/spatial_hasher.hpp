@@ -6,12 +6,9 @@
 #include <cstdint>
 #include <vector>
 
-namespace silk {
+#include "bbox.hpp"
 
-struct Bbox {
-  Eigen::Vector3f max;
-  Eigen::Vector3f min;
-};
+namespace silk {
 
 struct SpatialCellInfo {
   uint32_t time = 0;  // time stamp
