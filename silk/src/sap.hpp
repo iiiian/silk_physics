@@ -46,16 +46,16 @@ class SAP {
     sort_collider(proxies_a, proxy_num_a);
     sort_collider(proxies_b, proxy_num_b);
 
-    int ia = 0;
-    int ib = 0;
-    while (ia < proxy_num_a && ib < proxy_num_b) {
-      Collider* pa = proxies_a[ia];
-      Collider* pb = proxies_b[ib];
+    int a = 0;
+    int b = 0;
+    while (a < proxy_num_a && b < proxy_num_b) {
+      Collider* pa = proxies_a[a];
+      Collider* pb = proxies_b[b];
 
       if (pa->bbox.min(axis_) < pb->bbox.min(axis_)) {
-        test_collision(pa, proxies_b + ib, proxy_num_b - ib);
+        test_collision(pa, proxies_b + b, proxy_num_b - b);
       } else {
-        test_collision(pb, proxies_a + ia, proxy_num_a - ia);
+        test_collision(pb, proxies_a + a, proxy_num_a - a);
       }
     }
   }
