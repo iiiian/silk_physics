@@ -1,9 +1,12 @@
 #pragma once
 
+#include <Eigen/Core>
 #include <algorithm>
 #include <cassert>
 #include <climits>
 #include <cstdint>
+#include <cstring>
+#include <functional>
 #include <iterator>
 #include <optional>
 #include <vector>
@@ -12,330 +15,755 @@
 
 namespace silk {
 
-template <typename T>
-struct BVHNode {
-  std::optional<T> data;
+struct KDNode {
+  KDNode* parent;
+  KDNode* left;
+  KDNode* right;
+
   Bbox bbox;
-  BVHNode* parent = nullptr;
-  BVHNode* left = nullptr;
-  BVHNode* right = nullptr;
+  int plane_axis;
+  int sap_axis;
+  float plane_position;
+
+  int proxy_start;
+  int proxy_end;
+  int colli_start;
+  int colli_end;
+
+  int static_num;
+  int population;
+  int static_population;
+  int delay_offset;
+
+  bool is_translated;
+  bool is_delay_offset_applied;
 
   bool is_leaf() const {
     // bvh tree is always balanced, testing one child is enough
     return !left;
   }
+
+  bool is_left() const { return (parent && this == parent->left); }
+
+  int proxy_num() const {
+    assert((proxy_end >= proxy_start));
+    return proxy_end - proxy_start;
+  }
 };
 
 template <typename T>
-class BVHTree {
-  using NodeIter = typename std::vector<BVHNode<T>*>::iterator;
+struct KDObject {
+  KDNode* node;
+  Bbox bbox;
+  bool is_static;
+  T data;
+};
 
-  BVHNode<T>* true_root_ = nullptr;
-  BVHNode<T>* node_cache_ = nullptr;
-  uint64_t path_ = 0;
-  static constexpr uint32_t PATH_BIT_COUNTER_MAX_ = (1u << 6) - 1u;
-  int leaf_num_ = 0;
-  int reinsert_lookahead_ = -1;
+template <typename T>
+class KDTree {
+  KDNode* true_root_ = nullptr;
+  std::vector<KDNode*> stack_;
+  std::vector<KDObject<T>*> obj_proxies;
+  std::vector<KDObject<T>*> buffer_;
+  std::vector<KDObject<T>> objects;
 
-  static void delete_subtree(BVHNode<T>* root) {
-    while (root) {
-      delete_subtree(root->left);
-      delete_subtree(root->right);
-      delete root;
-    }
-  }
+  int obj_num_;
+  int static_obj_num_;
+  bool is_incremental_update_;
+  float margin = 0;
+  float incremental_update_threshold = 0;
+  int node_proxy_num_threshold = 0;
+  std::function<bool(const T&, const T&)> is_potential_collision;
+  std::vector<std::pair<T*, T*>> cache_;
 
-  // extract all leaf nodes and delete internal nodes
-  static void extract_subtree_leaves(BVHNode<T>* root,
-                                     std::vector<BVHNode<T>*>& leaves) {
-    if (root->is_leaf()) {
-      leaves.push_back(root);
-    } else {
-      assert(root->left && root->right &&
-             "internal root should always have two children");
-
-      extract_leaves_recursively(root->left);
-      extract_leaves_recursively(root->right);
-      delete root;
-    }
-  }
-
-  // insert node under root, return new root
-  BVHNode<T>* subtree_insert(BVHNode<T>* root, BVHNode<T>* node) {
-    // root is empty
+  void delete_subtree(KDNode* root) {
     if (!root) {
-      node->parent = nullptr;
-      return node;
+      return;
     }
 
-    // descend to leaf based on proximity heuristic
-    BVHNode<T>* current = root;
-    while (!current->is_leaf()) {
-      assert(current->left && current->right &&
-             "internal node should always have two children");
+    size_t init_stack_size = stack_.size();
+    stack_.push_back(root);
+    while (stack_.size() > init_stack_size) {
+      KDNode* current = stack_.back();
+      stack_.pop_back();
 
-      float a = Bbox::proximity(node, current->left->bbox);
-      float b = Bbox::proximity(node, current->right->bbox);
-      current = (a < b) ? current->left : current->right;
+      if (!current->is_leaf()) {
+        stack_.push_back(current->right);
+        stack_.push_back(current->left);
+      }
+      delete current;
     }
+  }
 
-    assert(!current->left && !current->right &&
-           "leaf node should have no children");
+  void clear() {
+    delete_subtree(true_root_);
+    true_root_ = nullptr;
+    stack_.clear();
+    obj_proxies.clear();
+    buffer_.clear();
+    objects.clear();
+    static_obj_num_ = 0;
+  }
 
-    // current is now a leaf node.
-    // create internal node and set node and current as its children.
-    BVHNode<T>* parent = current->parent;
+  void init(const std::vector<T>& data, const std::vector<Bbox>& bboxes) {
+    clear();
 
-    // reuse node cache if available
-    BVHNode<T>* internal = nullptr;
-    if (node_cache_) {
-      std::swap(internal, node_cache_);
-      *internal = {.data = std::nullopt,
-                   .bbox = Bbox::merge(node->bbox, current->bbox),
-                   .parent = parent,
-                   .left = current,
-                   .right = node};
-    } else {
-      internal = new BVHNode<T>{.data = std::nullopt,
-                                .bbox = Bbox::merge(node->bbox, current->bbox),
-                                .parent = parent,
-                                .left = current,
-                                .right = node};
+    obj_num_ = data.size();
+    true_root_ = new KDNode{.parent = nullptr,
+                            .left = nullptr,
+                            .right = nullptr,
+                            .bbox = Bbox::make_inf_bbox(),
+                            .plane_axis = 0,
+                            .sap_axis = 0,
+                            .plane_position = 0,
+                            .proxy_start = 0,
+                            .proxy_end = obj_num_,
+                            .colli_start = 0,
+                            .colli_end = 0,
+                            .static_num = 0,
+                            .population = obj_num_,
+                            .static_population = 0,
+                            .delay_offset = 0,
+                            .is_translated = false,
+                            .is_delay_offset_applied = false};
+    for (int i = 0; i < obj_num_; ++i) {
+      objects.emplace_back({.node = nullptr,
+                            .bbox = Bbox::extend(bboxes[i], margin),
+                            .data = data[i]});
     }
+    for (auto& o : objects) {
+      o.bbox.extend_inplace(margin);
+    }
+    buffer_.resize(2 * obj_num_);
+  }
 
-    // if current has parent, it now points to internal
-    if (parent) {
-      if (parent->left == current) {
-        parent->left = internal;
+  void update(const std::vector<Bbox>& bboxes) {
+    assert((bboxes.size() == obj_num_));
+
+    // update objects' bbox
+    static_obj_num_ = 0;
+    for (int i = 0; i < bboxes.size(); ++i) {
+      auto& o = objects[i];
+      if (o.bbox.is_inside(bboxes[i])) {
+        o.is_static = true;
+        static_obj_num_++;
       } else {
-        parent->right = internal;
+        o.bbox = Bbox::extend(bboxes[i], margin);
+        o.is_static = false;
       }
     }
 
-    current->parent = internal;
-    node->parent = internal;
+    is_incremental_update_ =
+        (static_obj_num_ > incremental_update_threshold * obj_num_);
 
-    // walk back up the tree, refitting bbox
-    while (parent && !parent->bbox.contain(node->bbox)) {
-      parent->bbox.merge_inplace();
-      parent = parent->parent;
+    if (static_obj_num_ != obj_num_) {
+      refit();
+      optimize();
     }
 
-    return (current == root) ? internal : root;
+    update_static_population();
   }
 
-  static BVHNode<T>* bottom_up_build(NodeIter begin, NodeIter end) {
-    while (std::distance(begin, end) > 1) {
-      // Find the pair of nodes that, when merged, create the smallest bbox
-      Bbox min_bbox;
-      float min_diag2 = std::numeric_limits<float>::max();
-      NodeIter min_it1, min_it2;
-      for (NodeIter it1 = begin; it1 != end; ++it1) {
-        for (NodeIter it2 = it1 + 1; it2 != end; ++it2) {
-          Bbox bbox = Bbox::merge((*it1)->bbox, (*it2)->bbox);
-          float diag2 = (bbox.min - bbox.max).squaredNorm();
-          if (diag2 < min_diag2) {
-            min_bbox = bbox;
-            min_diag2 = diag2;
-            min_it1 = it1;
-            min_it2 = it2;
-          }
+  void query_collision() {
+    if (static_obj_num_ == obj_num_) {
+      return;
+    }
+
+    true_root_->colli_start = 0;
+    true_root_->colli_end = 0;
+    assert((true_root_->proxy_num() > 0));
+    float position;
+    find_optimal_split_plane(true_root_, true_root_->sap_axis, position);
+
+    sort_node_objects(true_root_);
+    sap_node_node(true_root_);
+  }
+
+  void update_static_population() {
+    // BFS stack fill
+    stack_.push_back(true_root_);
+    for (int i = 0; i < stack_.size(); ++i) {
+      KDNode* n = stack_[i];
+      if (!n->is_leaf()) {
+        stack_.push_back(n->left);
+        stack_.push_back(n->right);
+      }
+    }
+
+    // bottom up refit, push unfit node up.
+    for (int i = stack_.size() - 1; i >= 0; i--) {
+      KDNode* n = stack_.back();
+
+      n->static_num = 0;
+      for (int i = n->proxy_start; i < n->proxy_end; ++i) {
+        if (obj_proxies[i]->is_static) {
+          n->static_num++;
         }
       }
 
-      // merge 2 nodes
-      auto node = new BVHNode<T>{.data = std::nullopt,
-                                 .bbox = min_bbox,
-                                 .parent = nullptr,
-                                 .left = *min_it1,
-                                 .right = *min_it2};
-      (*min_it1)->parent = node;
-      (*min_it2)->parent = node;
-
-      // Replace one of the merged nodes with the new parent and shrink the
-      // vector.
-      std::swap(*min_it1, *begin);
-      *min_it2 = node;
-      begin++;
+      if (n->is_leaf()) {
+        n->static_population = n->static_num;
+      } else {
+        n->static_population = n->static_num + n->left->static_population +
+                               n->right->static_population;
+      }
     }
 
-    assert(std::distance(begin, end) == 1);
-    return *begin;
+    stack_.clear();
   }
 
-  static BVHNode<T>* top_down_build(NodeIter begin, NodeIter end,
-                                    int bottom_up_threshold) {
-    int num = std::distance(begin, end);
-    assert((num > 0));
-
-    // reaching leaf
-    if (num == 1) {
-      return *begin;
-    }
-
-    if (num <= bottom_up_threshold) {
-      return bottom_up_build(begin, end);
-    }
-
-    Bbox bbox;
-    for (NodeIter it = begin; it != end; ++it) {
-      bbox.merge_inplace((*it)->bbox);
-    }
-
-    // split leaves by bbox center
-    Eigen::Vector3f center = bbox.center();
-    // split_count[axis][0] = leaves at the left of axis plane
-    // split_count[axis][1] = leaves at the right of axis plane
-    Eigen::Matrix<int, 3, 2> split_count = Eigen::Matrix<int, 3, 2>::Zero();
-    for (NodeIter it = begin; it != end; ++it) {
-      Eigen::Vector3f delta = (*it)->bbox.center() - center;
-      split_count(0, (delta(0) > 0) ? 1 : 0)++;
-      split_count(1, (delta(1) > 0) ? 1 : 0)++;
-      split_count(2, (delta(2) > 0) ? 1 : 0)++;
-    }
-
-    // choose the axis plane that split the leaves most evenly
-    Eigen::Vector3i split_count_diff =
-        (split_count.col(0) - split_count.col(1)).cwiseAbs();
-    int split_axis;
-    int min_diff = split_count_diff.maxCoeff(&split_axis);
-    NodeIter right_begin;
-    // if all axis planes split nothing, choose a random split at middle
-    if (min_diff == 0) {
-      right_begin = std::advance(begin, num / 2 + 1);
-    }
-    // partition by axis plane
-    else {
-      auto pred = [&center, split_axis](BVHNode<T>* node) -> bool {
-        return (node->bbox.center() - center).coeff(split_axis) < 0;
-      };
-      right_begin = std::partition(begin, end, pred);
-      assert((right_begin != begin && right_begin != end));
-    }
-
-    auto node = new BVHNode<T>{.data = std::nullopt,
-                               .bbox = bbox,
-                               .parent = std::nullopt,
-                               .left = top_down_build(begin, right_begin),
-                               .right = top_down_build(right_begin, end)};
-    node->left->parent = node;
-    node->right->parent = node;
-    return node;
-  }
-
-  static BVHNode<T>* rotate(BVHNode<T>* node) {
-    assert(node->parent && node->left && node->right);
-
-    BVHNode<T>* parent = node->parent;
-
-    if (node == parent->left) {
-      parent->left = node->right;
-      node->right = parent;
-    } else {
-      parent->right = node->left;
-      node->left = parent;
-    }
-
-    node->parent = parent->parent;
-    parent->parent = node;
-    return node;
-  }
-
-  // optimize memory layout for BFS.
-  void optimize_memory_layout() {
-    assert(true_root_);
-    assert(!true_root_->is_leaf());
-
-    uint32_t path_bit_counter = 0;
-    auto descend = [path = path_,
-                    &path_bit_counter](BVHNode<T>* node) -> BVHNode<T>* {
-      uint32_t choice = (path >> path_bit_counter) & 1u;
-      path_bit_counter = (path_bit_counter + 1) & PATH_BIT_COUNTER_MAX_;
-      return (choice == 0) ? node->left : node->right;
+  int push_unfit_right(KDNode* n) {
+    auto is_inside = [n](KDObject<T>* obj_proxy) -> bool {
+      return n->bbox.is_inside(obj_proxy->bbox);
     };
 
-    // special case, might rotate root
-    BVHNode<T>* node = descend(true_root_);
-    if (!node->is_leaf() && true_root_ > node) {
-      node = rotate(node);
-      true_root_ = node;
-    }
+    auto start_iter = std::advance(obj_proxies.begin(), n->proxy_start);
+    auto end_iter = std::advance(obj_proxies.begin(), n->proxy_end);
+    auto new_end_iter = std::partition(start_iter, end_iter, is_inside);
+    n->proxy_end = std::distance(obj_proxies.begin(), new_end_iter);
 
-    if (!node) {
+    return std::distance(new_end_iter, end_iter);
+  }
+
+  int push_unfit_left(KDNode* n) {
+    auto is_outside = [n](KDObject<T>* obj_proxy) -> bool {
+      return !(n->bbox.is_inside(obj_proxy->bbox));
+    };
+
+    auto start_iter = std::advance(obj_proxies.begin(), n->proxy_start);
+    auto end_iter = std::advance(obj_proxies.begin(), n->proxy_end);
+    auto new_start_iter = std::partition(start_iter, end_iter, is_outside);
+    n->proxy_start = std::distance(obj_proxies.begin(), new_start_iter);
+
+    return std::distance(start_iter, new_start_iter);
+  }
+
+  void shift_proxy_left_to_right(int proxy_start, int proxy_num,
+                                 int shift_num) {
+    if (proxy_num == 0 || shift_num == 0) {
       return;
     }
 
-    while (!node->is_leaf()) {
-      if (node->parent > node) {
-        rotate(node);
+    size_t copy_size = proxy_num * sizeof(KDObject<T>*);
+    size_t shift_size = shift_num * sizeof(KDObject<T>*);
+    KDObject<T>* left = obj_proxies.data() + proxy_start;
+    KDObject<T>* right = obj_proxies.data() + proxy_start + proxy_num;
+    buffer_.reserve(proxy_num);
+
+    // copy left chunk to temp buffer
+    std::memcpy(buffer_.data(), left, copy_size);
+    // shift right chunk left
+    std::memmove(left, right, shift_size);
+    // copy left chunk to right
+    std::memcpy(left + shift_num, buffer_.data(), copy_size);
+  }
+
+  void shift_proxy_right_to_left(int proxy_start, int proxy_num,
+                                 int shift_num) {
+    if (proxy_num == 0 || shift_num == 0) {
+      return;
+    }
+
+    size_t copy_size = proxy_num * sizeof(KDObject<T>*);
+    size_t shift_size = shift_num * sizeof(KDObject<T>*);
+    KDObject<T>* left = obj_proxies.data() + proxy_start - shift_num;
+    KDObject<T>* right = obj_proxies.data() + proxy_start;
+    buffer_.reserve(copy_size);
+
+    // copy right chunk to temp buffer
+    std::memcpy(buffer_.data(), right, copy_size);
+    // shift left chunk right
+    std::memmove(left + proxy_num, left, shift_size);
+    // copy right chunk to left
+    std::memcpy(left, buffer_.data(), copy_size);
+  }
+
+  void refit() {
+    assert(stack_.empty());
+
+    // BFS stack fill
+    stack_.push_back(true_root_);
+    for (int i = 0; i < stack_.size(); ++i) {
+      KDNode* n = stack_[i];
+      if (!n->is_leaf()) {
+        stack_.push_back(n->left);
+        stack_.push_back(n->right);
       }
-      node = descend(node);
+    }
+
+    // bottom up refit, push unfit node up. root is excluded
+    for (int i = stack_.size() - 1; i > 0; i--) {
+      KDNode* n = stack_[i];
+
+      if (n->proxy_num() == 0) {
+        continue;
+      }
+
+      if (n->is_leaf()) {
+        if (n->is_left()) {
+          // left leaf
+          n->parent->proxy_start -= push_unfit_right(n);
+          n->population = n->proxy_num();
+        } else {
+          // right leaf
+          n->parent->proxy_end += push_unfit_left(n);
+          n->population = n->proxy_num();
+        }
+      } else {
+        if (n->is_left()) {
+          // left internal
+          int unfit_num = push_unfit_right(n);
+          shift_proxy_left_to_right(n->proxy_end, unfit_num,
+                                    n->right->population);
+          n->proxy_end -= unfit_num;
+          n->parent->proxy_start -= unfit_num;
+          n->right->delay_offset = -unfit_num;
+          n->population =
+              n->proxy_num() + n->left->population + n->right->population;
+        } else {
+          // right internal
+          int unfit_num = push_unfit_left(n);
+          shift_proxy_left_to_right(n->proxy_start, unfit_num,
+                                    n->left->population);
+          n->proxy_start += unfit_num;
+          n->parent->proxy_end += unfit_num;
+          n->left->delay_offset = +unfit_num;
+          n->population =
+              n->proxy_num() + n->left->population + n->right->population;
+        }
+      }
+    }
+
+    if (true_root_->is_leaf()) {
+      true_root_->population = obj_proxies.size();
+    } else {
+      true_root_->population = true_root_->proxy_num() +
+                               true_root_->left->population +
+                               true_root_->right->population;
+    }
+
+    stack_.clear();
+  }
+
+  // split internal node based on plane
+  void split_internal_node(KDNode* n) {
+    assert((n->left || n->right));
+    assert((n->proxy_end - n->proxy_start > 0));
+
+    // partition object proxies by plane.
+    // strictly left  -> move to left partition
+    // on the plane   -> move to middle partition
+    // strictly right -> move to right partition
+    int left_end = n->proxy_start;
+    int right_start = n->proxy_end;
+    for (int i = n->proxy_start; i < right_start;) {
+      KDObject<T>* o = obj_proxies[i];
+      // strictly left
+      if (o->bbox.max(n->plane_axis) < n->plane_position) {
+        std::swap(obj_proxies[left_end], obj_proxies[i]);
+        obj_proxies[left_end]->node = n->left;
+        left_end++;
+        i++;
+      }
+      // strictly right
+      else if (o->bbox.min(n->plane_axis) > n->plane_position) {
+        std::swap(obj_proxies[right_start], obj_proxies[i]);
+        obj_proxies[right_start - 1]->node = n->right;
+        right_start--;
+      }
+      // on the plane, do nothing
+      else {
+        i++;
+      }
+    }
+
+    // move left partition down one node level
+    int left_num = left_end - n->proxy_start;
+    if (left_num != 0) {
+      n->left->proxy_end += left_num;
+      n->left->population += left_num;
+      if (!n->left->is_leaf()) {
+        shift_proxy_right_to_left(n->proxy_start, left_num,
+                                  n->left->right->population);
+        n->left->right->proxy_start += left_num;
+        n->left->right->proxy_end += left_num;
+      }
+    }
+
+    // move right partition down one node level
+    int right_num = n->proxy_end - right_start;
+    if (right_num != 0) {
+      n->right->proxy_start -= right_num;
+      n->right->population += right_num;
+      if (!n->right->is_leaf()) {
+        shift_proxy_left_to_right(right_start, right_num,
+                                  n->right->left->population);
+        n->right->left->proxy_start -= right_num;
+        n->right->left->proxy_end -= right_num;
+      }
     }
   }
 
- public:
-  BVHTree() = default;
-  ~BVHTree() { clear(); }
-
-  void clear() {
-    delete_tree(true_root_);
-    true_root_ = nullptr;
-    if (node_cache_) {
-      delete node_cache_;
+  void find_optimal_split_plane(KDNode* n, int& axis, float& position) const {
+    // find optimal split plane based on mean and variance of bbox center.
+    // plane axis should has the max variance and the plane position is the
+    // mean.
+    Eigen::Vector3f mean = Eigen::Vector3f::Zero();
+    Eigen::Vector3f variance = Eigen::Vector3f::Zero();
+    for (int i = n->proxy_start; i < n->proxy_end; ++i) {
+      Eigen::Vector3f center = obj_proxies[i].bbox.center();
+      mean += center;
+      variance += center.cwiseAbs2();
     }
-    leaf_num_ = 0;
+    int num = n->proxy_end - n->proxy_start;
+    mean /= num;
+    variance = variance / num - mean.cwiseAbs2();
+    variance.maxCoeff(&axis);
+    position = mean(axis);
   }
 
-  void optimize_top_down(int bottom_up_threshold = 128) {
-    assert((bottom_up_threshold > 1));
+  // find optimal split plane then split the leaf
+  void split_leaf_node(KDNode* n) {
+    assert(!(n->left || n->right));
+    assert((n->proxy_end - n->proxy_start > 0));
 
-    if (!true_root_) {
+    find_optimal_split_plane(n, n->plane_axis, n->plane_position);
+
+    // create new children
+    Bbox left_bbox = n->bbox;
+    left_bbox.max(n->plane_axis) = n->plane_position;
+    n->left = new KDNode{.parent = n,
+                         .left = nullptr,
+                         .right = nullptr,
+                         .bbox = left_bbox,
+                         .plane_axis = 0,
+                         .sap_axis = 0,
+                         .plane_position = 0,
+                         .proxy_start = n->proxy_start,
+                         .proxy_end = n->proxy_start,
+                         .colli_start = 0,
+                         .colli_end = 0,
+                         .static_num = 0,
+                         .population = 0,
+                         .static_population = 0,
+                         .delay_offset = 0,
+                         .is_translated = false,
+                         .is_delay_offset_applied = false};
+    Bbox right_bbox = n->bbox;
+    right_bbox.min(n->plane_axis) = n->plane_position;
+    n->right = new KDNode{.parent = n,
+                          .left = nullptr,
+                          .right = nullptr,
+                          .bbox = right_bbox,
+                          .plane_axis = 0,
+                          .sap_axis = 0,
+                          .plane_position = 0,
+                          .proxy_start = n->proxy_end,
+                          .proxy_end = n->proxy_end,
+                          .colli_start = 0,
+                          .colli_end = 0,
+                          .static_num = 0,
+                          .population = 0,
+                          .static_population = 0,
+                          .delay_offset = 0,
+                          .is_translated = false,
+                          .is_delay_offset_applied = false};
+
+    split_internal_node(n);
+  }
+
+  // collapse subtree into leaf
+  void collapse(KDNode* n) {
+    assert((n->left && n->right));
+
+    n->proxy_start -= n->left->population;
+    n->proxy_end += n->right->population;
+    for (int i = n->proxy_start; i < n->proxy_end; ++i) {
+      obj_proxies[i]->node = n;
+    }
+    delete_subtree(n);
+    n->left = nullptr;
+    n->right = nullptr;
+  }
+
+  // count the number of objects on the left, middle, and right of the plane
+  void count_left_middle_right(KDNode* n, int& left_num, int& middle_num,
+                               int& right_num) const {
+    left_num = 0;
+    middle_num = 0;
+    right_num = 0;
+
+    // partition object proxies by plane.
+    // strictly left  -> left partition
+    // on the plane   -> middle partition
+    // strictly right -> right partition
+    for (int i = n->proxy_start; i < n->proxy_end; ++i) {
+      KDObject<T>* o = obj_proxies[i];
+      // strictly left
+      if (o->bbox.max(n->plane_axis) < n->plane_position) {
+        left_num++;
+      }
+      // strictly right
+      else if (o->bbox.min(n->plane_axis) > n->plane_position) {
+        right_num++;
+      }
+      // on the plane
+      else {
+        middle_num++;
+      }
+    }
+  }
+
+  bool evaluate(float lp, float mp, float rp) const {
+    float s = lp + mp + rp;
+    float t_min = 0.5f * s * (0.5f * s - 1.0f);
+    float t_max = 0.5f * s * (s - 1.0f);
+    float t = 0.5 * (lp * lp + mp * mp + rp * rp - s) + mp * (lp + rp);
+    float cost = (t - t_min) / (t_max - t_min);
+    float balance = std::min(lp, rp) / (mp + std::max(lp, rp));
+    return (cost <= balance);
+  }
+
+  void lift_subtree(KDNode* n) {
+    assert((n->left && n->right));
+
+    n->proxy_start -= n->left->population;
+    n->proxy_end += n->right->population;
+
+    for (int i = n->proxy_start; i < n->proxy_end; ++i) {
+      obj_proxies[i].node = n;
+    }
+
+    size_t init_stack_size = stack_.size();
+    // lift left subtree
+    stack_.push_back(n->left);
+    while (stack_.size() > init_stack_size) {
+      KDNode* current = stack_.back();
+      stack_.pop_back();
+
+      if (current->population == 0) {
+        continue;
+      }
+
+      if (!current->is_leaf()) {
+        stack_.push_back(current->left);
+        stack_.push_back(current->right);
+      }
+
+      current->proxy_start = n->proxy_start;
+      current->proxy_end = n->proxy_start;
+      current->population = 0;
+    }
+    // lift right subtree
+    stack_.push_back(n->right);
+    while (stack_.size() > init_stack_size) {
+      KDNode* current = stack_.back();
+      stack_.pop_back();
+
+      if (current->population == 0) {
+        continue;
+      }
+
+      if (!current->is_leaf()) {
+        stack_.push_back(current->left);
+        stack_.push_back(current->right);
+      }
+
+      current->proxy_end = n->proxy_end;
+      current->proxy_end = n->proxy_end;
+      current->population = 0;
+    }
+  }
+
+  void translate(KDNode* n) {
+    assert((n->proxy_end > n->proxy_start));
+
+    Eigen::Vector3f mean = Eigen::Vector3f::Zero();
+    for (int i = n->proxy_start; i < n->proxy_end; ++i) {
+      mean += obj_proxies[i]->bbox.center();
+    }
+
+    mean /= float(n->proxy_end - n->proxy_start);
+    n->plane_position = mean(n->plane_axis);
+  }
+
+  KDNode* erase(KDNode* n, bool keep_left_subtree) {
+    assert((n->left && n->right));
+    assert((n->left->population == 0));
+    assert((n->right->population == 0));
+
+    KDNode* main_subtree;
+    KDNode* other_subtree;
+    if (keep_left_subtree) {
+      main_subtree = n->left;
+      other_subtree = n->right;
+    } else {
+      main_subtree = n->right;
+      other_subtree = n->left;
+    }
+
+    main_subtree->proxy_start = n->proxy_start;
+    main_subtree->proxy_end = n->proxy_end;
+    main_subtree->population = n->population;
+    main_subtree->parent = n->parent;
+    main_subtree->bbox = n->bbox;
+    if (n->parent) {
+      if (n == n->parent->left) {
+        n->parent->left = main_subtree;
+      } else {
+        n->parent->right = main_subtree;
+      }
+    }
+
+    delete n;
+    delete_subtree(other_subtree);
+  }
+
+  void optimize() {
+    assert(stack_.empty());
+
+    // DFS fill stack
+    stack_.push_back(true_root_);
+    while (!stack_.empty()) {
+      KDNode* n = stack_.back();
+      stack_.pop_back();
+
+      // propagate and apply delay offset
+      n->left->delay_offset += n->delay_offset;
+      n->right->delay_offset += n->delay_offset;
+      n->proxy_start += n->delay_offset;
+      n->proxy_end += n->delay_offset;
+      n->delay_offset = 0;
+
+      // if population of leaf is too large, split
+      if (n->is_leaf()) {
+        if (n->proxy_num() > node_proxy_num_threshold) {
+          split_leaf_node(n);
+          stack_.push_back(n->right);
+          stack_.push_back(n->left);
+        }
+        continue;
+      }
+
+      // if population of internal nodes is too small, collapse into leaf node
+      if (n->population < node_proxy_num_threshold) {
+        collapse(n);
+        stack_.push_back(n);
+        continue;
+      }
+
+      // first try to reuse the original plane
+      int left_num, middle_num, right_num;
+      count_left_middle_right(n, left_num, middle_num, right_num);
+      bool is_plane_optimal =
+          evaluate(left_num + n->left->population, middle_num,
+                   right_num + n->right->population);
+      if (is_plane_optimal) {
+        split_internal_node(n);
+        stack_.push_back(n->left);
+        stack_.push_back(n->right);
+        continue;
+      }
+
+      // original plane is not optimal, try translating the plane
+      lift_subtree(n);
+      translate(n);
+      count_left_middle_right(n, left_num, middle_num, right_num);
+      is_plane_optimal = evaluate(left_num, middle_num, right_num);
+      if (is_plane_optimal) {
+        split_internal_node(n);
+        stack_.push_back(n->left);
+        stack_.push_back(n->right);
+        continue;
+      }
+
+      // translated plane is still not optimal, erase the node
+      stack_.push_back(erase(n, (left_num > right_num)));
+    }
+  }
+
+  void sort_node_objects(KDNode* n) {
+    auto comp = [axis = n->sap_axis](KDNode* a, KDNode* b) -> bool {
+      return (a->bbox.min(axis) < b->bbox.min(axis));
+    };
+    auto start_iter = std::advance(obj_proxies.begin(), n->proxy_start);
+    auto end_iter = std::advance(obj_proxies.begin(), n->proxy_end);
+    std::sort(start_iter, end_iter, comp);
+  }
+
+  void sap_array(KDObject<T>* p1, int start, int end,
+                 const std::vector<KDObject<T>*> array, int axis) {
+    if (p1->bbox.max(axis) < array[start]->bbox.min(axis)) {
       return;
     }
 
-    // destroy current tree by extracting all leaf nodes
-    std::vector<BVHNode<T>*> leaves;
-    leaves.reserve(leaf_num_);
-    extract_subtree_leaves(true_root_, leaves);
+    // optimize for avx SIMD.
+    // each col is the min / max of a KDObject.
+    // test 8 objects in a row.
+    using Mat38f = Eigen::Matrix<float, 3, 8>;
+    Mat38f simd_p1_min = p1->bbox.min.replicate(1, 8);
+    Mat38f simd_p1_max = p1->bbox.max.replicate(1, 8);
+    Mat38f simd_p2_min;
+    Mat38f simd_p2_max;
+    Eigen::Matrix<KDObject<T>*, 8, 1> simd_objs;
 
-    // rebuild top down
-    true_root_ =
-        top_down_build(leaves.begin(), leaves.end(), bottom_up_threshold);
-    assert(true_root_);
-    true_root_->parent = nullptr;
+    int simd_count = 0;
+    for (int i = start; i > end; ++i) {
+      KDObject<T>* p2 = array[i];
+      // sap axis test
+      if (p1->bbox.max(axis) > p2->bbox.min(axis)) {
+        continue;
+      }
+      // user provided test
+      if (!is_potential_collision(p1->data, p2->data)) {
+        continue;
+      }
+
+      // potential collision candidate
+      simd_p2_min.col(simd_count) = p2->bbox.min;
+      simd_p2_max.col(simd_count) = p2->bbox.max;
+      simd_objs(simd_count) = p2;
+      simd_count++;
+
+      // simd bbox intersection test
+      if (simd_count == 8) {
+        Mat38f max_min = simd_p1_min.cwiseMin(simd_p2_min);
+        Mat38f min_max = simd_p1_max.cwiseMin(simd_p2_max);
+        Eigen::Matrix<bool, 8, 1> is_bbox_colliding =
+            (max_min.array() < min_max.array()).colwise().all();
+        for (int j = 0; j < 8; ++j) {
+          if (is_bbox_colliding[j]) {
+            cache_.emplace_back({&p1->data, &simd_objs[j]->data});
+          }
+        }
+        simd_count = 0;
+      }
+    }
+
+    // test the last chunk
+    if (simd_count != 0) {
+      Mat38f max_min = simd_p1_min.cwiseMin(simd_p2_min);
+      Mat38f min_max = simd_p1_max.cwiseMin(simd_p2_max);
+      Eigen::Matrix<float, 8, 1> is_bbox_colliding =
+          (max_min.array() < min_max.array()).colwise().all();
+      for (int j = 0; j < simd_count; ++j) {
+        if (is_bbox_colliding[j]) {
+          cache_.emplace_back({&p1->data, &simd_objs[j]->data});
+        }
+      }
+    }
   }
-
-  void optimize_incremental(int passes) {
-    assert((passes >= -1));
-
-    if (!true_root_) {
+  void sap_node_node(KDNode* n) {
+    if (n->static_num == n->proxy_num()) {
       return;
     }
 
-    if (passes == -1) {
-      passes = leaf_num_;
-    }
-
-    while (passes > 0) {
-      optimize_memory_layout();
-      path_++;
-      passes--;
+    for (int i = n->proxy_start; i < n->proxy_end - 1; ++i) {
+      sap_array(obj_proxies[i], i + 1, n->proxy_end, obj_proxies, n->sap_axis);
     }
   }
 
-  const BVHNode<T>* insert(T data, Bbox bbox) {
-    auto node = new BVHNode<T>{.data = std::move(data),
-                               .bbox = std::move(bbox),
-                               .parent = nullptr,
-                               .left = nullptr,
-                               .right = nullptr};
-    subtree_insert(true_root_, node);
-    return node;
-  }
-
-  void update(BVHNode<T>* node, Bbox bbox);
-
-  void remove(BVHNode<T>* node);
+  void sap_node_external(KDNode* n);
 };
 
 }  // namespace silk
