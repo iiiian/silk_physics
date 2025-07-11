@@ -20,20 +20,17 @@ struct KDNode {
   KDNode* right;
 
   Bbox bbox;
-  int axis;
-  float position;
-
-  int proxy_start;
-  int proxy_end;
-  // external collider
-  int ext_start;
-  int ext_end;
-
-  int static_num;
-  int population;
-  int static_population;
-  int delay_offset;
-  bool is_ext_static;
+  int axis;               // split plane axis
+  float position;         // split plane position
+  int proxy_start;        // proxies array start
+  int proxy_end;          // proxies array end
+  int ext_start;          // external collider buffer start
+  int ext_end;            // external collider buffer end
+  int static_num;         // static node proxy num
+  int population;         // subtree proxy num
+  int static_population;  // static subtree proxy num
+  int delay_offset;       // delayed update to proxy start/end
+  bool is_ext_static;     // is external colliders all static
 
   int proxy_num() const {
     assert((proxy_end >= proxy_start));
@@ -60,15 +57,9 @@ struct KDNode {
 template <typename T>
 class KDTree {
  public:
-  using Collider = BboxCollider<T>;
-
-  float incremental_update_threshold = 0;
-  int node_collider_num_threshold = 0;
-
   KDTree(std::vector<BboxCollider<T>>* p_colliders) {
     assert(p_colliders);
 
-    p_colliders_ = p_colliders;
     collider_num_ = p_colliders->size;
     root_ = new KDNode{.parent = nullptr,
                        .left = nullptr,
@@ -87,7 +78,7 @@ class KDTree {
                        .is_ext_static = false};
     proxies_.resize(collider_num_);
     for (int i = 0; i < collider_num_; ++i) {
-      proxies_[i] = p_colliders_->data() + i;
+      proxies_[i] = p_colliders->data() + i;
     }
     buffer_.resize(collider_num_);
   }
@@ -95,145 +86,13 @@ class KDTree {
   ~KDTree() { delete_subtree(root_); }
 
   void update() {
-    assert((p_colliders_->size() == collider_num_));
-
-    // update objects' bbox
-    static_collider_num_ = 0;
-    for (auto& collider : *p_colliders_) {
-      if (collider.is_static) {
-        static_collider_num_++;
-      }
-    }
-
-    is_incremental_ =
-        (static_collider_num_ > incremental_update_threshold * collider_num_);
-
-    if (static_collider_num_ != collider_num_) {
-      refit();
-      optimize();
-    }
-
+    refit();
+    optimize();
     update_static_population();
-  }
-
-  void update_ext_collider(KDNode* n) {
-    assert(n);
-    assert(n->parent);
-
-    // resize buffer
-    int max_ext_num = n->parent->ext_num() + n->parent->proxy_num();
-    int required_buffer_size = n->parent->ext_end + max_ext_num;
-    buffer_.resize(required_buffer_size);
-
-    n->ext_start = n->parent->ext_end;
-    n->ext_end = n->parent->ext_end;
-    n->is_ext_static = true;
-    int axis = n->parent->axis;
-    float position = n->parent->position;
-
-    // check parent's external colliders
-    if (!(n->is_subtree_static() && n->parent->is_ext_static)) {
-      for (int i = n->parent->ext_start; i < n->parent->ext_end; ++i) {
-        Collider* p = buffer_[i];
-        // exclude static-static pair
-        if (n->is_subtree_static() && p->is_static) {
-          continue;
-        }
-
-        if (n->is_left()) {
-          if (p->bbox.min(axis) < position) {
-            buffer_[n->ext_end] = p;
-            n->ext_end++;
-            n->is_ext_static = n->is_ext_static && p->is_static;
-          }
-        } else {
-          if (p->bbox.max(axis) > position) {
-            buffer_[n->ext_end] = p;
-            n->ext_end++;
-            n->is_ext_static = n->is_ext_static && p->is_static;
-          }
-        }
-      }
-    }
-
-    // check parent node colliders
-    if (!(n->is_subtree_static() && n->parent->is_subtree_static())) {
-      for (int i = n->parent->proxy_start; i < n->parent->proxy_end; ++i) {
-        Collider* p = proxies_[i];
-        // exclude static-static pair
-        if (n->is_subtree_static() && p->is_static) {
-          continue;
-        }
-
-        if (n->is_left()) {
-          if (p->bbox.min(axis) < position) {
-            buffer_[n->ext_end] = p;
-            n->ext_end++;
-            n->is_ext_static = n->is_ext_static && p->is_static;
-          }
-        } else {
-          if (p->bbox.max(axis) > position) {
-            buffer_[n->ext_end] = p;
-            n->ext_end++;
-            n->is_ext_static = n->is_ext_static && p->is_static;
-          }
-        }
-      }
-    }
-  }
-
-  void test_node_collision(KDNode* n,
-                           CollisionFilterCallback<T> filter_callback,
-                           CollisionCache<T>& cache) {
-    int proxy_num = n->proxy_num();
-    if (proxy_num == 0) {
-      return;
-    }
-
-    Collider** proxy_start = proxies_.data() + n->proxy_start;
-
-    if (n->is_static()) {
-      if (n->ext_num() != 0 && !n->is_ext_static) {
-        // node - external test
-        Collider** ext_start = buffer_.data() + n->ext_start;
-        int ext_num = n->ext_num();
-        int axis =
-            sap_find_optimal_axis(proxy_start, proxy_num, ext_start, ext_num);
-        sap_sort_proxies(proxy_start, proxy_num, axis);
-        sap_sort_proxies(ext_start, ext_num, axis);
-        sap_test_sorted_group_collision(proxy_start, proxy_num, ext_start,
-                                        ext_num, axis, filter_callback, cache);
-      }
-    } else {
-      if (n->ext_num() == 0) {
-        // node - node test
-        int axis = sap_find_optimal_axis(proxy_start, proxy_num);
-        sap_sort_proxies(proxy_start, proxy_num, axis);
-        sap_test_sorted_self_collision(proxy_start, proxy_num, axis,
-                                       filter_callback, cache);
-
-      } else {
-        // node - node + node - external test
-        Collider** ext_start = buffer_.data() + n->ext_start;
-        int ext_num = n->ext_num();
-        int axis =
-            sap_find_optimal_axis(proxy_start, proxy_num, ext_start, ext_num);
-        sap_sort_proxies(proxy_start, proxy_num, axis);
-        sap_sort_proxies(ext_start, ext_num, axis);
-        sap_test_sorted_self_collision(proxy_start, proxy_num, axis,
-                                       filter_callback, cache);
-        sap_test_sorted_group_collision(proxy_start, proxy_num, ext_start,
-                                        ext_num, axis, filter_callback, cache);
-      }
-    }
   }
 
   void test_self_collision(CollisionFilterCallback<T> filter_callback,
                            CollisionCache<T>& cache) {
-    if (static_collider_num_ == collider_num_) {
-      return;
-    }
-
     root_->ext_start = 0;
     root_->ext_end = 0;
     test_node_collision(root_, filter_callback, cache);
@@ -283,9 +142,9 @@ class KDTree {
       }
 
       if (!(na->is_static() && nb->is_static())) {
-        Collider** start_a = ta.proxies_.data() + na->proxy_start;
+        BboxCollider<T>** start_a = ta.proxies_.data() + na->proxy_start;
         int num_a = na->proxy_num();
-        Collider** start_b = tb.proxies_.data() + nb->proxy_start;
+        BboxCollider<T>** start_b = tb.proxies_.data() + nb->proxy_start;
         int num_b = nb->proxy_num();
         int axis = sap_find_optimal_axis(start_a, num_a, start_b, num_b);
         sap_sort_proxies(start_a, num_a, axis);
@@ -306,18 +165,18 @@ class KDTree {
   }
 
  private:
+  static constexpr int NODE_PROXY_THRESHOLD = 512;
   static constexpr int APPROX_PLANE_SAMPLE_NUM = 16;
   static constexpr int OPTIMIAL_PLANE_SAMPLE_THRESHOLD = 32;
 
   int collider_num_;
-  int static_collider_num_;
   bool is_incremental_;
-  std::vector<Collider>* p_colliders_;
 
-  KDNode* root_ = nullptr;
-  std::vector<KDNode*> stack_;
-  std::vector<Collider*> proxies_;
-  std::vector<Collider*> buffer_;
+  KDNode* root_;
+  std::vector<KDNode*> stack_;             // for tree traversal
+  std::vector<BboxCollider<T>*> proxies_;  // in-order layout proxy array
+  std::vector<BboxCollider<T>*>
+      buffer_;  // for both proxies and external colliders
 
   void delete_subtree(KDNode* n) {
     if (!n) {
@@ -802,7 +661,7 @@ class KDTree {
 
       // if population of leaf is too large, split
       if (n->is_leaf()) {
-        if (n->proxy_num() > node_collider_num_threshold) {
+        if (n->proxy_num() > NODE_PROXY_THRESHOLD) {
           split_leaf_node(n);
           stack_.push_back(n->right);
           stack_.push_back(n->left);
@@ -811,7 +670,7 @@ class KDTree {
       }
 
       // if population of internal nodes is too small, collapse into leaf node
-      if (n->population < node_collider_num_threshold) {
+      if (n->population < NODE_PROXY_THRESHOLD) {
         collapse(n);
         stack_.push_back(n);
         continue;
@@ -844,6 +703,118 @@ class KDTree {
 
       // translated plane is still not optimal, erase the node
       stack_.push_back(erase(n, (left_num > right_num)));
+    }
+  }
+
+  void update_ext_collider(KDNode* n) {
+    assert(n);
+    assert(n->parent);
+
+    // resize buffer
+    int max_ext_num = n->parent->ext_num() + n->parent->proxy_num();
+    int required_buffer_size = n->parent->ext_end + max_ext_num;
+    buffer_.resize(required_buffer_size);
+
+    n->ext_start = n->parent->ext_end;
+    n->ext_end = n->parent->ext_end;
+    n->is_ext_static = true;
+    int axis = n->parent->axis;
+    float position = n->parent->position;
+
+    // check parent's external colliders
+    if (!(n->is_subtree_static() && n->parent->is_ext_static)) {
+      for (int i = n->parent->ext_start; i < n->parent->ext_end; ++i) {
+        BboxCollider<T>* p = buffer_[i];
+        // exclude static-static pair
+        if (n->is_subtree_static() && p->is_static) {
+          continue;
+        }
+
+        if (n->is_left()) {
+          if (p->bbox.min(axis) < position) {
+            buffer_[n->ext_end] = p;
+            n->ext_end++;
+            n->is_ext_static = n->is_ext_static && p->is_static;
+          }
+        } else {
+          if (p->bbox.max(axis) > position) {
+            buffer_[n->ext_end] = p;
+            n->ext_end++;
+            n->is_ext_static = n->is_ext_static && p->is_static;
+          }
+        }
+      }
+    }
+
+    // check parent node colliders
+    if (!(n->is_subtree_static() && n->parent->is_subtree_static())) {
+      for (int i = n->parent->proxy_start; i < n->parent->proxy_end; ++i) {
+        BboxCollider<T>* p = proxies_[i];
+        // exclude static-static pair
+        if (n->is_subtree_static() && p->is_static) {
+          continue;
+        }
+
+        if (n->is_left()) {
+          if (p->bbox.min(axis) < position) {
+            buffer_[n->ext_end] = p;
+            n->ext_end++;
+            n->is_ext_static = n->is_ext_static && p->is_static;
+          }
+        } else {
+          if (p->bbox.max(axis) > position) {
+            buffer_[n->ext_end] = p;
+            n->ext_end++;
+            n->is_ext_static = n->is_ext_static && p->is_static;
+          }
+        }
+      }
+    }
+  }
+
+  void test_node_collision(KDNode* n,
+                           CollisionFilterCallback<T> filter_callback,
+                           CollisionCache<T>& cache) {
+    int proxy_num = n->proxy_num();
+    if (proxy_num == 0) {
+      return;
+    }
+
+    BboxCollider<T>** proxy_start = proxies_.data() + n->proxy_start;
+
+    if (n->is_static()) {
+      if (n->ext_num() != 0 && !n->is_ext_static) {
+        // node - external test
+        BboxCollider<T>** ext_start = buffer_.data() + n->ext_start;
+        int ext_num = n->ext_num();
+        int axis =
+            sap_find_optimal_axis(proxy_start, proxy_num, ext_start, ext_num);
+        sap_sort_proxies(proxy_start, proxy_num, axis);
+        sap_sort_proxies(ext_start, ext_num, axis);
+        sap_test_sorted_group_collision(proxy_start, proxy_num, ext_start,
+                                        ext_num, axis, filter_callback, cache);
+      }
+    } else {
+      if (n->ext_num() == 0) {
+        // node - node test
+        int axis = sap_find_optimal_axis(proxy_start, proxy_num);
+        sap_sort_proxies(proxy_start, proxy_num, axis);
+        sap_test_sorted_self_collision(proxy_start, proxy_num, axis,
+                                       filter_callback, cache);
+
+      } else {
+        // node - node + node - external test
+        BboxCollider<T>** ext_start = buffer_.data() + n->ext_start;
+        int ext_num = n->ext_num();
+        int axis =
+            sap_find_optimal_axis(proxy_start, proxy_num, ext_start, ext_num);
+        sap_sort_proxies(proxy_start, proxy_num, axis);
+        sap_sort_proxies(ext_start, ext_num, axis);
+        sap_test_sorted_self_collision(proxy_start, proxy_num, axis,
+                                       filter_callback, cache);
+        sap_test_sorted_group_collision(proxy_start, proxy_num, ext_start,
+                                        ext_num, axis, filter_callback, cache);
+      }
     }
   }
 };
