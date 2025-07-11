@@ -14,19 +14,19 @@
 namespace silk {
 
 struct KDNode {
-  KDNode* parent;
-  KDNode* left;
-  KDNode* right;
+  KDNode* parent = nullptr;
+  KDNode* left = nullptr;
+  KDNode* right = nullptr;
 
-  Bbox bbox;
-  int axis;          // split plane axis
-  float position;    // split plane position
-  int proxy_start;   // proxies array start
-  int proxy_end;     // proxies array end
-  int population;    // subtree proxy num
-  int delay_offset;  // delayed update to proxy start/end
-  int ext_start;     // external collider buffer start
-  int ext_end;       // external collider buffer end
+  Bbox bbox = {};
+  int axis = 0;           // split plane axis
+  float position = 0.0f;  // split plane position
+  int proxy_start = 0;    // proxies array start
+  int proxy_end = 0;      // proxies array end
+  int population = 0;     // subtree proxy num
+  int delay_offset = 0;   // delayed update to proxy start/end
+  int ext_start = 0;      // external collider buffer start
+  int ext_end = 0;        // external collider buffer end
 
   int proxy_num() const {
     assert((proxy_end >= proxy_start));
@@ -63,23 +63,16 @@ class KDTree {
     assert((collider_num > 0));
 
     collider_num_ = collider_num;
+    colliders_ = colliders;
     proxies_.resize(collider_num);
     buffer_.resize(collider_num);
     for (int i = 0; i < collider_num_; ++i) {
       proxies_[i] = colliders + i;
     }
-    root_ = new KDNode{.parent = nullptr,
-                       .left = nullptr,
-                       .right = nullptr,
-                       .bbox = {},
-                       .axis = 0,
-                       .position = 0,
-                       .proxy_start = 0,
-                       .proxy_end = collider_num_,
-                       .population = collider_num_,
-                       .delay_offset = 0,
-                       .ext_start = 0,
-                       .ext_end = 0};
+    root_ = new KDNode{};
+    root_->proxy_start = 0;
+    root_->proxy_end = collider_num;
+    root_->population = collider_num;
     set_root_bbox();
   }
 
@@ -159,6 +152,12 @@ class KDTree {
   std::vector<Proxy> proxies_;  // in-order layout proxy array
   std::vector<Proxy> buffer_;   // for both proxies and external colliders
 
+  void ensure_buffer_size(int num) {
+    if (buffer_.size() < num) {
+      buffer_.resize(num);
+    }
+  }
+
   void set_root_bbox() {
     root_->bbox = colliders_[0].bbox;
     for (int i = 1; i < collider_num_; ++i) {
@@ -224,7 +223,7 @@ class KDTree {
     n->position = mean(n->axis);
   }
 
-  int push_unfit_proxy_left(const KDNode* n) {
+  int partition_unfit_proxy_left(const KDNode* n) {
     auto is_outside = [n](Proxy p) -> bool {
       return !(n->bbox.is_inside(p->bbox));
     };
@@ -236,7 +235,7 @@ class KDTree {
     return new_start - start;
   }
 
-  int push_unfit_proxy_right(const KDNode* n) {
+  int partition_unfit_proxy_right(const KDNode* n) {
     auto is_inside = [n](Proxy p) -> bool {
       return n->bbox.is_inside(p->bbox);
     };
@@ -257,7 +256,7 @@ class KDTree {
     size_t shift_size = shift_num * sizeof(Proxy);
     Proxy left = proxies_.data() + proxy_start - shift_num;
     Proxy right = proxies_.data() + proxy_start;
-    buffer_.resize(copy_size);
+    ensure_buffer_size(proxy_num);
 
     // copy right chunk to temp buffer
     std::memcpy(buffer_.data(), right, copy_size);
@@ -276,7 +275,7 @@ class KDTree {
     size_t shift_size = shift_num * sizeof(Proxy);
     Proxy left = proxies_.data() + proxy_start;
     Proxy right = proxies_.data() + proxy_start + proxy_num;
-    buffer_.resize(proxy_num);
+    ensure_buffer_size(proxy_num);
 
     // copy left chunk to temp buffer
     std::memcpy(buffer_.data(), left, copy_size);
@@ -309,19 +308,19 @@ class KDTree {
 
       if (n->is_leaf()) {
         if (n->is_left()) {
-          int unfit_num = push_unfit_proxy_right(n);
+          int unfit_num = partition_unfit_proxy_right(n);
           n->proxy_end -= unfit_num;
           n->parent->proxy_start -= unfit_num;
           n->population = n->proxy_num();
         } else {
-          int unfit_num = push_unfit_proxy_left(n);
+          int unfit_num = partition_unfit_proxy_left(n);
           n->proxy_start += unfit_num;
           n->parent->proxy_end += unfit_num;
           n->population = n->proxy_num();
         }
       } else {
         if (n->is_left()) {
-          int unfit_num = push_unfit_proxy_right(n);
+          int unfit_num = partition_unfit_proxy_right(n);
           shift_proxy_right(n->proxy_end - unfit_num, unfit_num,
                             n->right->population);
 
@@ -331,7 +330,7 @@ class KDTree {
               n->proxy_num() + n->left->population + n->right->population;
           n->right->delay_offset = -unfit_num;
         } else {
-          int unfit_num = push_unfit_proxy_left(n);
+          int unfit_num = partition_unfit_proxy_left(n);
           shift_proxy_left(n->proxy_start, unfit_num, n->left->population);
 
           n->proxy_start += unfit_num;
@@ -385,21 +384,19 @@ class KDTree {
     int left_num = left_end - n->proxy_start;
     if (!n->left->is_leaf()) {
       shift_proxy_left(n->proxy_start, left_num, n->left->right->population);
+      n->left->right->delay_offset += left_num;
     }
     n->left->proxy_end += left_num;
     n->left->population += left_num;
-    n->left->right->proxy_start += left_num;
-    n->left->right->proxy_end += left_num;
 
     // move right partition down one node level
     int right_num = n->proxy_end - middle_end;
     if (!n->right->is_leaf()) {
       shift_proxy_right(middle_end, right_num, n->right->left->population);
+      n->right->left->delay_offset -= right_num;
     }
     n->right->proxy_start -= right_num;
     n->right->population += right_num;
-    n->right->left->proxy_start -= right_num;
-    n->right->left->proxy_end -= right_num;
 
     // update node
     n->proxy_start += left_num;
@@ -419,33 +416,18 @@ class KDTree {
     assert(!(n->left || n->right));
     assert((n->proxy_num() > NODE_PROXY_NUM_THRESHOLD));
 
-    find_optimal_plane(n, n->axis, n->position);
+    find_optimal_plane(n);
 
     // create new children
-    n->left = new KDNode{.parent = n,
-                         .left = nullptr,
-                         .right = nullptr,
-                         .bbox = {},
-                         .axis = 0,
-                         .position = 0,
-                         .proxy_start = n->proxy_start,
-                         .proxy_end = n->proxy_start,
-                         .population = 0,
-                         .delay_offset = 0,
-                         .ext_start = 0,
-                         .ext_end = 0};
-    n->right = new KDNode{.parent = n,
-                          .left = nullptr,
-                          .right = nullptr,
-                          .bbox = {},
-                          .axis = 0,
-                          .position = 0,
-                          .proxy_start = n->proxy_end,
-                          .proxy_end = n->proxy_end,
-                          .population = 0,
-                          .delay_offset = 0,
-                          .ext_start = 0,
-                          .ext_end = 0};
+    n->left = new KDNode{};
+    n->left->parent = n;
+    n->left->proxy_start = n->proxy_start;
+    n->left->proxy_end = n->proxy_start;
+
+    n->right = new KDNode{};
+    n->right->parent = n;
+    n->right->proxy_start = n->proxy_end;
+    n->right->proxy_end = n->proxy_end;
 
     filter(n);
     set_children_bbox(n);
@@ -542,7 +524,7 @@ class KDTree {
         stack_.push_back(current->right);
       }
 
-      current->proxy_end = n->proxy_end;
+      current->proxy_start = n->proxy_end;
       current->proxy_end = n->proxy_end;
       current->population = 0;
     }
@@ -560,7 +542,7 @@ class KDTree {
     n->position = mean(n->axis);
   }
 
-  KDNode* erase(KDNode* n, bool keep_left) {
+  void erase(KDNode* n, bool keep_left) {
     assert((n->left && n->right));
     // erase only happens after translate, which will lift all proxies up to n
     assert((n->left->population == 0));
@@ -576,23 +558,18 @@ class KDTree {
       other = n->left;
     }
 
-    main->parent = n->parent;
-    main->bbox = n->bbox;
-    main->proxy_start = n->proxy_start;
-    main->proxy_end = n->proxy_end;
-    main->population = n->population;
-    if (n->parent) {
-      if (n->is_left()) {
-        n->parent->left = main;
-      } else {
-        n->parent->right = main;
-      }
+    n->left = main->left;
+    n->right = main->right;
+    n->axis = main->axis;
+    n->position = main->position;
+
+    if (!main->is_leaf()) {
+      main->left->parent = n;
+      main->right->parent = n;
     }
 
     delete_subtree(other);
-    delete n;
-
-    return main;
+    delete main;
   }
 
   void optimize_structure() {
@@ -605,8 +582,10 @@ class KDTree {
       stack_.pop_back();
 
       // propagate and apply delay offset
-      n->left->delay_offset += n->delay_offset;
-      n->right->delay_offset += n->delay_offset;
+      if (!n->is_leaf()) {
+        n->left->delay_offset += n->delay_offset;
+        n->right->delay_offset += n->delay_offset;
+      }
       n->proxy_start += n->delay_offset;
       n->proxy_end += n->delay_offset;
       n->delay_offset = 0;
@@ -651,17 +630,18 @@ class KDTree {
       }
 
       // translated plane is still not optimal, erase the node
-      stack_.push_back(erase(n, (left_num > right_num)));
+      erase(n, (left_num > right_num));
+      stack_.push_back(n);
     }
   }
 
   void update_ext_collider(KDNode* n) {
     assert(n->parent);
 
-    // resize buffer
+    // ensure buffer capacity
     int max_ext_num = n->parent->ext_num() + n->parent->proxy_num();
     int required_buffer_size = n->parent->ext_end + max_ext_num;
-    buffer_.resize(required_buffer_size);
+    ensure_buffer_size(required_buffer_size);
 
     n->ext_start = n->parent->ext_end;
     n->ext_end = n->parent->ext_end;

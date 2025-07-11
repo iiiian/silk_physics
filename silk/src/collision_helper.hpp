@@ -37,7 +37,7 @@ MeanVariance proxy_mean_variance(BboxCollider<T>** proxies, int proxy_num) {
   mean /= proxy_num;
   variance = variance / proxy_num - mean.cwiseAbs2();
 
-  return {.mean = std::move(mean), .variance = std::move(variance)};
+  return {std::move(mean), std::move(variance)};
 }
 
 }  // namespace silk
