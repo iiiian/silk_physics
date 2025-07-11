@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
-#include <iterator>
 #include <random>
 #include <vector>
 
@@ -24,12 +23,12 @@ struct KDNode {
   float position;         // split plane position
   int proxy_start;        // proxies array start
   int proxy_end;          // proxies array end
-  int ext_start;          // external collider buffer start
-  int ext_end;            // external collider buffer end
   int static_num;         // static node proxy num
   int population;         // subtree proxy num
   int static_population;  // static subtree proxy num
   int delay_offset;       // delayed update to proxy start/end
+  int ext_start;          // external collider buffer start
+  int ext_end;            // external collider buffer end
   bool is_ext_static;     // is external colliders all static
 
   int proxy_num() const {
@@ -56,55 +55,67 @@ struct KDNode {
 
 template <typename T>
 class KDTree {
- public:
-  KDTree(std::vector<BboxCollider<T>>* p_colliders) {
-    assert(p_colliders);
+  using Proxy = const BboxCollider<T>*;
 
-    collider_num_ = p_colliders->size;
+  static constexpr int NODE_PROXY_NUM_THRESHOLD = 512;
+  static constexpr int APPROX_PLANE_SAMPLE_NUM = 16;
+  static constexpr int APPROX_PLANE_SAMPLE_THRESHOLD = 32;
+
+  int collider_num_;
+  const BboxCollider<T>* colliders_;
+
+ public:
+  KDTree(const BboxCollider<T>* colliders, int collider_num) {
+    assert(colliders);
+    assert((collider_num > 0));
+
+    collider_num_ = collider_num;
+    proxies_.resize(collider_num);
+    buffer_.resize(collider_num);
+    for (int i = 0; i < collider_num_; ++i) {
+      proxies_[i] = colliders + i;
+    }
     root_ = new KDNode{.parent = nullptr,
                        .left = nullptr,
                        .right = nullptr,
-                       .bbox = Bbox::make_inf_bbox(),
+                       .bbox = {},
                        .axis = 0,
                        .position = 0,
                        .proxy_start = 0,
                        .proxy_end = collider_num_,
-                       .ext_start = 0,
-                       .ext_end = 0,
                        .static_num = 0,
                        .population = collider_num_,
                        .static_population = 0,
                        .delay_offset = 0,
+                       .ext_start = 0,
+                       .ext_end = 0,
                        .is_ext_static = false};
-    proxies_.resize(collider_num_);
-    for (int i = 0; i < collider_num_; ++i) {
-      proxies_[i] = p_colliders->data() + i;
-    }
-    buffer_.resize(collider_num_);
+    set_root_bbox();
   }
 
   ~KDTree() { delete_subtree(root_); }
 
   void update() {
-    refit();
-    optimize();
-    update_static_population();
+    set_root_bbox();
+    lift_unfit_up();
+    optimize_structure();
+    set_static_population();
   }
 
   void test_self_collision(CollisionFilterCallback<T> filter_callback,
                            CollisionCache<T>& cache) {
+    assert(stack_.empty());
+
     root_->ext_start = 0;
     root_->ext_end = 0;
     test_node_collision(root_, filter_callback, cache);
-
-    assert(stack_.empty());
 
     if (!root_->is_leaf()) {
       stack_.push_back(root_->right);
       stack_.push_back(root_->left);
     }
 
-    while (stack_.size() != 0) {
+    while (!stack_.empty()) {
       KDNode* n = stack_.back();
       stack_.pop_back();
 
@@ -116,7 +127,6 @@ class KDTree {
         if (!(n->right->is_subtree_static() && n->is_ext_static)) {
           stack_.push_back(n->right);
         }
-
         if (!(n->left->is_subtree_static() && n->is_ext_static)) {
           stack_.push_back(n->left);
         }
@@ -142,9 +152,9 @@ class KDTree {
       }
 
       if (!(na->is_static() && nb->is_static())) {
-        BboxCollider<T>** start_a = ta.proxies_.data() + na->proxy_start;
+        Proxy* start_a = ta.proxies_.data() + na->proxy_start;
         int num_a = na->proxy_num();
-        BboxCollider<T>** start_b = tb.proxies_.data() + nb->proxy_start;
+        Proxy* start_b = tb.proxies_.data() + nb->proxy_start;
         int num_b = nb->proxy_num();
         int axis = sap_find_optimal_axis(start_a, num_a, start_b, num_b);
         sap_sort_proxies(start_a, num_a, axis);
@@ -165,18 +175,17 @@ class KDTree {
   }
 
  private:
-  static constexpr int NODE_PROXY_THRESHOLD = 512;
-  static constexpr int APPROX_PLANE_SAMPLE_NUM = 16;
-  static constexpr int OPTIMIAL_PLANE_SAMPLE_THRESHOLD = 32;
-
-  int collider_num_;
-  bool is_incremental_;
-
   KDNode* root_;
-  std::vector<KDNode*> stack_;             // for tree traversal
-  std::vector<BboxCollider<T>*> proxies_;  // in-order layout proxy array
-  std::vector<BboxCollider<T>*>
-      buffer_;  // for both proxies and external colliders
+  std::vector<KDNode*> stack_;  // for tree traversal
+  std::vector<Proxy> proxies_;  // in-order layout proxy array
+  std::vector<Proxy> buffer_;   // for both proxies and external colliders
+
+  void set_root_bbox() {
+    root_->bbox = colliders_[0].bbox;
+    for (int i = 1; i < collider_num_; ++i) {
+      root_->bbox.merge_inplace(colliders_[i].bbox);
+    }
+  }
 
   void delete_subtree(KDNode* n) {
     if (!n) {
@@ -197,25 +206,500 @@ class KDTree {
     }
   }
 
-  void update_static_population() {
-    // BFS stack fill
+  // find optimal split plane based on mean and variance of bbox center.
+  // plane axis should has the max variance and the plane position is the
+  // mean.
+  void find_optimal_plane(KDNode* n) const {
+    assert((n->proxy_num() > 0));
+
+    auto [mean, variance] =
+        proxy_mean_variance(proxies_.data() + n->proxy_start, n->proxy_num());
+    variance.maxCoeff(&n->axis);
+    n->position = mean(n->axis);
+  }
+
+  // find approximate split plane based on mean and variance of bbox center.
+  // sample a few bbox only.
+  void find_approx_plane(KDNode* n) {
+    static std::random_device rand_device;
+    static std::mt19937 rand_generator(rand_device());
+
+    assert((n->proxy_num() > 0));
+
+    if (n->proxy_num() <= APPROX_PLANE_SAMPLE_THRESHOLD) {
+      find_optimal_plane(n);
+      return;
+    }
+
+    int start = n->proxy_start;
+    int end = n->proxy_start + APPROX_PLANE_SAMPLE_NUM;
+    for (int i = start; i < end; ++i) {
+      std::uniform_int_distribution rand_dist(i, n->proxy_end - 1);
+      int rand_idx = rand_dist(rand_generator);
+      std::swap(proxies_[i], proxies_[rand_idx]);
+    }
+
+    auto [mean, variance] =
+        proxy_mean_variance(proxies_.data() + start, APPROX_PLANE_SAMPLE_NUM);
+    variance.maxCoeff(&n->axis);
+    n->position = mean(n->axis);
+  }
+
+  int push_unfit_proxy_left(const KDNode* n) {
+    auto is_outside = [n](Proxy p) -> bool {
+      return !(n->bbox.is_inside(p->bbox));
+    };
+
+    Proxy start = proxies_.data() + n->proxy_start;
+    Proxy end = proxies_.data() + n->proxy_end;
+    Proxy new_start = std::partition(start, end, is_outside);
+
+    return new_start - start;
+  }
+
+  int push_unfit_proxy_right(const KDNode* n) {
+    auto is_inside = [n](Proxy p) -> bool {
+      return n->bbox.is_inside(p->bbox);
+    };
+
+    Proxy start = proxies_.data() + n->proxy_start;
+    Proxy end = proxies_.data() + n->proxy_end;
+    Proxy new_end = std::partition(start, end, is_inside);
+
+    return end - new_end;
+  }
+
+  void shift_proxy_left(int proxy_start, int proxy_num, int shift_num) {
+    if (proxy_num == 0 || shift_num == 0) {
+      return;
+    }
+
+    size_t copy_size = proxy_num * sizeof(Proxy);
+    size_t shift_size = shift_num * sizeof(Proxy);
+    Proxy left = proxies_.data() + proxy_start - shift_num;
+    Proxy right = proxies_.data() + proxy_start;
+    buffer_.resize(copy_size);
+
+    // copy right chunk to temp buffer
+    std::memcpy(buffer_.data(), right, copy_size);
+    // shift left chunk right
+    std::memmove(left + proxy_num, left, shift_size);
+    // copy right chunk back
+    std::memcpy(left, buffer_.data(), copy_size);
+  }
+
+  void shift_proxy_right(int proxy_start, int proxy_num, int shift_num) {
+    if (proxy_num == 0 || shift_num == 0) {
+      return;
+    }
+
+    size_t copy_size = proxy_num * sizeof(Proxy);
+    size_t shift_size = shift_num * sizeof(Proxy);
+    Proxy left = proxies_.data() + proxy_start;
+    Proxy right = proxies_.data() + proxy_start + proxy_num;
+    buffer_.resize(proxy_num);
+
+    // copy left chunk to temp buffer
+    std::memcpy(buffer_.data(), left, copy_size);
+    // shift right chunk left
+    std::memmove(left, right, shift_size);
+    // copy left chunk back
+    std::memcpy(left + shift_num, buffer_.data(), copy_size);
+  }
+
+  void lift_unfit_up() {
+    assert(stack_.empty());
+
+    // prepare for bottom up traverse
     stack_.push_back(root_);
     for (int i = 0; i < stack_.size(); ++i) {
       KDNode* n = stack_[i];
       if (!n->is_leaf()) {
-        stack_.push_back(n->left);
         stack_.push_back(n->right);
+        stack_.push_back(n->left);
       }
     }
 
-    // bottom up refit, push unfit node up.
-    for (int i = stack_.size() - 1; i >= 0; i--) {
+    // bottom up refit, push unfit node up. root is excluded
+    for (int i = stack_.size() - 1; i > 0; --i) {
+      KDNode* n = stack_[i];
+
+      if (n->proxy_num() == 0) {
+        continue;
+      }
+
+      if (n->is_leaf()) {
+        if (n->is_left()) {
+          int unfit_num = push_unfit_proxy_right(n);
+          n->proxy_end -= unfit_num;
+          n->parent->proxy_start -= unfit_num;
+          n->population = n->proxy_num();
+        } else {
+          int unfit_num = push_unfit_proxy_left(n);
+          n->proxy_start += unfit_num;
+          n->parent->proxy_end += unfit_num;
+          n->population = n->proxy_num();
+        }
+      } else {
+        if (n->is_left()) {
+          int unfit_num = push_unfit_proxy_right(n);
+          shift_proxy_right(n->proxy_end - unfit_num, unfit_num,
+                            n->right->population);
+
+          n->proxy_end -= unfit_num;
+          n->parent->proxy_start -= unfit_num;
+          n->population =
+              n->proxy_num() + n->left->population + n->right->population;
+          n->right->delay_offset = -unfit_num;
+        } else {
+          int unfit_num = push_unfit_proxy_left(n);
+          shift_proxy_left(n->proxy_start, unfit_num, n->left->population);
+
+          n->proxy_start += unfit_num;
+          n->parent->proxy_end += unfit_num;
+          n->population =
+              n->proxy_num() + n->left->population + n->right->population;
+          n->left->delay_offset = unfit_num;
+        }
+      }
+    }
+
+    if (!root_->is_leaf()) {
+      root_->population = root_->proxy_num() + root_->left->population +
+                          root_->right->population;
+    }
+
+    stack_.clear();
+  }
+
+  void filter(KDNode* n) {
+    assert((n->left && n->right));
+
+    // partition proxies by plane.
+    // strictly left  -> move to left partition
+    // on the plane   -> move to middle partition
+    // strictly right -> move to right partition
+    int left_end = n->proxy_start;
+    int middle_end = n->proxy_end;
+    int i = n->proxy_start;
+    while (i != middle_end) {
+      Proxy p = proxies_[i];
+
+      // strictly left
+      if (p->bbox.max(n->axis) < n->position) {
+        std::swap(proxies_[left_end], proxies_[i]);
+        ++left_end;
+        ++i;
+      }
+      // strictly right
+      else if (p->bbox.min(n->axis) > n->position) {
+        std::swap(proxies_[middle_end - 1], proxies_[i]);
+        --middle_end;
+      }
+      // on the plane
+      else {
+        ++i;
+      }
+    }
+
+    // move left partition down one node level
+    int left_num = left_end - n->proxy_start;
+    if (!n->left->is_leaf()) {
+      shift_proxy_left(n->proxy_start, left_num, n->left->right->population);
+    }
+    n->left->proxy_end += left_num;
+    n->left->population += left_num;
+    n->left->right->proxy_start += left_num;
+    n->left->right->proxy_end += left_num;
+
+    // move right partition down one node level
+    int right_num = n->proxy_end - middle_end;
+    if (!n->right->is_leaf()) {
+      shift_proxy_right(middle_end, right_num, n->right->left->population);
+    }
+    n->right->proxy_start -= right_num;
+    n->right->population += right_num;
+    n->right->left->proxy_start -= right_num;
+    n->right->left->proxy_end -= right_num;
+
+    // update node
+    n->proxy_start += left_num;
+    n->proxy_end -= right_num;
+  }
+
+  void set_children_bbox(KDNode* n) {
+    assert((n->left && n->right));
+
+    n->left->bbox = n->bbox;
+    n->left->bbox.max(n->axis) = n->position;
+    n->right->bbox = n->bbox;
+    n->right->bbox.min(n->axis) = n->position;
+  }
+  // find optimal split plane then split the leaf
+  void split_leaf(KDNode* n) {
+    assert(!(n->left || n->right));
+    assert((n->proxy_num() > NODE_PROXY_NUM_THRESHOLD));
+
+    find_optimal_plane(n, n->axis, n->position);
+
+    // create new children
+    n->left = new KDNode{.parent = n,
+                         .left = nullptr,
+                         .right = nullptr,
+                         .bbox = {},
+                         .axis = 0,
+                         .position = 0,
+                         .proxy_start = n->proxy_start,
+                         .proxy_end = n->proxy_start,
+                         .static_num = 0,
+                         .population = 0,
+                         .static_population = 0,
+                         .delay_offset = 0,
+                         .ext_start = 0,
+                         .ext_end = 0,
+                         .is_ext_static = false};
+    n->right = new KDNode{.parent = n,
+                          .left = nullptr,
+                          .right = nullptr,
+                          .bbox = {},
+                          .axis = 0,
+                          .position = 0,
+                          .proxy_start = n->proxy_end,
+                          .proxy_end = n->proxy_end,
+                          .static_num = 0,
+                          .population = 0,
+                          .static_population = 0,
+                          .delay_offset = 0,
+                          .ext_start = 0,
+                          .ext_end = 0,
+                          .is_ext_static = false};
+
+    filter(n);
+    set_children_bbox(n);
+  }
+
+  // collapse subtree into leaf
+  void collapse(KDNode* n) {
+    assert((n->left && n->right));
+
+    n->proxy_start -= n->left->population;
+    n->proxy_end += n->right->population;
+
+    delete_subtree(n->left);
+    n->left = nullptr;
+
+    delete_subtree(n->right);
+    n->right = nullptr;
+  }
+
+  bool evaluate(const KDNode* n) const {
+    assert((n->left && n->right));
+
+    int left_num = 0;
+    int middle_num = 0;
+    int right_num = 0;
+
+    // partition object proxies by plane.
+    // strictly left  -> left partition
+    // on the plane   -> middle partition
+    // strictly right -> right partition
+    for (int i = n->proxy_start; i < n->proxy_end; ++i) {
+      Proxy p = proxies_[i];
+      // strictly left
+      if (p->bbox.max(n->axis) < n->position) {
+        left_num++;
+      }
+      // strictly right
+      else if (p->bbox.min(n->axis) > n->position) {
+        right_num++;
+      }
+      // on the plane
+      else {
+        middle_num++;
+      }
+    }
+
+    float num = n->proxy_num();
+    float t_min = 0.5f * num * (0.5f * num - 1.0f);
+    float t_max = 0.5f * num * (num - 1.0f);
+    float t = 0.5f * (left_num * left_num + middle_num * middle_num +
+                      right_num * right_num - num) +
+              middle_num * (left_num + right_num);
+    float cost = (t - t_min) / (t_max - t_min);
+    float balance = float(std::min(left_num, right_num)) /
+                    float((middle_num + std::max(left_num, right_num)));
+    return (cost <= balance);
+  }
+
+  void lift_subtree(KDNode* n) {
+    assert((n->left && n->right));
+
+    n->proxy_start -= n->left->population;
+    n->proxy_end += n->right->population;
+
+    size_t init_stack_size = stack_.size();
+
+    // lift left subtree
+    stack_.push_back(n->left);
+    while (stack_.size() > init_stack_size) {
+      KDNode* current = stack_.back();
+      stack_.pop_back();
+
+      if (!current->is_leaf() && current->population != 0) {
+        stack_.push_back(current->left);
+        stack_.push_back(current->right);
+      }
+
+      current->proxy_start = n->proxy_start;
+      current->proxy_end = n->proxy_start;
+      current->population = 0;
+    }
+
+    // lift right subtree
+    stack_.push_back(n->right);
+    while (stack_.size() > init_stack_size) {
+      KDNode* current = stack_.back();
+      stack_.pop_back();
+
+      if (!current->is_leaf() && current->population != 0) {
+        stack_.push_back(current->left);
+        stack_.push_back(current->right);
+      }
+
+      current->proxy_end = n->proxy_end;
+      current->proxy_end = n->proxy_end;
+      current->population = 0;
+    }
+  }
+
+  void translate(KDNode* n) {
+    assert((n->proxy_num() != 0));
+
+    Eigen::Vector3f mean = Eigen::Vector3f::Zero();
+    for (int i = n->proxy_start; i < n->proxy_end; ++i) {
+      mean += proxies_[i]->bbox.center();
+    }
+
+    mean /= float(n->proxy_num());
+    n->position = mean(n->axis);
+  }
+
+  KDNode* erase(KDNode* n, bool keep_left) {
+    assert((n->left && n->right));
+    // erase only happens after translate, which will lift all proxies up to n
+    assert((n->left->population == 0));
+    assert((n->right->population == 0));
+
+    KDNode* main;
+    KDNode* other;
+    if (keep_left) {
+      main = n->left;
+      other = n->right;
+    } else {
+      main = n->right;
+      other = n->left;
+    }
+
+    main->parent = n->parent;
+    main->bbox = n->bbox;
+    main->proxy_start = n->proxy_start;
+    main->proxy_end = n->proxy_end;
+    main->population = n->population;
+    if (n->parent) {
+      if (n->is_left()) {
+        n->parent->left = main;
+      } else {
+        n->parent->right = main;
+      }
+    }
+
+    delete_subtree(other);
+    delete n;
+
+    return main;
+  }
+
+  void optimize_structure() {
+    assert(stack_.empty());
+
+    // pre-order traverse the tree
+    stack_.push_back(root_);
+    while (!stack_.empty()) {
+      KDNode* n = stack_.back();
+      stack_.pop_back();
+
+      // propagate and apply delay offset
+      n->left->delay_offset += n->delay_offset;
+      n->right->delay_offset += n->delay_offset;
+      n->proxy_start += n->delay_offset;
+      n->proxy_end += n->delay_offset;
+      n->delay_offset = 0;
+
+      // split a leaf if proxy num is too large
+      if (n->is_leaf()) {
+        if (n->proxy_num() > NODE_PROXY_NUM_THRESHOLD) {
+          split_leaf(n);
+          stack_.push_back(n->right);
+          stack_.push_back(n->left);
+        }
+        continue;
+      }
+
+      // if population of subtree is too small, collapse into leaf node
+      if (n->population < NODE_PROXY_NUM_THRESHOLD) {
+        collapse(n);
+        stack_.push_back(n);
+        continue;
+      }
+
+      // first try to reuse the original plane
+      if (evaluate(n)) {
+        filter(n);
+        set_children_bbox(n);
+        stack_.push_back(n->right);
+        stack_.push_back(n->left);
+        continue;
+      }
+
+      // original plane is not optimal, try translating the plane
+      int left_num = n->left->population;
+      int right_num = n->right->population;
+      lift_subtree(n);
+      translate(n);
+      if (evaluate(n)) {
+        filter(n);
+        set_children_bbox(n);
+        stack_.push_back(n->right);
+        stack_.push_back(n->left);
+        continue;
+      }
+
+      // translated plane is still not optimal, erase the node
+      stack_.push_back(erase(n, (left_num > right_num)));
+    }
+  }
+
+  void set_static_population() {
+    assert(stack_.empty());
+
+    // prepare for bottom up traversal
+    stack_.push_back(root_);
+    for (int i = 0; i < stack_.size(); ++i) {
+      KDNode* n = stack_[i];
+      if (!n->is_leaf()) {
+        stack_.push_back(n->right);
+        stack_.push_back(n->left);
+      }
+    }
+
+    // bottom up update bbox and static statistics
+    for (int i = stack_.size() - 1; i >= 0; --i) {
       KDNode* n = stack_.back();
 
       n->static_num = 0;
       for (int i = n->proxy_start; i < n->proxy_end; ++i) {
         if (proxies_[i]->is_static) {
-          n->static_num++;
+          ++n->static_num;
         }
       }
 
@@ -230,484 +714,7 @@ class KDTree {
     stack_.clear();
   }
 
-  int push_unfit_right(KDNode* n) {
-    auto is_inside = [n](BboxCollider<T>* obj_proxy) -> bool {
-      return n->bbox.is_inside(obj_proxy->bbox);
-    };
-
-    auto start_iter = std::advance(proxies_.begin(), n->proxy_start);
-    auto end_iter = std::advance(proxies_.begin(), n->proxy_end);
-    auto new_end_iter = std::partition(start_iter, end_iter, is_inside);
-    n->proxy_end = std::distance(proxies_.begin(), new_end_iter);
-
-    return std::distance(new_end_iter, end_iter);
-  }
-
-  int push_unfit_left(KDNode* n) {
-    auto is_outside = [n](BboxCollider<T>* obj_proxy) -> bool {
-      return !(n->bbox.is_inside(obj_proxy->bbox));
-    };
-
-    auto start_iter = std::advance(proxies_.begin(), n->proxy_start);
-    auto end_iter = std::advance(proxies_.begin(), n->proxy_end);
-    auto new_start_iter = std::partition(start_iter, end_iter, is_outside);
-    n->proxy_start = std::distance(proxies_.begin(), new_start_iter);
-
-    return std::distance(start_iter, new_start_iter);
-  }
-
-  void shift_proxy_right(int proxy_start, int proxy_num, int shift_num) {
-    if (proxy_num == 0 || shift_num == 0) {
-      return;
-    }
-
-    size_t copy_size = proxy_num * sizeof(BboxCollider<T>*);
-    size_t shift_size = shift_num * sizeof(BboxCollider<T>*);
-    BboxCollider<T>* left = proxies_.data() + proxy_start;
-    BboxCollider<T>* right = proxies_.data() + proxy_start + proxy_num;
-    buffer_.reserve(proxy_num);
-
-    // copy left chunk to temp buffer
-    std::memcpy(buffer_.data(), left, copy_size);
-    // shift right chunk left
-    std::memmove(left, right, shift_size);
-    // copy left chunk to right
-    std::memcpy(left + shift_num, buffer_.data(), copy_size);
-  }
-
-  void shift_proxy_left(int proxy_start, int proxy_num, int shift_num) {
-    if (proxy_num == 0 || shift_num == 0) {
-      return;
-    }
-
-    size_t copy_size = proxy_num * sizeof(BboxCollider<T>*);
-    size_t shift_size = shift_num * sizeof(BboxCollider<T>*);
-    BboxCollider<T>* left = proxies_.data() + proxy_start - shift_num;
-    BboxCollider<T>* right = proxies_.data() + proxy_start;
-    buffer_.reserve(copy_size);
-
-    // copy right chunk to temp buffer
-    std::memcpy(buffer_.data(), right, copy_size);
-    // shift left chunk right
-    std::memmove(left + proxy_num, left, shift_size);
-    // copy right chunk to left
-    std::memcpy(left, buffer_.data(), copy_size);
-  }
-
-  // split internal node based on plane
-  void split_internal_node(KDNode* n) {
-    assert((n->left || n->right));
-    assert((n->proxy_end - n->proxy_start > 0));
-
-    // partition object proxies by plane.
-    // strictly left  -> move to left partition
-    // on the plane   -> move to middle partition
-    // strictly right -> move to right partition
-    int left_end = n->proxy_start;
-    int right_start = n->proxy_end;
-    for (int i = n->proxy_start; i < right_start;) {
-      BboxCollider<T>* o = proxies_[i];
-      // strictly left
-      if (o->bbox.max(n->axis) < n->position) {
-        std::swap(proxies_[left_end], proxies_[i]);
-        proxies_[left_end]->node = n->left;
-        left_end++;
-        i++;
-      }
-      // strictly right
-      else if (o->bbox.min(n->axis) > n->position) {
-        std::swap(proxies_[right_start], proxies_[i]);
-        proxies_[right_start - 1]->node = n->right;
-        right_start--;
-      }
-      // on the plane, do nothing
-      else {
-        i++;
-      }
-    }
-
-    // move left partition down one node level
-    int left_num = left_end - n->proxy_start;
-    if (left_num != 0) {
-      n->left->proxy_end += left_num;
-      n->left->population += left_num;
-      if (!n->left->is_leaf()) {
-        shift_proxy_left(n->proxy_start, left_num, n->left->right->population);
-        n->left->right->proxy_start += left_num;
-        n->left->right->proxy_end += left_num;
-      }
-    }
-
-    // move right partition down one node level
-    int right_num = n->proxy_end - right_start;
-    if (right_num != 0) {
-      n->right->proxy_start -= right_num;
-      n->right->population += right_num;
-      if (!n->right->is_leaf()) {
-        shift_proxy_right(right_start, right_num, n->right->left->population);
-        n->right->left->proxy_start -= right_num;
-        n->right->left->proxy_end -= right_num;
-      }
-    }
-  }
-
-  // find optimal split plane based on mean and variance of bbox center.
-  // plane axis should has the max variance and the plane position is the
-  // mean.
-  void find_optimal_plane(KDNode* n, int& axis, float& position) const {
-    auto [mean, variance] = find_proxy_mean_variance(
-        proxies_.data() + n->proxy_start, n->proxy_num());
-    variance.maxCoeff(&axis);
-    position = mean(axis);
-  }
-
-  // find approximate split plane based on mean and variance of bbox center.
-  // sample a few bbox only.
-  void find_approx_plane(KDNode* n, int& axis, float& position) {
-    static std::random_device rand_device;
-    static std::mt19937 rand_generator(rand_device());
-
-    if (n->proxy_num() <= OPTIMIAL_PLANE_SAMPLE_THRESHOLD) {
-      find_optimal_plane(n, axis, position);
-      return;
-    }
-
-    int start = n->proxy_start;
-    int end = n->proxy_start + APPROX_PLANE_SAMPLE_NUM;
-    for (int i = start; i < end; ++i) {
-      std::uniform_int_distribution rand_dist(i, n->proxy_end - 1);
-      int rand_idx = rand_dist(rand_generator);
-      std::swap(proxies_[i], proxies_[rand_idx]);
-    }
-
-    auto [mean, variance] = find_proxy_mean_variance(proxies_.data() + start,
-                                                     APPROX_PLANE_SAMPLE_NUM);
-    variance.maxCoeff(&axis);
-    position = mean(axis);
-  }
-
-  // find optimal split plane then split the leaf
-  void split_leaf_node(KDNode* n) {
-    assert(!(n->left || n->right));
-    assert((n->proxy_end - n->proxy_start > 0));
-
-    find_optimal_plane(n, n->axis, n->position);
-
-    // create new children
-    Bbox left_bbox = n->bbox;
-    left_bbox.max(n->axis) = n->position;
-    n->left = new KDNode{.parent = n,
-                         .left = nullptr,
-                         .right = nullptr,
-                         .bbox = left_bbox,
-                         .axis = 0,
-                         .position = 0,
-                         .proxy_start = n->proxy_start,
-                         .proxy_end = n->proxy_start,
-                         .ext_start = 0,
-                         .ext_end = 0,
-                         .static_num = 0,
-                         .population = 0,
-                         .static_population = 0,
-                         .delay_offset = 0,
-                         .is_ext_static = false};
-    Bbox right_bbox = n->bbox;
-    right_bbox.min(n->axis) = n->position;
-    n->right = new KDNode{.parent = n,
-                          .left = nullptr,
-                          .right = nullptr,
-                          .bbox = right_bbox,
-                          .axis = 0,
-                          .position = 0,
-                          .proxy_start = n->proxy_end,
-                          .proxy_end = n->proxy_end,
-                          .ext_start = 0,
-                          .ext_end = 0,
-                          .static_num = 0,
-                          .population = 0,
-                          .static_population = 0,
-                          .delay_offset = 0,
-                          .is_ext_static = false};
-
-    split_internal_node(n);
-  }
-
-  // count the number of objects on the left, middle, and right of the plane
-  void count_left_middle_right(KDNode* n, int& left_num, int& middle_num,
-                               int& right_num) const {
-    left_num = 0;
-    middle_num = 0;
-    right_num = 0;
-
-    // partition object proxies by plane.
-    // strictly left  -> left partition
-    // on the plane   -> middle partition
-    // strictly right -> right partition
-    for (int i = n->proxy_start; i < n->proxy_end; ++i) {
-      BboxCollider<T>* o = proxies_[i];
-      // strictly left
-      if (o->bbox.max(n->axis) < n->position) {
-        left_num++;
-      }
-      // strictly right
-      else if (o->bbox.min(n->axis) > n->position) {
-        right_num++;
-      }
-      // on the plane
-      else {
-        middle_num++;
-      }
-    }
-  }
-
-  void lift_subtree(KDNode* n) {
-    assert((n->left && n->right));
-
-    n->proxy_start -= n->left->population;
-    n->proxy_end += n->right->population;
-
-    for (int i = n->proxy_start; i < n->proxy_end; ++i) {
-      proxies_[i].node = n;
-    }
-
-    size_t init_stack_size = stack_.size();
-    // lift left subtree
-    stack_.push_back(n->left);
-    while (stack_.size() > init_stack_size) {
-      KDNode* current = stack_.back();
-      stack_.pop_back();
-
-      if (current->population == 0) {
-        continue;
-      }
-
-      if (!current->is_leaf()) {
-        stack_.push_back(current->left);
-        stack_.push_back(current->right);
-      }
-
-      current->proxy_start = n->proxy_start;
-      current->proxy_end = n->proxy_start;
-      current->population = 0;
-    }
-    // lift right subtree
-    stack_.push_back(n->right);
-    while (stack_.size() > init_stack_size) {
-      KDNode* current = stack_.back();
-      stack_.pop_back();
-
-      if (current->population == 0) {
-        continue;
-      }
-
-      if (!current->is_leaf()) {
-        stack_.push_back(current->left);
-        stack_.push_back(current->right);
-      }
-
-      current->proxy_end = n->proxy_end;
-      current->proxy_end = n->proxy_end;
-      current->population = 0;
-    }
-  }
-
-  void refit() {
-    assert(stack_.empty());
-
-    // BFS stack fill
-    stack_.push_back(root_);
-    for (int i = 0; i < stack_.size(); ++i) {
-      KDNode* n = stack_[i];
-      if (!n->is_leaf()) {
-        stack_.push_back(n->left);
-        stack_.push_back(n->right);
-      }
-    }
-
-    // bottom up refit, push unfit node up. root is excluded
-    for (int i = stack_.size() - 1; i > 0; i--) {
-      KDNode* n = stack_[i];
-
-      if (n->proxy_num() == 0) {
-        continue;
-      }
-
-      if (n->is_leaf()) {
-        if (n->is_left()) {
-          // left leaf
-          n->parent->proxy_start -= push_unfit_right(n);
-          n->population = n->proxy_num();
-        } else {
-          // right leaf
-          n->parent->proxy_end += push_unfit_left(n);
-          n->population = n->proxy_num();
-        }
-      } else {
-        if (n->is_left()) {
-          // left internal
-          int unfit_num = push_unfit_right(n);
-          shift_proxy_right(n->proxy_end, unfit_num, n->right->population);
-          n->proxy_end -= unfit_num;
-          n->parent->proxy_start -= unfit_num;
-          n->right->delay_offset = -unfit_num;
-          n->population =
-              n->proxy_num() + n->left->population + n->right->population;
-        } else {
-          // right internal
-          int unfit_num = push_unfit_left(n);
-          shift_proxy_right(n->proxy_start, unfit_num, n->left->population);
-          n->proxy_start += unfit_num;
-          n->parent->proxy_end += unfit_num;
-          n->left->delay_offset = +unfit_num;
-          n->population =
-              n->proxy_num() + n->left->population + n->right->population;
-        }
-      }
-    }
-
-    if (root_->is_leaf()) {
-      root_->population = proxies_.size();
-    } else {
-      root_->population = root_->proxy_num() + root_->left->population +
-                          root_->right->population;
-    }
-
-    stack_.clear();
-  }
-
-  // collapse subtree into leaf
-  void collapse(KDNode* n) {
-    assert((n->left && n->right));
-
-    n->proxy_start -= n->left->population;
-    n->proxy_end += n->right->population;
-    for (int i = n->proxy_start; i < n->proxy_end; ++i) {
-      proxies_[i]->node = n;
-    }
-    delete_subtree(n);
-    n->left = nullptr;
-    n->right = nullptr;
-  }
-
-  bool evaluate(float lp, float mp, float rp) const {
-    float s = lp + mp + rp;
-    float t_min = 0.5f * s * (0.5f * s - 1.0f);
-    float t_max = 0.5f * s * (s - 1.0f);
-    float t = 0.5 * (lp * lp + mp * mp + rp * rp - s) + mp * (lp + rp);
-    float cost = (t - t_min) / (t_max - t_min);
-    float balance = std::min(lp, rp) / (mp + std::max(lp, rp));
-    return (cost <= balance);
-  }
-
-  void translate(KDNode* n) {
-    assert((n->proxy_end > n->proxy_start));
-
-    Eigen::Vector3f mean = Eigen::Vector3f::Zero();
-    for (int i = n->proxy_start; i < n->proxy_end; ++i) {
-      mean += proxies_[i]->bbox.center();
-    }
-
-    mean /= float(n->proxy_end - n->proxy_start);
-    n->position = mean(n->axis);
-  }
-
-  KDNode* erase(KDNode* n, bool keep_left_subtree) {
-    assert((n->left && n->right));
-    assert((n->left->population == 0));
-    assert((n->right->population == 0));
-
-    KDNode* main_subtree;
-    KDNode* other_subtree;
-    if (keep_left_subtree) {
-      main_subtree = n->left;
-      other_subtree = n->right;
-    } else {
-      main_subtree = n->right;
-      other_subtree = n->left;
-    }
-
-    main_subtree->proxy_start = n->proxy_start;
-    main_subtree->proxy_end = n->proxy_end;
-    main_subtree->population = n->population;
-    main_subtree->parent = n->parent;
-    main_subtree->bbox = n->bbox;
-    if (n->parent) {
-      if (n == n->parent->left) {
-        n->parent->left = main_subtree;
-      } else {
-        n->parent->right = main_subtree;
-      }
-    }
-
-    delete n;
-    delete_subtree(other_subtree);
-  }
-
-  void optimize() {
-    assert(stack_.empty());
-
-    // DFS fill stack
-    stack_.push_back(root_);
-    while (!stack_.empty()) {
-      KDNode* n = stack_.back();
-      stack_.pop_back();
-
-      // propagate and apply delay offset
-      n->left->delay_offset += n->delay_offset;
-      n->right->delay_offset += n->delay_offset;
-      n->proxy_start += n->delay_offset;
-      n->proxy_end += n->delay_offset;
-      n->delay_offset = 0;
-
-      // if population of leaf is too large, split
-      if (n->is_leaf()) {
-        if (n->proxy_num() > NODE_PROXY_THRESHOLD) {
-          split_leaf_node(n);
-          stack_.push_back(n->right);
-          stack_.push_back(n->left);
-        }
-        continue;
-      }
-
-      // if population of internal nodes is too small, collapse into leaf node
-      if (n->population < NODE_PROXY_THRESHOLD) {
-        collapse(n);
-        stack_.push_back(n);
-        continue;
-      }
-
-      // first try to reuse the original plane
-      int left_num, middle_num, right_num;
-      count_left_middle_right(n, left_num, middle_num, right_num);
-      bool is_plane_optimal =
-          evaluate(left_num + n->left->population, middle_num,
-                   right_num + n->right->population);
-      if (is_plane_optimal) {
-        split_internal_node(n);
-        stack_.push_back(n->left);
-        stack_.push_back(n->right);
-        continue;
-      }
-
-      // original plane is not optimal, try translating the plane
-      lift_subtree(n);
-      translate(n);
-      count_left_middle_right(n, left_num, middle_num, right_num);
-      is_plane_optimal = evaluate(left_num, middle_num, right_num);
-      if (is_plane_optimal) {
-        split_internal_node(n);
-        stack_.push_back(n->left);
-        stack_.push_back(n->right);
-        continue;
-      }
-
-      // translated plane is still not optimal, erase the node
-      stack_.push_back(erase(n, (left_num > right_num)));
-    }
-  }
-
   void update_ext_collider(KDNode* n) {
-    assert(n);
     assert(n->parent);
 
     // resize buffer
@@ -722,51 +729,39 @@ class KDTree {
     float position = n->parent->position;
 
     // check parent's external colliders
-    if (!(n->is_subtree_static() && n->parent->is_ext_static)) {
-      for (int i = n->parent->ext_start; i < n->parent->ext_end; ++i) {
-        BboxCollider<T>* p = buffer_[i];
-        // exclude static-static pair
-        if (n->is_subtree_static() && p->is_static) {
-          continue;
-        }
+    for (int i = n->parent->ext_start; i < n->parent->ext_end; ++i) {
+      Proxy p = buffer_[i];
 
-        if (n->is_left()) {
-          if (p->bbox.min(axis) < position) {
-            buffer_[n->ext_end] = p;
-            n->ext_end++;
-            n->is_ext_static = n->is_ext_static && p->is_static;
-          }
-        } else {
-          if (p->bbox.max(axis) > position) {
-            buffer_[n->ext_end] = p;
-            n->ext_end++;
-            n->is_ext_static = n->is_ext_static && p->is_static;
-          }
+      if (n->is_left()) {
+        if (p->bbox.min(axis) < position) {
+          buffer_[n->ext_end] = p;
+          ++n->ext_end;
+          n->is_ext_static = n->is_ext_static && p->is_static;
+        }
+      } else {
+        if (p->bbox.max(axis) > position) {
+          buffer_[n->ext_end] = p;
+          ++n->ext_end;
+          n->is_ext_static = n->is_ext_static && p->is_static;
         }
       }
     }
 
     // check parent node colliders
-    if (!(n->is_subtree_static() && n->parent->is_subtree_static())) {
-      for (int i = n->parent->proxy_start; i < n->parent->proxy_end; ++i) {
-        BboxCollider<T>* p = proxies_[i];
-        // exclude static-static pair
-        if (n->is_subtree_static() && p->is_static) {
-          continue;
-        }
+    for (int i = n->parent->proxy_start; i < n->parent->proxy_end; ++i) {
+      Proxy p = proxies_[i];
 
-        if (n->is_left()) {
-          if (p->bbox.min(axis) < position) {
-            buffer_[n->ext_end] = p;
-            n->ext_end++;
-            n->is_ext_static = n->is_ext_static && p->is_static;
-          }
-        } else {
-          if (p->bbox.max(axis) > position) {
-            buffer_[n->ext_end] = p;
-            n->ext_end++;
-            n->is_ext_static = n->is_ext_static && p->is_static;
-          }
+      if (n->is_left()) {
+        if (p->bbox.min(axis) < position) {
+          buffer_[n->ext_end] = p;
+          ++n->ext_end;
+          n->is_ext_static = n->is_ext_static && p->is_static;
+        }
+      } else {
+        if (p->bbox.max(axis) > position) {
+          buffer_[n->ext_end] = p;
+          ++n->ext_end;
+          n->is_ext_static = n->is_ext_static && p->is_static;
         }
       }
     }
@@ -780,12 +775,12 @@ class KDTree {
       return;
     }
 
-    BboxCollider<T>** proxy_start = proxies_.data() + n->proxy_start;
+    Proxy* proxy_start = proxies_.data() + n->proxy_start;
 
     if (n->is_static()) {
       if (n->ext_num() != 0 && !n->is_ext_static) {
         // node - external test
-        BboxCollider<T>** ext_start = buffer_.data() + n->ext_start;
+        Proxy* ext_start = buffer_.data() + n->ext_start;
         int ext_num = n->ext_num();
         int axis =
             sap_find_optimal_axis(proxy_start, proxy_num, ext_start, ext_num);
@@ -804,7 +799,7 @@ class KDTree {
 
       } else {
         // node - node + node - external test
-        BboxCollider<T>** ext_start = buffer_.data() + n->ext_start;
+        Proxy* ext_start = buffer_.data() + n->ext_start;
         int ext_num = n->ext_num();
         int axis =
             sap_find_optimal_axis(proxy_start, proxy_num, ext_start, ext_num);

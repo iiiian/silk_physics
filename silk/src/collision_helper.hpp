@@ -25,8 +25,7 @@ struct MeanVariance {
 };
 
 template <typename T>
-MeanVariance find_proxy_mean_variance(BboxCollider<T>** proxies,
-                                      int proxy_num) {
+MeanVariance proxy_mean_variance(BboxCollider<T>** proxies, int proxy_num) {
   assert((proxy_num > 0));
 
   Eigen::Vector3f mean = Eigen::Vector3f::Zero();

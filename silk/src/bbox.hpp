@@ -5,7 +5,6 @@
 namespace silk {
 
 struct Bbox {
- public:
   Eigen::Vector3f min;
   Eigen::Vector3f max;
 

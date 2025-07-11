@@ -49,7 +49,7 @@ class SpatialHasher {
 
     auto [cell_min, cell_max] = get_cell_minmax(bbox);
 
-    for (int i = cell_min[0]; i <= cell_max[0]; i++) {
+    for (int i = cell_min[0]; i <= cell_max[0]; ++i) {
       for (int j = cell_min[1]; j <= cell_max[1]; j++) {
         for (int k = cell_min[2]; k <= cell_max[2]; k++) {
           uint32_t h = spatial_hash(i, j, k);
@@ -104,7 +104,7 @@ class SpatialHasher {
 
     auto [cell_min, cell_max] = get_cell_minmax(bbox);
 
-    for (int i = cell_min[0]; i <= cell_max[0]; i++) {
+    for (int i = cell_min[0]; i <= cell_max[0]; ++i) {
       for (int j = cell_min[1]; j <= cell_max[1]; j++) {
         for (int k = cell_min[2]; k <= cell_max[2]; k++) {
           uint32_t h = spatial_hash(i, j, k);
@@ -123,7 +123,7 @@ class SpatialHasher {
     assert(!cell_infos_.empty());
 
     cells_.resize(cell_primitives_count_);
-    for (int i = 0; i < values.size(); i++) {
+    for (int i = 0; i < values.size(); ++i) {
       cell_insert(values[i], bboxes[i]);
     }
   }
@@ -157,7 +157,7 @@ class SpatialHasher {
     auto [cell_min, cell_max] = get_cell_minmax(bbox);
 
     std::vector<T> neighbors;
-    for (int i = cell_min[0] - 1; i <= cell_max[0] + 1; i++) {
+    for (int i = cell_min[0] - 1; i <= cell_max[0] + 1; ++i) {
       for (int j = cell_min[1] - 1; j <= cell_max[1] + 1; j++) {
         for (int k = cell_min[2] - 1; k <= cell_max[2] + 1; k++) {
           uint32_t h = spatial_hash(i, j, k);

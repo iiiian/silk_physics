@@ -168,7 +168,7 @@ SolverInitData Cloth::compute_solver_init_data() const {
   Eigen::SparseMatrix<float> W(vert_num,
                                vert_num);  // cotangent laplacian weight
   W.setIdentity();
-  for (int i = 0; i < vert_num; i++) {
+  for (int i = 0; i < vert_num; ++i) {
     W.coeffRef(i, i) = 1 / mass.coeff(i, i);
   }
   // this is the weighted AA for bending energy.
