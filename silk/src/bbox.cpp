@@ -30,6 +30,18 @@ Bbox Bbox::extend(const Bbox& bbox, float margin) {
   return {.min = bbox.min.array() - margin, .max = bbox.max.array() + margin};
 }
 
+bool Bbox::is_disjoint(const Bbox& a, const Bbox& b) {
+  Eigen::Vector3f max_min = a.min.cwiseMax(b.min);
+  Eigen::Vector3f min_max = a.max.cwiseMin(b.max);
+  return (max_min.array() > min_max.array()).any();
+}
+
+bool Bbox::is_colliding(const Bbox& a, const Bbox& b) {
+  Eigen::Vector3f max_min = a.min.cwiseMax(b.min);
+  Eigen::Vector3f min_max = a.max.cwiseMin(b.max);
+  return (max_min.array() < min_max.array()).all();
+}
+
 Eigen::Vector3f Bbox::center() const { return (min + max) / 2; }
 
 bool Bbox::is_inside(const Bbox& other) const {
