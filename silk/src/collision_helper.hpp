@@ -9,7 +9,6 @@ namespace silk {
 template <typename T>
 struct BboxCollider {
   Bbox bbox;
-  bool is_static;
   T data;
 };
 

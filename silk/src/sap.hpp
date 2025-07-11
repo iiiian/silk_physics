@@ -13,9 +13,9 @@ template <typename T>
 int sap_optimal_axis(BboxCollider<T>** proxies, int proxy_num) {
   assert((proxy_num > 0));
 
-  auto [mean, variance] = find_proxy_mean_variance(proxies, proxy_num);
+  auto [mean, var] = proxy_mean_variance(proxies, proxy_num);
   int axis;
-  variance.maxCoeff(&axis);
+  var.maxCoeff(&axis);
   return axis;
 }
 
@@ -25,14 +25,14 @@ int sap_optimal_axis(BboxCollider<T>** proxies_a, int proxy_num_a,
   assert((proxy_num_a > 0));
   assert((proxy_num_b > 0));
 
-  auto [ma, va] = find_proxy_mean_variance(proxies_a, proxy_num_a);
-  auto [mb, vb] = find_proxy_mean_variance(proxies_b, proxy_num_b);
-  Eigen::Vector3f mean =
-      (proxy_num_a * ma + proxy_num_b * mb) / (proxy_num_a + proxy_num_b);
-  Eigen::Vector3f variance = proxy_num_a * (va + (ma - mean).square()) +
-                             proxy_num_b * (vb + (mb - mean).square());
+  auto [mean_a, var_a] = proxy_mean_variance(proxies_a, proxy_num_a);
+  auto [mean_b, var_b] = proxy_mean_variance(proxies_b, proxy_num_b);
+  Eigen::Vector3f mean = (proxy_num_a * mean_a + proxy_num_b * mean_b) /
+                         (proxy_num_a + proxy_num_b);
+  Eigen::Vector3f var = proxy_num_a * (var_a + (mean_a - mean).square()) +
+                        proxy_num_b * (var_b + (mean_b - mean).square());
   int axis;
-  variance.maxCoeff(&axis);
+  var.maxCoeff(&axis);
   return axis;
 }
 
@@ -123,10 +123,6 @@ void sap_sorted_collision(BboxCollider<T>* p1, BboxCollider<T>** proxies,
     // axis test
     if (p1->bbox.max(axis) < p2->bbox.min(axis)) {
       break;
-    }
-    // exclude staic-static pair
-    if (p1->is_static && p2->is_static) {
-      continue;
     }
     // user provided collision filter
     if (!filter_callback_(p1->data, p2->data)) {
