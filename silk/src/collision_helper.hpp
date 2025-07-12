@@ -13,6 +13,9 @@ struct BboxCollider {
 };
 
 template <typename T>
+using BboxColliderProxy = const BboxCollider<T>*;
+
+template <typename T>
 using CollisionCache = std::vector<std::pair<T, T>>;
 
 template <typename T>
@@ -24,7 +27,8 @@ struct MeanVariance {
 };
 
 template <typename T>
-MeanVariance proxy_mean_variance(BboxCollider<T>** proxies, int proxy_num) {
+MeanVariance proxy_mean_variance(const BboxColliderProxy<T>* proxies,
+                                 int proxy_num) {
   assert((proxy_num > 0));
 
   Eigen::Vector3f mean = Eigen::Vector3f::Zero();

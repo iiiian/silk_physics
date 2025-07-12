@@ -48,7 +48,7 @@ struct KDNode {
 
 template <typename T>
 class KDTree {
-  using Proxy = const BboxCollider<T>*;
+  using Proxy = BboxColliderProxy<T>;
 
   static constexpr int NODE_PROXY_NUM_THRESHOLD = 512;
   static constexpr int APPROX_PLANE_SAMPLE_NUM = 16;
@@ -56,6 +56,11 @@ class KDTree {
 
   int collider_num_;
   const BboxCollider<T>* colliders_;
+
+  KDNode* root_;
+  std::vector<KDNode*> stack_;  // for tree traversal
+  std::vector<Proxy> proxies_;  // in-order layout proxy array
+  std::vector<Proxy> buffer_;   // for both proxies and external colliders
 
  public:
   KDTree(const BboxCollider<T>* colliders, int collider_num) {
@@ -129,7 +134,7 @@ class KDTree {
       int num_a = na->proxy_num();
       Proxy* start_b = tb.proxies_.data() + nb->proxy_start;
       int num_b = nb->proxy_num();
-      int axis = sap_find_optimal_axis(start_a, num_a, start_b, num_b);
+      int axis = sap_optimal_axis(start_a, num_a, start_b, num_b);
       sap_sort_proxies(start_a, num_a, axis);
       sap_sort_proxies(start_b, num_b, axis);
       sap_test_sorted_group_collision(start_a, num_a, start_b, num_b, axis,
@@ -147,11 +152,6 @@ class KDTree {
   }
 
  private:
-  KDNode* root_;
-  std::vector<KDNode*> stack_;  // for tree traversal
-  std::vector<Proxy> proxies_;  // in-order layout proxy array
-  std::vector<Proxy> buffer_;   // for both proxies and external colliders
-
   void ensure_buffer_size(int num) {
     if (buffer_.size() < num) {
       buffer_.resize(num);
@@ -228,9 +228,9 @@ class KDTree {
       return !(n->bbox.is_inside(p->bbox));
     };
 
-    Proxy start = proxies_.data() + n->proxy_start;
-    Proxy end = proxies_.data() + n->proxy_end;
-    Proxy new_start = std::partition(start, end, is_outside);
+    Proxy* start = proxies_.data() + n->proxy_start;
+    Proxy* end = proxies_.data() + n->proxy_end;
+    Proxy* new_start = std::partition(start, end, is_outside);
 
     return new_start - start;
   }
@@ -240,9 +240,9 @@ class KDTree {
       return n->bbox.is_inside(p->bbox);
     };
 
-    Proxy start = proxies_.data() + n->proxy_start;
-    Proxy end = proxies_.data() + n->proxy_end;
-    Proxy new_end = std::partition(start, end, is_inside);
+    Proxy* start = proxies_.data() + n->proxy_start;
+    Proxy* end = proxies_.data() + n->proxy_end;
+    Proxy* new_end = std::partition(start, end, is_inside);
 
     return end - new_end;
   }
@@ -254,8 +254,8 @@ class KDTree {
 
     size_t copy_size = proxy_num * sizeof(Proxy);
     size_t shift_size = shift_num * sizeof(Proxy);
-    Proxy left = proxies_.data() + proxy_start - shift_num;
-    Proxy right = proxies_.data() + proxy_start;
+    Proxy* left = proxies_.data() + proxy_start - shift_num;
+    Proxy* right = proxies_.data() + proxy_start;
     ensure_buffer_size(proxy_num);
 
     // copy right chunk to temp buffer
@@ -273,8 +273,8 @@ class KDTree {
 
     size_t copy_size = proxy_num * sizeof(Proxy);
     size_t shift_size = shift_num * sizeof(Proxy);
-    Proxy left = proxies_.data() + proxy_start;
-    Proxy right = proxies_.data() + proxy_start + proxy_num;
+    Proxy* left = proxies_.data() + proxy_start;
+    Proxy* right = proxies_.data() + proxy_start + proxy_num;
     ensure_buffer_size(proxy_num);
 
     // copy left chunk to temp buffer
@@ -694,22 +694,21 @@ class KDTree {
 
     if (n->ext_num() == 0) {
       // node-node test
-      int axis = sap_find_optimal_axis(proxy_start, proxy_num);
+      int axis = sap_optimal_axis(proxy_start, proxy_num);
       sap_sort_proxies(proxy_start, proxy_num, axis);
-      sap_test_sorted_self_collision(proxy_start, proxy_num, axis,
-                                     filter_callback, cache);
+      sap_sorted_group_self_collision(proxy_start, proxy_num, axis,
+                                      filter_callback, cache);
     } else {
       // node-node and node-external test
       Proxy* ext_start = buffer_.data() + n->ext_start;
       int ext_num = n->ext_num();
-      int axis =
-          sap_find_optimal_axis(proxy_start, proxy_num, ext_start, ext_num);
+      int axis = sap_optimal_axis(proxy_start, proxy_num, ext_start, ext_num);
       sap_sort_proxies(proxy_start, proxy_num, axis);
       sap_sort_proxies(ext_start, ext_num, axis);
-      sap_test_sorted_self_collision(proxy_start, proxy_num, axis,
-                                     filter_callback, cache);
-      sap_test_sorted_group_collision(proxy_start, proxy_num, ext_start,
-                                      ext_num, axis, filter_callback, cache);
+      sap_sorted_group_self_collision(proxy_start, proxy_num, axis,
+                                      filter_callback, cache);
+      sap_sorted_group_group_collision(proxy_start, proxy_num, ext_start,
+                                       ext_num, axis, filter_callback, cache);
     }
   }
 };
