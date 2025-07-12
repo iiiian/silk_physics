@@ -73,3 +73,9 @@
 - gpu solver
 - softbody
 - hair
+
+## 0712
+
+```
+sudo dnf install alembic-devel imath-devel
+```

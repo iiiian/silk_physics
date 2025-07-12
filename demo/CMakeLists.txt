@@ -40,9 +40,12 @@ target_compile_definitions(
         SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_WARN>
 )
 
-target_link_libraries(demo PRIVATE spdlog::spdlog)
-target_link_libraries(demo PRIVATE Eigen3::Eigen)
-target_link_libraries(demo PRIVATE igl::core)
-target_link_libraries(demo PRIVATE polyscope)
-target_link_libraries(demo PRIVATE portable_file_dialogs)
-target_link_libraries(demo PRIVATE silk::silk)
+target_link_libraries(
+    demo
+    PRIVATE spdlog::spdlog
+    PRIVATE Eigen3::Eigen
+    PRIVATE igl::core
+    PRIVATE polyscope
+    PRIVATE portable_file_dialogs
+    PRIVATE silk::silk
+)

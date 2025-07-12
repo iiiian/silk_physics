@@ -8,9 +8,6 @@ struct Bbox {
   Eigen::Vector3f min;
   Eigen::Vector3f max;
 
-  static Bbox make_zero_bbox();
-  static Bbox make_inf_bbox();
-
   static float proximity(const Bbox& a, const Bbox& b);
   static Bbox merge(const Bbox& a, const Bbox& b);
   static Bbox extend(const Bbox& bbox, float margin);

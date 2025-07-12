@@ -25,8 +25,11 @@ add_executable(
     ${SILK_SRC_DIR}/ccd_poly.cpp
 )
 target_include_directories(ccd_performance_test PRIVATE ${SILK_SRC_DIR})
-target_link_libraries(ccd_performance_test PRIVATE Catch2::Catch2WithMain)
-target_link_libraries(ccd_performance_test PRIVATE Eigen3::Eigen)
+target_link_libraries(
+    ccd_performance_test
+    PRIVATE Catch2::Catch2WithMain
+    PRIVATE Eigen3::Eigen
+)
 target_compile_definitions(
     ccd_performance_test
     PRIVATE SAMPLE_QUERY_ROOT="${CMAKE_SOURCE_DIR}/misc/ccd-sample-queries"
@@ -41,6 +44,26 @@ add_executable(
 target_include_directories(resource_manager_test PRIVATE ${SILK_SRC_DIR})
 target_link_libraries(resource_manager_test PRIVATE Catch2::Catch2WithMain)
 
+# sap kd tree test
+add_executable(
+    sap_kd_tree_test
+    sap_kd_tree_test.cpp
+    abc_file_loader.cpp
+    ${SILK_SRC_DIR}/bbox.cpp
+)
+target_include_directories(sap_kd_tree_test PRIVATE ${SILK_SRC_DIR})
+target_link_libraries(
+    sap_kd_tree_test
+    PRIVATE Eigen3::Eigen
+    PRIVATE spdlog::spdlog
+    PRIVATE Alembic::Alembic
+    PRIVATE Catch2::Catch2WithMain
+)
+target_compile_definitions(
+    sap_kd_tree_test
+    PRIVATE PHYSICS_SCENE_ROOT="${CMAKE_SOURCE_DIR}/misc/physics_scene"
+)
+
 include(CTest)
 include(Catch)
-catch_discover_tests(ccd_correctness_test ccd_performance_test resource_manager_test)
+catch_discover_tests(ccd_correctness_test ccd_performance_test resource_manager_test sap_kd_tree_test)

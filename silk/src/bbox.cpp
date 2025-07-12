@@ -4,18 +4,6 @@
 
 namespace silk {
 
-Bbox Bbox::make_zero_bbox() {
-  return {.min = Eigen::Vector3f::Zero(), .max = Eigen::Vector3f::Zero()};
-}
-
-Bbox Bbox::make_inf_bbox() {
-  constexpr float pos_inf = std::numeric_limits<float>::max();
-  constexpr float neg_inf = std::numeric_limits<float>::min();
-  Eigen::Vector3f max_vec = {pos_inf, pos_inf, pos_inf};
-  Eigen::Vector3f min_vec = {neg_inf, neg_inf, neg_inf};
-  return {.min = min_vec, .max = max_vec};
-}
-
 float Bbox::proximity(const Bbox& a, const Bbox& b) {
   Eigen::Vector3f center_delta = (a.min + a.max) - (b.min + b.max);
   return center_delta.array().abs().sum();
