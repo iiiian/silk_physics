@@ -155,7 +155,7 @@ void sap_sorted_collision(BboxColliderProxy<T> p1,
 
   // test the last chunk
   if (simd_count != 0) {
-    Matrix38f max_min = simd_p1_min.cwiseMin(simd_p2_min);
+    Matrix38f max_min = simd_p1_min.cwiseMax(simd_p2_min);
     Matrix38f min_max = simd_p1_max.cwiseMin(simd_p2_max);
     Eigen::Matrix<bool, 1, 8> is_bbox_colliding =
         (max_min.array() < min_max.array()).colwise().all();
