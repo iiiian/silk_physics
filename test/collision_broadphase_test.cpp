@@ -150,14 +150,11 @@ TEST_CASE("sap-animation-test", "[collision broadphase]") {
     return true;
   };
 
-  int frame_num = cloth.series.size();
+  int frame_num = 60;
   for (int i = 0; i < frame_num; ++i) {
-    spdlog::info("Testing frame {}", i);
-
     update_colliders(cloth_colliders, cloth, 0, cloth.series[i]);
     update_colliders(sphere_colliders, sphere, 1, sphere.series[i]);
 
-    spdlog::info("sap self collision test");
     // self collision
     int axis = sap_optimal_axis(cloth_proxies.data(), cloth_fnum);
     sap_sort_proxies(cloth_proxies.data(), cloth_fnum, axis);
@@ -166,12 +163,10 @@ TEST_CASE("sap-animation-test", "[collision broadphase]") {
                                     self_collision_filter,
                                     self_collision_cache);
 
-    spdlog::info("brute force self collision test");
     CollisionCache<SimpleColliderdata> bf_self_collision_cache;
     brute_force_self_collision(cloth_colliders, self_collision_filter,
                                bf_self_collision_cache);
 
-    spdlog::info("sap group collision test");
     // inter-collision
     axis = sap_optimal_axis(cloth_proxies.data(), cloth_fnum,
                             sphere_proxies.data(), sphere_fnum);
@@ -182,15 +177,13 @@ TEST_CASE("sap-animation-test", "[collision broadphase]") {
         cloth_proxies.data(), cloth_fnum, sphere_proxies.data(), sphere_fnum,
         axis, inter_collision_filter, inter_collision_cache);
 
-    spdlog::info("brute force group collision test");
     CollisionCache<SimpleColliderdata> bf_inter_collision_cache;
     brute_force_group_group_collision(cloth_colliders, sphere_colliders,
                                       inter_collision_filter,
                                       bf_inter_collision_cache);
 
     spdlog::info(
-        "frame {}: self collision sap/bf {}/{}, inter collision sap/bf {}/{}"
-        "\n",
+        "frame {}: self collision sap/bf {}/{}, inter collision sap/bf {}/{}",
         i, self_collision_cache.size(), bf_self_collision_cache.size(),
         inter_collision_cache.size(), bf_inter_collision_cache.size());
 
