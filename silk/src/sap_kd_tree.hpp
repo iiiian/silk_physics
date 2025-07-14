@@ -137,7 +137,7 @@ class KDTree {
       int axis = sap_optimal_axis(start_a, num_a, start_b, num_b);
       sap_sort_proxies(start_a, num_a, axis);
       sap_sort_proxies(start_b, num_b, axis);
-      sap_test_sorted_group_collision(start_a, num_a, start_b, num_b, axis,
+      sap_sorted_group_group_collision(start_a, num_a, start_b, num_b, axis,
                                       filter_callback, cache);
 
       if (!na->is_leaf()) {
