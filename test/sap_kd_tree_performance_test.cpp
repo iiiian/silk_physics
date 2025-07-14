@@ -2,6 +2,7 @@
 
 #include <Eigen/Core>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <filesystem>
 #include <vector>
 
@@ -13,7 +14,7 @@ using namespace silk;
 namespace fs = std::filesystem;
 
 const fs::path root{PHYSICS_SCENE_ROOT};
-const fs::path cloth_sphere_abc = root / "cloth_sphere_collision.abc";
+const fs::path cloth_sphere_abc = root / "cloth_sphere_collision_dense.abc";
 
 TEST_CASE("sap-kd-tree-animation-performance-test",
           "[collision broadphase][performance]") {
@@ -49,9 +50,13 @@ TEST_CASE("sap-kd-tree-animation-performance-test",
   update_colliders(sphere_colliders, sphere, 1, sphere.series[0]);
   sphere_tree.update();
 
+  namespace ch = std::chrono;
+  ch::nanoseconds elapsed{0};
+  auto t0 = ch::steady_clock::now();
+
   int frame_num = 60;
   for (int i = 0; i < frame_num; ++i) {
-    spdlog::info("Testing frame {}", i);
+    // spdlog::info("Testing frame {}", i);
 
     update_colliders(cloth_colliders, cloth, 0, cloth.series[i]);
 
@@ -59,14 +64,20 @@ TEST_CASE("sap-kd-tree-animation-performance-test",
 
     // self collision
     CollisionCache<SimpleColliderdata> self_collision_cache;
+    self_collision_cache.clear();
     cloth_tree.test_self_collision(self_collision_filter, self_collision_cache);
 
     // inter-collision
-    CollisionCache<SimpleColliderdata> inter_collision_cache;
-    KDTree<SimpleColliderdata>::test_tree_collision(
-        cloth_tree, sphere_tree, inter_collision_filter, inter_collision_cache);
+    // CollisionCache<SimpleColliderdata> inter_collision_cache;
+    // KDTree<SimpleColliderdata>::test_tree_collision(
+    //     cloth_tree, sphere_tree, inter_collision_filter,
+    //     inter_collision_cache);
 
     // spdlog::info("frame {}: self collision {}, inter collision {}", i,
     //              self_collision_cache.size(), inter_collision_cache.size());
   }
+
+  elapsed += ch::steady_clock::now() - t0;
+  spdlog::info("total {} ms",
+               ch::duration_cast<ch::milliseconds>(elapsed).count());
 }

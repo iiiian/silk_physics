@@ -1,5 +1,7 @@
 #pragma once
 
+#include <omp.h>
+
 #include <array>
 #include <random>
 
@@ -110,17 +112,6 @@ void sap_sorted_collision(BboxColliderProxy<T> p1,
     return;
   }
 
-  // optimize for avx SIMD.
-  // each col is the min / max of a KDObject.
-  // test 8 objects in a row.
-  using Matrix38f = Eigen::Matrix<float, 3, 8>;
-  Matrix38f simd_p1_min = p1->bbox.min.replicate(1, 8);
-  Matrix38f simd_p1_max = p1->bbox.max.replicate(1, 8);
-  Matrix38f simd_p2_min;
-  Matrix38f simd_p2_max;
-  std::array<BboxColliderProxy<T>, 8> simd_proxies;
-
-  int simd_count = 0;
   for (int i = 0; i < proxy_num; ++i) {
     BboxColliderProxy<T> p2 = proxies[i];
     // axis test
@@ -132,37 +123,10 @@ void sap_sorted_collision(BboxColliderProxy<T> p1,
       continue;
     }
 
-    // potential collision candidate
-    simd_p2_min.col(simd_count) = p2->bbox.min;
-    simd_p2_max.col(simd_count) = p2->bbox.max;
-    simd_proxies[simd_count] = p2;
-    ++simd_count;
-
-    // simd bbox intersection test
-    if (simd_count == 8) {
-      Matrix38f max_min = simd_p1_min.cwiseMax(simd_p2_min);
-      Matrix38f min_max = simd_p1_max.cwiseMin(simd_p2_max);
-      Eigen::Matrix<bool, 8, 1> is_bbox_colliding =
-          (max_min.array() < min_max.array()).colwise().all();
-      for (int j = 0; j < 8; ++j) {
-        if (is_bbox_colliding(j)) {
-          cache.emplace_back(p1->data, simd_proxies[j]->data);
-        }
-      }
-      simd_count = 0;
-    }
-  }
-
-  // test the last chunk
-  if (simd_count != 0) {
-    Matrix38f max_min = simd_p1_min.cwiseMax(simd_p2_min);
-    Matrix38f min_max = simd_p1_max.cwiseMin(simd_p2_max);
-    Eigen::Matrix<bool, 1, 8> is_bbox_colliding =
-        (max_min.array() < min_max.array()).colwise().all();
-    for (int j = 0; j < simd_count; ++j) {
-      if (is_bbox_colliding(j)) {
-        cache.emplace_back(p1->data, simd_proxies[j]->data);
-      }
+    Eigen::Vector3f max_min = p1->bbox.min.cwiseMax(p2->bbox.min);
+    Eigen::Vector3f min_max = p1->bbox.max.cwiseMin(p2->bbox.max);
+    if ((max_min.array() < min_max.array()).all()) {
+      cache.emplace_back(p1->data, p2->data);
     }
   }
 }
@@ -174,9 +138,25 @@ void sap_sorted_group_self_collision(const BboxColliderProxy<T>* proxies,
                                      CollisionCache<T>& cache) {
   assert((proxy_num > 0));
 
+  // for (int i = 0; i < proxy_num - 1; ++i) {
+  //   sap_sorted_collision(proxies[i], proxies + i + 1, proxy_num - i - 1,
+  //   axis,
+  //                        filter_callback, cache);
+  // }
+
+#define TN 4
+  std::array<CollisionCache<T>, TN> lc_cache;
+
+#pragma omp parallel for num_threads(TN) schedule(static, 1)
   for (int i = 0; i < proxy_num - 1; ++i) {
     sap_sorted_collision(proxies[i], proxies + i + 1, proxy_num - i - 1, axis,
-                         filter_callback, cache);
+                         filter_callback, lc_cache[omp_get_thread_num()]);
+  }
+
+  for (int i = 0; i < TN; ++i) {
+    for (auto& p : lc_cache[i]) {
+      cache.emplace_back(std::move(p));
+    }
   }
 }
 

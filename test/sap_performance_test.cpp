@@ -13,7 +13,7 @@ using namespace silk;
 namespace fs = std::filesystem;
 
 const fs::path root{PHYSICS_SCENE_ROOT};
-const fs::path cloth_sphere_abc = root / "cloth_sphere_collision.abc";
+const fs::path cloth_sphere_abc = root / "cloth_sphere_collision_dense.abc";
 
 TEST_CASE("sap-animation-performance-test",
           "[collision broadphase][performance]") {
@@ -53,7 +53,7 @@ TEST_CASE("sap-animation-performance-test",
 
   int frame_num = 60;
   for (int i = 0; i < frame_num; ++i) {
-    spdlog::info("Testing frame {}", i);
+    // spdlog::info("Testing frame {}", i);
 
     update_colliders(cloth_colliders, cloth, 0, cloth.series[i]);
     update_colliders(sphere_colliders, sphere, 1, sphere.series[i]);
@@ -67,14 +67,14 @@ TEST_CASE("sap-animation-performance-test",
                                     self_collision_cache);
 
     // inter-collision
-    axis = sap_optimal_axis(cloth_proxies.data(), cloth_fnum,
-                            sphere_proxies.data(), sphere_fnum);
-    sap_sort_proxies(cloth_proxies.data(), cloth_fnum, axis);
-    sap_sort_proxies(sphere_proxies.data(), sphere_fnum, axis);
-    CollisionCache<SimpleColliderdata> inter_collision_cache;
-    sap_sorted_group_group_collision(
-        cloth_proxies.data(), cloth_fnum, sphere_proxies.data(), sphere_fnum,
-        axis, inter_collision_filter, inter_collision_cache);
+    // axis = sap_optimal_axis(cloth_proxies.data(), cloth_fnum,
+    //                         sphere_proxies.data(), sphere_fnum);
+    // sap_sort_proxies(cloth_proxies.data(), cloth_fnum, axis);
+    // sap_sort_proxies(sphere_proxies.data(), sphere_fnum, axis);
+    // CollisionCache<SimpleColliderdata> inter_collision_cache;
+    // sap_sorted_group_group_collision(
+    //     cloth_proxies.data(), cloth_fnum, sphere_proxies.data(), sphere_fnum,
+    //     axis, inter_collision_filter, inter_collision_cache);
 
     // spdlog::info(
     //     "frame {}: self collision {}, inter collision {}",
