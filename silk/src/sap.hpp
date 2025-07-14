@@ -1,6 +1,7 @@
 #pragma once
 
-#include <array>
+#include <omp.h>
+
 #include <random>
 
 #include "collision_helper.hpp"
@@ -110,17 +111,6 @@ void sap_sorted_collision(BboxColliderProxy<T> p1,
     return;
   }
 
-  // optimize for avx SIMD.
-  // each col is the min / max of a KDObject.
-  // test 8 objects in a row.
-  using Matrix38f = Eigen::Matrix<float, 3, 8>;
-  Matrix38f simd_p1_min = p1->bbox.min.replicate(1, 8);
-  Matrix38f simd_p1_max = p1->bbox.max.replicate(1, 8);
-  Matrix38f simd_p2_min;
-  Matrix38f simd_p2_max;
-  std::array<BboxColliderProxy<T>, 8> simd_proxies;
-
-  int simd_count = 0;
   for (int i = 0; i < proxy_num; ++i) {
     BboxColliderProxy<T> p2 = proxies[i];
     // axis test
@@ -132,37 +122,8 @@ void sap_sorted_collision(BboxColliderProxy<T> p1,
       continue;
     }
 
-    // potential collision candidate
-    simd_p2_min.col(simd_count) = p2->bbox.min;
-    simd_p2_max.col(simd_count) = p2->bbox.max;
-    simd_proxies[simd_count] = p2;
-    ++simd_count;
-
-    // simd bbox intersection test
-    if (simd_count == 8) {
-      Matrix38f max_min = simd_p1_min.cwiseMax(simd_p2_min);
-      Matrix38f min_max = simd_p1_max.cwiseMin(simd_p2_max);
-      Eigen::Matrix<bool, 8, 1> is_bbox_colliding =
-          (max_min.array() < min_max.array()).colwise().all();
-      for (int j = 0; j < 8; ++j) {
-        if (is_bbox_colliding(j)) {
-          cache.emplace_back(p1->data, simd_proxies[j]->data);
-        }
-      }
-      simd_count = 0;
-    }
-  }
-
-  // test the last chunk
-  if (simd_count != 0) {
-    Matrix38f max_min = simd_p1_min.cwiseMin(simd_p2_min);
-    Matrix38f min_max = simd_p1_max.cwiseMin(simd_p2_max);
-    Eigen::Matrix<bool, 1, 8> is_bbox_colliding =
-        (max_min.array() < min_max.array()).colwise().all();
-    for (int j = 0; j < simd_count; ++j) {
-      if (is_bbox_colliding(j)) {
-        cache.emplace_back(p1->data, simd_proxies[j]->data);
-      }
+    if (Bbox::is_colliding(p1->bbox, p2->bbox)) {
+      cache.emplace_back(p1->data, p2->data);
     }
   }
 }
@@ -197,9 +158,11 @@ void sap_sorted_group_group_collision(
     if (pa->bbox.min(axis) < pb->bbox.min(axis)) {
       sap_sorted_collision(pa, proxies_b + b, proxy_num_b - b, axis,
                            filter_callback, cache);
+      a++;
     } else {
       sap_sorted_collision(pb, proxies_a + a, proxy_num_a - a, axis,
                            filter_callback, cache);
+      b++;
     }
   }
 }

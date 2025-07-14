@@ -61,6 +61,7 @@ class KDTree {
   std::vector<KDNode*> stack_;  // for tree traversal
   std::vector<Proxy> proxies_;  // in-order layout proxy array
   std::vector<Proxy> buffer_;   // for both proxies and external colliders
+  std::vector<CollisionCache<T>> local_cache_;  // thread local collision cache
 
  public:
   KDTree(const BboxCollider<T>* colliders, int collider_num) {
@@ -79,6 +80,8 @@ class KDTree {
     root_->proxy_end = collider_num;
     root_->population = collider_num;
     set_root_bbox();
+
+    local_cache_.resize(omp_get_max_threads());
   }
 
   ~KDTree() { delete_subtree(root_); }
@@ -93,27 +96,39 @@ class KDTree {
                            CollisionCache<T>& cache) {
     assert(stack_.empty());
 
+    for (int i = 0; i < local_cache_.size(); ++i) {
+      local_cache_[i].clear();
+    }
+
     root_->ext_start = 0;
     root_->ext_end = 0;
-    test_node_collision(root_, filter_callback, cache);
+    test_node_collision(root_, filter_callback);
 
     if (!root_->is_leaf()) {
       stack_.push_back(root_->right);
       stack_.push_back(root_->left);
     }
 
+    // one main thread traverse the tree while collision detection at each node
+    // is processed in parallel
+#pragma omp parallel
+#pragma omp single
     while (!stack_.empty()) {
       KDNode* n = stack_.back();
       stack_.pop_back();
 
       update_ext_collider(n);
-      test_node_collision(n, filter_callback, cache);
+      test_node_collision(n, filter_callback);
 
       // recurse into subtree
       if (!n->is_leaf()) {
         stack_.push_back(n->right);
         stack_.push_back(n->left);
       }
+    }
+
+    for (int i = 0; i < local_cache_.size(); ++i) {
+      cache.insert(cache.end(), local_cache_[i].begin(), local_cache_[i].end());
     }
   }
 
@@ -137,8 +152,8 @@ class KDTree {
       int axis = sap_optimal_axis(start_a, num_a, start_b, num_b);
       sap_sort_proxies(start_a, num_a, axis);
       sap_sort_proxies(start_b, num_b, axis);
-      sap_test_sorted_group_collision(start_a, num_a, start_b, num_b, axis,
-                                      filter_callback, cache);
+      sap_sorted_group_group_collision(start_a, num_a, start_b, num_b, axis,
+                                       filter_callback, cache);
 
       if (!na->is_leaf()) {
         pair_stack_.push_back({na->left, nb});
@@ -684,8 +699,7 @@ class KDTree {
   }
 
   void test_node_collision(KDNode* n,
-                           CollisionFilterCallback<T> filter_callback,
-                           CollisionCache<T>& cache) {
+                           CollisionFilterCallback<T> filter_callback) {
     Proxy* proxy_start = proxies_.data() + n->proxy_start;
     int proxy_num = n->proxy_num();
     if (proxy_num == 0) {
@@ -696,8 +710,13 @@ class KDTree {
       // node-node test
       int axis = sap_optimal_axis(proxy_start, proxy_num);
       sap_sort_proxies(proxy_start, proxy_num, axis);
-      sap_sorted_group_self_collision(proxy_start, proxy_num, axis,
-                                      filter_callback, cache);
+
+#pragma omp task
+      {
+        auto& cache = local_cache_[omp_get_thread_num()];
+        sap_sorted_group_self_collision(proxy_start, proxy_num, axis,
+                                        filter_callback, cache);
+      }
     } else {
       // node-node and node-external test
       Proxy* ext_start = buffer_.data() + n->ext_start;
@@ -705,10 +724,15 @@ class KDTree {
       int axis = sap_optimal_axis(proxy_start, proxy_num, ext_start, ext_num);
       sap_sort_proxies(proxy_start, proxy_num, axis);
       sap_sort_proxies(ext_start, ext_num, axis);
-      sap_sorted_group_self_collision(proxy_start, proxy_num, axis,
-                                      filter_callback, cache);
-      sap_sorted_group_group_collision(proxy_start, proxy_num, ext_start,
-                                       ext_num, axis, filter_callback, cache);
+
+#pragma omp task
+      {
+        auto& cache = local_cache_[omp_get_thread_num()];
+        sap_sorted_group_self_collision(proxy_start, proxy_num, axis,
+                                        filter_callback, cache);
+        sap_sorted_group_group_collision(proxy_start, proxy_num, ext_start,
+                                         ext_num, axis, filter_callback, cache);
+      }
     }
   }
 };
