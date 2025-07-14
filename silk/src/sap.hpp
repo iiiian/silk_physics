@@ -123,9 +123,7 @@ void sap_sorted_collision(BboxColliderProxy<T> p1,
       continue;
     }
 
-    Eigen::Vector3f max_min = p1->bbox.min.cwiseMax(p2->bbox.min);
-    Eigen::Vector3f min_max = p1->bbox.max.cwiseMin(p2->bbox.max);
-    if ((max_min.array() < min_max.array()).all()) {
+    if (Bbox::is_colliding(p1->bbox, p2->bbox)) {
       cache.emplace_back(p1->data, p2->data);
     }
   }
