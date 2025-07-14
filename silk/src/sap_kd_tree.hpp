@@ -3,9 +3,9 @@
 #include <Eigen/Core>
 #include <algorithm>
 #include <cassert>
-#include <climits>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <random>
 #include <vector>
 
@@ -98,7 +98,6 @@ class KDTree {
 
   void test_self_collision(CollisionFilterCallback<T> filter_callback,
                            CollisionCache<T>& cache) {
-
     stack_.clear();
     buffer_.clear();
     for (int i = 0; i < local_cache_.size(); ++i) {
