@@ -1,3 +1,5 @@
+#include "sap_kd_tree.hpp"
+
 #include <spdlog/spdlog.h>
 
 #include <Eigen/Core>
@@ -8,7 +10,6 @@
 
 #include "abc_file_loader.hpp"
 #include "collision_broadphase_test_helper.hpp"
-#include "sap_kd_tree.hpp"
 
 using namespace silk;
 namespace fs = std::filesystem;
@@ -70,8 +71,8 @@ TEST_CASE("sap-kd-tree-animation-test", "[collision broadphase]") {
                                       bf_inter_collision_cache);
 
     spdlog::info(
-        "frame {}: self collision kd-tree/bf {}/{}, inter collision kd-tree/bf {}/{}"
-        "\n",
+        "frame {}: self collision kd-tree/bf {}/{}, inter collision kd-tree/bf "
+        "{}/{}",
         i, self_collision_cache.size(), bf_self_collision_cache.size(),
         inter_collision_cache.size(), bf_inter_collision_cache.size());
 
