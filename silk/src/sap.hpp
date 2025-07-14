@@ -2,7 +2,6 @@
 
 #include <omp.h>
 
-#include <array>
 #include <random>
 
 #include "collision_helper.hpp"
@@ -136,25 +135,9 @@ void sap_sorted_group_self_collision(const BboxColliderProxy<T>* proxies,
                                      CollisionCache<T>& cache) {
   assert((proxy_num > 0));
 
-  // for (int i = 0; i < proxy_num - 1; ++i) {
-  //   sap_sorted_collision(proxies[i], proxies + i + 1, proxy_num - i - 1,
-  //   axis,
-  //                        filter_callback, cache);
-  // }
-
-#define TN 4
-  std::array<CollisionCache<T>, TN> lc_cache;
-
-#pragma omp parallel for num_threads(TN) schedule(static, 1)
   for (int i = 0; i < proxy_num - 1; ++i) {
     sap_sorted_collision(proxies[i], proxies + i + 1, proxy_num - i - 1, axis,
-                         filter_callback, lc_cache[omp_get_thread_num()]);
-  }
-
-  for (int i = 0; i < TN; ++i) {
-    for (auto& p : lc_cache[i]) {
-      cache.emplace_back(std::move(p));
-    }
+                         filter_callback, cache);
   }
 }
 
