@@ -197,9 +197,11 @@ void sap_sorted_group_group_collision(
     if (pa->bbox.min(axis) < pb->bbox.min(axis)) {
       sap_sorted_collision(pa, proxies_b + b, proxy_num_b - b, axis,
                            filter_callback, cache);
+      a++;
     } else {
       sap_sorted_collision(pb, proxies_a + a, proxy_num_a - a, axis,
                            filter_callback, cache);
+      b++;
     }
   }
 }
