@@ -2,8 +2,8 @@
 
 #include <Eigen/Core>
 #include <algorithm>
-#include <climits>
 #include <cassert>
+#include <climits>
 #include <cstdint>
 #include <cstring>
 #include <random>
@@ -145,10 +145,10 @@ class KDTree {
     }
 
     // this should never happens in normal scenario
-    if (ta.root_->generation = std::numeric_limits<uint32_t>::max()){
+    if (ta.root_->generation == std::numeric_limits<uint32_t>::max()) {
       ta.reset_generation();
     }
-    if (tb.root_->generation = std::numeric_limits<uint32_t>::max()){
+    if (tb.root_->generation == std::numeric_limits<uint32_t>::max()) {
       tb.reset_generation();
     }
 
@@ -163,11 +163,11 @@ class KDTree {
 
 // one main thread traverse the tree while collision detection at each node
 // is processed in parallel
-#pragma omp parallel num_threads(1)
+#pragma omp parallel
 #pragma omp single
-    while (!pair_stack_.empty()) {
-      auto [na, nb] = pair_stack_.back();
-      pair_stack_.pop_back();
+    for (int i = 0; i < pair_stack_.size(); ++i) {
+      auto [na, nb] = pair_stack_[i];
+      // pair_stack_.pop_back();
 
       if (!na || !nb) {
         continue;
@@ -224,7 +224,8 @@ class KDTree {
         Proxy* start_b = tb.proxies_.data() + nb->proxy_start;
         int num_b = nb->proxy_num();
 
-// #pragma omp task depend(mutexinoutset: na, nb) firstprivate(start_a, num_a, start_b, num_b) 
+        // #pragma omp task depend(mutexinoutset: na, nb) firstprivate(start_a,
+        // num_a, start_b, num_b)
         {
           int axis = sap_optimal_axis(start_a, num_a, start_b, num_b);
           sap_sort_proxies(start_a, num_a, axis);
@@ -242,10 +243,10 @@ class KDTree {
     }
   }
 
-  void delete_cache(){
+  void delete_cache() {
     stack_ = {};
     buffer_ = {};
-    for (auto& cache : local_cache_){
+    for (auto& cache : local_cache_) {
       local_cache_ = {};
     }
   }
@@ -841,7 +842,7 @@ class KDTree {
     }
   }
 
-  void reset_generation(){
+  void reset_generation() {
     assert(stack_.empty());
 
     stack_.push_back(root_);
@@ -858,6 +859,6 @@ class KDTree {
       }
     }
   }
-};  
+};
 
 }  // namespace silk
