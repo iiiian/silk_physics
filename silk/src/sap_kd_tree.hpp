@@ -98,8 +98,9 @@ class KDTree {
 
   void test_self_collision(CollisionFilterCallback<T> filter_callback,
                            CollisionCache<T>& cache) {
-    assert(stack_.empty());
 
+    stack_.clear();
+    buffer_.clear();
     for (int i = 0; i < local_cache_.size(); ++i) {
       local_cache_[i].clear();
     }
@@ -139,11 +140,6 @@ class KDTree {
   static void test_tree_collision(KDTree& ta, KDTree& tb,
                                   CollisionFilterCallback<T> filter_callback,
                                   CollisionCache<T>& cache) {
-    // use ta's local cache
-    for (int i = 0; i < ta.local_cache_.size(); ++i) {
-      ta.local_cache_[i].clear();
-    }
-
     // this should never happens in normal scenario
     if (ta.root_->generation == std::numeric_limits<uint32_t>::max()) {
       ta.reset_generation();
@@ -161,10 +157,6 @@ class KDTree {
     std::vector<std::pair<KDNode*, KDNode*>> pair_stack_;
     pair_stack_.emplace_back(ta.root_, tb.root_);
 
-// one main thread traverse the tree while collision detection at each node
-// is processed in parallel
-#pragma omp parallel
-#pragma omp single
     for (int i = 0; i < pair_stack_.size(); ++i) {
       auto [na, nb] = pair_stack_[i];
       // pair_stack_.pop_back();
@@ -224,22 +216,13 @@ class KDTree {
         Proxy* start_b = tb.proxies_.data() + nb->proxy_start;
         int num_b = nb->proxy_num();
 
-        // #pragma omp task depend(mutexinoutset: na, nb) firstprivate(start_a,
-        // num_a, start_b, num_b)
-        {
-          int axis = sap_optimal_axis(start_a, num_a, start_b, num_b);
-          sap_sort_proxies(start_a, num_a, axis);
-          sap_sort_proxies(start_b, num_b, axis);
-          // auto cache = ta.local_cache_[omp_get_thread_num()];
-          sap_sorted_group_group_collision(start_a, num_a, start_b, num_b, axis,
-                                           filter_callback, cache);
-        }
+        int axis = sap_optimal_axis(start_a, num_a, start_b, num_b);
+        sap_sort_proxies(start_a, num_a, axis);
+        sap_sort_proxies(start_b, num_b, axis);
+        // auto cache = ta.local_cache_[omp_get_thread_num()];
+        sap_sorted_group_group_collision(start_a, num_a, start_b, num_b, axis,
+                                         filter_callback, cache);
       }
-    }
-
-    for (int i = 0; i < ta.local_cache_.size(); ++i) {
-      cache.insert(cache.end(), ta.local_cache_[i].begin(),
-                   ta.local_cache_[i].end());
     }
   }
 
@@ -386,7 +369,7 @@ class KDTree {
   }
 
   void lift_unfit_up() {
-    assert(stack_.empty());
+    stack_.clear();
 
     // prepare for bottom up traverse
     stack_.push_back(root_);
@@ -446,8 +429,6 @@ class KDTree {
       root_->population = root_->proxy_num() + root_->left->population +
                           root_->right->population;
     }
-
-    stack_.clear();
   }
 
   void filter(KDNode* n) {
@@ -683,7 +664,7 @@ class KDTree {
   }
 
   void optimize_structure() {
-    assert(stack_.empty());
+    stack_.clear();
 
     // pre-order traverse the tree
     stack_.push_back(root_);
@@ -843,7 +824,7 @@ class KDTree {
   }
 
   void reset_generation() {
-    assert(stack_.empty());
+    stack_.clear();
 
     stack_.push_back(root_);
     while (!stack_.empty()) {
