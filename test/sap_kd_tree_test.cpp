@@ -46,10 +46,12 @@ TEST_CASE("sap-kd-tree-animation-test", "[collision broadphase]") {
     return true;
   };
 
+  update_colliders(sphere_colliders, sphere, 1, sphere.series[0]);
+  sphere_tree.update();
+
   int frame_num = 60;
   for (int i = 0; i < frame_num; ++i) {
     update_colliders(cloth_colliders, cloth, 0, cloth.series[i]);
-    update_colliders(sphere_colliders, sphere, 1, sphere.series[i]);
 
     cloth_tree.update();
 
