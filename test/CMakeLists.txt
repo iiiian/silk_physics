@@ -58,6 +58,7 @@ target_link_libraries(
     PRIVATE spdlog::spdlog
     PRIVATE Alembic::Alembic
     PRIVATE Catch2::Catch2WithMain
+    PRIVATE OpenMP::OpenMP_CXX
 )
 target_compile_definitions(
     collision_broadphase_test
