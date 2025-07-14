@@ -23,9 +23,11 @@ struct SimpleColliderdata {
 };
 
 TEST_CASE("sap-test", "[collision broadphase]") {
+  // object 0 is the cloth
+  // object 1 is a icosphere
+  // the cloth will fall onto the icosphere
   auto objects = loadAllMeshes(cloth_sphere_abc);
 
-  // object 0 is the cloth
   auto& cloth = objects[0];
   int vnum = cloth.V.rows();
   int fnum = cloth.F.rows();
