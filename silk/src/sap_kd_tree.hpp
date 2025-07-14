@@ -711,7 +711,7 @@ class KDTree {
       int axis = sap_optimal_axis(proxy_start, proxy_num);
       sap_sort_proxies(proxy_start, proxy_num, axis);
 
-#pragma omp task
+#pragma omp task firstprivate(proxy_start, proxy_num, axis)
       {
         auto& cache = local_cache_[omp_get_thread_num()];
         sap_sorted_group_self_collision(proxy_start, proxy_num, axis,
@@ -725,13 +725,17 @@ class KDTree {
       sap_sort_proxies(proxy_start, proxy_num, axis);
       sap_sort_proxies(ext_start, ext_num, axis);
 
-#pragma omp task
+      // buffer will be overwrite once main thread traverse to another branch.
+      // hence external collider buffer needs to be copied.
+      std::vector<Proxy> ext_copy(ext_start, ext_start + ext_num);
+#pragma omp task firstprivate(proxy_start, proxy_num, axis, ext_copy)
       {
         auto& cache = local_cache_[omp_get_thread_num()];
         sap_sorted_group_self_collision(proxy_start, proxy_num, axis,
                                         filter_callback, cache);
-        sap_sorted_group_group_collision(proxy_start, proxy_num, ext_start,
-                                         ext_num, axis, filter_callback, cache);
+        sap_sorted_group_group_collision(proxy_start, proxy_num,
+                                         ext_copy.data(), ext_num, axis,
+                                         filter_callback, cache);
       }
     }
   }
