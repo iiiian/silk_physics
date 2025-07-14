@@ -2,6 +2,7 @@
 
 #include <Eigen/Core>
 #include <algorithm>
+#include <climits>
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -138,6 +139,19 @@ class KDTree {
   static void test_tree_collision(KDTree& ta, KDTree& tb,
                                   CollisionFilterCallback<T> filter_callback,
                                   CollisionCache<T>& cache) {
+    // use ta's local cache
+    for (int i = 0; i < ta.local_cache_.size(); ++i) {
+      ta.local_cache_[i].clear();
+    }
+
+    // this should never happens in normal scenario
+    if (ta.root_->generation = std::numeric_limits<uint32_t>::max()){
+      ta.reset_generation();
+    }
+    if (tb.root_->generation = std::numeric_limits<uint32_t>::max()){
+      tb.reset_generation();
+    }
+
     // since root is guaranteed to be visited during tree-tree collision test,
     // the generate of root node is the last generation of tree. The current
     // generation is last generation plus one
@@ -146,6 +160,11 @@ class KDTree {
 
     std::vector<std::pair<KDNode*, KDNode*>> pair_stack_;
     pair_stack_.emplace_back(ta.root_, tb.root_);
+
+// one main thread traverse the tree while collision detection at each node
+// is processed in parallel
+#pragma omp parallel num_threads(1)
+#pragma omp single
     while (!pair_stack_.empty()) {
       auto [na, nb] = pair_stack_.back();
       pair_stack_.pop_back();
@@ -164,8 +183,8 @@ class KDTree {
         if (Bbox::is_colliding(na->bbox, nb->bbox)) {
           pair_stack_.emplace_back(na->left, nb->left);
           pair_stack_.emplace_back(na->left, nb->right);
-          pair_stack_.emplace_back(na->left, nb->left);
           pair_stack_.emplace_back(na->right, nb->left);
+          pair_stack_.emplace_back(na->right, nb->right);
           pair_stack_.emplace_back(na, nb->left);
           pair_stack_.emplace_back(na, nb->right);
           pair_stack_.emplace_back(na->left, nb);
@@ -204,12 +223,30 @@ class KDTree {
         int num_a = na->proxy_num();
         Proxy* start_b = tb.proxies_.data() + nb->proxy_start;
         int num_b = nb->proxy_num();
-        int axis = sap_optimal_axis(start_a, num_a, start_b, num_b);
-        sap_sort_proxies(start_a, num_a, axis);
-        sap_sort_proxies(start_b, num_b, axis);
-        sap_sorted_group_group_collision(start_a, num_a, start_b, num_b, axis,
-                                         filter_callback, cache);
+
+// #pragma omp task depend(mutexinoutset: na, nb) firstprivate(start_a, num_a, start_b, num_b) 
+        {
+          int axis = sap_optimal_axis(start_a, num_a, start_b, num_b);
+          sap_sort_proxies(start_a, num_a, axis);
+          sap_sort_proxies(start_b, num_b, axis);
+          // auto cache = ta.local_cache_[omp_get_thread_num()];
+          sap_sorted_group_group_collision(start_a, num_a, start_b, num_b, axis,
+                                           filter_callback, cache);
+        }
       }
+    }
+
+    for (int i = 0; i < ta.local_cache_.size(); ++i) {
+      cache.insert(cache.end(), ta.local_cache_[i].begin(),
+                   ta.local_cache_[i].end());
+    }
+  }
+
+  void delete_cache(){
+    stack_ = {};
+    buffer_ = {};
+    for (auto& cache : local_cache_){
+      local_cache_ = {};
     }
   }
 
@@ -803,6 +840,24 @@ class KDTree {
       }
     }
   }
-};
+
+  void reset_generation(){
+    assert(stack_.empty());
+
+    stack_.push_back(root_);
+    while (!stack_.empty()) {
+      KDNode* n = stack_.back();
+      stack_.pop_back();
+
+      n->generation = 0;
+
+      // recurse into subtree
+      if (!n->is_leaf()) {
+        stack_.push_back(n->right);
+        stack_.push_back(n->left);
+      }
+    }
+  }
+};  
 
 }  // namespace silk
