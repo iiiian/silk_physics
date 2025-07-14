@@ -721,9 +721,8 @@ class KDTree {
       // node-node and node-external test
       Proxy* ext_start = buffer_.data() + n->ext_start;
       int ext_num = n->ext_num();
+      // most collider resides on leaf, so no need to test external collider
       int axis = sap_optimal_axis(proxy_start, proxy_num);
-      // int axis = sap_optimal_axis(proxy_start, proxy_num, ext_start,
-      // ext_num);
       sap_sort_proxies(proxy_start, proxy_num, axis);
       sap_sort_proxies(ext_start, ext_num, axis);
 

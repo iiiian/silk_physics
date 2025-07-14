@@ -52,7 +52,10 @@ add_executable(
     abc_file_loader.cpp
     ${SILK_SRC_DIR}/bbox.cpp
 )
-target_include_directories(sap_test PRIVATE ${SILK_SRC_DIR})
+target_include_directories(
+    sap_test
+    PRIVATE ${SILK_SRC_DIR} ${CMAKE_SOURCE_DIR}/extern/pdqsort
+)
 target_link_libraries(
     sap_test
     PRIVATE Eigen3::Eigen
@@ -73,7 +76,10 @@ add_executable(
     abc_file_loader.cpp
     ${SILK_SRC_DIR}/bbox.cpp
 )
-target_include_directories(sap_kd_tree_test PRIVATE ${SILK_SRC_DIR})
+target_include_directories(
+    sap_kd_tree_test
+    PRIVATE ${SILK_SRC_DIR} ${CMAKE_SOURCE_DIR}/extern/pdqsort
+)
 target_link_libraries(
     sap_kd_tree_test
     PRIVATE Eigen3::Eigen
@@ -87,8 +93,6 @@ target_compile_definitions(
     PRIVATE PHYSICS_SCENE_ROOT="${CMAKE_SOURCE_DIR}/misc/physics_scene"
 )
 
-include(CTest)
-include(Catch)
 add_executable(
     sap_performance_test
     sap_performance_test.cpp
@@ -96,7 +100,10 @@ add_executable(
     abc_file_loader.cpp
     ${SILK_SRC_DIR}/bbox.cpp
 )
-target_include_directories(sap_performance_test PRIVATE ${SILK_SRC_DIR})
+target_include_directories(
+    sap_performance_test
+    PRIVATE ${SILK_SRC_DIR} ${CMAKE_SOURCE_DIR}/extern/pdqsort
+)
 target_link_libraries(
     sap_performance_test
     PRIVATE Eigen3::Eigen
@@ -117,7 +124,10 @@ add_executable(
     abc_file_loader.cpp
     ${SILK_SRC_DIR}/bbox.cpp
 )
-target_include_directories(sap_kd_tree_performance_test PRIVATE ${SILK_SRC_DIR})
+target_include_directories(
+    sap_kd_tree_performance_test
+    PRIVATE ${SILK_SRC_DIR} ${CMAKE_SOURCE_DIR}/extern/pdqsort
+)
 target_link_libraries(
     sap_kd_tree_performance_test
     PRIVATE Eigen3::Eigen
@@ -131,4 +141,6 @@ target_compile_definitions(
     PRIVATE PHYSICS_SCENE_ROOT="${CMAKE_SOURCE_DIR}/misc/physics_scene"
 )
 
+include(CTest)
+include(Catch)
 catch_discover_tests(ccd_correctness_test ccd_performance_test resource_manager_test sap_test sap_kd_tree_test sap_performance_test sap_kd_tree_performance_test)

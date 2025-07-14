@@ -1,9 +1,10 @@
 #pragma once
 
+#include <pdqsort.h>
+
 #include <random>
 
 #include "collision_helper.hpp"
-#include "pdqsort.h"
 
 namespace silk {
 
@@ -97,7 +98,6 @@ void sap_sort_proxies(BboxColliderProxy<T>* proxies, int proxy_num, int axis) {
     return (a->bbox.min(axis) < b->bbox.min(axis));
   };
   pdqsort_branchless(proxies, proxies + proxy_num, comp);
-  // std::sort(proxies, proxies + proxy_num, comp);
 }
 
 template <typename T>
