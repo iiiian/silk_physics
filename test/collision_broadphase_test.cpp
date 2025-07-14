@@ -8,7 +8,6 @@
 
 #include "abc_file_loader.hpp"
 #include "sap.hpp"
-#include "sap_kd_tree.hpp"
 
 using namespace silk;
 namespace fs = std::filesystem;
@@ -44,9 +43,17 @@ TEST_CASE("sap-test", "[collision broadphase]") {
     m.row(1) = cloth.V.row(data.v1);
     m.row(2) = cloth.V.row(data.v2);
 
+    float e01_len = (m.row(1) - m.row(0)).norm();
+    float e12_len = (m.row(2) - m.row(1)).norm();
+    float e20_len = (m.row(0) - m.row(2)).norm();
+
+    float min_len = std::min(e01_len, std::min(e12_len, e20_len));
+    float h = 0.05f * min_len;
+
     Bbox bbox;
     bbox.min = m.colwise().minCoeff();
     bbox.max = m.colwise().maxCoeff();
+    bbox.extend_inplace(h);
 
     colliders[i] = {bbox, data};
   }
@@ -60,63 +67,19 @@ TEST_CASE("sap-test", "[collision broadphase]") {
   sap_sort_proxies(proxies.data(), fnum, axis);
 
   CollisionCache<SimpleColliderdata> cache;
-  CollisionFilterCallback<SimpleColliderdata> dummy_filter =
+  CollisionFilterCallback<SimpleColliderdata> filter =
       [](const SimpleColliderdata& a, const SimpleColliderdata& b) -> bool {
-    return true;
+    return (a.v0 != b.v0 && a.v0 != b.v1 && a.v0 != b.v2 && a.v1 != b.v0 &&
+            a.v1 != b.v1 && a.v1 != b.v2 && a.v2 != b.v0 && a.v2 != b.v1 &&
+            a.v2 != b.v2);
   };
-  sap_sorted_group_self_collision(proxies.data(), fnum, axis, dummy_filter,
-                                  cache);
+
+  sap_sorted_group_self_collision(proxies.data(), fnum, axis, filter, cache);
   spdlog::info("detect {} collisions", cache.size());
   for (auto& c : cache) {
     auto& fa = c.first;
     auto& fb = c.second;
-    spdlog::info("pair {} {}", fa.face_id, fb.face_id);
+    spdlog::info("pair {}: {}, {}, {} | {}: {}, {}, {}", fa.face_id, fa.v0,
+                 fa.v1, fa.v2, fb.face_id, fb.v0, fb.v1, fb.v2);
   }
 }
-
-// TEST_CASE("sap-kdtree-tests", "[collision broadphase]") {
-//   auto objects = loadAllMeshes(cloth_sphere_abc);
-//
-//   // object 0 is the cloth
-//   auto& cloth = objects[0];
-//   int vnum = cloth.V.rows();
-//   int fnum = cloth.F.rows();
-//
-//   using Collider = BboxCollider<SimpleColliderdata>;
-//   std::vector<Collider> colliders;
-//   colliders.resize(fnum);
-//   for (int i = 0; i < fnum; ++i) {
-//     SimpleColliderdata data;
-//     data.face_id = i;
-//     data.v0 = cloth.F(i, 0);
-//     data.v1 = cloth.F(i, 1);
-//     data.v2 = cloth.F(i, 2);
-//
-//     Eigen::Matrix3f m;
-//     m.row(0) = cloth.V.row(data.v0);
-//     m.row(1) = cloth.V.row(data.v1);
-//     m.row(2) = cloth.V.row(data.v2);
-//
-//     Bbox bbox;
-//     bbox.min = m.colwise().minCoeff();
-//     bbox.max = m.colwise().maxCoeff();
-//
-//     colliders[i] = {bbox, data};
-//   }
-//
-//   KDTree<SimpleColliderdata> tree{colliders.data(), fnum};
-//   tree.update();
-//
-//   CollisionCache<SimpleColliderdata> cache;
-//   auto dummy_filter = [](const SimpleColliderdata& a,
-//                          const SimpleColliderdata& b) -> bool { return true;
-//                          };
-//
-//   tree.test_self_collision(dummy_filter, cache);
-//   spdlog::info("detect {} collisions", cache.size());
-//   for (auto& c : cache) {
-//     auto& fa = c.first;
-//     auto& fb = c.second;
-//     spdlog::info("pair {} {}", fa.face_id, fb.face_id);
-//   }
-// }
