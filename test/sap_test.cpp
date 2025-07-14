@@ -1,14 +1,14 @@
+#include "sap.hpp"
+
 #include <spdlog/spdlog.h>
 
 #include <Eigen/Core>
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
-#include <functional>
 #include <vector>
 
 #include "abc_file_loader.hpp"
 #include "collision_broadphase_test_helper.hpp"
-#include "sap.hpp"
 
 using namespace silk;
 namespace fs = std::filesystem;

@@ -13,9 +13,9 @@ std::size_t hash<SimpleColliderdata>::operator()(
 }
 }  // namespace std
 
-void update_colliders(std::vector<silk::BboxCollider<SimpleColliderdata>>& colliders,
-                      const AlembicObject& object, int object_id,
-                      const Eigen::MatrixXf& V) {
+void update_colliders(
+    std::vector<silk::BboxCollider<SimpleColliderdata>>& colliders,
+    const AlembicObject& object, int object_id, const Eigen::MatrixXf& V) {
   int fnum = object.F.rows();
   for (int i = 0; i < fnum; ++i) {
     SimpleColliderdata data;
@@ -30,9 +30,16 @@ void update_colliders(std::vector<silk::BboxCollider<SimpleColliderdata>>& colli
     m.row(1) = V.row(data.v1);
     m.row(2) = V.row(data.v2);
 
+    float e01_len = (m.row(1) - m.row(0)).norm();
+    float e12_len = (m.row(2) - m.row(1)).norm();
+    float e20_len = (m.row(0) - m.row(2)).norm();
+    float min_len = std::min(e01_len, std::min(e12_len, e20_len));
+    float h = 0.05f * min_len;
+
     silk::Bbox bbox;
     bbox.min = m.colwise().minCoeff();
     bbox.max = m.colwise().maxCoeff();
+    bbox.extend_inplace(h);
 
     colliders[i] = {bbox, data};
   }
@@ -72,7 +79,8 @@ void brute_force_group_group_collision(
   for (int i = 0; i < colliders_a.size(); ++i) {
     for (int j = 0; j < colliders_b.size(); ++j) {
       if (filter_callback(colliders_a[i].data, colliders_b[j].data)) {
-        if (silk::Bbox::is_colliding(colliders_a[i].bbox, colliders_b[j].bbox)) {
+        if (silk::Bbox::is_colliding(colliders_a[i].bbox,
+                                     colliders_b[j].bbox)) {
           thread_local_caches[omp_get_thread_num()].emplace_back(
               colliders_a[i].data, colliders_b[j].data);
         }
