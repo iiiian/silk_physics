@@ -3,6 +3,7 @@
 #include <Eigen/Core>
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 #include <random>
 #include <vector>
@@ -19,14 +20,16 @@ struct KDNode {
   KDNode* right = nullptr;
 
   Bbox bbox = {};
-  int axis = 0;           // split plane axis
-  float position = 0.0f;  // split plane position
-  int proxy_start = 0;    // proxies array start
-  int proxy_end = 0;      // proxies array end
-  int population = 0;     // subtree proxy num
-  int delay_offset = 0;   // delayed update to proxy start/end
-  int ext_start = 0;      // external collider buffer start
-  int ext_end = 0;        // external collider buffer end
+  Bbox plane_bbox = {};
+  int axis = 0;             // split plane axis
+  float position = 0.0f;    // split plane position
+  int proxy_start = 0;      // proxies array start
+  int proxy_end = 0;        // proxies array end
+  int population = 0;       // subtree proxy num
+  int delay_offset = 0;     // delayed update to proxy start/end
+  int ext_start = 0;        // external collider buffer start
+  int ext_end = 0;          // external collider buffer end
+  uint32_t generation = 0;  // for tree-tree collision
 
   int proxy_num() const {
     assert((proxy_end >= proxy_start));
@@ -135,33 +138,77 @@ class KDTree {
   static void test_tree_collision(KDTree& ta, KDTree& tb,
                                   CollisionFilterCallback<T> filter_callback,
                                   CollisionCache<T>& cache) {
+    // since root is guaranteed to be visited during tree-tree collision test,
+    // the generate of root node is the last generation of tree. The current
+    // generation is last generation plus one
+    uint32_t gen_a = ta.root_->generation + 1;
+    uint32_t gen_b = tb.root_->generation + 1;
+
     std::vector<std::pair<KDNode*, KDNode*>> pair_stack_;
-    pair_stack_.push_back({ta.root_, tb.root_});
+    pair_stack_.emplace_back(ta.root_, tb.root_);
     while (!pair_stack_.empty()) {
       auto [na, nb] = pair_stack_.back();
       pair_stack_.pop_back();
 
-      if (Bbox::is_disjoint(na->bbox, nb->bbox)) {
+      if (!na || !nb) {
         continue;
       }
 
-      Proxy* start_a = ta.proxies_.data() + na->proxy_start;
-      int num_a = na->proxy_num();
-      Proxy* start_b = tb.proxies_.data() + nb->proxy_start;
-      int num_b = nb->proxy_num();
-      int axis = sap_optimal_axis(start_a, num_a, start_b, num_b);
-      sap_sort_proxies(start_a, num_a, axis);
-      sap_sort_proxies(start_b, num_b, axis);
-      sap_sorted_group_group_collision(start_a, num_a, start_b, num_b, axis,
-                                       filter_callback, cache);
+      // the node has never been visited if generation doesn't match
+      bool is_na_new = !(na->generation == gen_a);
+      bool is_nb_new = !(nb->generation == gen_b);
+      na->generation = gen_a;
+      nb->generation = gen_b;
 
-      if (!na->is_leaf()) {
-        pair_stack_.push_back({na->left, nb});
-        pair_stack_.push_back({na->right, nb});
+      if (is_na_new && is_nb_new) {
+        if (Bbox::is_colliding(na->bbox, nb->bbox)) {
+          pair_stack_.emplace_back(na->left, nb->left);
+          pair_stack_.emplace_back(na->left, nb->right);
+          pair_stack_.emplace_back(na->left, nb->left);
+          pair_stack_.emplace_back(na->right, nb->left);
+          pair_stack_.emplace_back(na, nb->left);
+          pair_stack_.emplace_back(na, nb->right);
+          pair_stack_.emplace_back(na->left, nb);
+          pair_stack_.emplace_back(na->right, nb);
+          pair_stack_.emplace_back(na, nb);
+        }
+        continue;
       }
-      if (!nb->is_leaf()) {
-        pair_stack_.push_back({na, nb->left});
-        pair_stack_.push_back({na, nb->right});
+
+      if (is_na_new) {
+        if (Bbox::is_colliding(na->bbox, nb->plane_bbox)) {
+          pair_stack_.emplace_back(na->left, nb);
+          pair_stack_.emplace_back(na->right, nb);
+          pair_stack_.emplace_back(na, nb);
+        }
+        continue;
+      }
+
+      if (is_nb_new) {
+        if (Bbox::is_colliding(na->plane_bbox, nb->bbox)) {
+          pair_stack_.emplace_back(na, nb->left);
+          pair_stack_.emplace_back(na, nb->right);
+          pair_stack_.emplace_back(na, nb);
+        }
+        continue;
+      }
+
+      // both node a and node b is old, test on plane proxy only
+      if (na->proxy_num() == 0 || nb->proxy_num() == 0) {
+        continue;
+      }
+      Bbox& ba = (na->is_leaf()) ? na->bbox : na->plane_bbox;
+      Bbox& bb = (nb->is_leaf()) ? nb->bbox : nb->plane_bbox;
+      if (Bbox::is_colliding(ba, bb)) {
+        Proxy* start_a = ta.proxies_.data() + na->proxy_start;
+        int num_a = na->proxy_num();
+        Proxy* start_b = tb.proxies_.data() + nb->proxy_start;
+        int num_b = nb->proxy_num();
+        int axis = sap_optimal_axis(start_a, num_a, start_b, num_b);
+        sap_sort_proxies(start_a, num_a, axis);
+        sap_sort_proxies(start_b, num_b, axis);
+        sap_sorted_group_group_collision(start_a, num_a, start_b, num_b, axis,
+                                         filter_callback, cache);
       }
     }
   }
@@ -587,6 +634,16 @@ class KDTree {
     delete main;
   }
 
+  void set_plane_bbox(KDNode* n) {
+    if (n->proxy_num() == 0) {
+      return;
+    }
+    n->plane_bbox = proxies_[n->proxy_start]->bbox;
+    for (int i = n->proxy_start + 1; i < n->proxy_end; ++i) {
+      n->plane_bbox.merge_inplace(proxies_[i]->bbox);
+    }
+  }
+
   void optimize_structure() {
     assert(stack_.empty());
 
@@ -609,6 +666,8 @@ class KDTree {
       if (n->is_leaf()) {
         if (n->proxy_num() > NODE_PROXY_NUM_THRESHOLD) {
           split_leaf(n);
+          set_plane_bbox(n);
+          n->generation = 0;
           stack_.push_back(n->right);
           stack_.push_back(n->left);
         }
@@ -626,6 +685,8 @@ class KDTree {
       if (evaluate(n)) {
         filter(n);
         set_children_bbox(n);
+        set_plane_bbox(n);
+        n->generation = 0;
         stack_.push_back(n->right);
         stack_.push_back(n->left);
         continue;
@@ -639,6 +700,8 @@ class KDTree {
       if (evaluate(n)) {
         filter(n);
         set_children_bbox(n);
+        set_plane_bbox(n);
+        n->generation = 0;
         stack_.push_back(n->right);
         stack_.push_back(n->left);
         continue;
