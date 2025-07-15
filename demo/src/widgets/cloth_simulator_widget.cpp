@@ -26,10 +26,10 @@ void ClothSimulatorWidget::enter_sim_mode() {
     idx++;
   }
 
-  silk::WorldResult result;
+  silk::Result result;
   if (cloth_handle_) {
     result = solver_.update_cloth(cloth_cfg_, *cloth_handle_);
-    if (result != silk::WorldResult::Success) {
+    if (result != silk::Result::Success) {
       SPDLOG_ERROR("Fail to enter cloth sim mode, Reason: {}",
                    silk::to_string(result));
       return;
@@ -37,7 +37,7 @@ void ClothSimulatorWidget::enter_sim_mode() {
   } else {
     silk::Handle h;
     result = solver_.add_cloth(cloth_cfg_, h);
-    if (result != silk::WorldResult::Success) {
+    if (result != silk::Result::Success) {
       SPDLOG_ERROR("Fail to enter cloth sim mode, Reason: {}",
                    silk::to_string(result));
       return;
@@ -50,20 +50,20 @@ void ClothSimulatorWidget::enter_sim_mode() {
   solver_.set_max_iterations(solver_max_iter_);
   solver_.set_thread_num(solver_thread_num_);
   result = solver_.set_dt(1.0f / target_fps_);
-  if (result != silk::WorldResult::Success) {
+  if (result != silk::Result::Success) {
     SPDLOG_ERROR("Fail to enter cloth sim mode, Reason: {}",
                  silk::to_string(result));
     return;
   }
   result = solver_.set_low_freq_mode_num(solver_low_freq_mode_num_);
-  if (result != silk::WorldResult::Success) {
+  if (result != silk::Result::Success) {
     SPDLOG_ERROR("Fail to enter cloth sim mode, Reason: {}",
                  silk::to_string(result));
     return;
   }
 
   result = solver_.solver_init();
-  if (result != silk::WorldResult::Success) {
+  if (result != silk::Result::Success) {
     solver_.solver_reset();
     SPDLOG_ERROR("Fail to enter cloth sim mode: Reason: {}",
                  silk::to_string(result));
@@ -106,7 +106,7 @@ void ClothSimulatorWidget::compute_cloth(float elapse_sec) {
 
   auto result =
       solver_.update_position_constrain(*cloth_handle_, pinned_positions);
-  if (result != silk::WorldResult::Success) {
+  if (result != silk::Result::Success) {
     SPDLOG_ERROR("Cloth solve fail, Reason: {}", silk::to_string(result));
     leave_sim_mode();
     return;
@@ -114,7 +114,7 @@ void ClothSimulatorWidget::compute_cloth(float elapse_sec) {
 
   for (int s = 0; s < substep; ++s) {
     auto result = solver_.step();
-    if (result != silk::WorldResult::Success) {
+    if (result != silk::Result::Success) {
       SPDLOG_ERROR("Cloth solve fail, Reason: {}", silk::to_string(result));
       leave_sim_mode();
       return;
@@ -125,7 +125,7 @@ void ClothSimulatorWidget::compute_cloth(float elapse_sec) {
   Eigen::Map<Eigen::VectorXf> vert_view{engine_ctx_.V.data(),
                                         3 * engine_ctx_.V.rows()};
   result = solver_.get_current_position(*cloth_handle_, vert_view);
-  if (result != silk::WorldResult::Success) {
+  if (result != silk::Result::Success) {
     SPDLOG_ERROR("Cloth solve fail, Reason: {}", silk::to_string(result));
     leave_sim_mode();
     return;

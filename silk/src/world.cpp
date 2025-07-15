@@ -13,42 +13,42 @@
 
 namespace silk {
 
-std::string to_string(WorldResult result) {
+std::string to_string(Result result) {
   switch (result) {
-    case WorldResult::Success: {
+    case Result::Success: {
       return "Success";
     }
-    case WorldResult::InvalidTimeStep: {
+    case Result::InvalidTimeStep: {
       return "InvalidTimeStep";
     }
-    case WorldResult::InvalidLowFreqModeNum: {
+    case Result::InvalidLowFreqModeNum: {
       return "InvalidLowFreqModeNum";
     }
-    case WorldResult::InvalidConfig: {
+    case Result::InvalidConfig: {
       return "InvalidConfig";
     }
-    case WorldResult::TooManyBody: {
+    case Result::TooManyBody: {
       return "TooManyBody";
     }
-    case WorldResult::InvalidHandle: {
+    case Result::InvalidHandle: {
       return "InvalidHandle";
     }
-    case WorldResult::IncorrectPositionConstrainLength: {
+    case Result::IncorrectPositionConstrainLength: {
       return "IncorrectPositionConstrainLength";
     }
-    case WorldResult::IncorrentOutputPositionLength: {
+    case Result::IncorrentOutputPositionLength: {
       return "IncorrentOutputPositionLength";
     }
-    case WorldResult::EigenDecompositionfail: {
+    case Result::EigenDecompositionfail: {
       return "EigenDecompositionfail";
     }
-    case WorldResult::IterativeSolverInitFail: {
+    case Result::IterativeSolverInitFail: {
       return "IterativeSolverInitFail";
     }
-    case WorldResult::NeedInitSolverBeforeSolve: {
+    case Result::NeedInitSolverBeforeSolve: {
       return "NeedInitSolverBeforeSolve";
     }
-    case WorldResult::IterativeSolveFail: {
+    case Result::IterativeSolveFail: {
       return "IterativeSolveFail";
     }
     default:
@@ -181,73 +181,73 @@ class World::WorldImpl {
 
   float get_dt() const { return dt_; }
 
-  WorldResult set_dt(float dt) {
+  Result set_dt(float dt) {
     if (dt <= 0) {
-      return WorldResult::InvalidTimeStep;
+      return Result::InvalidTimeStep;
     }
     dt_ = dt;
     need_warmup_ = true;
-    return WorldResult::Success;
+    return Result::Success;
   }
 
   int get_low_freq_mode_num() const { return low_freq_mode_num_; }
 
-  WorldResult set_low_freq_mode_num(int num) {
+  Result set_low_freq_mode_num(int num) {
     if (num == 0) {
-      return WorldResult::InvalidLowFreqModeNum;
+      return Result::InvalidLowFreqModeNum;
     }
 
     low_freq_mode_num_ = num;
     need_warmup_ = true;
-    return WorldResult::Success;
+    return Result::Success;
   }
 
-  WorldResult add_cloth(ClothConfig config, Handle& handle) {
+  Result add_cloth(ClothConfig config, Handle& handle) {
     if (!config.is_valid()) {
-      return WorldResult::InvalidConfig;
+      return Result::InvalidConfig;
     }
 
     auto resource_handle = clothes_.add_resource(Cloth{std::move(config)});
     if (!resource_handle) {
-      return WorldResult::TooManyBody;
+      return Result::TooManyBody;
     }
 
     handle.type = HandleType::Cloth;
     handle.value = resource_handle->get_value();
 
     need_warmup_ = true;
-    return WorldResult::Success;
+    return Result::Success;
   }
 
-  WorldResult remove_cloth(const Handle& handle) {
+  Result remove_cloth(const Handle& handle) {
     if (handle.type != HandleType::Cloth) {
-      return WorldResult::InvalidHandle;
+      return Result::InvalidHandle;
     }
     ResourceHandle r_handle{handle.value};
     if (!clothes_.remove_resource(r_handle)) {
-      return WorldResult::InvalidHandle;
+      return Result::InvalidHandle;
     }
 
     need_warmup_ = true;
-    return WorldResult::Success;
+    return Result::Success;
   }
 
-  WorldResult update_cloth(ClothConfig config, const Handle& handle) {
+  Result update_cloth(ClothConfig config, const Handle& handle) {
     if (handle.type != HandleType::Cloth) {
-      return WorldResult::InvalidHandle;
+      return Result::InvalidHandle;
     }
     ResourceHandle resource_handle{handle.value};
     Cloth* cloth = clothes_.get_resources(resource_handle);
     if (!cloth) {
-      return WorldResult::InvalidHandle;
+      return Result::InvalidHandle;
     }
     if (!config.is_valid()) {
-      return WorldResult::InvalidConfig;
+      return Result::InvalidConfig;
     }
     *cloth = Cloth{std::move(config)};
 
     need_warmup_ = true;
-    return WorldResult::Success;
+    return Result::Success;
   }
 
   void solver_reset() {
@@ -265,7 +265,7 @@ class World::WorldImpl {
     total_vert_num_ = 0;
   }
 
-  WorldResult solver_init() {
+  Result solver_init() {
     init_solver_body_offset();
     init_solver_position_and_velocity();
     std::vector<Eigen::Triplet<float>> mass_triplets;
@@ -305,7 +305,7 @@ class World::WorldImpl {
     if (eigen_solver.info() != Eigen::Success) {
       // SPDLOG_ERROR("eigen decomposition fail");
       // TODO: better signal warning
-      return WorldResult::EigenDecompositionfail;
+      return Result::EigenDecompositionfail;
     }
     U_ = eigen_solver.eigenvectors();
     UHU_ = eigen_solver.eigenvalues();
@@ -317,16 +317,16 @@ class World::WorldImpl {
     if (iterative_solver_.info() != Eigen::Success) {
       // SPDLOG_ERROR("iterative solver decomposition fail");
       // TODO: signal warning
-      return WorldResult::IterativeSolverInitFail;
+      return Result::IterativeSolverInitFail;
     }
 
     need_warmup_ = false;
-    return WorldResult::Success;
+    return Result::Success;
   }
 
-  WorldResult step() {
+  Result step() {
     if (need_warmup_) {
-      return WorldResult::NeedInitSolverBeforeSolve;
+      return Result::NeedInitSolverBeforeSolve;
     }
 
     // basic linear velocity term
@@ -357,7 +357,7 @@ class World::WorldImpl {
     Eigen::VectorXf sol = iterative_solver_.solveWithGuess(rhs, subspace_sol);
     if (iterative_solver_.info() != Eigen::Success &&
         iterative_solver_.info() != Eigen::NoConvergence) {
-      return WorldResult::IterativeSolveFail;
+      return Result::IterativeSolveFail;
     }
 
     // CCD
@@ -365,19 +365,19 @@ class World::WorldImpl {
     velocity_ = (sol - curr_positions_) / dt_;
     curr_positions_ = sol;
 
-    return WorldResult::Success;
+    return Result::Success;
   }
 
-  WorldResult update_position_constrain(
+  Result update_position_constrain(
       const Handle& handle, Eigen::Ref<const Eigen::VectorXf> positions) {
     PhysicalBody* body = resolve_handle(handle);
     if (!body) {
-      return WorldResult::InvalidHandle;
+      return Result::InvalidHandle;
     }
 
     auto pinned_verts = body->get_pinned_verts();
     if (positions.size() != 3 * pinned_verts.size()) {
-      return WorldResult::IncorrectPositionConstrainLength;
+      return Result::IncorrectPositionConstrainLength;
     }
     int offset = body->get_position_offset();
     for (int idx = 0; idx < pinned_verts.size(); ++idx) {
@@ -385,24 +385,24 @@ class World::WorldImpl {
           positions(Eigen::seqN(3 * idx, 3));
     }
 
-    return WorldResult::Success;
+    return Result::Success;
   }
 
-  WorldResult get_current_position(
-      const Handle& handle, Eigen::Ref<Eigen::VectorXf> positions) const {
+  Result get_current_position(const Handle& handle,
+                              Eigen::Ref<Eigen::VectorXf> positions) const {
     const PhysicalBody* body = resolve_handle(handle);
     if (!body) {
-      return WorldResult::InvalidHandle;
+      return Result::InvalidHandle;
     }
 
     int offset = body->get_position_offset();
     int num = 3 * body->get_vert_num();
     if (positions.size() != num) {
-      return WorldResult::IncorrentOutputPositionLength;
+      return Result::IncorrentOutputPositionLength;
     }
 
     positions = curr_positions_(Eigen::seqN(offset, num));
-    return WorldResult::Success;
+    return Result::Success;
   }
 };
 
@@ -414,16 +414,16 @@ World::World(World&&) = default;
 
 World& World::operator=(World&&) = default;
 
-[[nodiscard]] WorldResult World::add_cloth(ClothConfig config, Handle& handle) {
+[[nodiscard]] Result World::add_cloth(ClothConfig config, Handle& handle) {
   return impl_->add_cloth(std::move(config), handle);
 }
 
-[[nodiscard]] WorldResult World::remove_cloth(const Handle& handle) {
+[[nodiscard]] Result World::remove_cloth(const Handle& handle) {
   return impl_->remove_cloth(handle);
 }
 
-[[nodiscard]] WorldResult World::update_cloth(ClothConfig config,
-                                              const Handle& handle) {
+[[nodiscard]] Result World::update_cloth(ClothConfig config,
+                                         const Handle& handle) {
   return impl_->update_cloth(std::move(config), handle);
 }
 
@@ -446,28 +446,28 @@ void World::set_thread_num(int num) { impl_->thread_num = num; }
 
 float World::get_dt() const { return impl_->get_dt(); }
 
-[[nodiscard]] WorldResult World::set_dt(float dt) { return impl_->set_dt(dt); }
+[[nodiscard]] Result World::set_dt(float dt) { return impl_->set_dt(dt); }
 
 int World::get_low_freq_mode_num() const {
   return impl_->get_low_freq_mode_num();
 }
 
-[[nodiscard]] WorldResult World::set_low_freq_mode_num(int num) {
+[[nodiscard]] Result World::set_low_freq_mode_num(int num) {
   return impl_->set_low_freq_mode_num(num);
 }
 
 void World::solver_reset() { impl_->solver_reset(); }
 
-[[nodiscard]] WorldResult World::solver_init() { return impl_->solver_init(); }
+[[nodiscard]] Result World::solver_init() { return impl_->solver_init(); }
 
-[[nodiscard]] WorldResult World::step() { return impl_->step(); }
+[[nodiscard]] Result World::step() { return impl_->step(); }
 
-[[nodiscard]] WorldResult World::update_position_constrain(
+[[nodiscard]] Result World::update_position_constrain(
     const Handle& handle, Eigen::Ref<const Eigen::VectorXf> positions) {
   return impl_->update_position_constrain(handle, positions);
 }
 
-[[nodiscard]] WorldResult World::get_current_position(
+[[nodiscard]] Result World::get_current_position(
     const Handle& handle, Eigen::Ref<Eigen::VectorXf> positions) const {
   return impl_->get_current_position(handle, positions);
 }

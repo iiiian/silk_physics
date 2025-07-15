@@ -43,7 +43,7 @@ struct Handle {
   uint32_t value;
 };
 
-enum class WorldResult {
+enum class Result {
   Success,
   InvalidTimeStep,
   InvalidLowFreqModeNum,
@@ -58,7 +58,7 @@ enum class WorldResult {
   IterativeSolveFail
 };
 
-std::string to_string(WorldResult result);
+std::string to_string(Result result);
 
 class World {
   class WorldImpl;
@@ -73,10 +73,9 @@ class World {
   World& operator=(World&&);
 
   // cloth API
-  [[nodiscard]] WorldResult add_cloth(ClothConfig config, Handle& handle);
-  [[nodiscard]] WorldResult remove_cloth(const Handle& handle);
-  [[nodiscard]] WorldResult update_cloth(ClothConfig config,
-                                         const Handle& handle);
+  [[nodiscard]] Result add_cloth(ClothConfig config, Handle& handle);
+  [[nodiscard]] Result remove_cloth(const Handle& handle);
+  [[nodiscard]] Result update_cloth(ClothConfig config, const Handle& handle);
 
   // solver API
 
@@ -90,19 +89,19 @@ class World {
   void set_thread_num(int num);
 
   float get_dt() const;
-  [[nodiscard]] WorldResult set_dt(float dt);
+  [[nodiscard]] Result set_dt(float dt);
 
   int get_low_freq_mode_num() const;
-  [[nodiscard]] WorldResult set_low_freq_mode_num(int num);
+  [[nodiscard]] Result set_low_freq_mode_num(int num);
 
   void solver_reset();
-  [[nodiscard]] WorldResult solver_init();
-  [[nodiscard]] WorldResult step();
+  [[nodiscard]] Result solver_init();
+  [[nodiscard]] Result step();
 
   // position API
-  [[nodiscard]] WorldResult update_position_constrain(
+  [[nodiscard]] Result update_position_constrain(
       const Handle& handle, Eigen::Ref<const Eigen::VectorXf> positions);
-  [[nodiscard]] WorldResult get_current_position(
+  [[nodiscard]] Result get_current_position(
       const Handle& handle, Eigen::Ref<Eigen::VectorXf> positions) const;
 };
 
