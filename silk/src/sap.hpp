@@ -2,6 +2,7 @@
 
 #include <pdqsort.h>
 
+#include <cassert>
 #include <random>
 
 #include "collision_helper.hpp"

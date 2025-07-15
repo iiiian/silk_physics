@@ -15,8 +15,7 @@ namespace fs = std::filesystem;
 const fs::path root{PHYSICS_SCENE_ROOT};
 const fs::path cloth_sphere_abc = root / "cloth_sphere_collision_dense.abc";
 
-TEST_CASE("sap-animation-performance-test",
-          "[collision broadphase][performance]") {
+TEST_CASE("sap-animation-performance-test", "[collision broadphase]") {
   auto objects = loadAllMeshes(cloth_sphere_abc);
 
   auto& cloth = objects[0];

@@ -16,8 +16,7 @@ namespace fs = std::filesystem;
 const fs::path root{PHYSICS_SCENE_ROOT};
 const fs::path cloth_sphere_abc = root / "cloth_sphere_collision_dense.abc";
 
-TEST_CASE("sap-kd-tree-animation-performance-test",
-          "[collision broadphase][performance]") {
+TEST_CASE("sap-kd-tree-animation-performance-test", "[collision broadphase]") {
   // object 0 is the cloth
   // object 1 is a icosphere
   // the cloth will fall onto the icosphere
@@ -56,22 +55,18 @@ TEST_CASE("sap-kd-tree-animation-performance-test",
 
   int frame_num = 60;
   for (int i = 0; i < frame_num; ++i) {
-    // spdlog::info("Testing frame {}", i);
-
     update_colliders(cloth_colliders, cloth, 0, cloth.series[i]);
 
     cloth_tree.update();
 
     // self collision
     CollisionCache<SimpleColliderdata> self_collision_cache;
-    self_collision_cache.clear();
     cloth_tree.test_self_collision(self_collision_filter, self_collision_cache);
 
     // inter-collision
-    // CollisionCache<SimpleColliderdata> inter_collision_cache;
-    // KDTree<SimpleColliderdata>::test_tree_collision(
-    //     cloth_tree, sphere_tree, inter_collision_filter,
-    //     inter_collision_cache);
+    CollisionCache<SimpleColliderdata> inter_collision_cache;
+    KDTree<SimpleColliderdata>::test_tree_collision(
+        cloth_tree, sphere_tree, inter_collision_filter, inter_collision_cache);
 
     // spdlog::info("frame {}: self collision {}, inter collision {}", i,
     //              self_collision_cache.size(), inter_collision_cache.size());
