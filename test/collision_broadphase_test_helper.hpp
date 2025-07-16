@@ -24,17 +24,17 @@ struct hash<SimpleColliderdata> {
 };
 }  // namespace std
 
-void update_colliders(std::vector<silk::BboxCollider<SimpleColliderdata>>& colliders,
-                      const AlembicObject& object, int object_id,
-                      const Eigen::MatrixXf& V);
+void update_colliders(
+    std::vector<silk::Collider<SimpleColliderdata>>& colliders,
+    const AlembicObject& object, int object_id, const Eigen::MatrixXf& V);
 
 void brute_force_self_collision(
-    const std::vector<silk::BboxCollider<SimpleColliderdata>>& colliders,
+    const std::vector<silk::Collider<SimpleColliderdata>>& colliders,
     silk::CollisionFilterCallback<SimpleColliderdata> filter_callback,
     silk::CollisionCache<SimpleColliderdata>& cache);
 
 void brute_force_group_group_collision(
-    const std::vector<silk::BboxCollider<SimpleColliderdata>>& colliders_a,
-    const std::vector<silk::BboxCollider<SimpleColliderdata>>& colliders_b,
+    const std::vector<silk::Collider<SimpleColliderdata>>& colliders_a,
+    const std::vector<silk::Collider<SimpleColliderdata>>& colliders_b,
     silk::CollisionFilterCallback<SimpleColliderdata> filter_callback,
     silk::CollisionCache<SimpleColliderdata>& cache);

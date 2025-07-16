@@ -24,12 +24,11 @@ TEST_CASE("sap-animation-performance-test", "[collision broadphase]") {
   int cloth_fnum = cloth.F.rows();
   int sphere_fnum = sphere.F.rows();
 
-  std::vector<BboxCollider<SimpleColliderdata>> cloth_colliders(cloth_fnum);
-  std::vector<BboxCollider<SimpleColliderdata>> sphere_colliders(sphere_fnum);
+  std::vector<Collider<SimpleColliderdata>> cloth_colliders(cloth_fnum);
+  std::vector<Collider<SimpleColliderdata>> sphere_colliders(sphere_fnum);
 
-  std::vector<BboxColliderProxy<SimpleColliderdata>> cloth_proxies(cloth_fnum);
-  std::vector<BboxColliderProxy<SimpleColliderdata>> sphere_proxies(
-      sphere_fnum);
+  std::vector<ColliderProxy<SimpleColliderdata>> cloth_proxies(cloth_fnum);
+  std::vector<ColliderProxy<SimpleColliderdata>> sphere_proxies(sphere_fnum);
 
   for (int i = 0; i < cloth_fnum; ++i) {
     cloth_proxies[i] = cloth_colliders.data() + i;
@@ -38,14 +37,14 @@ TEST_CASE("sap-animation-performance-test", "[collision broadphase]") {
     sphere_proxies[i] = sphere_colliders.data() + i;
   }
 
-  CollisionFilterCallback<SimpleColliderdata> self_collision_filter =
+  CollisionFilter<SimpleColliderdata> self_collision_filter =
       [](const SimpleColliderdata& a, const SimpleColliderdata& b) -> bool {
     return (a.v0 != b.v0 && a.v0 != b.v1 && a.v0 != b.v2 && a.v1 != b.v0 &&
             a.v1 != b.v1 && a.v1 != b.v2 && a.v2 != b.v0 && a.v2 != b.v1 &&
             a.v2 != b.v2);
   };
 
-  CollisionFilterCallback<SimpleColliderdata> inter_collision_filter =
+  CollisionFilter<SimpleColliderdata> inter_collision_filter =
       [](const SimpleColliderdata& a, const SimpleColliderdata& b) -> bool {
     return true;
   };

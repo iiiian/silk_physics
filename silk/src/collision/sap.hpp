@@ -5,7 +5,8 @@
 #include <cassert>
 #include <random>
 
-#include "collision_helper.hpp"
+#include "collision.hpp"
+#include "collision_internal.hpp"
 
 namespace silk {
 
@@ -13,7 +14,7 @@ constexpr int SAP_APPROX_AXIS_SAMPLE_NUM = 16;
 constexpr int SAP_APPROX_AXIS_SAMPLE_THRESHOLD = 32;
 
 template <typename T>
-int sap_optimal_axis(const BboxColliderProxy<T>* proxies, int proxy_num) {
+int sap_optimal_axis(const Collider<T>** proxies, int proxy_num) {
   assert((proxy_num > 0));
 
   auto [mean, var] = proxy_mean_variance(proxies, proxy_num);
@@ -23,8 +24,8 @@ int sap_optimal_axis(const BboxColliderProxy<T>* proxies, int proxy_num) {
 }
 
 template <typename T>
-int sap_optimal_axis(const BboxColliderProxy<T>* proxies_a, int proxy_num_a,
-                     const BboxColliderProxy<T>* proxies_b, int proxy_num_b) {
+int sap_optimal_axis(const Collider<T>** proxies_a, int proxy_num_a,
+                     const Collider<T>** proxies_b, int proxy_num_b) {
   assert((proxy_num_a > 0));
   assert((proxy_num_b > 0));
 
@@ -42,7 +43,7 @@ int sap_optimal_axis(const BboxColliderProxy<T>* proxies_a, int proxy_num_a,
 }
 
 template <typename T>
-int sap_approx_axis(BboxColliderProxy<T>* proxies, int proxy_num) {
+int sap_approx_axis(Collider<T>** proxies, int proxy_num) {
   assert((proxy_num > 0));
 
   static std::random_device rand_device;
@@ -62,8 +63,8 @@ int sap_approx_axis(BboxColliderProxy<T>* proxies, int proxy_num) {
 }
 
 template <typename T>
-int sap_approx_axis(BboxColliderProxy<T>* proxies_a, int proxy_num_a,
-                    BboxColliderProxy<T>* proxies_b, int proxy_num_b) {
+int sap_approx_axis(Collider<T>** proxies_a, int proxy_num_a,
+                    Collider<T>** proxies_b, int proxy_num_b) {
   assert((proxy_num_a > 0));
   assert((proxy_num_b > 0));
 
@@ -92,19 +93,18 @@ int sap_approx_axis(BboxColliderProxy<T>* proxies_a, int proxy_num_a,
 }
 
 template <typename T>
-void sap_sort_proxies(BboxColliderProxy<T>* proxies, int proxy_num, int axis) {
+void sap_sort_proxies(ColliderProxy<T>* proxies, int proxy_num, int axis) {
   assert((proxy_num != 0));
 
-  auto comp = [axis](BboxColliderProxy<T> a, BboxColliderProxy<T> b) -> bool {
+  auto comp = [axis](ColliderProxy<T> a, ColliderProxy<T> b) -> bool {
     return (a->bbox.min(axis) < b->bbox.min(axis));
   };
   pdqsort_branchless(proxies, proxies + proxy_num, comp);
 }
 
 template <typename T>
-void sap_sorted_collision(BboxColliderProxy<T> p1,
-                          const BboxColliderProxy<T>* proxies, int proxy_num,
-                          int axis, CollisionFilterCallback<T> filter_callback,
+void sap_sorted_collision(ColliderProxy<T> p1, const ColliderProxy<T>* proxies,
+                          int proxy_num, int axis, CollisionFilter<T> filter,
                           CollisionCache<T>& cache) {
   assert((proxy_num != 0));
 
@@ -113,13 +113,13 @@ void sap_sorted_collision(BboxColliderProxy<T> p1,
   }
 
   for (int i = 0; i < proxy_num; ++i) {
-    BboxColliderProxy<T> p2 = proxies[i];
+    ColliderProxy<T> p2 = proxies[i];
     // axis test
     if (p1->bbox.max(axis) < p2->bbox.min(axis)) {
       break;
     }
     // user provided collision filter
-    if (!filter_callback(p1->data, p2->data)) {
+    if (!filter(p1->data, p2->data)) {
       continue;
     }
 
@@ -130,39 +130,41 @@ void sap_sorted_collision(BboxColliderProxy<T> p1,
 }
 
 template <typename T>
-void sap_sorted_group_self_collision(const BboxColliderProxy<T>* proxies,
+void sap_sorted_group_self_collision(const ColliderProxy<T>* proxies,
                                      int proxy_num, int axis,
-                                     CollisionFilterCallback<T> filter_callback,
+                                     CollisionFilter<T> filter,
                                      CollisionCache<T>& cache) {
   assert((proxy_num > 0));
 
   for (int i = 0; i < proxy_num - 1; ++i) {
     sap_sorted_collision(proxies[i], proxies + i + 1, proxy_num - i - 1, axis,
-                         filter_callback, cache);
+                         filter, cache);
   }
 }
 
 template <typename T>
-void sap_sorted_group_group_collision(
-    const BboxColliderProxy<T>* proxies_a, int proxy_num_a,
-    const BboxColliderProxy<T>* proxies_b, int proxy_num_b, int axis,
-    CollisionFilterCallback<T> filter_callback, CollisionCache<T>& cache) {
+void sap_sorted_group_group_collision(const ColliderProxy<T>* proxies_a,
+                                      int proxy_num_a,
+                                      const ColliderProxy<T>* proxies_b,
+                                      int proxy_num_b, int axis,
+                                      CollisionFilter<T> filter,
+                                      CollisionCache<T>& cache) {
   assert((proxy_num_a > 0));
   assert((proxy_num_b > 0));
 
   int a = 0;
   int b = 0;
   while (a < proxy_num_a && b < proxy_num_b) {
-    BboxColliderProxy<T> pa = proxies_a[a];
-    BboxColliderProxy<T> pb = proxies_b[b];
+    ColliderProxy<T> pa = proxies_a[a];
+    ColliderProxy<T> pb = proxies_b[b];
 
     if (pa->bbox.min(axis) < pb->bbox.min(axis)) {
-      sap_sorted_collision(pa, proxies_b + b, proxy_num_b - b, axis,
-                           filter_callback, cache);
+      sap_sorted_collision(pa, proxies_b + b, proxy_num_b - b, axis, filter,
+                           cache);
       a++;
     } else {
-      sap_sorted_collision(pb, proxies_a + a, proxy_num_a - a, axis,
-                           filter_callback, cache);
+      sap_sorted_collision(pb, proxies_a + a, proxy_num_a - a, axis, filter,
+                           cache);
       b++;
     }
   }

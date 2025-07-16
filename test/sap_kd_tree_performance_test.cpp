@@ -28,20 +28,20 @@ TEST_CASE("sap-kd-tree-animation-performance-test", "[collision broadphase]") {
   int cloth_fnum = cloth.F.rows();
   int sphere_fnum = sphere.F.rows();
 
-  std::vector<BboxCollider<SimpleColliderdata>> cloth_colliders(cloth_fnum);
-  std::vector<BboxCollider<SimpleColliderdata>> sphere_colliders(sphere_fnum);
+  std::vector<Collider<SimpleColliderdata>> cloth_colliders(cloth_fnum);
+  std::vector<Collider<SimpleColliderdata>> sphere_colliders(sphere_fnum);
 
   KDTree<SimpleColliderdata> cloth_tree(cloth_colliders.data(), cloth_fnum);
   KDTree<SimpleColliderdata> sphere_tree(sphere_colliders.data(), sphere_fnum);
 
-  CollisionFilterCallback<SimpleColliderdata> self_collision_filter =
+  CollisionFilter<SimpleColliderdata> self_collision_filter =
       [](const SimpleColliderdata& a, const SimpleColliderdata& b) -> bool {
     return (a.v0 != b.v0 && a.v0 != b.v1 && a.v0 != b.v2 && a.v1 != b.v0 &&
             a.v1 != b.v1 && a.v1 != b.v2 && a.v2 != b.v0 && a.v2 != b.v1 &&
             a.v2 != b.v2);
   };
 
-  CollisionFilterCallback<SimpleColliderdata> inter_collision_filter =
+  CollisionFilter<SimpleColliderdata> inter_collision_filter =
       [](const SimpleColliderdata& a, const SimpleColliderdata& b) -> bool {
     return true;
   };

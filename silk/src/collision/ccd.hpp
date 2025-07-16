@@ -27,10 +27,10 @@ class CCDSolver {
       Eigen::Ref<const Eigen::Vector3f> v41) const;
 
  public:
-  float eps;
-  float h;
-  float tol;
-  int max_iter;
+  float eps = 1e-6f;
+  float h = 0.01f;
+  float tol = 0.1f;
+  int max_iter = 10;
 
   bool point_triangle_ccd(Eigen::Ref<const Eigen::Vector3f> p0,
                           Eigen::Ref<const Eigen::Vector3f> v10,

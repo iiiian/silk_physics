@@ -10,12 +10,12 @@ float Bbox::proximity(const Bbox& a, const Bbox& b) {
 }
 
 Bbox Bbox::merge(const Bbox& a, const Bbox& b) {
-  return {.min = a.min.cwiseMin(b.min), .max = a.max.cwiseMax(b.max)};
+  return {a.min.cwiseMin(b.min), a.max.cwiseMax(b.max)};
 }
 
 Bbox Bbox::extend(const Bbox& bbox, float margin) {
   assert((margin > 0));
-  return {.min = bbox.min.array() - margin, .max = bbox.max.array() + margin};
+  return {bbox.min.array() - margin, bbox.max.array() + margin};
 }
 
 bool Bbox::is_disjoint(const Bbox& a, const Bbox& b) {

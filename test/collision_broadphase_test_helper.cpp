@@ -14,7 +14,7 @@ std::size_t hash<SimpleColliderdata>::operator()(
 }  // namespace std
 
 void update_colliders(
-    std::vector<silk::BboxCollider<SimpleColliderdata>>& colliders,
+    std::vector<silk::Collider<SimpleColliderdata>>& colliders,
     const AlembicObject& object, int object_id, const Eigen::MatrixXf& V) {
   int fnum = object.F.rows();
   for (int i = 0; i < fnum; ++i) {
@@ -46,7 +46,7 @@ void update_colliders(
 }
 
 void brute_force_self_collision(
-    const std::vector<silk::BboxCollider<SimpleColliderdata>>& colliders,
+    const std::vector<silk::Collider<SimpleColliderdata>>& colliders,
     silk::CollisionFilterCallback<SimpleColliderdata> filter_callback,
     silk::CollisionCache<SimpleColliderdata>& cache) {
   std::vector<silk::CollisionCache<SimpleColliderdata>> thread_local_caches(
@@ -69,8 +69,8 @@ void brute_force_self_collision(
 }
 
 void brute_force_group_group_collision(
-    const std::vector<silk::BboxCollider<SimpleColliderdata>>& colliders_a,
-    const std::vector<silk::BboxCollider<SimpleColliderdata>>& colliders_b,
+    const std::vector<silk::Collider<SimpleColliderdata>>& colliders_a,
+    const std::vector<silk::Collider<SimpleColliderdata>>& colliders_b,
     silk::CollisionFilterCallback<SimpleColliderdata> filter_callback,
     silk::CollisionCache<SimpleColliderdata>& cache) {
   std::vector<silk::CollisionCache<SimpleColliderdata>> thread_local_caches(

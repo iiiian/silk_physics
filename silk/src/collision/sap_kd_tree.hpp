@@ -9,8 +9,9 @@
 #include <random>
 #include <vector>
 
-#include "bbox.hpp"
-#include "collision_helper.hpp"
+#include "../bbox.hpp"
+#include "collision.hpp"
+#include "collision_internal.hpp"
 #include "sap.hpp"
 
 namespace silk {
@@ -52,23 +53,32 @@ struct KDNode {
 
 template <typename T>
 class KDTree {
-  using Proxy = BboxColliderProxy<T>;
+ public:
+  using Proxy = ColliderProxy<T>;
 
+ private:
   static constexpr int NODE_PROXY_NUM_THRESHOLD = 1024;
   static constexpr int APPROX_PLANE_SAMPLE_NUM = 16;
   static constexpr int APPROX_PLANE_SAMPLE_THRESHOLD = 32;
 
-  int collider_num_;
-  const BboxCollider<T>* colliders_;
+  int collider_num_ = 0;
+  const Collider<T>* colliders_ = nullptr;
 
-  KDNode* root_;
+  KDNode* root_ = nullptr;
   std::vector<KDNode*> stack_;  // for tree traversal
   std::vector<Proxy> proxies_;  // in-order layout proxy array
   std::vector<Proxy> buffer_;   // for both proxies and external colliders
   std::vector<CollisionCache<T>> local_cache_;  // thread local collision cache
 
  public:
-  KDTree(const BboxCollider<T>* colliders, int collider_num) {
+  KDTree() = default;
+  KDTree(KDTree&) = delete;
+  KDTree(KDTree&&) = default;
+  ~KDTree() { delete_subtree(root_); }
+  KDTree& operator=(KDTree&) = delete;
+  KDTree& operator=(KDTree&&) = default;
+
+  void init(const Collider<T>* colliders, int collider_num) {
     assert(colliders);
     assert((collider_num > 0));
 
@@ -83,21 +93,21 @@ class KDTree {
     root_->proxy_start = 0;
     root_->proxy_end = collider_num;
     root_->population = collider_num;
-    set_root_bbox();
-
     local_cache_.resize(omp_get_max_threads());
   }
 
-  ~KDTree() { delete_subtree(root_); }
+  void update(const Bbox& bbox) {
+    assert(root_);
 
-  void update() {
-    set_root_bbox();
+    root_->bbox = bbox;
     lift_unfit_up();
     optimize_structure();
   }
 
-  void test_self_collision(CollisionFilterCallback<T> filter_callback,
+  void test_self_collision(CollisionFilter<T> filter,
                            CollisionCache<T>& cache) {
+    assert(root_);
+
     stack_.clear();
     buffer_.clear();
     for (int i = 0; i < local_cache_.size(); ++i) {
@@ -106,7 +116,7 @@ class KDTree {
 
     root_->ext_start = 0;
     root_->ext_end = 0;
-    test_node_collision(root_, filter_callback);
+    test_node_collision(root_, filter);
 
     if (!root_->is_leaf()) {
       stack_.push_back(root_->right);
@@ -122,7 +132,7 @@ class KDTree {
       stack_.pop_back();
 
       update_ext_collider(n);
-      test_node_collision(n, filter_callback);
+      test_node_collision(n, filter);
 
       // recurse into subtree
       if (!n->is_leaf()) {
@@ -137,8 +147,10 @@ class KDTree {
   }
 
   static void test_tree_collision(KDTree& ta, KDTree& tb,
-                                  CollisionFilterCallback<T> filter_callback,
+                                  CollisionFilter<T> filter,
                                   CollisionCache<T>& cache) {
+    assert(ta.root_ && tb.root_);
+
     // this should never happens in normal scenario
     if (ta.root_->generation == std::numeric_limits<uint32_t>::max()) {
       ta.reset_generation();
@@ -220,7 +232,7 @@ class KDTree {
         sap_sort_proxies(start_b, num_b, axis);
         // auto cache = ta.local_cache_[omp_get_thread_num()];
         sap_sorted_group_group_collision(start_a, num_a, start_b, num_b, axis,
-                                         filter_callback, cache);
+                                         filter, cache);
       }
     }
   }
@@ -237,13 +249,6 @@ class KDTree {
   void ensure_buffer_size(int num) {
     if (buffer_.size() < num) {
       buffer_.resize(num);
-    }
-  }
-
-  void set_root_bbox() {
-    root_->bbox = colliders_[0].bbox;
-    for (int i = 1; i < collider_num_; ++i) {
-      root_->bbox.merge_inplace(colliders_[i].bbox);
     }
   }
 
@@ -779,8 +784,7 @@ class KDTree {
     }
   }
 
-  void test_node_collision(KDNode* n,
-                           CollisionFilterCallback<T> filter_callback) {
+  void test_node_collision(KDNode* n, CollisionFilter<T> filter) {
     Proxy* proxy_start = proxies_.data() + n->proxy_start;
     int proxy_num = n->proxy_num();
     if (proxy_num == 0) {
@@ -795,8 +799,8 @@ class KDTree {
 #pragma omp task firstprivate(proxy_start, proxy_num, axis)
       {
         auto& cache = local_cache_[omp_get_thread_num()];
-        sap_sorted_group_self_collision(proxy_start, proxy_num, axis,
-                                        filter_callback, cache);
+        sap_sorted_group_self_collision(proxy_start, proxy_num, axis, filter,
+                                        cache);
       }
     } else {
       // node-node and node-external test
@@ -813,11 +817,11 @@ class KDTree {
 #pragma omp task firstprivate(proxy_start, proxy_num, axis, ext_copy)
       {
         auto& cache = local_cache_[omp_get_thread_num()];
-        sap_sorted_group_self_collision(proxy_start, proxy_num, axis,
-                                        filter_callback, cache);
+        sap_sorted_group_self_collision(proxy_start, proxy_num, axis, filter,
+                                        cache);
         sap_sorted_group_group_collision(proxy_start, proxy_num,
-                                         ext_copy.data(), ext_num, axis,
-                                         filter_callback, cache);
+                                         ext_copy.data(), ext_num, axis, filter,
+                                         cache);
       }
     }
   }
