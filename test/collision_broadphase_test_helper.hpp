@@ -30,12 +30,12 @@ void update_colliders(std::vector<SimpleCollider>& colliders,
                       const Eigen::MatrixXf& V);
 
 void brute_force_self_collision(
-    const std::vector<SimpleCollider>& colliders,
+    std::vector<SimpleCollider>& colliders,
     silk::CollisionFilter<SimpleCollider> filter_callback,
     silk::CollisionCache<SimpleCollider>& cache);
 
 void brute_force_group_group_collision(
-    const std::vector<SimpleCollider>& colliders_a,
-    const std::vector<SimpleCollider>& colliders_b,
+    std::vector<SimpleCollider>& colliders_a,
+    std::vector<SimpleCollider>& colliders_b,
     silk::CollisionFilter<SimpleCollider> filter_callback,
     silk::CollisionCache<SimpleCollider>& cache);

@@ -65,8 +65,8 @@ void brute_force_self_collision(
 }
 
 void brute_force_group_group_collision(
-    const std::vector<SimpleCollider>& colliders_a,
-    const std::vector<SimpleCollider>& colliders_b,
+    std::vector<SimpleCollider>& colliders_a,
+    std::vector<SimpleCollider>& colliders_b,
     silk::CollisionFilter<SimpleCollider> filter_callback,
     silk::CollisionCache<SimpleCollider>& cache) {
   std::vector<silk::CollisionCache<SimpleCollider>> thread_local_caches(
