@@ -9,7 +9,6 @@
 #include "physical_body.hpp"
 #include "resource_manager.hpp"
 #include "solver.hpp"
-#include "spatial_hasher.hpp"
 
 namespace silk {
 

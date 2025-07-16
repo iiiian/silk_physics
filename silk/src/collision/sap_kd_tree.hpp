@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "../bbox.hpp"
-#include "collision.hpp"
 #include "collision_internal.hpp"
 #include "sap.hpp"
 
@@ -51,24 +50,22 @@ struct KDNode {
   bool is_left() const { return (parent && this == parent->left); }
 };
 
-template <typename T>
+template <typename C>
 class KDTree {
  public:
-  using Proxy = ColliderProxy<T>;
-
  private:
   static constexpr int NODE_PROXY_NUM_THRESHOLD = 1024;
   static constexpr int APPROX_PLANE_SAMPLE_NUM = 16;
   static constexpr int APPROX_PLANE_SAMPLE_THRESHOLD = 32;
 
   int collider_num_ = 0;
-  const Collider<T>* colliders_ = nullptr;
+  C* colliders_ = nullptr;
 
   KDNode* root_ = nullptr;
   std::vector<KDNode*> stack_;  // for tree traversal
-  std::vector<Proxy> proxies_;  // in-order layout proxy array
-  std::vector<Proxy> buffer_;   // for both proxies and external colliders
-  std::vector<CollisionCache<T>> local_cache_;  // thread local collision cache
+  std::vector<C*> proxies_;     // in-order layout proxy array
+  std::vector<C*> buffer_;      // for both proxies and external colliders
+  std::vector<CollisionCache<C>> local_cache_;  // thread local collision cache
 
  public:
   KDTree() = default;
@@ -78,10 +75,11 @@ class KDTree {
   KDTree& operator=(KDTree&) = delete;
   KDTree& operator=(KDTree&&) = default;
 
-  void init(const Collider<T>* colliders, int collider_num) {
+  void init(C* colliders, int collider_num) {
     assert(colliders);
     assert((collider_num > 0));
 
+    delete_subtree(root_);
     collider_num_ = collider_num;
     colliders_ = colliders;
     proxies_.resize(collider_num);
@@ -104,8 +102,8 @@ class KDTree {
     optimize_structure();
   }
 
-  void test_self_collision(CollisionFilter<T> filter,
-                           CollisionCache<T>& cache) {
+  void test_self_collision(CollisionFilter<C> filter,
+                           CollisionCache<C>& cache) {
     assert(root_);
 
     stack_.clear();
@@ -147,8 +145,8 @@ class KDTree {
   }
 
   static void test_tree_collision(KDTree& ta, KDTree& tb,
-                                  CollisionFilter<T> filter,
-                                  CollisionCache<T>& cache) {
+                                  CollisionFilter<C> filter,
+                                  CollisionCache<C>& cache) {
     assert(ta.root_ && tb.root_);
 
     // this should never happens in normal scenario
@@ -222,9 +220,9 @@ class KDTree {
       Bbox& ba = (na->is_leaf()) ? na->bbox : na->plane_bbox;
       Bbox& bb = (nb->is_leaf()) ? nb->bbox : nb->plane_bbox;
       if (Bbox::is_colliding(ba, bb)) {
-        Proxy* start_a = ta.proxies_.data() + na->proxy_start;
+        C** start_a = ta.proxies_.data() + na->proxy_start;
         int num_a = na->proxy_num();
-        Proxy* start_b = tb.proxies_.data() + nb->proxy_start;
+        C** start_b = tb.proxies_.data() + nb->proxy_start;
         int num_b = nb->proxy_num();
 
         int axis = sap_optimal_axis(start_a, num_a, start_b, num_b);
@@ -311,25 +309,23 @@ class KDTree {
   }
 
   int partition_unfit_proxy_left(const KDNode* n) {
-    auto is_outside = [n](Proxy p) -> bool {
+    auto is_outside = [n](C* p) -> bool {
       return !(n->bbox.is_inside(p->bbox));
     };
 
-    Proxy* start = proxies_.data() + n->proxy_start;
-    Proxy* end = proxies_.data() + n->proxy_end;
-    Proxy* new_start = std::partition(start, end, is_outside);
+    C** start = proxies_.data() + n->proxy_start;
+    C** end = proxies_.data() + n->proxy_end;
+    C** new_start = std::partition(start, end, is_outside);
 
     return new_start - start;
   }
 
   int partition_unfit_proxy_right(const KDNode* n) {
-    auto is_inside = [n](Proxy p) -> bool {
-      return n->bbox.is_inside(p->bbox);
-    };
+    auto is_inside = [n](C* p) -> bool { return n->bbox.is_inside(p->bbox); };
 
-    Proxy* start = proxies_.data() + n->proxy_start;
-    Proxy* end = proxies_.data() + n->proxy_end;
-    Proxy* new_end = std::partition(start, end, is_inside);
+    C** start = proxies_.data() + n->proxy_start;
+    C** end = proxies_.data() + n->proxy_end;
+    C** new_end = std::partition(start, end, is_inside);
 
     return end - new_end;
   }
@@ -339,10 +335,10 @@ class KDTree {
       return;
     }
 
-    size_t copy_size = proxy_num * sizeof(Proxy);
-    size_t shift_size = shift_num * sizeof(Proxy);
-    Proxy* left = proxies_.data() + proxy_start - shift_num;
-    Proxy* right = proxies_.data() + proxy_start;
+    size_t copy_size = proxy_num * sizeof(C*);
+    size_t shift_size = shift_num * sizeof(C*);
+    C** left = proxies_.data() + proxy_start - shift_num;
+    C** right = proxies_.data() + proxy_start;
     ensure_buffer_size(proxy_num);
 
     // copy right chunk to temp buffer
@@ -358,10 +354,10 @@ class KDTree {
       return;
     }
 
-    size_t copy_size = proxy_num * sizeof(Proxy);
-    size_t shift_size = shift_num * sizeof(Proxy);
-    Proxy* left = proxies_.data() + proxy_start;
-    Proxy* right = proxies_.data() + proxy_start + proxy_num;
+    size_t copy_size = proxy_num * sizeof(C*);
+    size_t shift_size = shift_num * sizeof(C*);
+    C** left = proxies_.data() + proxy_start;
+    C** right = proxies_.data() + proxy_start + proxy_num;
     ensure_buffer_size(proxy_num);
 
     // copy left chunk to temp buffer
@@ -446,7 +442,7 @@ class KDTree {
     int middle_end = n->proxy_end;
     int i = n->proxy_start;
     while (i != middle_end) {
-      Proxy p = proxies_[i];
+      C* p = proxies_[i];
 
       // strictly left
       if (p->bbox.max(n->axis) < n->position) {
@@ -544,7 +540,7 @@ class KDTree {
     // on the plane   -> middle partition
     // strictly right -> right partition
     for (int i = n->proxy_start; i < n->proxy_end; ++i) {
-      Proxy p = proxies_[i];
+      C* p = proxies_[i];
       // strictly left
       if (p->bbox.max(n->axis) < n->position) {
         left_num++;
@@ -751,7 +747,7 @@ class KDTree {
 
     // check parent's external colliders
     for (int i = n->parent->ext_start; i < n->parent->ext_end; ++i) {
-      Proxy p = buffer_[i];
+      C* p = buffer_[i];
 
       if (n->is_left()) {
         if (p->bbox.min(axis) < position) {
@@ -768,7 +764,7 @@ class KDTree {
 
     // check parent node colliders
     for (int i = n->parent->proxy_start; i < n->parent->proxy_end; ++i) {
-      Proxy p = proxies_[i];
+      C* p = proxies_[i];
 
       if (n->is_left()) {
         if (p->bbox.min(axis) < position) {
@@ -784,8 +780,8 @@ class KDTree {
     }
   }
 
-  void test_node_collision(KDNode* n, CollisionFilter<T> filter) {
-    Proxy* proxy_start = proxies_.data() + n->proxy_start;
+  void test_node_collision(KDNode* n, CollisionFilter<C> filter) {
+    C** proxy_start = proxies_.data() + n->proxy_start;
     int proxy_num = n->proxy_num();
     if (proxy_num == 0) {
       return;
@@ -804,7 +800,7 @@ class KDTree {
       }
     } else {
       // node-node and node-external test
-      Proxy* ext_start = buffer_.data() + n->ext_start;
+      C** ext_start = buffer_.data() + n->ext_start;
       int ext_num = n->ext_num();
       // most collider resides on leaf, so no need to test external collider
       int axis = sap_optimal_axis(proxy_start, proxy_num);
@@ -813,7 +809,7 @@ class KDTree {
 
       // buffer will be overwrite once main thread traverse to another branch.
       // hence external collider buffer needs to be copied.
-      std::vector<Proxy> ext_copy(ext_start, ext_start + ext_num);
+      std::vector<C*> ext_copy(ext_start, ext_start + ext_num);
 #pragma omp task firstprivate(proxy_start, proxy_num, axis, ext_copy)
       {
         auto& cache = local_cache_[omp_get_thread_num()];

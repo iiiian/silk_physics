@@ -24,11 +24,11 @@ TEST_CASE("sap-animation-performance-test", "[collision broadphase]") {
   int cloth_fnum = cloth.F.rows();
   int sphere_fnum = sphere.F.rows();
 
-  std::vector<Collider<SimpleColliderdata>> cloth_colliders(cloth_fnum);
-  std::vector<Collider<SimpleColliderdata>> sphere_colliders(sphere_fnum);
+  std::vector<SimpleCollider> cloth_colliders(cloth_fnum);
+  std::vector<SimpleCollider> sphere_colliders(sphere_fnum);
 
-  std::vector<ColliderProxy<SimpleColliderdata>> cloth_proxies(cloth_fnum);
-  std::vector<ColliderProxy<SimpleColliderdata>> sphere_proxies(sphere_fnum);
+  std::vector<SimpleCollider*> cloth_proxies(cloth_fnum);
+  std::vector<SimpleCollider*> sphere_proxies(sphere_fnum);
 
   for (int i = 0; i < cloth_fnum; ++i) {
     cloth_proxies[i] = cloth_colliders.data() + i;
@@ -37,15 +37,15 @@ TEST_CASE("sap-animation-performance-test", "[collision broadphase]") {
     sphere_proxies[i] = sphere_colliders.data() + i;
   }
 
-  CollisionFilter<SimpleColliderdata> self_collision_filter =
-      [](const SimpleColliderdata& a, const SimpleColliderdata& b) -> bool {
+  CollisionFilter<SimpleCollider> self_collision_filter =
+      [](const SimpleCollider& a, const SimpleCollider& b) -> bool {
     return (a.v0 != b.v0 && a.v0 != b.v1 && a.v0 != b.v2 && a.v1 != b.v0 &&
             a.v1 != b.v1 && a.v1 != b.v2 && a.v2 != b.v0 && a.v2 != b.v1 &&
             a.v2 != b.v2);
   };
 
-  CollisionFilter<SimpleColliderdata> inter_collision_filter =
-      [](const SimpleColliderdata& a, const SimpleColliderdata& b) -> bool {
+  CollisionFilter<SimpleCollider> inter_collision_filter =
+      [](const SimpleCollider& a, const SimpleCollider& b) -> bool {
     return true;
   };
 
@@ -59,20 +59,20 @@ TEST_CASE("sap-animation-performance-test", "[collision broadphase]") {
     // self collision
     int axis = sap_optimal_axis(cloth_proxies.data(), cloth_fnum);
     sap_sort_proxies(cloth_proxies.data(), cloth_fnum, axis);
-    CollisionCache<SimpleColliderdata> self_collision_cache;
+    CollisionCache<SimpleCollider> self_collision_cache;
     sap_sorted_group_self_collision(cloth_proxies.data(), cloth_fnum, axis,
                                     self_collision_filter,
                                     self_collision_cache);
 
     // inter-collision
-    // axis = sap_optimal_axis(cloth_proxies.data(), cloth_fnum,
-    //                         sphere_proxies.data(), sphere_fnum);
-    // sap_sort_proxies(cloth_proxies.data(), cloth_fnum, axis);
-    // sap_sort_proxies(sphere_proxies.data(), sphere_fnum, axis);
-    // CollisionCache<SimpleColliderdata> inter_collision_cache;
-    // sap_sorted_group_group_collision(
-    //     cloth_proxies.data(), cloth_fnum, sphere_proxies.data(), sphere_fnum,
-    //     axis, inter_collision_filter, inter_collision_cache);
+    axis = sap_optimal_axis(cloth_proxies.data(), cloth_fnum,
+                            sphere_proxies.data(), sphere_fnum);
+    sap_sort_proxies(cloth_proxies.data(), cloth_fnum, axis);
+    sap_sort_proxies(sphere_proxies.data(), sphere_fnum, axis);
+    CollisionCache<SimpleCollider> inter_collision_cache;
+    sap_sorted_group_group_collision(
+        cloth_proxies.data(), cloth_fnum, sphere_proxies.data(), sphere_fnum,
+        axis, inter_collision_filter, inter_collision_cache);
 
     // spdlog::info(
     //     "frame {}: self collision {}, inter collision {}",

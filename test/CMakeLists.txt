@@ -42,7 +42,7 @@ add_executable(
     resource_manager_test.cpp
     ${SILK_DIR}/resource_manager.cpp
 )
-target_include_directories(resource_manager_test PRIVATE ${SILK_COLLISION_DIR})
+target_include_directories(resource_manager_test PRIVATE ${SILK_DIR})
 target_link_libraries(resource_manager_test PRIVATE Catch2::Catch2WithMain)
 
 # sap kd tree test

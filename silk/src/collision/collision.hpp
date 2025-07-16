@@ -9,23 +9,15 @@
 
 namespace silk {
 
-template <typename T>
-struct Collider {
-  Bbox bbox;
-  T data;
-};
-
 enum class MeshColliderType { POINT, EDGE, TRIANGLE };
 
-struct MeshColliderData {
+struct MeshCollider {
+  Bbox bbox;
   MeshColliderType type;
-
   int v1;
   int v2;
   int v3;
 };
-
-using MeshCollider = Collider<MeshColliderData>;
 
 struct ObstacleStatus {
   // collision group:

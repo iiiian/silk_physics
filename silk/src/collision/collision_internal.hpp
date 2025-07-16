@@ -1,24 +1,23 @@
 #pragma once
 
+#include <Eigen/Core>
 #include <functional>
-
-#include "collision.hpp"
 
 namespace silk {
 
-template <typename T>
-using CollisionCache = std::vector<std::pair<T*, T*>>;
+template <typename C>
+using CollisionCache = std::vector<std::pair<C*, C*>>;
 
-template <typename T>
-using CollisionFilter = std::function<bool(const T&, const T&)>;
+template <typename C>
+using CollisionFilter = std::function<bool(const C&, const C&)>;
 
 struct MeanVariance {
   Eigen::Vector3f mean;
   Eigen::Vector3f variance;
 };
 
-template <typename T>
-MeanVariance proxy_mean_variance(const Collider<T>** proxies, int proxy_num) {
+template <typename C>
+MeanVariance proxy_mean_variance(C* const* proxies, int proxy_num) {
   assert((proxy_num > 0));
 
   Eigen::Vector3f mean = Eigen::Vector3f::Zero();
