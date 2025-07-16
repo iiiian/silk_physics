@@ -9,7 +9,7 @@
 
 namespace silk {
 
-enum class MeshColliderType { POINT, EDGE, TRIANGLE };
+enum class MeshColliderType { Point, Edge, Triangle };
 
 struct MeshCollider {
   Bbox bbox;

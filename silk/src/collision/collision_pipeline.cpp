@@ -70,7 +70,54 @@ class CollisionPipeline::CollisionPipelineImpl {
     }
   }
 
-  PositionConstrain resolve_collision(const Eigen::VectorXf& position) {
+  std::optional<PositionConstrain> get_position_constrain(
+      const Eigen::VectorXf& position, const Eigen::VectorXf& prev_position,
+      const ObstacleCollider& oa, const MeshCollider& ma,
+      const ObstacleCollider& ob, const MeshCollider& mb) {
+    // fetch position at t0 and t1 then do a ccd test
+    if (ma.type == MeshColliderType::Edge) {
+      auto v10 = prev_position(Eigen::seqN(ma.v1, 3));
+      auto v20 = prev_position(Eigen::seqN(ma.v2, 3));
+      auto v30 = prev_position(Eigen::seqN(mb.v1, 3));
+      auto v40 = prev_position(Eigen::seqN(mb.v2, 3));
+      auto v11 = position(Eigen::seqN(ma.v1, 3));
+      auto v21 = position(Eigen::seqN(ma.v2, 3));
+      auto v31 = position(Eigen::seqN(mb.v1, 3));
+      auto v41 = position(Eigen::seqN(mb.v2, 3));
+
+      auto toi = ccd_solver_.edge_edge_ccd(v10, v20, v30, v40, v11, v21, v31,
+                                           v41, 0.0f, 1.0f);
+    }
+
+    if (ma.type == MeshColliderType::Point) {
+      auto p0 = prev_position(Eigen::seqN(ma.v1, 3));
+      auto v10 = prev_position(Eigen::seqN(mb.v1, 3));
+      auto v20 = prev_position(Eigen::seqN(mb.v2, 3));
+      auto v30 = prev_position(Eigen::seqN(mb.v3, 3));
+      auto p1 = position(Eigen::seqN(ma.v1, 3));
+      auto v11 = position(Eigen::seqN(mb.v1, 3));
+      auto v21 = position(Eigen::seqN(mb.v2, 3));
+      auto v31 = position(Eigen::seqN(mb.v3, 3));
+
+      auto toi = ccd_solver_.point_triangle_ccd(p0, v10, v20, v30, p1, v11, v21,
+                                                v31, 0.0f, 1.0f);
+    }
+
+    auto p0 = prev_position(Eigen::seqN(mb.v1, 3));
+    auto v10 = prev_position(Eigen::seqN(ma.v1, 3));
+    auto v20 = prev_position(Eigen::seqN(ma.v2, 3));
+    auto v30 = prev_position(Eigen::seqN(ma.v3, 3));
+    auto p1 = position(Eigen::seqN(mb.v1, 3));
+    auto v11 = position(Eigen::seqN(ma.v1, 3));
+    auto v21 = position(Eigen::seqN(ma.v2, 3));
+    auto v31 = position(Eigen::seqN(ma.v3, 3));
+
+    auto toi = ccd_solver_.point_triangle_ccd(p0, v10, v20, v30, p1, v11, v21,
+                                              v31, 0.0f, 1.0f);
+  }
+
+  PositionConstrain resolve_collision(const Eigen::VectorXf& position,
+                                      const Eigen::VectorXf& prev_position) {
     update_obstacles(position);
 
     std::vector<ObstacleCollider*> proxies(obstacle_colliders_.size());
@@ -100,20 +147,9 @@ class CollisionPipeline::CollisionPipelineImpl {
 
     // mesh level collision
 
-    CollisionFilter<MeshCollider> mesh_filter =
+    CollisionFilter<MeshCollider> dummy_filter =
         [](const MeshCollider& a, const MeshCollider& b) -> bool {
-      // reject neighbors
-      if (a.type == MeshColliderType::POINT &&
-          b.type == MeshColliderType::TRIANGLE) {
-        return (a.v1 != b.v1 && a.v1 != b.v2 && a.v1 != b.v2);
-      } else if (a.type == MeshColliderType::TRIANGLE &&
-                 b.type == MeshColliderType::POINT) {
-        return (b.v1 != a.v1 && b.v1 != a.v2 && b.v1 != a.v2);
-      } else if (a.type == MeshColliderType::EDGE &&
-                 b.type == MeshColliderType::EDGE) {
-        return (a.v1 != b.v1 && a.v1 != b.v2 && a.v2 != b.v1 && a.v2 != b.v2);
-      }
-      return false;
+      return true;
     };
     CollisionCache<MeshCollider> mesh_ccache;
 
@@ -121,12 +157,29 @@ class CollisionPipeline::CollisionPipelineImpl {
     for (auto& [a, b] : obstacle_ccache) {
       KDTree<MeshCollider>::test_tree_collision(a->mesh_collider_tree,
                                                 b->mesh_collider_tree,
-                                                mesh_filter, mesh_ccache);
+                                                dummy_filter, mesh_ccache);
     }
 
     // obstacle self collision
+    CollisionFilter<MeshCollider> neighbor_filter =
+        [](const MeshCollider& a, const MeshCollider& b) -> bool {
+      // reject neighbors
+      if (a.type == MeshColliderType::Point &&
+          b.type == MeshColliderType::Triangle) {
+        return (a.v1 != b.v1 && a.v1 != b.v2 && a.v1 != b.v2);
+      } else if (a.type == MeshColliderType::Triangle &&
+                 b.type == MeshColliderType::Point) {
+        return (b.v1 != a.v1 && b.v1 != a.v2 && b.v1 != a.v2);
+      } else if (a.type == MeshColliderType::Edge &&
+                 b.type == MeshColliderType::Edge) {
+        return (a.v1 != b.v1 && a.v1 != b.v2 && a.v2 != b.v1 && a.v2 != b.v2);
+      }
+      return false;
+    };
+    mesh_ccache.clear();
     for (auto& c : obstacle_colliders_) {
       if (!c.status.is_pure_obstacle && c.status.is_self_collision_on) {
+        c.mesh_collider_tree.test_self_collision(neighbor_filter, mesh_ccache);
         // grep position
         // exact test
         // compute constrain
