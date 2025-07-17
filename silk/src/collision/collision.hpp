@@ -1,11 +1,9 @@
 #pragma once
 
 #include <Eigen/Core>
-#include <memory>
 #include <vector>
 
 #include "../bbox.hpp"
-#include "../solver.hpp"
 
 namespace silk {
 
@@ -14,9 +12,14 @@ enum class MeshColliderType { Point, Edge, Triangle };
 struct MeshCollider {
   Bbox bbox;
   MeshColliderType type;
+  // vertex index
   int v1;
   int v2;
   int v3;
+  // vertex mass
+  float m1;
+  float m2;
+  float m3;
 };
 
 struct ObstacleStatus {
@@ -37,18 +40,25 @@ class IObstacle {
   virtual ObstacleStatus get_obstacle_status() const;
 };
 
-class CollisionPipeline {
- private:
-  class CollisionPipelineImpl;
-  std::unique_ptr<CollisionPipelineImpl> impl_;
-
+class CollisionConstrain {
  public:
-  void add_obstacle(IObstacle* obstacle);
-  void remove_obstacle(IObstacle* obstacle);
-  PositionConstrain resolve_collision(const Eigen::VectorXf& position);
-
- private:
-  void update_obstacles(const Eigen::VectorXf& position);
+  void reweight(const Eigen::VectorXf& position,
+                const Eigen::VectorXf& prev_position);
+  void project(const Eigen::VectorXf& position, Eigen::VectorXf& out) const;
 };
+
+// class CollisionPipeline {
+//  private:
+//   class CollisionPipelineImpl;
+//   std::unique_ptr<CollisionPipelineImpl> impl_;
+//
+//  public:
+//   void add_obstacle(IObstacle* obstacle);
+//   void remove_obstacle(IObstacle* obstacle);
+//   PositionConstrain resolve_collision(const Eigen::VectorXf& position);
+//
+//  private:
+//   void update_obstacles(const Eigen::VectorXf& position);
+// };
 
 }  // namespace silk

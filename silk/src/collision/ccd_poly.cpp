@@ -52,17 +52,43 @@ float CCDPoly::eval_derivative(float x) const {
   return x * (x * 3 * a_ + 2 * b_) + c_;
 }
 
-float CCDPoly::newton(float x) const {
-  for (int it = 0; it < max_iter_; ++it) {
-    float x_next = x - eval(x) / eval_derivative(x);
-    if (std::abs(x_next - x) < tol_) {
-      // std::cout << "newton it: " << it + 1 << "\n";
-      return x_next;
-    }
-    x = x_next;
+float CCDPoly::refine_newton(float x) const {
+  for (int i = 0; i < refine_it_; ++i) {
+    x = x - x / eval_derivative(x);
   }
-  // std::cout << "newton it: " << max_iter_ << "\n";
   return x;
+}
+
+float CCDPoly::forward_newton(float x) const {
+  float x_next = x + tol_;
+  float x_next_val = eval(x_next);
+  while (x_next_val > 0) {
+    x = x_next - x_next_val / eval_derivative(x_next);
+    x_next = x + tol_;
+    x_next_val = eval(x_next);
+  }
+
+  if (x < tol_) {
+    return refine_newton(x);
+  }
+
+  return x;
+}
+
+float CCDPoly::backward_newton(float x) const {
+  float x_next = x - tol_;
+  float x_next_val = eval(x_next);
+  while (x_next_val < 0) {
+    x = x_next - x_next_val / eval_derivative(x_next);
+    x_next = x - tol_;
+    x_next_val = eval(x_next);
+  }
+
+  if (x_next < tol_) {
+    return refine_newton(x);
+  }
+
+  return x_next;
 }
 
 std::optional<float> CCDPoly::cubic_ccd() const {
@@ -97,15 +123,15 @@ std::optional<float> CCDPoly::cubic_ccd() const {
     }
     // collision between mirror point, t1
     if (eval_mirror > 0) {
-      return newton(1);
+      return backward_newton(1.0f);
     }
     // collision between t0, mirror point
     else {
-      return newton(0);
+      return forward_newton(0.0f);
     }
   }
 
-  float tmp1 = -b_ / (3 * a_);
+  float tmp1 = -b_ / (3 * a_);  // mirror point
   float tmp2 = std::sqrt(tmp0) / (3 * a_);
   // root of first derivative
   float e1 = tmp1 - tmp2;
@@ -128,8 +154,11 @@ std::optional<float> CCDPoly::cubic_ccd() const {
       if (eval_t1 > -eps_) {
         return eval_t1;
       }
-      // start from mirror point
-      return newton(tmp1);
+      if (tmp1 > 1.0f) {
+        return backward_newton(1.0f);
+      } else {
+        return forward_newton(tmp1);
+      }
     }
 
     // t0 after e1 before e2, t1 after e2
@@ -143,7 +172,7 @@ std::optional<float> CCDPoly::cubic_ccd() const {
         return eval_e2;
       }
       // start from mirror point
-      return newton(tmp1);
+      return forward_newton(tmp1);
     }
 
     // t0 before e1, t1 before e1
@@ -161,8 +190,11 @@ std::optional<float> CCDPoly::cubic_ccd() const {
       if (eval_t1 > -eps_) {
         return eval_t1;
       }
-      // start from mirror point
-      return newton(tmp1);
+      if (tmp1 > 1.0f) {
+        return backward_newton(1.0f);
+      } else {
+        return forward_newton(tmp1);
+      }
     }
 
     // t0 before e1, t1 after e2
@@ -174,8 +206,11 @@ std::optional<float> CCDPoly::cubic_ccd() const {
     if (eval_e2 > -eps_) {
       return eval_e2;
     }
-    // start from mirror point
-    return newton(tmp1);
+    if (eval(tmp1) > 0) {
+      return forward_newton(tmp1);
+    } else {
+      return backward_newton(tmp1);
+    }
   }
 
   // case 6
@@ -189,7 +224,7 @@ std::optional<float> CCDPoly::cubic_ccd() const {
     if (eval_t1 > -eps_) {
       return eval_t1;
     }
-    return newton(1);
+    return backward_newton(1.0f);
   }
 
   // t0 after e1 before e2, t1 before e2
@@ -207,7 +242,7 @@ std::optional<float> CCDPoly::cubic_ccd() const {
     if (eval_t1 > -eps_) {
       return eval_t1;
     }
-    return newton(1);
+    return backward_newton(1.0f);
   }
 
   // t0 before e1, t1 before e1
@@ -219,7 +254,7 @@ std::optional<float> CCDPoly::cubic_ccd() const {
     if (eval_t1 > -eps_) {
       return eval_t1;
     }
-    return newton(0);
+    return forward_newton(0.0f);
   }
 
   // t0 before e1, t1 after e1 before e2
@@ -232,7 +267,7 @@ std::optional<float> CCDPoly::cubic_ccd() const {
     if (eval_e1 > -eps_) {
       return eval_e1;
     }
-    return newton(0);
+    return forward_newton(0.0f);
   }
 
   // t0 before e1, t1 after e2
@@ -243,7 +278,7 @@ std::optional<float> CCDPoly::cubic_ccd() const {
     if (eval_e1 > -eps_) {
       return eval_e1;
     }
-    return newton(0);
+    return forward_newton(0.0f);
   }
   // no collision between t0 e1, test e2 t1
   if (eval_t1 > eps_) {
@@ -252,7 +287,7 @@ std::optional<float> CCDPoly::cubic_ccd() const {
   if (eval_t1 > -eps_) {
     return eval_t1;
   }
-  return newton(1);
+  return backward_newton(1.0f);
 }
 
 std::optional<CCDPoly> CCDPoly::try_make_ccd_poly(
@@ -263,7 +298,8 @@ std::optional<CCDPoly> CCDPoly::try_make_ccd_poly(
     Eigen::Ref<const Eigen::Vector3f> x11,
     Eigen::Ref<const Eigen::Vector3f> x21,
     Eigen::Ref<const Eigen::Vector3f> x31,
-    Eigen::Ref<const Eigen::Vector3f> x41, float tol, int max_iter, float eps) {
+    Eigen::Ref<const Eigen::Vector3f> x41, float tol, int refine_it,
+    float eps) {
   Eigen::Vector3f p21 = x20 - x10;
   Eigen::Vector3f v21 = (x21 - x11) - p21;
   Eigen::Vector3f p31 = x30 - x10;
@@ -308,7 +344,7 @@ std::optional<CCDPoly> CCDPoly::try_make_ccd_poly(
   poly.c_ = c;
   poly.d_ = d;
   poly.tol_ = tol;
-  poly.max_iter_ = max_iter;
+  poly.refine_it_ = refine_it;
   poly.eps_ = eps;
 
   return poly;

@@ -51,16 +51,16 @@ ClothElasticConstrain::ClothElasticConstrain(Matrix69f jacobian_op,
       offset_(offset),
       weight_(weight) {}
 
-void ClothElasticConstrain::project(const Eigen::VectorXf& positions,
+void ClothElasticConstrain::project(const Eigen::VectorXf& position,
                                     Eigen::VectorXf& out) const {
   // assemble local vectorized vertex position
   Eigen::Matrix<float, 9, 1> buffer;
   buffer(Eigen::seqN(0, 3)) =
-      positions(Eigen::seqN(offset_ + 3 * vert_indexes_(0), 3));
+      position(Eigen::seqN(offset_ + 3 * vert_indexes_(0), 3));
   buffer(Eigen::seqN(3, 3)) =
-      positions(Eigen::seqN(offset_ + 3 * vert_indexes_(1), 3));
+      position(Eigen::seqN(offset_ + 3 * vert_indexes_(1), 3));
   buffer(Eigen::seqN(6, 3)) =
-      positions(Eigen::seqN(offset_ + 3 * vert_indexes_(2), 3));
+      position(Eigen::seqN(offset_ + 3 * vert_indexes_(2), 3));
 
   // deformation matrix
   Eigen::Matrix<float, 3, 2> F = (jacobian_op_ * buffer).reshaped(3, 2);

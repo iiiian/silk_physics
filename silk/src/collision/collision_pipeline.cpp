@@ -19,10 +19,9 @@ struct ObstacleCollider {
   KDTree<MeshCollider> mesh_collider_tree;
 };
 
-class CollisionPipeline::CollisionPipelineImpl {
+class CollisionPipelineImpl {
  private:
   std::vector<ObstacleCollider> obstacle_colliders_;
-  CCDSolver ccd_solver_;
 
  public:
   void add_obstacle(IObstacle* obstacle) {
@@ -85,8 +84,9 @@ class CollisionPipeline::CollisionPipelineImpl {
       auto v31 = position(Eigen::seqN(mb.v1, 3));
       auto v41 = position(Eigen::seqN(mb.v2, 3));
 
-      auto toi = ccd_solver_.edge_edge_ccd(v10, v20, v30, v40, v11, v21, v31,
-                                           v41, 0.0f, 1.0f);
+      auto impact = edge_edge_ccd(v10, v20, v30, v40, v11, v21, v31, v41, 0.0f,
+                                  0.0f, 1, 0.0f);
+      return std::nullopt;
     }
 
     if (ma.type == MeshColliderType::Point) {
@@ -99,8 +99,9 @@ class CollisionPipeline::CollisionPipelineImpl {
       auto v21 = position(Eigen::seqN(mb.v2, 3));
       auto v31 = position(Eigen::seqN(mb.v3, 3));
 
-      auto toi = ccd_solver_.point_triangle_ccd(p0, v10, v20, v30, p1, v11, v21,
-                                                v31, 0.0f, 1.0f);
+      auto impact = point_triangle_ccd(p0, v10, v20, v30, p1, v11, v21, v31,
+                                       0.0f, 0.0f, 1, 0.0f);
+      return std::nullopt;
     }
 
     auto p0 = prev_position(Eigen::seqN(mb.v1, 3));
@@ -112,8 +113,9 @@ class CollisionPipeline::CollisionPipelineImpl {
     auto v21 = position(Eigen::seqN(ma.v2, 3));
     auto v31 = position(Eigen::seqN(ma.v3, 3));
 
-    auto toi = ccd_solver_.point_triangle_ccd(p0, v10, v20, v30, p1, v11, v21,
-                                              v31, 0.0f, 1.0f);
+    auto impact = point_triangle_ccd(p0, v10, v20, v30, p1, v11, v21, v31, 0.0f,
+                                     0.0f, 1, 0.0f);
+    return std::nullopt;
   }
 
   PositionConstrain resolve_collision(const Eigen::VectorXf& position,
@@ -188,15 +190,15 @@ class CollisionPipeline::CollisionPipelineImpl {
   }
 };
 
-void CollisionPipeline::add_obstacle(IObstacle* obstacle) {
-  impl_->add_obstacle(obstacle);
-}
-void CollisionPipeline::remove_obstacle(IObstacle* obstacle) {
-  impl_->add_obstacle(obstacle);
-}
-PositionConstrain CollisionPipeline::resolve_collision(
-    const Eigen::VectorXf& position) {
-  return impl_->resolve_collision(position);
-}
+// void CollisionPipeline::add_obstacle(IObstacle* obstacle) {
+//   impl_->add_obstacle(obstacle);
+// }
+// void CollisionPipeline::remove_obstacle(IObstacle* obstacle) {
+//   impl_->add_obstacle(obstacle);
+// }
+// PositionConstrain CollisionPipeline::resolve_collision(
+//     const Eigen::VectorXf& position) {
+//   return impl_->resolve_collision(position);
+// }
 
 }  // namespace silk

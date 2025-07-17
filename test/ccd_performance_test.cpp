@@ -13,11 +13,10 @@ namespace fs = std::filesystem;
 
 void benchmark_query_category(const fs::path &root, const std::string &name) {
   QueryCategory category{root / name};
-  silk::CCDSolver solver;
-  solver.tol = 0.01;
-  solver.eps = 1e-6;
+  float tol = 0.01;
+  float eps = 1e-6;
   // solver.h = 0.001;
-  solver.max_iter = 10;
+  int max_iter = 10;
 
   namespace ch = std::chrono;
   ch::nanoseconds elapsed{0};
@@ -26,13 +25,13 @@ void benchmark_query_category(const fs::path &root, const std::string &name) {
     double dist2_a = (q.v20 - q.v10).squaredNorm();
     double dist2_b = (q.v40 - q.v30).squaredNorm();
     double dist2 = std::min(dist2_a, dist2_b);
-    solver.h = 0.01 * std::sqrt(dist2);
+    float h = 0.01 * std::sqrt(dist2);
 
     auto t0 = ch::steady_clock::now();
-    solver.edge_edge_ccd(q.v10.cast<float>(), q.v20.cast<float>(),
-                         q.v30.cast<float>(), q.v40.cast<float>(),
-                         q.v11.cast<float>(), q.v21.cast<float>(),
-                         q.v31.cast<float>(), q.v41.cast<float>(), 0.0, 1.0);
+    silk::edge_edge_ccd(
+        q.v10.cast<float>(), q.v20.cast<float>(), q.v30.cast<float>(),
+        q.v40.cast<float>(), q.v11.cast<float>(), q.v21.cast<float>(),
+        q.v31.cast<float>(), q.v41.cast<float>(), h, tol, max_iter, eps);
     elapsed += ch::steady_clock::now() - t0;
   }
 
@@ -41,13 +40,13 @@ void benchmark_query_category(const fs::path &root, const std::string &name) {
     double dist2_b = (q.v30 - q.v20).squaredNorm();
     double dist2_c = (q.v10 - q.v30).squaredNorm();
     double dist2 = std::min(std::min(dist2_a, dist2_b), dist2_c);
-    solver.h = 0.01 * std::sqrt(dist2);
+    float h = 0.01 * std::sqrt(dist2);
 
     auto t0 = ch::steady_clock::now();
-    solver.point_triangle_ccd(
+    silk::point_triangle_ccd(
         q.v40.cast<float>(), q.v10.cast<float>(), q.v20.cast<float>(),
         q.v30.cast<float>(), q.v41.cast<float>(), q.v11.cast<float>(),
-        q.v21.cast<float>(), q.v31.cast<float>(), 0.0, 1.0);
+        q.v21.cast<float>(), q.v31.cast<float>(), h, tol, max_iter, eps);
     elapsed += ch::steady_clock::now() - t0;
   }
 

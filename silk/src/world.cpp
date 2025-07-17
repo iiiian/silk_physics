@@ -75,8 +75,8 @@ class World::WorldImpl {
   // solver internal
   bool need_warmup_ = true;
   int total_vert_num_;
-  Eigen::VectorXf curr_positions_;
-  Eigen::VectorXf init_positions_;
+  Eigen::VectorXf curr_position_;
+  Eigen::VectorXf init_position_;
   Eigen::VectorXf velocity_;
   Eigen::SparseMatrix<float> mass_;
   Eigen::SparseMatrix<float> H_;  // iterative solver depends on this matrix !!
@@ -115,13 +115,13 @@ class World::WorldImpl {
 
   void init_solver_position_and_velocity() {
     velocity_ = Eigen::VectorXf::Zero(3 * total_vert_num_);
-    curr_positions_.resize(3 * total_vert_num_);
+    curr_position_.resize(3 * total_vert_num_);
     for (BodyPositionOffset& body_offset : body_position_offsets_) {
       int num = 3 * body_offset.body->get_vert_num();
-      curr_positions_(Eigen::seqN(body_offset.offset, num)) =
+      curr_position_(Eigen::seqN(body_offset.offset, num)) =
           body_offset.body->get_init_position();
     }
-    init_positions_ = curr_positions_;
+    init_position_ = curr_position_;
   }
 
   PhysicalBody* resolve_handle(const Handle& handle) {
@@ -251,8 +251,8 @@ class World::WorldImpl {
 
   void solver_reset() {
     need_warmup_ = true;
-    curr_positions_ = {};
-    init_positions_ = {};
+    curr_position_ = {};
+    init_position_ = {};
     velocity_ = {};
     mass_ = {};
     H_ = {};
@@ -308,7 +308,7 @@ class World::WorldImpl {
     }
     U_ = eigen_solver.eigenvectors();
     UHU_ = eigen_solver.eigenvalues();
-    HX_ = H_ * init_positions_;
+    HX_ = H_ * init_position_;
 
     // conjugate gradient solver depends on H_ !!
     iterative_solver_.setMaxIterations(max_iteration);
@@ -330,7 +330,7 @@ class World::WorldImpl {
 
     // basic linear velocity term
     Eigen::VectorXf rhs =
-        (mass_ / dt_ / dt_) * curr_positions_ + (mass_ / dt_) * velocity_ +
+        (mass_ / dt_ / dt_) * curr_position_ + (mass_ / dt_) * velocity_ +
         mass_ * constant_acce_field.replicate(total_vert_num_, 1);
 
     // thread local buffer for rhs
@@ -340,7 +340,7 @@ class World::WorldImpl {
 #pragma omp parallel for num_threads(thread_num)
     for (const auto& c : constrains_) {
       Eigen::VectorXf& buffer = buffers[omp_get_thread_num()];
-      c->project(curr_positions_, buffer);
+      c->project(curr_position_, buffer);
     }
     // merge thread local rhs back to global rhs
     for (Eigen::VectorXf& buffer : buffers) {
@@ -350,7 +350,7 @@ class World::WorldImpl {
     // sub space solve
     Eigen::VectorXf b = U_.transpose() * (rhs - HX_);
     Eigen::VectorXf q = b.array() / UHU_.array();
-    Eigen::VectorXf subspace_sol = init_positions_ + U_ * q;
+    Eigen::VectorXf subspace_sol = init_position_ + U_ * q;
 
     // iterative global solve
     Eigen::VectorXf sol = iterative_solver_.solveWithGuess(rhs, subspace_sol);
@@ -361,34 +361,34 @@ class World::WorldImpl {
 
     // CCD
 
-    velocity_ = (sol - curr_positions_) / dt_;
-    curr_positions_ = sol;
+    velocity_ = (sol - curr_position_) / dt_;
+    curr_position_ = sol;
 
     return Result::Success;
   }
 
   Result update_position_constrain(
-      const Handle& handle, Eigen::Ref<const Eigen::VectorXf> positions) {
+      const Handle& handle, Eigen::Ref<const Eigen::VectorXf> position) {
     PhysicalBody* body = resolve_handle(handle);
     if (!body) {
       return Result::InvalidHandle;
     }
 
     auto pinned_verts = body->get_pinned_verts();
-    if (positions.size() != 3 * pinned_verts.size()) {
+    if (position.size() != 3 * pinned_verts.size()) {
       return Result::IncorrectPositionConstrainLength;
     }
     int offset = body->get_position_offset();
     for (int idx = 0; idx < pinned_verts.size(); ++idx) {
-      curr_positions_(Eigen::seqN(offset + 3 * pinned_verts(idx), 3)) =
-          positions(Eigen::seqN(3 * idx, 3));
+      curr_position_(Eigen::seqN(offset + 3 * pinned_verts(idx), 3)) =
+          position(Eigen::seqN(3 * idx, 3));
     }
 
     return Result::Success;
   }
 
   Result get_current_position(const Handle& handle,
-                              Eigen::Ref<Eigen::VectorXf> positions) const {
+                              Eigen::Ref<Eigen::VectorXf> position) const {
     const PhysicalBody* body = resolve_handle(handle);
     if (!body) {
       return Result::InvalidHandle;
@@ -396,11 +396,11 @@ class World::WorldImpl {
 
     int offset = body->get_position_offset();
     int num = 3 * body->get_vert_num();
-    if (positions.size() != num) {
+    if (position.size() != num) {
       return Result::IncorrentOutputPositionLength;
     }
 
-    positions = curr_positions_(Eigen::seqN(offset, num));
+    position = curr_position_(Eigen::seqN(offset, num));
     return Result::Success;
   }
 };
@@ -462,13 +462,13 @@ void World::solver_reset() { impl_->solver_reset(); }
 [[nodiscard]] Result World::step() { return impl_->step(); }
 
 [[nodiscard]] Result World::update_position_constrain(
-    const Handle& handle, Eigen::Ref<const Eigen::VectorXf> positions) {
-  return impl_->update_position_constrain(handle, positions);
+    const Handle& handle, Eigen::Ref<const Eigen::VectorXf> position) {
+  return impl_->update_position_constrain(handle, position);
 }
 
 [[nodiscard]] Result World::get_current_position(
-    const Handle& handle, Eigen::Ref<Eigen::VectorXf> positions) const {
-  return impl_->get_current_position(handle, positions);
+    const Handle& handle, Eigen::Ref<Eigen::VectorXf> position) const {
+  return impl_->get_current_position(handle, position);
 }
 
 }  // namespace silk

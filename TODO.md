@@ -79,3 +79,8 @@
 ```
 sudo dnf install alembic-devel imath-devel
 ```
+
+## 0716
+
+- ccd poly forward / backward
+- double check ccd poly eps

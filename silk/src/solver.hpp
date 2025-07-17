@@ -11,7 +11,7 @@ class SolverConstrain {
  public:
   virtual ~SolverConstrain() = default;
 
-  virtual void project(const Eigen::VectorXf& positions,
+  virtual void project(const Eigen::VectorXf& position,
                        Eigen::VectorXf& out) const = 0;
 };
 
@@ -24,7 +24,7 @@ class PositionConstrain : public SolverConstrain {
   PositionConstrain(Eigen::VectorXi vert_indexes, int offset, float weight);
 
   // impl solver constrain interface
-  void project(const Eigen::VectorXf& positions,
+  void project(const Eigen::VectorXf& position,
                Eigen::VectorXf& out) const override;
 };
 

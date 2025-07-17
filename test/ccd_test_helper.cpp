@@ -10,8 +10,6 @@
 #include <string>
 #include <vector>
 
-#include "ccd.hpp"
-
 namespace fs = std::filesystem;
 namespace eg = Eigen;
 
@@ -154,16 +152,6 @@ template <typename T>
 void vector_append(std::vector<T> &main, const std::vector<T> &append) {
   main.reserve(main.size() + append.size());
   main.insert(main.end(), append.begin(), append.end());
-}
-
-std::string ccd_solver_to_string(const silk::CCDSolver &solver) {
-  std::stringstream ss;
-  ss << "CCD solver:\n";
-  ss << "    eps = " << solver.eps << "\n";
-  ss << "    h = " << solver.h << "\n";
-  ss << "    tol = " << solver.tol << "\n";
-  ss << "    max iter = " << solver.max_iter << "\n";
-  return ss.str();
 }
 
 QueryCategory::QueryCategory(const fs::path &path) {

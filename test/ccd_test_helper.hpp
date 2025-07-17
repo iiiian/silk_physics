@@ -5,8 +5,6 @@
 #include <string>
 #include <vector>
 
-#include "ccd.hpp"
-
 enum class QueryType { EdgeEdge, PointTriangle };
 
 struct Query {
@@ -28,8 +26,6 @@ struct Query {
 
 std::vector<Query> parse_queries_from_csv(const std::filesystem::path &path,
                                           QueryType type);
-
-std::string ccd_solver_to_string(const silk::CCDSolver &solver);
 
 struct QueryCategory {
   std::string name;

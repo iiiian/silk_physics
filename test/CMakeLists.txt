@@ -142,6 +142,14 @@ target_compile_definitions(
     PRIVATE PHYSICS_SCENE_ROOT="${CMAKE_SOURCE_DIR}/misc/physics_scene"
 )
 
+add_executable(
+    ccd_poly
+    ccd_poly_test.cpp
+    ${SILK_COLLISION_DIR}/ccd_poly.cpp
+)
+target_include_directories(ccd_poly PRIVATE ${SILK_COLLISION_DIR})
+target_link_libraries(ccd_poly PRIVATE Catch2::Catch2WithMain Eigen3::Eigen)
+
 include(CTest)
 include(Catch)
-catch_discover_tests(ccd_correctness_test ccd_performance_test resource_manager_test sap_test sap_kd_tree_test sap_performance_test sap_kd_tree_performance_test)
+catch_discover_tests(ccd_correctness_test ccd_performance_test resource_manager_test sap_test sap_kd_tree_test sap_performance_test sap_kd_tree_performance_test ccd_poly)
