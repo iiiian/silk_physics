@@ -85,7 +85,7 @@ void ClothElasticConstrain::project(const Eigen::VectorXf& position,
       buffer(Eigen::seqN(6, 3));
 }
 
-std::optional<Matrix69f> Cloth::vectorized_jacobian_operator(
+std::optional<Matrix69f> SolverCloth::vectorized_jacobian_operator(
     Eigen::Ref<const Eigen::Vector3f> v1, Eigen::Ref<const Eigen::Vector3f> v2,
     Eigen::Ref<const Eigen::Vector3f> v3, float zero_threshold) const {
   // convert triangle to 2D
@@ -131,25 +131,25 @@ std::optional<Matrix69f> Cloth::vectorized_jacobian_operator(
   return Eigen::KroneckerProduct(B, Eigen::Matrix3f::Identity());
 }
 
-Cloth::Cloth(ClothConfig config) : cfg_(std::move(config)) {}
+SolverCloth::SolverCloth(ClothConfig config) : cfg_(std::move(config)) {}
 
-int Cloth::get_vert_num() const { return cfg_.mesh.V.rows(); }
+int SolverCloth::get_vert_num() const { return cfg_.mesh.V.rows(); }
 
-Eigen::Ref<const Eigen::VectorXf> Cloth::get_init_position() const {
+Eigen::Ref<const Eigen::VectorXf> SolverCloth::get_init_position() const {
   return cfg_.mesh.V.reshaped<Eigen::RowMajor>();
 }
 
-int Cloth::get_position_offset() const { return solver_position_offset_; }
+int SolverCloth::get_position_offset() const { return solver_position_offset_; }
 
-void Cloth::set_position_offset(int offset) {
+void SolverCloth::set_position_offset(int offset) {
   solver_position_offset_ = offset;
 }
 
-Eigen::Ref<const Eigen::VectorXi> Cloth::get_pinned_verts() const {
+Eigen::Ref<const Eigen::VectorXi> SolverCloth::get_pinned_verts() const {
   return cfg_.pinned_verts;
 }
 
-SolverInitData Cloth::compute_solver_init_data() const {
+SolverInitData SolverCloth::compute_solver_init_data() const {
   const Mesh& mesh = cfg_.mesh;
   int vert_num = mesh.V.rows();
   int face_num = mesh.F.rows();

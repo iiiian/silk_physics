@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <cassert>
-#include <memory>
 #include <vector>
 
 #include "../bbox.hpp"
@@ -19,7 +18,7 @@ struct ObstacleCollider {
   KDTree<MeshCollider> mesh_collider_tree;
 };
 
-class CollisionPipelineImpl {
+class CollisionPipeline::CollisionPipelineImpl {
  private:
   std::vector<ObstacleCollider> obstacle_colliders_;
 
@@ -52,78 +51,11 @@ class CollisionPipelineImpl {
     obstacle_colliders_.pop_back();
   }
 
-  void update_obstacles(const Eigen::VectorXf& position) {
-    for (auto& c : obstacle_colliders_) {
-      c.status = c.obstacle->get_obstacle_status();
-      if (c.status.is_static) {
-        return;
-      }
+  void resolve_collision() {
+    update_obstacles();
 
-      // if obstacle is not static, update mesh colliders and its kd tree
-      c.obstacle->update_mesh_colliders(c.mesh_colliders, position);
-      c.bbox = c.mesh_colliders[0].bbox;
-      for (int i = 1; i < c.mesh_colliders.size(); ++i) {
-        c.bbox.merge_inplace(c.mesh_colliders[i].bbox);
-      }
-      c.mesh_collider_tree.update(c.bbox);
-    }
-  }
-
-  std::optional<PositionConstrain> get_position_constrain(
-      const Eigen::VectorXf& position, const Eigen::VectorXf& prev_position,
-      const ObstacleCollider& oa, const MeshCollider& ma,
-      const ObstacleCollider& ob, const MeshCollider& mb) {
-    // fetch position at t0 and t1 then do a ccd test
-    if (ma.type == MeshColliderType::Edge) {
-      auto v10 = prev_position(Eigen::seqN(ma.v1, 3));
-      auto v20 = prev_position(Eigen::seqN(ma.v2, 3));
-      auto v30 = prev_position(Eigen::seqN(mb.v1, 3));
-      auto v40 = prev_position(Eigen::seqN(mb.v2, 3));
-      auto v11 = position(Eigen::seqN(ma.v1, 3));
-      auto v21 = position(Eigen::seqN(ma.v2, 3));
-      auto v31 = position(Eigen::seqN(mb.v1, 3));
-      auto v41 = position(Eigen::seqN(mb.v2, 3));
-
-      auto impact = edge_edge_ccd(v10, v20, v30, v40, v11, v21, v31, v41, 0.0f,
-                                  0.0f, 1, 0.0f);
-      return std::nullopt;
-    }
-
-    if (ma.type == MeshColliderType::Point) {
-      auto p0 = prev_position(Eigen::seqN(ma.v1, 3));
-      auto v10 = prev_position(Eigen::seqN(mb.v1, 3));
-      auto v20 = prev_position(Eigen::seqN(mb.v2, 3));
-      auto v30 = prev_position(Eigen::seqN(mb.v3, 3));
-      auto p1 = position(Eigen::seqN(ma.v1, 3));
-      auto v11 = position(Eigen::seqN(mb.v1, 3));
-      auto v21 = position(Eigen::seqN(mb.v2, 3));
-      auto v31 = position(Eigen::seqN(mb.v3, 3));
-
-      auto impact = point_triangle_ccd(p0, v10, v20, v30, p1, v11, v21, v31,
-                                       0.0f, 0.0f, 1, 0.0f);
-      return std::nullopt;
-    }
-
-    auto p0 = prev_position(Eigen::seqN(mb.v1, 3));
-    auto v10 = prev_position(Eigen::seqN(ma.v1, 3));
-    auto v20 = prev_position(Eigen::seqN(ma.v2, 3));
-    auto v30 = prev_position(Eigen::seqN(ma.v3, 3));
-    auto p1 = position(Eigen::seqN(mb.v1, 3));
-    auto v11 = position(Eigen::seqN(ma.v1, 3));
-    auto v21 = position(Eigen::seqN(ma.v2, 3));
-    auto v31 = position(Eigen::seqN(ma.v3, 3));
-
-    auto impact = point_triangle_ccd(p0, v10, v20, v30, p1, v11, v21, v31, 0.0f,
-                                     0.0f, 1, 0.0f);
-    return std::nullopt;
-  }
-
-  PositionConstrain resolve_collision(const Eigen::VectorXf& position,
-                                      const Eigen::VectorXf& prev_position) {
-    update_obstacles(position);
-
+    // prepare obstacle collider proxies for obstable level broadphase sap
     std::vector<ObstacleCollider*> proxies(obstacle_colliders_.size());
-
     for (int i = 0; i < obstacle_colliders_.size(); ++i) {
       proxies[i] = obstacle_colliders_.data() + i;
     }
@@ -141,7 +73,7 @@ class CollisionPipelineImpl {
         };
     CollisionCache<ObstacleCollider> obstacle_ccache;
 
-    // at obstacle level, use sweep and prune to find collision
+    // use sweep and prune to find collision
     int axis = sap_optimal_axis(proxies.data(), proxies.size());
     sap_sort_proxies(proxies.data(), proxies.size(), axis);
     sap_sorted_group_self_collision(proxies.data(), proxies.size(), axis,
@@ -154,14 +86,16 @@ class CollisionPipelineImpl {
       return true;
     };
     CollisionCache<MeshCollider> mesh_ccache;
-
-    // obstacle-obstacle collision
-    for (auto& [a, b] : obstacle_ccache) {
-      KDTree<MeshCollider>::test_tree_collision(a->mesh_collider_tree,
-                                                b->mesh_collider_tree,
+    for (auto& [oa, ob] : obstacle_ccache) {
+      // obstacle-obstacle collision broadphase
+      KDTree<MeshCollider>::test_tree_collision(oa->mesh_collider_tree,
+                                                ob->mesh_collider_tree,
                                                 dummy_filter, mesh_ccache);
+      // obstacle obstacle collision narrowphase
+      for (auto& [ma, mb] : mesh_ccache) {
+        narrow_phase(*oa, *ma, *ob, *mb);
+      }
     }
-
     // obstacle self collision
     CollisionFilter<MeshCollider> neighbor_filter =
         [](const MeshCollider& a, const MeshCollider& b) -> bool {
@@ -180,25 +114,127 @@ class CollisionPipelineImpl {
     };
     mesh_ccache.clear();
     for (auto& c : obstacle_colliders_) {
-      if (!c.status.is_pure_obstacle && c.status.is_self_collision_on) {
-        c.mesh_collider_tree.test_self_collision(neighbor_filter, mesh_ccache);
-        // grep position
-        // exact test
-        // compute constrain
+      if (c.status.is_pure_obstacle || !c.status.is_self_collision_on) {
+        continue;
       }
+
+      // self collision broadphase
+      c.mesh_collider_tree.test_self_collision(neighbor_filter, mesh_ccache);
+      // self collision narrowphase
+      for (auto& [ma, mb] : mesh_ccache) {
+        narrow_phase(c, *ma, c, *mb);
+      }
+    }
+  }
+
+ private:
+  void update_obstacles() {
+    for (auto& c : obstacle_colliders_) {
+      c.status = c.obstacle->get_obstacle_status();
+      if (c.status.is_static) {
+        return;
+      }
+
+      // if obstacle is not static, update mesh colliders and its kd tree
+      c.obstacle->update_mesh_colliders(c.mesh_colliders);
+      c.bbox = c.mesh_colliders[0].bbox;
+      for (int i = 1; i < c.mesh_colliders.size(); ++i) {
+        c.bbox.merge_inplace(c.mesh_colliders[i].bbox);
+      }
+      c.mesh_collider_tree.update(c.bbox);
+    }
+  }
+
+  void narrow_phase(const ObstacleCollider& oa, const MeshCollider& ma,
+                    const ObstacleCollider& ob, const MeshCollider& mb) {
+    MeshColliderDetail da = oa.obstacle->get_mesh_collider_detail(ma.index);
+    MeshColliderDetail db = ob.obstacle->get_mesh_collider_detail(mb.index);
+
+    // edge edge collision
+    if (ma.type == MeshColliderType::Edge) {
+      // TODO: compute h
+      auto im = edge_edge_ccd(da.v10, da.v20, db.v10, db.v20, da.v11, da.v21,
+                              db.v11, db.v21, 0.0f, 0.05f, 10, 1e-6f);
+      MeshColliderImpact impact_a;
+      impact_a.v1 = im->v1;
+      impact_a.v2 = im->v2;
+      impact_a.normal = im->normal;
+      impact_a.index = ma.index;
+      impact_a.toi = im->toi;
+      impact_a.weight = db.w1 + db.w2;
+
+      oa.obstacle->resolve_impact(std::move(impact_a));
+
+      MeshColliderImpact impact_b;
+      impact_b.v1 = im->v3;
+      impact_b.v2 = im->v4;
+      impact_b.normal = -im->normal;
+      impact_b.index = mb.index;
+      impact_b.toi = im->toi;
+      impact_b.weight = da.w1 + da.w2;
+
+      ob.obstacle->resolve_impact(std::move(impact_b));
+    }
+    // point triangle collision: a is point and b is triangle
+    else if (ma.type == MeshColliderType::Point) {
+      auto im = point_triangle_ccd(da.v10, db.v10, db.v20, db.v30, da.v11,
+                                   db.v11, db.v21, db.v31, 0.0f, 0.0f, 1, 0.0f);
+
+      MeshColliderImpact impact_a;
+      impact_a.v1 = im->p;
+      impact_a.normal = im->normal;
+      impact_a.index = ma.index;
+      impact_a.toi = im->toi;
+      impact_a.weight = db.w1 + db.w2 + db.w3;
+      ;
+
+      oa.obstacle->resolve_impact(std::move(impact_a));
+
+      MeshColliderImpact impact_b;
+      impact_b.v1 = im->v1;
+      impact_b.v2 = im->v2;
+      impact_b.v3 = im->v3;
+      impact_b.normal = -im->normal;
+      impact_b.index = mb.index;
+      impact_b.toi = im->toi;
+      impact_b.weight = da.w1;
+
+      ob.obstacle->resolve_impact(std::move(impact_b));
+    }
+    // point triangle collision: a is triangle and b is point
+    else {
+      auto im = point_triangle_ccd(db.v10, da.v10, da.v20, da.v30, db.v11,
+                                   da.v11, da.v21, da.v31, 0.0f, 0.0f, 1, 0.0f);
+      MeshColliderImpact impact_a;
+      impact_a.v1 = im->v1;
+      impact_a.v2 = im->v2;
+      impact_a.v3 = im->v3;
+      impact_a.normal = im->normal;
+      impact_a.index = ma.index;
+      impact_a.toi = im->toi;
+      impact_a.weight = db.w1;
+
+      oa.obstacle->resolve_impact(std::move(impact_a));
+
+      MeshColliderImpact impact_b;
+      impact_b.v1 = im->p;
+      impact_b.normal = -im->normal;
+      impact_b.index = mb.index;
+      impact_b.toi = im->toi;
+      impact_b.weight = da.w1 + da.w2 + da.w3;
+
+      ob.obstacle->resolve_impact(std::move(impact_b));
     }
   }
 };
 
-// void CollisionPipeline::add_obstacle(IObstacle* obstacle) {
-//   impl_->add_obstacle(obstacle);
-// }
-// void CollisionPipeline::remove_obstacle(IObstacle* obstacle) {
-//   impl_->add_obstacle(obstacle);
-// }
-// PositionConstrain CollisionPipeline::resolve_collision(
-//     const Eigen::VectorXf& position) {
-//   return impl_->resolve_collision(position);
-// }
+// pimpl boilerplate
+void CollisionPipeline::add_obstacle(IObstacle* obstacle) {
+  impl_->add_obstacle(obstacle);
+}
+void CollisionPipeline::remove_obstacle(IObstacle* obstacle) {
+  impl_->remove_obstacle(obstacle);
+}
+void CollisionPipeline::resolve_collision() { impl_->resolve_collision(); }
 
 }  // namespace silk

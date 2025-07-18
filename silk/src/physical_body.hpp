@@ -6,9 +6,9 @@
 
 namespace silk {
 
-class PhysicalBody {
+class SolverBody {
  public:
-  virtual ~PhysicalBody() = default;
+  virtual ~SolverBody() = default;
 
   virtual int get_vert_num() const = 0;
   virtual Eigen::Ref<const Eigen::VectorXf> get_init_position() const = 0;

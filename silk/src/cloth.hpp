@@ -25,20 +25,13 @@ class ClothElasticConstrain : public SolverConstrain {
                Eigen::VectorXf& out) const override;
 };
 
-class Cloth : public PhysicalBody {
+class SolverCloth : public SolverBody {
+ private:
   ClothConfig cfg_;
   int solver_position_offset_ = 0;  // managed by solver
 
-  // compute vectorized jacobian operator given initial triangle vertex position
-  // v1, v2, v3.
-  // return nullopt if triangle is degenerated
-  std::optional<Matrix69f> vectorized_jacobian_operator(
-      Eigen::Ref<const Eigen::Vector3f> v1,
-      Eigen::Ref<const Eigen::Vector3f> v2,
-      Eigen::Ref<const Eigen::Vector3f> v3, float zero_threshold = 1e-8) const;
-
  public:
-  Cloth(ClothConfig config);
+  SolverCloth(ClothConfig config);
 
   // impl physical body interface
   int get_vert_num() const override;
@@ -48,6 +41,15 @@ class Cloth : public PhysicalBody {
   Eigen::Ref<const Eigen::VectorXi> get_pinned_verts() const override;
 
   SolverInitData compute_solver_init_data() const override;
+
+ private:
+  // compute vectorized jacobian operator given initial triangle vertex position
+  // v1, v2, v3.
+  // return nullopt if triangle is degenerated
+  std::optional<Matrix69f> vectorized_jacobian_operator(
+      Eigen::Ref<const Eigen::Vector3f> v1,
+      Eigen::Ref<const Eigen::Vector3f> v2,
+      Eigen::Ref<const Eigen::Vector3f> v3, float zero_threshold = 1e-8) const;
 };
 
 }  // namespace silk

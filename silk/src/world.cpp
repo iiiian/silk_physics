@@ -57,12 +57,12 @@ std::string to_string(Result result) {
 }
 
 struct BodyPositionOffset {
-  PhysicalBody* body;
+  SolverBody* body;
   int offset;
 };
 
 struct FaceCollider {
-  PhysicalBody* body;
+  SolverBody* body;
   int v1;
   int v2;
   int v3;
@@ -95,20 +95,20 @@ class World::WorldImpl {
   float dt_;
 
   // entities
-  ResourceManager<Cloth> clothes_;
+  ResourceManager<SolverCloth> clothes_;
 
   void init_solver_body_offset() {
     body_position_offsets_.clear();
     total_vert_num_ = 0;
 
-    auto init_offset = [this](PhysicalBody& body) {
+    auto init_offset = [this](SolverBody& body) {
       body_position_offsets_.emplace_back(
           BodyPositionOffset{&body, 3 * total_vert_num_});
       body.set_position_offset(3 * total_vert_num_);
       total_vert_num_ += body.get_vert_num();
     };
 
-    for (Cloth& body : clothes_.get_dense_data()) {
+    for (SolverCloth& body : clothes_.get_dense_data()) {
       init_offset(body);
     }
   }
@@ -124,11 +124,11 @@ class World::WorldImpl {
     init_position_ = curr_position_;
   }
 
-  PhysicalBody* resolve_handle(const Handle& handle) {
+  SolverBody* resolve_handle(const Handle& handle) {
     ResourceHandle r_handle{handle.value};
     switch (handle.type) {
       case HandleType::Cloth: {
-        return dynamic_cast<PhysicalBody*>(clothes_.get_resources(r_handle));
+        return dynamic_cast<PDObject*>(clothes_.get_resources(r_handle));
       }
       case HandleType::RigidBody:
         assert(false && "not impl");
@@ -148,12 +148,11 @@ class World::WorldImpl {
     }
   }
 
-  const PhysicalBody* resolve_handle(const Handle& handle) const {
+  const SolverBody* resolve_handle(const Handle& handle) const {
     ResourceHandle r_handle{handle.value};
     switch (handle.type) {
       case HandleType::Cloth: {
-        return dynamic_cast<const PhysicalBody*>(
-            clothes_.get_resources(r_handle));
+        return dynamic_cast<const PDObject*>(clothes_.get_resources(r_handle));
       }
       case HandleType::RigidBody:
         assert(false && "not impl");
@@ -206,7 +205,8 @@ class World::WorldImpl {
       return Result::InvalidConfig;
     }
 
-    auto resource_handle = clothes_.add_resource(Cloth{std::move(config)});
+    auto resource_handle =
+        clothes_.add_resource(SolverCloth{std::move(config)});
     if (!resource_handle) {
       return Result::TooManyBody;
     }
@@ -236,14 +236,14 @@ class World::WorldImpl {
       return Result::InvalidHandle;
     }
     ResourceHandle resource_handle{handle.value};
-    Cloth* cloth = clothes_.get_resources(resource_handle);
+    SolverCloth* cloth = clothes_.get_resources(resource_handle);
     if (!cloth) {
       return Result::InvalidHandle;
     }
     if (!config.is_valid()) {
       return Result::InvalidConfig;
     }
-    *cloth = Cloth{std::move(config)};
+    *cloth = SolverCloth{std::move(config)};
 
     need_warmup_ = true;
     return Result::Success;
@@ -271,7 +271,7 @@ class World::WorldImpl {
     std::vector<Eigen::Triplet<float>> AA_triplets;
 
     auto collect_solver_init_data = [this, &mass_triplets,
-                                     &AA_triplets](PhysicalBody& body) {
+                                     &AA_triplets](SolverBody& body) {
       SolverInitData init_data = body.compute_solver_init_data();
       for (auto& t : init_data.mass) {
         mass_triplets.emplace_back(std::move(t));
@@ -284,8 +284,8 @@ class World::WorldImpl {
       }
     };
 
-    for (Cloth& body : clothes_.get_dense_data()) {
-      collect_solver_init_data(dynamic_cast<PhysicalBody&>(body));
+    for (SolverCloth& body : clothes_.get_dense_data()) {
+      collect_solver_init_data(dynamic_cast<PDObject&>(body));
     }
 
     // set other solver matrices
@@ -367,9 +367,9 @@ class World::WorldImpl {
     return Result::Success;
   }
 
-  Result update_position_constrain(
-      const Handle& handle, Eigen::Ref<const Eigen::VectorXf> position) {
-    PhysicalBody* body = resolve_handle(handle);
+  Result update_position_constrain(const Handle& handle,
+                                   Eigen::Ref<const Eigen::VectorXf> position) {
+    SolverBody* body = resolve_handle(handle);
     if (!body) {
       return Result::InvalidHandle;
     }
@@ -389,7 +389,7 @@ class World::WorldImpl {
 
   Result get_current_position(const Handle& handle,
                               Eigen::Ref<Eigen::VectorXf> position) const {
-    const PhysicalBody* body = resolve_handle(handle);
+    const SolverBody* body = resolve_handle(handle);
     if (!body) {
       return Result::InvalidHandle;
     }
