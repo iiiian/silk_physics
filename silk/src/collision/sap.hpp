@@ -6,7 +6,7 @@
 #include <random>
 
 #include "../bbox.hpp"
-#include "collision_internal.hpp"
+#include "collision_helper.hpp"
 
 namespace silk {
 

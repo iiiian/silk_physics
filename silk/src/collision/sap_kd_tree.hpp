@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "../bbox.hpp"
-#include "collision_internal.hpp"
+#include "collision_helper.hpp"
 #include "sap.hpp"
 
 namespace silk {

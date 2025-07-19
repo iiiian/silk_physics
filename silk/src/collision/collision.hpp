@@ -58,12 +58,12 @@ struct ObstacleStatus {
 
 class IObstacle {
  public:
-  virtual std::vector<MeshCollider> init_mesh_colliders() const;
+  virtual std::vector<MeshCollider> init_mesh_colliders() const = 0;
   virtual void update_mesh_colliders(
-      std::vector<MeshCollider>& mesh_colliders) const;
+      std::vector<MeshCollider>& mesh_colliders) const = 0;
   virtual MeshColliderDetail get_mesh_collider_detail(int index) const = 0;
   virtual void resolve_impact(MeshColliderImpact impact) = 0;
-  virtual ObstacleStatus get_obstacle_status() const;
+  virtual ObstacleStatus get_obstacle_status() const = 0;
 };
 
 enum class CollisionConstrainType {
