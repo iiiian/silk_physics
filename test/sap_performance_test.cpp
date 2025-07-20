@@ -37,14 +37,14 @@ TEST_CASE("sap-animation-performance-test", "[collision broadphase]") {
     sphere_proxies[i] = sphere_colliders.data() + i;
   }
 
-  CollisionFilter<SimpleCollider> self_collision_filter =
+  CollisionFilterCallback<SimpleCollider> self_collision_filter =
       [](const SimpleCollider& a, const SimpleCollider& b) -> bool {
     return (a.v0 != b.v0 && a.v0 != b.v1 && a.v0 != b.v2 && a.v1 != b.v0 &&
             a.v1 != b.v1 && a.v1 != b.v2 && a.v2 != b.v0 && a.v2 != b.v1 &&
             a.v2 != b.v2);
   };
 
-  CollisionFilter<SimpleCollider> inter_collision_filter =
+  CollisionFilterCallback<SimpleCollider> inter_collision_filter =
       [](const SimpleCollider& a, const SimpleCollider& b) -> bool {
     return true;
   };

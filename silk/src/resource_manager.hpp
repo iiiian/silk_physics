@@ -3,86 +3,101 @@
 #include <cassert>
 #include <cstdint>
 #include <deque>
-#include <optional>
 #include <vector>
 
 namespace silk {
 
-// a non owning 32bit resource handle
-// bit layout: | padding (1) | generation (11) | slot_index (20) |
-class ResourceHandle {
+// Bit layout: | is valid (1) | generate (GEN_BITS) | index (INDEX_BITS) |
+struct ID {
+ public:
+  // bit operation helper
   static constexpr uint32_t GEN_BITS = 11;
-  static constexpr uint32_t SLOT_BITS = 20;
-  static constexpr uint32_t GEN_MAX = 1u << GEN_BITS;
-  static constexpr uint32_t SLOT_MAX = 1u << SLOT_BITS;
-  static constexpr uint32_t GEN_MASK = (GEN_MAX - 1u) << SLOT_BITS;
-  static constexpr uint32_t SLOT_MASK = SLOT_MAX - 1u;
+  static constexpr uint32_t INDEX_BITS = 20;
+  static constexpr uint32_t MAX_GEN = 1u << GEN_BITS;
+  static constexpr uint32_t MAX_GEN_MASK = MAX_GEN - 1u;
+  static constexpr uint32_t MAX_INDEX = 1u << INDEX_BITS;
+  static constexpr uint32_t GEN_MASK = (MAX_GEN - 1u) << INDEX_BITS;
+  static constexpr uint32_t INDEX_MASK = MAX_INDEX - 1u;
+  static constexpr uint32_t IS_VALID_SHIFT = GEN_BITS + INDEX_BITS;
+  static constexpr uint32_t IS_VALID_MASK = 1u << IS_VALID_SHIFT;
 
-  uint32_t value = 0;
+ private:
+  uint32_t value_ = 0;
 
  public:
-  ResourceHandle() = default;
-  explicit ResourceHandle(uint32_t value);
-  ResourceHandle(int generation, int slot_index);
+  ID() = default;
 
-  uint32_t get_value() const;
-  int get_generation() const;
-  int get_slot_index() const;
-};
+  ID(uint32_t is_valid, uint32_t generation, uint32_t index) {
+    assert((generation >= 0 && generation < MAX_GEN));
+    assert((index >= 0 && index < MAX_INDEX));
 
-// an internal mapping data structure for resource manager,
-// maps resource handle to internal dense data array
-// bit layout: | is_valid (1) | generation (11) | data_index (20) |
-class ResourceSlot {
-  static constexpr uint32_t GEN_BITS = 11;
-  static constexpr uint32_t DATA_BITS = 20;
-  static constexpr uint32_t GEN_MAX = 1u << GEN_BITS;
-  static constexpr uint32_t DATA_MAX = 1u << DATA_BITS;
-  static constexpr uint32_t GEN_MASK = (GEN_MAX - 1u) << DATA_BITS;
-  static constexpr uint32_t DATA_MASK = DATA_MAX - 1u;
-  static constexpr uint32_t IS_VALID_MASK = 1u << (GEN_BITS + DATA_BITS);
+    uint32_t is_valid_bit = static_cast<uint32_t>(is_valid) << IS_VALID_SHIFT;
+    uint32_t generation_bit = (generation << INDEX_BITS) & GEN_MASK;
+    uint32_t data_index_bit = index & INDEX_MASK;
+    value_ = is_valid_bit | generation_bit | data_index_bit;
+  }
 
-  uint32_t value = 0;
+  bool is_empty() const { return value_ == 0; }
 
- public:
-  ResourceSlot() = default;
-  ResourceSlot(bool is_valid, int generation, int data_index);
+  uint32_t get_raw() const { return value_; }
 
-  bool get_is_valid() const;
-  void set_is_valid(bool is_valid);
-  int get_generation() const;
-  void set_generation(int generation);
-  void increment_generation();
-  int get_data_index() const;
-  void set_data_index(int data_index);
+  void set_raw(uint32_t value) { value_ = value; }
+
+  bool get_is_valid() const {
+    return static_cast<bool>(value_ & IS_VALID_MASK);
+  }
+
+  void set_is_valid(bool is_valid) {
+    uint32_t is_valid_bit = static_cast<uint32_t>(is_valid) << IS_VALID_SHIFT;
+    value_ = is_valid_bit | (value_ & ~IS_VALID_MASK);
+  }
+
+  uint32_t get_generation() const { return (value_ & GEN_MASK) >> INDEX_BITS; }
+
+  void set_generation(uint32_t generation) {
+    assert((generation < MAX_GEN));
+
+    uint32_t generation_bit = (generation << INDEX_BITS) & GEN_MASK;
+    value_ = generation_bit | (value_ & ~GEN_MASK);
+  }
+
+  void increment_generation() {
+    set_generation(get_generation() | MAX_GEN_MASK);
+  }
+
+  uint32_t get_index() const { return value_ & INDEX_MASK; }
+
+  void set_index(uint32_t index) {
+    assert((index >= 0 && index < MAX_INDEX));
+
+    uint32_t index_bit = index & INDEX_MASK;
+    value_ = index_bit | (value_ & ~INDEX_MASK);
+  }
 };
 
 template <typename T>
-class ResourceManager {
-  static constexpr uint32_t MAX_GENERATION = 1u << 11;  // 2^11
-  static constexpr uint32_t MAX_RESOURCE = 1u << 20;    // 2^20
-
-  std::vector<ResourceSlot> slots_;
-  std::deque<int> free_slots_;
+class Manager {
+  std::vector<ID> slots_;  // map handle to index of data_ array
+  std::deque<uint32_t> free_slots_;
   std::vector<T> data_;
-  std::vector<int> slot_of_data_;
+  std::vector<uint32_t> slot_of_data_;  // map data array to index of slots_
 
  public:
-  ResourceManager() {
-    slots_.resize(MAX_RESOURCE);
-    for (int i = 0; i < MAX_RESOURCE; ++i) {
+  Manager() {
+    slots_.resize(ID::MAX_INDEX);
+    for (uint32_t i = 0; i < ID::MAX_INDEX; ++i) {
       free_slots_.push_back(i);
     }
   }
 
   void clear() {
-    for (ResourceSlot& s : slots_) {
+    for (ID& s : slots_) {
       s.set_is_valid(true);
       s.increment_generation();
     }
 
     free_slots_.clear();
-    for (int i = 0; i < MAX_RESOURCE; ++i) {
+    for (uint32_t i = 0; i < ID::MAX_INDEX; ++i) {
       free_slots_.push_back(i);
     }
 
@@ -91,66 +106,64 @@ class ResourceManager {
   }
 
   // return nullptr if handle is invalid
-  T* get_resources(const ResourceHandle& handle) {
-    ResourceSlot& slot = slots_[handle.get_slot_index()];
+  T* get(const ID& handle) {
+    ID& slot = slots_[handle.get_index()];
     if (!slot.get_is_valid() ||
         slot.get_generation() != handle.get_generation()) {
       return nullptr;
     }
 
-    return &data_[slot.get_data_index()];
+    return data_[slot.get_index()];
   }
 
   // return nullptr if handle is invalid
-  const T* get_resources(const ResourceHandle& handle) const {
-    const ResourceSlot& slot = slots_[handle.get_slot_index()];
+  const T* get(const ID& handle) const {
+    const ID& slot = slots_[handle.get_index()];
     if (!slot.get_is_valid() ||
         slot.get_generation() != handle.get_generation()) {
       return nullptr;
     }
 
-    return &data_[slot.get_data_index()];
+    return data_[slot.get_index()];
   }
 
   // return nullopt if ready max resource
-  std::optional<ResourceHandle> add_resource(T resource) {
+  ID add(T resource) {
     if (free_slots_.empty()) {
-      return std::nullopt;
+      return ID{};
     }
 
-    int slot_idx = free_slots_.front();
+    uint32_t slot_idx = free_slots_.front();
     free_slots_.pop_front();
 
-    ResourceSlot& slot = slots_[slot_idx];
+    ID& slot = slots_[slot_idx];
     slot.set_is_valid(true);
-    slot.set_data_index(data_.size());
+    slot.set_index(data_.size());
     data_.emplace_back(std::move(resource));
     slot_of_data_.push_back(slot_idx);
-    return ResourceHandle{slot.get_generation(), slot_idx};
+    return ID{true, slot.get_generation(), slot_idx};
   }
 
-  bool remove_resource(const ResourceHandle& handle) {
-    ResourceSlot& dead_slot = slots_[handle.get_slot_index()];
+  bool remove(const ID& handle) {
+    ID& dead_slot = slots_[handle.get_index()];
     if (!dead_slot.get_is_valid() ||
         dead_slot.get_generation() != handle.get_generation()) {
       return false;
     }
 
     // swap removed data element with the last element
-    std::swap(data_[dead_slot.get_data_index()], data_.back());
-    slots_[slot_of_data_.back()].set_data_index(dead_slot.get_data_index());
-    slot_of_data_[dead_slot.get_data_index()] = slot_of_data_.back();
+    std::swap(data_[dead_slot.get_index()], data_.back());
+    slots_[slot_of_data_.back()].set_index(dead_slot.get_index());
+    slot_of_data_[dead_slot.get_index()] = slot_of_data_.back();
     data_.pop_back();
     slot_of_data_.pop_back();
 
     dead_slot.set_is_valid(false);
     dead_slot.increment_generation();
-    free_slots_.push_front(handle.get_slot_index());
+    free_slots_.push_front(handle.get_index());
 
     return true;
   }
-
-  int size() const { return int(data_.size()); }
 
   std::vector<T>& get_dense_data() { return data_; }
 

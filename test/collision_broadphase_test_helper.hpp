@@ -31,11 +31,11 @@ void update_colliders(std::vector<SimpleCollider>& colliders,
 
 void brute_force_self_collision(
     std::vector<SimpleCollider>& colliders,
-    silk::CollisionFilter<SimpleCollider> filter_callback,
+    silk::CollisionFilterCallback<SimpleCollider> filter_callback,
     silk::CollisionCache<SimpleCollider>& cache);
 
 void brute_force_group_group_collision(
     std::vector<SimpleCollider>& colliders_a,
     std::vector<SimpleCollider>& colliders_b,
-    silk::CollisionFilter<SimpleCollider> filter_callback,
+    silk::CollisionFilterCallback<SimpleCollider> filter_callback,
     silk::CollisionCache<SimpleCollider>& cache);

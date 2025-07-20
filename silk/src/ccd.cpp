@@ -202,7 +202,7 @@ std::optional<Eigen::Vector3f> edge_edge_collision(
   return n / std::sqrt(dist2);
 }
 
-std::optional<PointTriangleImpact> point_triangle_ccd(
+std::optional<CollisionImpact> point_triangle_ccd(
     Eigen::Ref<const Eigen::Vector3f> p0, Eigen::Ref<const Eigen::Vector3f> v10,
     Eigen::Ref<const Eigen::Vector3f> v20,
     Eigen::Ref<const Eigen::Vector3f> v30, Eigen::Ref<const Eigen::Vector3f> p1,
@@ -221,14 +221,14 @@ std::optional<PointTriangleImpact> point_triangle_ccd(
     return std::nullopt;
   }
 
-  PointTriangleImpact im;
-  im.p = p0 + toi.value() * (p1 - p0);
-  im.v1 = v10 + toi.value() * (v11 - v10);
-  im.v2 = v20 + toi.value() * (v21 - v20);
-  im.v3 = v30 + toi.value() * (v31 - v30);
+  CollisionImpact im;
+  im.v1 = p0 + toi.value() * (p1 - p0);
+  im.v2 = v10 + toi.value() * (v11 - v10);
+  im.v3 = v20 + toi.value() * (v21 - v20);
+  im.v4 = v30 + toi.value() * (v31 - v30);
   im.toi = *toi;
 
-  auto normal = point_triangle_collision(im.p, im.v1, im.v2, im.v3, h, eps);
+  auto normal = point_triangle_collision(im.v1, im.v2, im.v3, im.v4, h, eps);
   if (!normal) {
     return std::nullopt;
   }
@@ -237,7 +237,7 @@ std::optional<PointTriangleImpact> point_triangle_ccd(
   return im;
 }
 
-std::optional<EdgeEdgeImpact> edge_edge_ccd(
+std::optional<CollisionImpact> edge_edge_ccd(
     Eigen::Ref<const Eigen::Vector3f> v10,
     Eigen::Ref<const Eigen::Vector3f> v20,
     Eigen::Ref<const Eigen::Vector3f> v30,
@@ -258,7 +258,7 @@ std::optional<EdgeEdgeImpact> edge_edge_ccd(
     return std::nullopt;
   }
 
-  EdgeEdgeImpact im;
+  CollisionImpact im;
   im.v1 = v10 + toi.value() * (v11 - v10);
   im.v2 = v20 + toi.value() * (v21 - v20);
   im.v3 = v30 + toi.value() * (v31 - v30);

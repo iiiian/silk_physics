@@ -5,7 +5,7 @@
 #include <cassert>
 #include <random>
 
-#include "../bbox.hpp"
+#include "bbox.hpp"
 #include "collision_helper.hpp"
 
 namespace silk {
@@ -104,7 +104,8 @@ void sap_sort_proxies(C** proxies, int proxy_num, int axis) {
 
 template <typename C>
 void sap_sorted_collision(C* p1, C* const* proxies, int proxy_num, int axis,
-                          CollisionFilter<C> filter, CollisionCache<C>& cache) {
+                          CollisionFilterCallback<C> filter,
+                          CollisionCache<C>& cache) {
   assert((proxy_num != 0));
 
   if (p1->bbox.max(axis) < proxies[0]->bbox.min(axis)) {
@@ -130,7 +131,7 @@ void sap_sorted_collision(C* p1, C* const* proxies, int proxy_num, int axis,
 
 template <typename C>
 void sap_sorted_group_self_collision(C* const* proxies, int proxy_num, int axis,
-                                     CollisionFilter<C> filter,
+                                     CollisionFilterCallback<C> filter,
                                      CollisionCache<C>& cache) {
   assert((proxy_num > 0));
 
@@ -143,7 +144,8 @@ void sap_sorted_group_self_collision(C* const* proxies, int proxy_num, int axis,
 template <typename C>
 void sap_sorted_group_group_collision(C* const* proxies_a, int proxy_num_a,
                                       C* const* proxies_b, int proxy_num_b,
-                                      int axis, CollisionFilter<C> filter,
+                                      int axis,
+                                      CollisionFilterCallback<C> filter,
                                       CollisionCache<C>& cache) {
   assert((proxy_num_a > 0));
   assert((proxy_num_b > 0));

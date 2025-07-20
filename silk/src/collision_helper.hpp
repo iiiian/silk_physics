@@ -9,7 +9,7 @@ template <typename C>
 using CollisionCache = std::vector<std::pair<C*, C*>>;
 
 template <typename C>
-using CollisionFilter = std::function<bool(const C&, const C&)>;
+using CollisionFilterCallback = std::function<bool(const C&, const C&)>;
 
 struct MeanVariance {
   Eigen::Vector3f mean;

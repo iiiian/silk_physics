@@ -9,7 +9,7 @@
 #include <random>
 #include <vector>
 
-#include "../bbox.hpp"
+#include "bbox.hpp"
 #include "collision_helper.hpp"
 #include "sap.hpp"
 
@@ -102,7 +102,7 @@ class KDTree {
     optimize_structure();
   }
 
-  void test_self_collision(CollisionFilter<C> filter,
+  void test_self_collision(CollisionFilterCallback<C> filter,
                            CollisionCache<C>& cache) {
     assert(root_);
 
@@ -145,7 +145,7 @@ class KDTree {
   }
 
   static void test_tree_collision(KDTree& ta, KDTree& tb,
-                                  CollisionFilter<C> filter,
+                                  CollisionFilterCallback<C> filter,
                                   CollisionCache<C>& cache) {
     assert(ta.root_ && tb.root_);
 
@@ -780,7 +780,7 @@ class KDTree {
     }
   }
 
-  void test_node_collision(KDNode* n, CollisionFilter<C> filter) {
+  void test_node_collision(KDNode* n, CollisionFilterCallback<C> filter) {
     C** proxy_start = proxies_.data() + n->proxy_start;
     int proxy_num = n->proxy_num();
     if (proxy_num == 0) {
