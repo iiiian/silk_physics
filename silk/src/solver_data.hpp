@@ -1,14 +1,16 @@
 #pragma once
 
-#include <Eigen/Core>
 #include <Eigen/SparseCore>
 #include <memory>
 #include <vector>
 
+#include "solver_constrain.hpp"
+
 namespace silk {
 
-struct SolverInitData {
-  std::vector<Eigen::Triplet<float>> mass;
+struct SolverData {
+  int offset;
+  Eigen::VectorXf mass;
   std::vector<Eigen::Triplet<float>> weighted_AA;
   std::vector<std::unique_ptr<ISolverConstrain>> constrains;
 };

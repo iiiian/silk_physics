@@ -1,41 +1,37 @@
+#include "mesh.hpp"
+
+#include <igl/edges.h>
+
 #include <Eigen/Core>
-#include <silk/silk.hpp>
+#include <cassert>
 
 namespace silk {
 
-Mesh::Mesh(const Verts& verts, const Faces& faces) : V(verts), F(faces) {}
+std::optional<TriMesh> try_make_tri_mesh(MeshConfig mesh_config,
+                                         PininingConfig pinning_config) {
+  assert((mesh_config.validate() == Result::Success &&
+          pinning_config.validate() == Result::Success));
 
-Mesh::Mesh(float* verts, int vert_num, int* faces, int face_num) {
-  Eigen::Map<const Verts> V_map{verts, vert_num, 3};
-  V = V_map;
-  Eigen::Map<const Faces> F_map{faces, face_num, 3};
-  F = F_map;
-}
+  auto& mc = mesh_config;
+  auto& pc = pinning_config;
 
-bool Mesh::is_valid() const {
-  int vert_num = V.rows();
-  int face_num = F.rows();
+  TriMesh mesh;
+  mesh.V = Eigen::Map<RMatrixX3f>(mc.vertices, mc.vert_num, 3);
+  mesh.F = Eigen::Map<RMatrixX3i>(mc.faces, mc.face_num, 3);
+  igl::edges(mesh.F, mesh.E);
 
-  // empty mesh
-  if (vert_num == 0 || face_num == 0) {
-    return false;
+  if (pc.pinned_num != 0) {
+    mesh.pinned =
+        Eigen::Map<Eigen::VectorXi>(pc.pinned_vertices, pc.pinned_num);
   }
 
-  for (auto vert_idx : F.rowwise()) {
-    // vertex index out of range
-    if (vert_idx(0) >= vert_num || vert_idx(1) >= vert_num ||
-        vert_idx(2) >= vert_num) {
-      return false;
-    }
-
-    // triangle with repeated vertices
-    if (vert_idx(0) == vert_idx(1) || vert_idx(1) == vert_idx(2) ||
-        vert_idx(2) == vert_idx(0)) {
-      return false;
-    }
+  // check vertex index of pinned vertices lies in range
+  int max = mesh.pinned.maxCoeff();
+  if (max >= mesh_config.vert_num) {
+    return std::nullopt;
   }
 
-  return true;
+  return mesh;
 }
 
 }  // namespace silk

@@ -291,31 +291,35 @@ std::optional<float> CCDPoly::cubic_ccd() const {
 }
 
 std::optional<CCDPoly> CCDPoly::try_make_ccd_poly(
-    Eigen::Ref<const Eigen::Vector3f> x10,
-    Eigen::Ref<const Eigen::Vector3f> x20,
-    Eigen::Ref<const Eigen::Vector3f> x30,
-    Eigen::Ref<const Eigen::Vector3f> x40,
-    Eigen::Ref<const Eigen::Vector3f> x11,
-    Eigen::Ref<const Eigen::Vector3f> x21,
-    Eigen::Ref<const Eigen::Vector3f> x31,
-    Eigen::Ref<const Eigen::Vector3f> x41, float tol, int refine_it,
+    const Eigen::Matrix<float, 3, 4>& position_t0,
+    const Eigen::Matrix<float, 3, 4>& position_t1, float tol, int refine_it,
     float eps) {
-  Eigen::Vector3f p21 = x20 - x10;
-  Eigen::Vector3f v21 = (x21 - x11) - p21;
-  Eigen::Vector3f p31 = x30 - x10;
-  Eigen::Vector3f v31 = (x31 - x11) - p31;
-  Eigen::Vector3f p41 = x40 - x10;
-  Eigen::Vector3f v41 = (x41 - x11) - p41;
+  // unpack position
+  auto x00 = position_t0.col(0);  // vertex 0 at t0
+  auto x10 = position_t0.col(1);  // vertex 1 at t0
+  auto x20 = position_t0.col(2);  // vertex 2 at t0
+  auto x30 = position_t0.col(3);  // vertex 3 at t0
+  auto x01 = position_t1.col(0);  // vertex 0 at t1
+  auto x11 = position_t1.col(1);  // vertex 1 at t1
+  auto x21 = position_t1.col(2);  // vertex 2 at t1
+  auto x31 = position_t1.col(3);  // vertex 3 at t1
 
-  Eigen::Vector3f v21cv31 = v21.cross(v31);
-  Eigen::Vector3f p21cv31 = p21.cross(v31);
-  Eigen::Vector3f v21cp31 = v21.cross(p31);
-  Eigen::Vector3f p21cp31 = p21.cross(p31);
+  Eigen::Vector3f p10 = x10 - x00;
+  Eigen::Vector3f v10 = (x11 - x01) - p10;
+  Eigen::Vector3f p20 = x20 - x00;
+  Eigen::Vector3f v20 = (x21 - x01) - p20;
+  Eigen::Vector3f p30 = x30 - x00;
+  Eigen::Vector3f v30 = (x31 - x01) - p30;
 
-  float a = v21cv31.dot(v41);
-  float b = p21cv31.dot(v41) + v21cp31.dot(v41) + v21cv31.dot(p41);
-  float c = v21cp31.dot(p41) + p21cv31.dot(p41) + p21cp31.dot(v41);
-  float d = p21cp31.dot(p41);
+  Eigen::Vector3f v10cv20 = v10.cross(v20);
+  Eigen::Vector3f p10cv20 = p10.cross(v20);
+  Eigen::Vector3f v10cp20 = v10.cross(p20);
+  Eigen::Vector3f p10cp20 = p10.cross(p20);
+
+  float a = v10cv20.dot(v30);
+  float b = p10cv20.dot(v30) + v10cp20.dot(v30) + v10cv20.dot(p30);
+  float c = v10cp20.dot(p30) + p10cv20.dot(p30) + p10cp20.dot(v30);
+  float d = p10cp20.dot(p30);
 
   float max_coeff =
       std::max({std::abs(a), std::abs(b), std::abs(c), std::abs(d)});

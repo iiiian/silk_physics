@@ -3,215 +3,303 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <cmath>
+#include <optional>
 
 #include "ccd_poly.hpp"
 
 namespace silk {
 
 // return normal if collide
-std::optional<Eigen::Vector3f> point_triangle_collision(
-    Eigen::Ref<const Eigen::Vector3f> p, Eigen::Ref<const Eigen::Vector3f> v1,
-    Eigen::Ref<const Eigen::Vector3f> v2, Eigen::Ref<const Eigen::Vector3f> v3,
-    float h, float eps) {
-  Eigen::Vector3f v13 = v1 - v3;
-  Eigen::Vector3f v23 = v2 - v3;
-  Eigen::Vector3f vp3 = p - v3;
+std::optional<Collision> point_triangle_collision(
+    float toi, const Eigen::Matrix<float, 3, 4>& position_t0,
+    const Eigen::Matrix<float, 3, 4>& position_t1,
+    const Eigen::Vector4f& weight, const CCDConfig& config) {
+  const CCDConfig& c = config;
 
-  float v13dv13 = v13.squaredNorm();
-  float v13dv23 = v13.dot(v23);
-  float v23dv23 = v23.squaredNorm();
-  float v13dvp3 = v13.dot(vp3);
-  float v23dvp3 = v23.dot(vp3);
-  float det = v13dv13 * v23dv23 - v13dv23 * v13dv23;
+  // point triangle position at potential collision
+  Eigen::Matrix<float, 3, 4> p_diff = (position_t1 - position_t0);
+  Eigen::Matrix<float, 3, 4> p_colli = position_t0 + toi * p_diff;
+  auto x0 = p_colli.col(0);  // point position
+  auto x1 = p_colli.col(1);  // triangle vertex 1 position
+  auto x2 = p_colli.col(2);  // triangle vertex 2 position
+  auto x3 = p_colli.col(3);  // triangle vertex 3 position
 
-  // degenerate triangle
-  // TODO: warn about degenerate triangle
-  float area2_eps = std::pow(eps * std::max(v13dv13, v23dv23), 2);
+  Eigen::Vector3f x13 = x1 - x3;
+  Eigen::Vector3f x23 = x2 - x3;
+  Eigen::Vector3f x03 = x0 - x3;
+
+  float x13dx13 = x13.squaredNorm();
+  float x13dx23 = x13.dot(x23);
+  float x23dx23 = x23.squaredNorm();
+  float x13dx03 = x13.dot(x03);
+  float x23dx03 = x23.dot(x03);
+  float det = x13dx13 * x23dx23 - x13dx23 * x13dx23;
+
+  // degenerate triangle, ignore
+  float area2_eps = std::pow(c.eps * std::max(x13dx13, x23dx23), 2);
   if (det < area2_eps) {
     return std::nullopt;
   }
 
-  float b1 = (v23dv23 * v13dvp3 - v13dv23 * v23dvp3) / det;
-  float b2 = (-v13dv23 * v13dvp3 + v13dv13 * v23dvp3) / det;
+  // bary barycentric coordinate of point projection
+  float b1 = (x23dx23 * x13dx03 - x13dx23 * x23dx03) / det;
+  float b2 = (-x13dx23 * x13dx03 + x13dx13 * x23dx03) / det;
 
   // barycentric coordinate is outside of triangle
-  if (b1 < -eps || b1 > 1 + eps || b2 < -eps || b2 > 1 + eps ||
-      b1 + b2 > 1 + eps) {
+  if (b1 < -c.eps || b1 > 1 + c.eps || b2 < -c.eps || b2 > 1 + c.eps ||
+      b1 + b2 > 1 + c.eps) {
     return std::nullopt;
   }
 
-  Eigen::Vector3f proj = b1 * v1 + b2 * v2 + (1 - b1 - b2) * v3;
-  Eigen::Vector3f n = p - proj;
+  Eigen::Vector3f proj = b1 * x1 + b2 * x2 + (1.0f - b1 - b2) * x3;
+  // collision normal, point to triangle
+  Eigen::Vector3f n = proj - x0;
   float dist2 = n.squaredNorm();
-  if (dist2 > h * h) {
+  if (dist2 > c.h * c.h) {
     return std::nullopt;
   }
-  return n / std::sqrt(dist2);
+  n /= std::sqrt(dist2);
+
+  // compute relative velocity at impact
+  Eigen::Matrix<float, 3, 4> v = p_diff / c.dt;
+  Eigen::Vector3f proj_t0 = b1 * position_t0.col(1) + b2 * position_t0.col(2) +
+                            (1.0f - b1 - b2) * position_t0.col(3);
+  Eigen::Vector3f v_proj = (proj - proj_t0) / (toi * c.dt);
+  Eigen::Vector3f v_relative = v.col(0) - v_proj;
+  Eigen::Vector3f v_normal = n.dot(v_relative) * n;
+  Eigen::Vector3f v_parallel = v_relative - v_normal;
+
+  // compute reflection
+  Eigen::Vector4f norm_weight = weight.array() / weight.sum();
+  norm_weight(0) *= -1.0f;
+  Eigen::Vector3f v_diff =
+      (1.0f - c.damping) * v_normal + (1.0f - c.friction) * v_parallel;
+  v += v_diff * norm_weight.transpose();
+
+  Collision collision;
+  collision.type = CollisionType::PointTriangle;
+  collision.toi = toi;
+  collision.p = p_colli + (1.0f - toi) * c.dt * v;
+
+  return collision;
 }
 
 // return normal if collide
-std::optional<Eigen::Vector3f> edge_edge_collision(
-    Eigen::Ref<const Eigen::Vector3f> v1, Eigen::Ref<const Eigen::Vector3f> v2,
-    Eigen::Ref<const Eigen::Vector3f> v3, Eigen::Ref<const Eigen::Vector3f> v4,
-    float h, float eps) {
-  Eigen::Vector3f v21 = v2 - v1;
-  Eigen::Vector3f v43 = v4 - v3;
-  Eigen::Vector3f v31 = v3 - v1;
+std::optional<Collision> edge_edge_collision(
+    float toi, const Eigen::Matrix<float, 3, 4>& position_t0,
+    const Eigen::Matrix<float, 3, 4>& position_t1,
+    const Eigen::Vector4f& weight, const CCDConfig& config) {
+  const CCDConfig& c = config;
 
-  float v21dv21 = v21.squaredNorm();
-  float v21dv43 = v21.dot(v43);
-  float v43dv43 = v43.squaredNorm();
-  float v21dv31 = v21.dot(v31);
-  float v43dv31 = v43.dot(v31);
-  float det = v21dv21 * v43dv43 - v21dv43 * v21dv43;
+  // edge edge position at potential collision
+  Eigen::Matrix<float, 3, 4> p_diff = (position_t1 - position_t0);
+  Eigen::Matrix<float, 3, 4> p_colli = position_t0 + toi * p_diff;
+  auto x0 = p_colli.col(0);  // edge 1 vertex 1 position
+  auto x1 = p_colli.col(1);  // edge 1 vertex 2 position
+  auto x2 = p_colli.col(2);  // edge 2 vertex 1 position
+  auto x3 = p_colli.col(3);  // edge 2 vertex 2 position
 
-  // zero length edge
-  // TODO: warn zero length edge
-  if (v21dv21 < eps || v43dv43 < eps) {
+  Eigen::Vector3f x10 = x1 - x0;
+  Eigen::Vector3f x32 = x3 - x2;
+  Eigen::Vector3f x20 = x2 - x0;
+
+  float x10dx10 = x10.squaredNorm();
+  float x10dx32 = x10.dot(x32);
+  float x32dx32 = x32.squaredNorm();
+  float x10dx21 = x10.dot(x20);
+  float x32dx20 = x32.dot(x20);
+  float det = x10dx10 * x32dx32 - x10dx32 * x10dx32;
+
+  // zero length edge, ignore
+  if (x10dx10 < c.eps * c.eps || x32dx32 < c.eps * c.eps) {
     return std::nullopt;
   }
+
+  float e10_para = 0;
+  float e32_para = 0;
+  Eigen::Vector3f n;
+
+  // find edge parameter of collision point
 
   // parallel edge
-  float area2_eps = pow(eps * std::max(v21dv21, v43dv43), 2);
+  float area2_eps = pow(c.eps * std::max(x10dx10, x32dx32), 2);
   if (det < area2_eps) {
-    float v1cp = v43.dot(-v31) / v43dv43;
-    if (v1cp > 0.0f && v1cp < 1.0f) {
-      Eigen::Vector3f v1c = v3 + v1cp * v43;
-      Eigen::Vector3f n = v1 - v1c;
+    // test x0 against edge x2 x3
+    if (float para = x32.dot(-x20) / x32dx32; para > 0.0f && para < 1.0f) {
+      Eigen::Vector3f x0c = x2 + para * x32;
+      n = x0 - x0c;
       float dist2 = n.squaredNorm();
-      if (dist2 > h * h) {
+      if (dist2 > c.h * c.h) {
         return std::nullopt;
       }
-      return n / std::sqrt(dist2);
-    }
 
-    float v2cp = v43.dot(v2 - v3) / v43dv43;
-    if (v2cp > 0.0f && v2cp < 1.0f) {
-      Eigen::Vector3f v2c = v3 + v2cp * v43;
-      Eigen::Vector3f n = v2 - v2c;
+      e10_para = 0.0f;
+      e32_para = para;
+      n /= std::sqrt(dist2);
+    }
+    // test x1 against edge x2 x3
+    else if (float para = x32.dot(x1 - x2) / x32dx32;
+             para > 0.0f && para < 1.0f) {
+      Eigen::Vector3f x1c = x2 + para * x32;
+      Eigen::Vector3f n = x1 - x1c;
       float dist2 = n.squaredNorm();
-      if (dist2 > h * h) {
+      if (dist2 > c.h * c.h) {
         return std::nullopt;
       }
-      return n / std::sqrt(dist2);
-    }
 
-    float v3cp = v21.dot(v31) / v21dv21;
-    if (v3cp > 0.0f && v3cp < 1.0f) {
-      Eigen::Vector3f v3c = v1 + v3cp * v21;
-      Eigen::Vector3f n = -v3 + v3c;
+      e10_para = 1.0f;
+      e32_para = para;
+      n /= std::sqrt(dist2);
+    }
+    // test x2 against edge x0 x1
+    else if (float para = x10.dot(x20) / x10dx10; para > 0.0f && para < 1.0f) {
+      Eigen::Vector3f x2c = x0 + para * x10;
+      Eigen::Vector3f n = x2c - x2;
       float dist2 = n.squaredNorm();
-      if (dist2 > h * h) {
+      if (dist2 > c.h * c.h) {
         return std::nullopt;
       }
-      return n / std::sqrt(dist2);
-    }
 
-    float v4cp = v21.dot(v4 - v1) / v21dv21;
-    if (v4cp > 0.0f && v4cp < 1.0f) {
-      Eigen::Vector3f v4c = v1 + v4cp * v21;
-      Eigen::Vector3f n = -v4 + v4c;
+      e10_para = para;
+      e32_para = 0.0f;
+      n /= std::sqrt(dist2);
+    }
+    // test x3 against edge x0 x1
+    else if (float para = x10.dot(x3 - x0) / x10dx10;
+             para > 0.0f && para < 1.0f) {
+      Eigen::Vector3f x3c = x0 + para * x10;
+      Eigen::Vector3f n = x3c - x3;
       float dist2 = n.squaredNorm();
-      if (dist2 > h * h) {
+      if (dist2 > c.h * c.h) {
         return std::nullopt;
       }
-      return n / std::sqrt(dist2);
+
+      e10_para = para;
+      e32_para = 1.0f;
+      n /= std::sqrt(dist2);
     }
-  }
-
-  // non parallel edge, compute the closest point between two infinite line
-  // then clamp if necessary
-  auto try_clamp = [](float val) -> std::pair<bool, float> {
-    if (val < 0) {
-      return {true, 0};
+  } else {
+    // non parallel edge, compute the closest point between two infinite line
+    // then clamp if necessary
+    e10_para = (x32dx32 * x10dx21 - x10dx32 * x32dx20) / det;
+    bool is_e10_para_clamped = false;
+    if (e10_para < 0.0f) {
+      e10_para = 0.0f;
+      is_e10_para_clamped = true;
+    } else if (e10_para > 1.0f) {
+      e10_para = 1.0f;
+      is_e10_para_clamped = true;
     }
-    if (val > 1) {
-      return {true, 1};
+    e32_para = (x10dx32 * x10dx21 - x10dx10 * x32dx20) / det;
+    bool is_e32_para_clamped = false;
+    if (e32_para < 0.0f) {
+      e32_para = 0.0f;
+      is_e32_para_clamped = true;
+    } else if (e32_para > 1.0f) {
+      e32_para = 1.0f;
+      is_e32_para_clamped = true;
     }
-    return {false, val};
-  };
-  auto [is_e12cp_clamped, e12cp] =
-      try_clamp((v43dv43 * v21dv31 - v21dv43 * v43dv31) / det);
-  auto [is_e34cp_clamped, e34cp] =
-      try_clamp((v21dv43 * v21dv31 - v21dv21 * v43dv31) / det);
 
-  // both parameter of edge v1 v2 and edge v3 v4 are outside
-  if (is_e12cp_clamped && is_e34cp_clamped) {
-    // compute 2 possible collision point pairs then choose the closer one
-    // candidate pair a
-    Eigen::Vector3f e12c_a = v1 + e12cp * v21;
-    float e34cp_a = std::clamp(v43.dot(e12c_a - v3) / v43dv43, 0.0f, 1.0f);
-    Eigen::Vector3f e34c_a = v3 + e34cp_a * v43;
+    // both parameter of edge x0 x1 and edge x2 x3 are outside
+    if (is_e10_para_clamped && is_e32_para_clamped) {
+      // compute 2 possible collision point pairs then choose the closer one
+      // candidate pair a
+      Eigen::Vector3f e10c_a = x0 + e10_para * x10;
+      float e32_para_a = std::clamp(x32.dot(e10c_a - x2) / x32dx32, 0.0f, 1.0f);
+      Eigen::Vector3f e32c_a = x2 + e32_para_a * x32;
 
-    // candidate pair b
-    Eigen::Vector3f e34c_b = v3 + e34cp * v43;
-    float e12cp_b = std::clamp(v21.dot(e34c_b - v1) / v21dv21, 0.0f, 1.0f);
-    Eigen::Vector3f e12c_b = v1 + e12cp_b * v21;
+      // candidate pair b
+      Eigen::Vector3f e32c_b = x2 + e32_para * x32;
+      float e10_para_b = std::clamp(x10.dot(e32c_b - x0) / x10dx10, 0.0f, 1.0f);
+      Eigen::Vector3f e10c_b = x0 + e10_para_b * x10;
 
-    Eigen::Vector3f na = e12c_a - e34c_a;
-    Eigen::Vector3f nb = e12c_b - e34c_b;
-    float dist2a = na.squaredNorm();
-    float dist2b = nb.squaredNorm();
-    if (dist2a < dist2b) {
-      if (dist2a > h * h) {
+      Eigen::Vector3f na = e10c_a - e32c_a;
+      Eigen::Vector3f nb = e10c_b - e32c_b;
+      float dist2a = na.squaredNorm();
+      float dist2b = nb.squaredNorm();
+      if (dist2a < dist2b) {
+        if (dist2a > c.h * c.h) {
+          return std::nullopt;
+        }
+        e32_para = e32_para_a;
+        n = na / std::sqrt(dist2a);
+      } else {
+        if (dist2b > c.h * c.h) {
+          return std::nullopt;
+        }
+        e10_para = e10_para_b;
+        n = nb / std::sqrt(dist2b);
+      }
+    }
+    // parameter of edge x0 x1 is outside
+    else if (is_e10_para_clamped) {
+      Eigen::Vector3f e10c = x0 + e10_para * x10;
+      e32_para = std::clamp(x32.dot(e10c - x2) / x32dx32, 0.0f, 1.0f);
+      Eigen::Vector3f e32c = x2 + e32_para * x32;
+      n = e10c - e32c;
+      float dist2 = n.squaredNorm();
+      if (dist2 > c.h * c.h) {
         return std::nullopt;
       }
-      return na / std::sqrt(dist2a);
-    } else {
-      if (dist2b > h * h) {
+
+      n /= std::sqrt(dist2);
+    }
+    // parameter of edge x2 x3 is outside
+    else if (is_e32_para_clamped) {
+      Eigen::Vector3f e32c = x2 + e32_para * x32;
+      e10_para = std::clamp(x10.dot(e32c - x0) / x10dx10, 0.0f, 1.0f);
+      Eigen::Vector3f e12c = x0 + e10_para * x10;
+      Eigen::Vector3f n = e12c - e32c;
+      float dist2 = n.squaredNorm();
+      if (dist2 > c.h * c.h) {
         return std::nullopt;
       }
-      return nb / std::sqrt(dist2b);
+
+      n /= std::sqrt(dist2);
+    }
+    // both para are inside
+    else {
+      Eigen::Vector3f e10c = x0 + e10_para * x10;
+      Eigen::Vector3f e32c = x2 + e32_para * x32;
+      Eigen::Vector3f n = e10c - e32c;
+      float dist2 = n.squaredNorm();
+      if (dist2 > c.h * c.h) {
+        return std::nullopt;
+      }
+      n /= std::sqrt(dist2);
     }
   }
 
-  // parameter of edge v1 v2 is outside
-  if (is_e12cp_clamped) {
-    Eigen::Vector3f e12c = v1 + e12cp * v21;
-    float e34cp = std::clamp(v43.dot(e12c - v3) / v43dv43, 0.0f, 1.0f);
-    Eigen::Vector3f e34c = v3 + e34cp * v43;
-    Eigen::Vector3f n = e12c - e34c;
-    float dist2 = n.squaredNorm();
-    if (dist2 > h * h) {
-      return std::nullopt;
-    }
-    return n / std::sqrt(dist2);
-  }
+  // compute relative velocity at impact
+  Eigen::Matrix<float, 3, 4> v = p_diff / c.dt;
+  Eigen::Vector3f v_e10c = e10_para * v.col(0) + (1.0f - e10_para) * v.col(1);
+  Eigen::Vector3f v_e32c = e32_para * v.col(2) + (1.0f - e32_para) * v.col(3);
+  Eigen::Vector3f v_relative = v_e10c - v_e32c;
+  Eigen::Vector3f v_normal = n.dot(v_relative) * n;
+  Eigen::Vector3f v_parallel = v_relative - v_normal;
 
-  // parameter of edge v3 v4 is outside
-  if (is_e34cp_clamped) {
-    Eigen::Vector3f e34c = v3 + e34cp * v43;
-    float e12cp = std::clamp(v21.dot(e34c - v1) / v21dv21, 0.0f, 1.0f);
-    Eigen::Vector3f e12c = v1 + e12cp * v21;
-    Eigen::Vector3f n = e12c - e34c;
-    float dist2 = n.squaredNorm();
-    if (dist2 > h * h) {
-      return std::nullopt;
-    }
-    return n / std::sqrt(dist2);
-  }
+  // compute reflection
+  Eigen::Vector4f norm_weight = weight.array() / weight.sum();
+  norm_weight(0) *= -1.0f;
+  norm_weight(1) *= -1.0f;
+  Eigen::Vector3f v_diff =
+      (1.0f - c.damping) * v_normal + (1.0f - c.friction) * v_parallel;
+  v += v_diff * norm_weight.transpose();
 
-  // both para are inside
-  Eigen::Vector3f e12c = v1 + e12cp * v21;
-  Eigen::Vector3f e34c = v3 + e34cp * v43;
-  Eigen::Vector3f n = e12c - e34c;
-  float dist2 = n.squaredNorm();
-  if (dist2 > h * h) {
-    return std::nullopt;
-  }
-  return n / std::sqrt(dist2);
+  Collision collision;
+  collision.type = CollisionType::EdgeEdge;
+  collision.toi = toi;
+  collision.p = p_colli + (1.0f - toi) * c.dt * v;
+
+  return collision;
 }
 
-std::optional<CollisionImpact> point_triangle_ccd(
-    Eigen::Ref<const Eigen::Vector3f> p0, Eigen::Ref<const Eigen::Vector3f> v10,
-    Eigen::Ref<const Eigen::Vector3f> v20,
-    Eigen::Ref<const Eigen::Vector3f> v30, Eigen::Ref<const Eigen::Vector3f> p1,
-    Eigen::Ref<const Eigen::Vector3f> v11,
-    Eigen::Ref<const Eigen::Vector3f> v21,
-    Eigen::Ref<const Eigen::Vector3f> v31, float h, float tol, int refine_it,
-    float eps) {
-  auto poly = CCDPoly::try_make_ccd_poly(p0, v10, v20, v30, p1, v11, v21, v31,
-                                         tol, refine_it, eps);
+std::optional<Collision> point_triangle_ccd(
+    const Eigen::Matrix<float, 3, 4>& position_t0,
+    const Eigen::Matrix<float, 3, 4>& position_t1,
+    const Eigen::Vector4f& weight, const CCDConfig& config) {
+  auto poly = CCDPoly::try_make_ccd_poly(position_t0, position_t1, config.tol,
+                                         config.refine_it, config.eps);
   if (!poly) {
     return std::nullopt;
   }
@@ -221,34 +309,16 @@ std::optional<CollisionImpact> point_triangle_ccd(
     return std::nullopt;
   }
 
-  CollisionImpact im;
-  im.v1 = p0 + toi.value() * (p1 - p0);
-  im.v2 = v10 + toi.value() * (v11 - v10);
-  im.v3 = v20 + toi.value() * (v21 - v20);
-  im.v4 = v30 + toi.value() * (v31 - v30);
-  im.toi = *toi;
-
-  auto normal = point_triangle_collision(im.v1, im.v2, im.v3, im.v4, h, eps);
-  if (!normal) {
-    return std::nullopt;
-  }
-
-  im.normal = normal.value();
-  return im;
+  return point_triangle_collision(*toi, position_t0, position_t1, weight,
+                                  config);
 }
 
-std::optional<CollisionImpact> edge_edge_ccd(
-    Eigen::Ref<const Eigen::Vector3f> v10,
-    Eigen::Ref<const Eigen::Vector3f> v20,
-    Eigen::Ref<const Eigen::Vector3f> v30,
-    Eigen::Ref<const Eigen::Vector3f> v40,
-    Eigen::Ref<const Eigen::Vector3f> v11,
-    Eigen::Ref<const Eigen::Vector3f> v21,
-    Eigen::Ref<const Eigen::Vector3f> v31,
-    Eigen::Ref<const Eigen::Vector3f> v41, float h, float tol, int refine_it,
-    float eps) {
-  auto poly = CCDPoly::try_make_ccd_poly(v10, v20, v30, v40, v11, v21, v31, v41,
-                                         tol, refine_it, eps);
+std::optional<Collision> edge_edge_ccd(
+    const Eigen::Matrix<float, 3, 4>& position_t0,
+    const Eigen::Matrix<float, 3, 4>& position_t1,
+    const Eigen::Vector3f& weight, const CCDConfig& config) {
+  auto poly = CCDPoly::try_make_ccd_poly(position_t0, position_t1, config.tol,
+                                         config.refine_it, config.eps);
   if (!poly) {
     return std::nullopt;
   }
@@ -258,20 +328,7 @@ std::optional<CollisionImpact> edge_edge_ccd(
     return std::nullopt;
   }
 
-  CollisionImpact im;
-  im.v1 = v10 + toi.value() * (v11 - v10);
-  im.v2 = v20 + toi.value() * (v21 - v20);
-  im.v3 = v30 + toi.value() * (v31 - v30);
-  im.v4 = v40 + toi.value() * (v41 - v40);
-  im.toi = *toi;
-
-  auto normal = edge_edge_collision(im.v1, im.v2, im.v3, im.v4, h, eps);
-  if (!normal) {
-    return std::nullopt;
-  }
-
-  im.normal = normal.value();
-  return im;
+  return edge_edge_collision(*toi, position_t0, position_t1, weight, config);
 }
 
 }  // namespace silk

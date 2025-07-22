@@ -1,47 +1,10 @@
 #pragma once
 
-#include <Eigen/Core>
 #include <cstdint>
 #include <memory>
 #include <string>
 
 namespace silk {
-
-using Verts = Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor>;
-using Faces = Eigen::Matrix<int, Eigen::Dynamic, 3, Eigen::RowMajor>;
-
-class Mesh {
- public:
-  Verts V;
-  Faces F;
-
-  Mesh() = default;
-  Mesh(const Verts& verts, const Faces& faces);
-  Mesh(float* verts, int vert_num, int* faces, int face_num);
-
-  bool is_valid() const;
-};
-
-class ClothConfig {
- public:
-  bool enable_collision = true;
-  bool enable_self_collision = true;
-  float elastic_stiffness = 1.0f;
-  float bending_stiffness = 1.0f;
-  float density = 1.0f;
-
-  Mesh mesh;
-  Eigen::VectorXi pinned_verts;
-
-  bool is_valid() const;
-};
-
-enum class HandleType { Cloth, RigidBody, SoftBody, Hair, Collider };
-
-struct Handle {
-  HandleType type;
-  uint32_t value;
-};
 
 enum class Result {
   Success,
@@ -56,6 +19,52 @@ enum class Result {
   IterativeSolverInitFail,
   NeedInitSolverBeforeSolve,
   IterativeSolveFail
+};
+
+class MeshConfig {
+ public:
+  float* vertices;
+  int vert_num;
+  int* faces;
+  int face_num;
+
+  Result validate() const;
+};
+
+class PininingConfig {
+ public:
+  int* pinned_vertices;
+  int pinned_num;
+
+  Result validate() const;
+};
+
+class CollisionConfig {
+ public:
+  bool is_collision_on = true;
+  bool is_self_collision_on = true;
+  int group = 0;
+  float damping = 0.0f;
+  float friction = 0.0f;
+
+  Result validate() const;
+};
+
+class ClothConfig {
+ public:
+  float elastic_stiffness = 1.0f;
+  float bending_stiffness = 1.0f;
+  float density = 1.0f;
+
+  Result validate() const;
+};
+
+struct ClothHandle {
+  uint32_t value;
+};
+
+struct ObstacleHandle {
+  uint32_t value;
 };
 
 std::string to_string(Result result);
@@ -73,14 +82,45 @@ class World {
   World& operator=(World&&);
 
   // cloth API
-  [[nodiscard]] Result add_cloth(ClothConfig config, Handle& handle);
-  [[nodiscard]] Result remove_cloth(const Handle& handle);
-  [[nodiscard]] Result update_cloth(ClothConfig config, const Handle& handle);
+  [[nodiscard]] Result add_cloth(ClothConfig cloth_config,
+                                 CollisionConfig collision_config,
+                                 MeshConfig mesh_config,
+                                 PininingConfig pinning_config,
+                                 ClothHandle& handle);
+  [[nodiscard]] Result remove_cloth(const ClothHandle& handle);
+  // update cloth config
+  [[nodiscard]] Result update_cloth(const ClothHandle& handle,
+                                    ClothConfig config);
+  // update cloth collision config
+  [[nodiscard]] Result update_cloth(const ClothHandle& handle,
+                                    CollisionConfig config);
+  // update cloth mesh and pinning config
+  [[nodiscard]] Result update_cloth(const ClothHandle& handle,
+                                    MeshConfig mesh_config,
+                                    PininingConfig pining_config);
+  [[nodiscard]] Result set_cloth_pinned(const ClothHandle& handle,
+                                        float* pinned_vertices, int pinned_num);
+  [[nodiscard]] Result get_cloth_state(const ClothHandle& handle,
+                                       float* position, int num) const;
+
+  // obstacle API
+  [[nodiscard]] Result add_obstacle(CollisionConfig collision_config,
+                                    MeshConfig mesh_config,
+                                    ObstacleHandle& handle);
+  [[nodiscard]] Result remove_obstacle(const ObstacleHandle& handle);
+  // update obstacle collision config
+  [[nodiscard]] Result update_obstacle(const ObstacleHandle& handle,
+                                       CollisionConfig config);
+  // update obstacle mesh
+  [[nodiscard]] Result update_obstacle(const ObstacleHandle& handle,
+                                       MeshConfig mesh_config);
 
   // solver API
 
-  Eigen::Vector3f get_constant_acce_field() const;
-  void set_constant_acce_field(Eigen::Vector3f acce);
+  void get_acceleration(float& x_acceleration, float& y_acceleration,
+                        float& z_acceleration) const;
+  void set_acceleration(float x_acceleration, float y_acceleration,
+                        float z_acceleration);
 
   int get_max_iteration() const;
   void set_max_iterations(int iter);
@@ -97,12 +137,6 @@ class World {
   void solver_reset();
   [[nodiscard]] Result solver_init();
   [[nodiscard]] Result step();
-
-  // position API
-  [[nodiscard]] Result update_position_constrain(
-      const Handle& handle, Eigen::Ref<const Eigen::VectorXf> positions);
-  [[nodiscard]] Result get_current_position(
-      const Handle& handle, Eigen::Ref<Eigen::VectorXf> positions) const;
 };
 
 }  // namespace silk
