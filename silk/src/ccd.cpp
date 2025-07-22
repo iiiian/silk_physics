@@ -79,7 +79,7 @@ std::optional<Collision> point_triangle_collision(
   Collision collision;
   collision.type = CollisionType::PointTriangle;
   collision.toi = toi;
-  collision.p = p_colli + (1.0f - toi) * c.dt * v;
+  collision.position = p_colli + (1.0f - toi) * c.dt * v;
 
   return collision;
 }
@@ -289,7 +289,7 @@ std::optional<Collision> edge_edge_collision(
   Collision collision;
   collision.type = CollisionType::EdgeEdge;
   collision.toi = toi;
-  collision.p = p_colli + (1.0f - toi) * c.dt * v;
+  collision.position = p_colli + (1.0f - toi) * c.dt * v;
 
   return collision;
 }

@@ -178,18 +178,19 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   }
 
   // pinned vertices
-  if (pinned_group.pinnned_index.size() != 0) {
-    // TODO: remove hard coded position constrain stiffness
-    for (int idx : pinned_group.pinnned_index) {
+  auto p = pinned_group;
+  if (p.pinnned_index.size() != 0) {
+    for (int idx : p.pinnned_index) {
       int offset = solver_offset + 3 * idx;
-      weighted_AA.emplace_back(offset, offset, 1e6f);
-      weighted_AA.emplace_back(offset + 1, offset + 1, 1e6f);
-      weighted_AA.emplace_back(offset + 2, offset + 2, 1e6f);
+      weighted_AA.emplace_back(offset, offset, p.pinned_sitffness);
+      weighted_AA.emplace_back(offset + 1, offset + 1, p.pinned_sitffness);
+      weighted_AA.emplace_back(offset + 2, offset + 2, p.pinned_sitffness);
     }
   }
 
   SolverData data;
-  data.offset = solver_offset;
+  data.state_offset = solver_offset;
+  data.state_num = 3 * m.V.rows();
   data.mass.resize(vert_num);
   for (int i = 0; i < vert_num; ++i) {
     data.mass(i) = mass.coeff(i, i);
@@ -211,12 +212,14 @@ void make_all_solver_data(Registry& registry) {
     auto pinned_group = ECS_GET(registry, e, pinned_group);
 
     if (cloth_config && tri_mesh && pinned_group) {
-      Handle h = registry.solver_data.add(make_cloth_solver_data(
-          *cloth_config, *tri_mesh, *pinned_group, offset_counter));
+      SolverData data = make_cloth_solver_data(*cloth_config, *tri_mesh,
+                                               *pinned_group, offset_counter);
+      offset_counter += data.state_num;
+
+      Handle h = registry.solver_data.add(std::move(data));
       assert(!h.is_empty());
       e.solver_data = h;
 
-      offset_counter += 3 * tri_mesh->V.rows();
       continue;
     }
   }

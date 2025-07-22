@@ -1,16 +1,52 @@
 #pragma once
 
 #include <Eigen/Core>
-#include <Eigen/SparseCore>
+#include <Eigen/Sparse>
 #include <memory>
 #include <vector>
 
+#include "collision.hpp"
+#include "collision_pipeline.hpp"
+#include "ecs.hpp"
+#include "solver_constrain.hpp"
+
 namespace silk {
 
-struct SolverInitData {
-  std::vector<Eigen::Triplet<float>> mass;
-  std::vector<Eigen::Triplet<float>> weighted_AA;
-  std::vector<std::unique_ptr<ISolverConstrain>> constrains;
+class Solver {
+ public:
+  Eigen::Vector3f const_acceleration = {0.0f, 0.0f, -1.0f};
+  int max_iteration = 10;
+  int thread_num = 4;
+  int r_ = 30;
+  float dt_ = 1.0f;
+  float ccd_line_search_walkback = 0.8f;
+
+ private:
+  int state_num_ = 0;
+
+  Eigen::VectorXf init_state_;
+  Eigen::VectorXf curr_state_;
+  Eigen::VectorXf prev_state_;
+  Eigen::VectorXf prev_velocity;
+
+  Eigen::SparseMatrix<float> mass_;
+  Eigen::SparseMatrix<float> H_;
+  Eigen::MatrixXf UHU_;
+  Eigen::MatrixXf U_;
+  Eigen::VectorXf HX_;
+
+  std::vector<std::unique_ptr<ISolverConstrain>> constrains_;
+  std::vector<Collision> collisions_;
+
+ public:
+  const Eigen::VectorXf& get_solver_state() const;
+  void clear();
+  void reset();
+  bool init(Registry& registry);
+  bool step(Registry& registry, const CollisionPipeline& collision_pipeline);
+
+ private:
+  bool lg_solve(Registry& registry, Eigen::VectorXf& predict_state);
 };
 
 }  // namespace silk

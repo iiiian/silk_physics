@@ -29,7 +29,7 @@ Obstacle make_obstacle(const CollisionConfig& config, const TriMesh& tri_mesh,
   // group -1 means collision is disabled
   o.group = (c.is_collision_on) ? c.group : -1;
   o.is_static = false;
-  o.solver_offset = solver_data.offset;
+  o.solver_offset = solver_data.state_offset;
   o.is_self_collision_on = c.is_self_collision_on;
   o.bbox_padding = 0.05f * m.avg_edge_length;
   o.damping = config.damping;

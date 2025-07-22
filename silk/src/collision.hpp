@@ -12,7 +12,7 @@ struct Collision {
   // solver state offset for vertices,
   // if offset = -1, the vertex is pinned or from pure obstacle
   Eigen::Vector4i offset;
-  Eigen::Matrix<float, 3, 4> p;
+  Eigen::Matrix<float, 3, 4> position;
 };
 
 }  // namespace silk

@@ -36,7 +36,7 @@ void update_obstacle(const CollisionConfig& config,
 
     switch (mc.type) {
       case MeshColliderType::Point: {
-        int o0 = solver_data.offset + 3 * mc.index(0);
+        int o0 = solver_data.state_offset + 3 * mc.index(0);
         p0.col(0) = get_vertex(prev_solver_state, o0);
         p1.col(0) = get_vertex(solver_state, o0);
         mc.bbox.min = p0.col(0).cwiseMin(p1.col(0));
@@ -46,8 +46,8 @@ void update_obstacle(const CollisionConfig& config,
         break;
       }
       case MeshColliderType::Edge: {
-        int o0 = solver_data.offset + 3 * mc.index(0);
-        int o1 = solver_data.offset + 3 * mc.index(1);
+        int o0 = solver_data.state_offset + 3 * mc.index(0);
+        int o1 = solver_data.state_offset + 3 * mc.index(1);
         p0.col(0) = get_vertex(prev_solver_state, o0);
         p0.col(1) = get_vertex(prev_solver_state, o1);
         p1.col(0) = get_vertex(solver_state, o0);
@@ -63,9 +63,9 @@ void update_obstacle(const CollisionConfig& config,
         break;
       }
       case MeshColliderType::Triangle: {
-        int o0 = solver_data.offset + 3 * mc.index(0);
-        int o1 = solver_data.offset + 3 * mc.index(1);
-        int o2 = solver_data.offset + 3 * mc.index(2);
+        int o0 = solver_data.state_offset + 3 * mc.index(0);
+        int o1 = solver_data.state_offset + 3 * mc.index(1);
+        int o2 = solver_data.state_offset + 3 * mc.index(2);
         p0.col(0) = get_vertex(prev_solver_state, o0);
         p0.col(1) = get_vertex(prev_solver_state, o1);
         p0.col(2) = get_vertex(prev_solver_state, o2);
