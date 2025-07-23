@@ -51,7 +51,7 @@ bool Solver::init(Registry& registry) {
   // count total state num
   state_num_ = 0;
   for (Entity& e : registry.entity.data()) {
-    auto solver_data = ECS_GET(registry, e, solver_data);
+    auto solver_data = ECS_GET_PTR(registry, e, solver_data);
     if (solver_data) {
       state_num_ += solver_data->state_num;
     }
@@ -63,8 +63,8 @@ bool Solver::init(Registry& registry) {
   prev_state_.resize(state_num_);
   prev_velocity = Eigen::VectorXf::Zero(state_num_);
   for (Entity& e : registry.entity.data()) {
-    auto solver_data = ECS_GET(registry, e, solver_data);
-    auto tri_mesh = ECS_GET(registry, e, tri_mesh);
+    auto solver_data = ECS_GET_PTR(registry, e, solver_data);
+    auto tri_mesh = ECS_GET_PTR(registry, e, tri_mesh);
 
     if (solver_data && tri_mesh) {
       init_state_(
@@ -81,7 +81,7 @@ bool Solver::init(Registry& registry) {
   std::vector<Eigen::Triplet<float>> AA_triplets;
   constrains_.clear();
   for (Entity& e : registry.entity.data()) {
-    auto solver_data = ECS_GET(registry, e, solver_data);
+    auto solver_data = ECS_GET_PTR(registry, e, solver_data);
     if (solver_data) {
       // vectorize vertex mass
       auto& m = solver_data->mass;
@@ -111,15 +111,15 @@ bool Solver::init(Registry& registry) {
   Eigen::SparseMatrix<float> AA(state_num_, state_num_);
   AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
 
-  H_ = (mass_ / (dt_ * dt_) + AA);
+  H_ = (mass_ / (dt * dt) + AA);
 
   // TODO: replace arpack with modern solution.
   Eigen::ArpackGeneralizedSelfAdjointEigenSolver<
       Eigen::SparseMatrix<float>,
       Eigen::SimplicialLLT<Eigen::SparseMatrix<float>>>
       eigen_solver;
-  r_ = std::min(r_, state_num_);
-  eigen_solver.compute(H_, r_, "SM");
+  r = std::min(r, state_num_);
+  eigen_solver.compute(H_, r, "SM");
   if (eigen_solver.info() != Eigen::Success) {
     return false;
   }
@@ -135,8 +135,8 @@ bool Solver::init(Registry& registry) {
 
 bool Solver::lg_solve(Registry& registry, Eigen::VectorXf& predict_state) {
   // momentum energy term
-  Eigen::VectorXf b = (mass_ / dt_ / dt_) * predict_state +
-                      (mass_ / dt_) * (predict_state - prev_state_) +
+  Eigen::VectorXf b = (mass_ / dt / dt) * predict_state +
+                      (mass_ / dt) * (predict_state - prev_state_) +
                       mass_ * const_acceleration.replicate(state_num_, 1);
   Eigen::SparseMatrix<float> A = H_;
 
@@ -151,17 +151,17 @@ bool Solver::lg_solve(Registry& registry, Eigen::VectorXf& predict_state) {
     }
   }
 
-  // project position constrain from pinned groups
+  // project position constrain from pin groups
   for (Entity& e : registry.entity.data()) {
-    auto solver_data = ECS_GET(registry, e, solver_data);
-    auto pinned_group = ECS_GET(registry, e, pinned_group);
-    if (solver_data && pinned_group) {
-      auto p = pinned_group;
+    auto solver_data = ECS_GET_PTR(registry, e, solver_data);
+    auto pin_group = ECS_GET_PTR(registry, e, pin_group);
+    if (solver_data && pin_group) {
+      auto p = pin_group;
 
       int offset = solver_data->state_offset;
-      for (int i = 0; i < p->pinnned_index.size(); ++i) {
-        b(Eigen::seqN(offset + 3 * p->pinnned_index(i), 3)) +=
-            p->pinned_value(Eigen::seqN(3 * i, 3));
+      for (int i = 0; i < p->pin_index.size(); ++i) {
+        b(Eigen::seqN(offset + 3 * p->pin_index(i), 3)) +=
+            p->pin_value(Eigen::seqN(3 * i, 3));
       }
     }
   }
@@ -208,11 +208,11 @@ bool Solver::lg_solve(Registry& registry, Eigen::VectorXf& predict_state) {
 bool Solver::step(Registry& registry,
                   const CollisionPipeline& collision_pipeline) {
   // prediction based on linear velocity
-  Eigen::VectorXf velocity = (curr_state_ - prev_state_) / dt_;
-  Eigen::VectorXf acceleration = (velocity - prev_velocity) / dt_ +
+  Eigen::VectorXf velocity = (curr_state_ - prev_state_) / dt;
+  Eigen::VectorXf acceleration = (velocity - prev_velocity) / dt +
                                  const_acceleration.replicate(state_num_, 1);
   Eigen::VectorXf predict_state =
-      curr_state_ + dt_ * velocity + dt_ * dt_ * acceleration;
+      curr_state_ + dt * velocity + dt * dt * acceleration;
   prev_velocity = velocity;
   prev_state_ = curr_state_;
   curr_state_ = predict_state;
@@ -228,7 +228,7 @@ bool Solver::step(Registry& registry,
     // update collision
     update_all_obstacles(registry, predict_state, prev_state_);
     collisions_ =
-        collision_pipeline.find_collision(registry.obstacle.data(), dt_);
+        collision_pipeline.find_collision(registry.obstacle.data(), dt);
 
     // ccd line search
     if (!collisions_.empty()) {
@@ -237,8 +237,7 @@ bool Solver::step(Registry& registry,
         toi = std::min(toi, c.toi);
       }
 
-      curr_state_ +=
-          ccd_line_search_walkback * toi * (predict_state - curr_state_);
+      curr_state_ += ccd_walkback * toi * (predict_state - curr_state_);
       state_diff = (predict_state - curr_state_).cwiseAbs().sum();
     }
   }

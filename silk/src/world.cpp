@@ -1,6 +1,10 @@
-#include <Eigen/Core>
-#include <vector>
+#include <igl/edges.h>
 
+#include <Eigen/Core>
+#include <cassert>
+#include <cstring>
+
+#include "collision_pipeline.hpp"
 #include "ecs.hpp"
 #include "solver.hpp"
 
@@ -11,12 +15,6 @@ std::string to_string(Result result) {
     case Result::Success: {
       return "Success";
     }
-    case Result::InvalidTimeStep: {
-      return "InvalidTimeStep";
-    }
-    case Result::InvalidLowFreqModeNum: {
-      return "InvalidLowFreqModeNum";
-    }
     case Result::InvalidConfig: {
       return "InvalidConfig";
     }
@@ -26,24 +24,6 @@ std::string to_string(Result result) {
     case Result::InvalidHandle: {
       return "InvalidHandle";
     }
-    case Result::IncorrectPositionConstrainLength: {
-      return "IncorrectPositionConstrainLength";
-    }
-    case Result::IncorrentOutputPositionLength: {
-      return "IncorrentOutputPositionLength";
-    }
-    case Result::EigenDecompositionfail: {
-      return "EigenDecompositionfail";
-    }
-    case Result::IterativeSolverInitFail: {
-      return "IterativeSolverInitFail";
-    }
-    case Result::NeedInitSolverBeforeSolve: {
-      return "NeedInitSolverBeforeSolve";
-    }
-    case Result::IterativeSolveFail: {
-      return "IterativeSolveFail";
-    }
     default:
       assert(false && "unknown result");
       return "Unknown";
@@ -52,322 +32,269 @@ std::string to_string(Result result) {
 
 class World::WorldImpl {
  private:
-  // collision internal
-
-  // solver internal
-  bool need_warmup_ = true;
-  int solver_state_num_;
-  Eigen::VectorXf curr_position_;
-  Eigen::VectorXf init_position_;
-  Eigen::VectorXf velocity_;
-  Eigen::SparseMatrix<float> mass_;
-  Eigen::SparseMatrix<float> H_;  // iterative solver depends on this matrix !!
-  Eigen::MatrixXf UHU_;
-  Eigen::MatrixXf U_;
-  Eigen::VectorXf HX_;
-  std::vector<std::unique_ptr<SolverConstrain>> constrains_;
-  Eigen::ConjugateGradient<Eigen::SparseMatrix<float>,
-                           Eigen::Upper | Eigen::Lower,
-                           Eigen::IncompleteCholesky<float>>
-      iterative_solver_;
-
-  // solver parameters (need recompute warmup)
-  int low_freq_mode_num_;
-  float dt_;
-
-  Registry registry;
+  bool is_solver_init = false;
+  Registry registry_;
+  Solver solver_;
+  CollisionPipeline collision_pipeline_;
 
  public:
-  Eigen::Vector3f constant_acce_field = {0.0f, 0.0f, -1.0f};
-  int max_iteration = 5;
-  int thread_num = 4;
+  // Global API
+  Result set_global_config(GlobalConfig config) {
+    is_solver_init = false;
 
-  float get_dt() const { return dt_; }
+    auto& c = config;
+    solver_.const_acceleration = {c.acceleration_x, c.acceleration_y,
+                                  c.acceleration_z};
+    solver_.max_iteration = c.max_iteration;
+    solver_.r = c.r;
+    solver_.dt = c.dt;
+    solver_.ccd_walkback = c.ccd_walkback;
+    collision_pipeline_.toi_tolerance = c.toi_tolerance;
+    collision_pipeline_.toi_refine_it = c.toi_refine_iteration;
+    collision_pipeline_.eps = c.eps;
 
-  Result set_dt(float dt) {
-    if (dt <= 0) {
-      return Result::InvalidTimeStep;
-    }
-    dt_ = dt;
-    need_warmup_ = true;
     return Result::Success;
   }
 
-  int get_low_freq_mode_num() const { return low_freq_mode_num_; }
+  void clear() {
+    is_solver_init = false;
+    solver_.clear();
 
-  Result set_low_freq_mode_num(int num) {
-    if (num == 0) {
-      return Result::InvalidLowFreqModeNum;
+    // nuke entire registry
+    registry_.entity.clear();
+    registry_.cloth_config.clear();
+    registry_.collision_config.clear();
+    registry_.tri_mesh.clear();
+    registry_.pin_group.clear();
+    registry_.solver_data.clear();
+    registry_.obstacle.clear();
+  }
+
+  // Solver API
+  Result solver_init() {
+    if (!solver_.init(registry_)) {
+      return Result::EigenDecompositionFail;
     }
-
-    low_freq_mode_num_ = num;
-    need_warmup_ = true;
+    is_solver_init = true;
     return Result::Success;
   }
 
-  Result add_cloth(ClothConfig config, ClothHandle& handle) {
-    if (!config.is_valid()) {
-      return Result::InvalidConfig;
+  Result solver_step() {
+    if (!is_solver_init) {
+      return Result::NeedInitSolverFirst;
+    }
+    solver_.step(registry_, collision_pipeline_);
+    return Result::Success;
+  }
+
+  Result solver_reset() {
+    if (!is_solver_init) {
+      return Result::NeedInitSolverFirst;
+    }
+    solver_.reset();
+    return Result::Success;
+  }
+
+  // cloth API
+  Result add_cloth(ClothConfig cloth_config, CollisionConfig collision_config,
+                   MeshConfig mesh_config, ClothHandle& handle) {
+    // make tri mesh
+    TriMesh m;
+    m.V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
+                                      mesh_config.verts.num, 3);
+    m.F = Eigen::Map<const RMatrix3i>(mesh_config.faces.data,
+                                      mesh_config.faces.num, 3);
+    igl::edges(m.V, m.F, m.E);
+    m.avg_edge_length = 0.0f;
+    for (int i = 0; i < m.E.rows(); ++i) {
+      m.avg_edge_length += (m.V.row(m.E(i, 0)) - m.V.row(m.E(i, 1))).norm();
+    }
+    m.avg_edge_length /= m.E.rows();
+
+    // make pin group
+    PinGroup p;
+    p.pin_index = Eigen::Map<const Eigen::VectorXi>(mesh_config.pin_index.data,
+                                                    mesh_config.pin_index.num);
+    p.pin_value.resize(3 * p.pin_index.size());
+    for (int i = 0; i < p.pin_index.size(); ++i) {
+      p.pin_value(Eigen::seqN(3 * i, 3)) = m.V.row(i);
     }
 
-    auto id = clothes_.add(Cloth{std::move(config)});
-    if (id.is_empty()) {
+    Entity e;
+    e.cloth_config = registry_.cloth_config.add(std::move(cloth_config));
+    e.collision_config =
+        registry_.collision_config.add(std::move(collision_config));
+    e.tri_mesh = registry_.tri_mesh.add(std::move(m));
+    e.pin_group = registry_.pin_group.add(std::move(p));
+    Handle h = registry_.entity.add(e);
+
+    if (h.is_empty() || e.cloth_config.is_empty() ||
+        e.collision_config.is_empty() || e.tri_mesh.is_empty() ||
+        e.pin_group.is_empty()) {
+      ECS_REMOVE(registry_, e, cloth_config);
+      ECS_REMOVE(registry_, e, collision_config);
+      ECS_REMOVE(registry_, e, tri_mesh);
+      ECS_REMOVE(registry_, e, pin_group);
+      registry_.entity.remove(h);
       return Result::TooManyBody;
     }
 
-    handle.value = id.get_raw();
-
-    need_warmup_ = true;
+    is_solver_init = false;
     return Result::Success;
   }
 
-  Result remove_cloth(const ClothHandle& handle) {
-    Handle id{handle.value};
-    if (!clothes_.remove(id)) {
-      return Result::InvalidHandle;
-    }
-
-    need_warmup_ = true;
-    return Result::Success;
-  }
-
-  Result update_cloth_config(const ClothHandle& handle, ClothConfig config) {
-    Handle id{handle.value};
-    Cloth* cloth = clothes_.get(id);
+  Result remove_cloth(ClothHandle handle) {
+    Handle h{handle.value};
+    auto cloth = registry_.entity.get(h);
     if (!cloth) {
       return Result::InvalidHandle;
     }
-    if (!config.is_valid()) {
-      return Result::InvalidConfig;
-    }
-    *cloth = Cloth{std::move(config)};
 
-    need_warmup_ = true;
+    is_solver_init = false;
+    Entity& e = *cloth;
+    ECS_REMOVE(registry_, e, cloth_config);
+    ECS_REMOVE(registry_, e, collision_config);
+    ECS_REMOVE(registry_, e, tri_mesh);
+    ECS_REMOVE(registry_, e, pin_group);
+    ECS_REMOVE(registry_, e, solver_data);
+    ECS_REMOVE(registry_, e, obstacle);
+    registry_.entity.remove(h);
+
     return Result::Success;
   }
 
-  Result update_cloth_pinned_verts(const ClothHandle& handle,
-                                   Eigen::VectorXf position) {
-    const Cloth* c = clothes_.get(Handle{handle.value});
-    if (!c) {
+  Result get_cloth_position(ClothHandle handle, View<float> position) const {
+    auto cloth = registry_.entity.get(Handle{handle.value});
+    if (!cloth) {
       return Result::InvalidHandle;
     }
 
-    int pinned_num = c->get_pinned_vert_num();
-    if (position.size() != 3 * pinned_num) {
-      return Result::IncorrectPositionConstrainLength;
+    const Entity& e = *cloth;
+    if (is_solver_init) {
+      auto solver_data = ECS_GET_PTR(registry_, e, solver_data);
+      assert(solver_data);
+
+      if (position.num < solver_data->state_num) {
+        return Result::IncorrectPositionNum;
+      }
+
+      auto solver_state = solver_.get_solver_state();
+      assert((solver_state.size() >=
+              solver_data->state_offset + solver_data->state_num));
+
+      memcpy(position.data, solver_state.data() + solver_data->state_offset,
+             solver_data->state_num);
+      return Result::Success;
+    } else {
+      auto mesh = ECS_GET_PTR(registry_, e, tri_mesh);
+      assert(mesh);
+
+      if (position.num < 3 * mesh->V.rows()) {
+        return Result::IncorrectPositionNum;
+      }
+
+      memcpy(position.data, mesh->V.data(), 3 * mesh->V.rows());
     }
 
-    c->update_pinned_verts(curr_position_);
     return Result::Success;
   }
 
-  Result get_cloth_position(const ClothHandle& handle,
-                            Eigen::VectorXf& position) const {
-    const Cloth* c = clothes_.get(Handle{handle.value});
-    if (!c) {
+  Result set_cloth_config(ClothHandle handle, ClothConfig config) {
+    auto cloth = registry_.entity.get(Handle{handle.value});
+    if (!cloth) {
       return Result::InvalidHandle;
     }
 
-    Eigen::VectorXf out = c->get_position(curr_position_);
-    if (out.size() != position.size()) {
-      return Result::IncorrentOutputPositionLength;
-    }
-
-    position = out;
+    is_solver_init = false;
+    Entity& e = *cloth;
+    auto cloth_config = ECS_GET_PTR(registry_, e, cloth_config);
+    assert(cloth_config);
+    *cloth_config = config;
     return Result::Success;
   }
 
-  void solver_reset() {
-    need_warmup_ = true;
-    curr_position_ = {};
-    init_position_ = {};
-    velocity_ = {};
-    mass_ = {};
-    H_ = {};
-    UHU_ = {};
-    U_ = {};
-    HX_ = {};
-    constrains_.clear();
-    solver_state_num_ = 0;
-  }
-
-  Result solver_init() {
-    solver_state_num_ = 0;
-    for (auto& c : clothes_.get_dense_data()) {
-      solver_state_num_ += c.solver_state_num();
+  Result set_cloth_collision_config(ClothHandle handle,
+                                    CollisionConfig config) {
+    auto cloth = registry_.entity.get(Handle{handle.value});
+    if (!cloth) {
+      return Result::InvalidHandle;
     }
 
-    int current_state_offset = 0;
-    curr_position_.resize(solver_state_num_);
-    init_position_.resize(solver_state_num_);
-    velocity_.resize(solver_state_num_);
-    std::vector<Eigen::Triplet<float>> mass_triplets;
-    std::vector<Eigen::Triplet<float>> AA_triplets;
-
-    for (auto& c : clothes_.get_dense_data()) {
-      auto init_data = c.init_solver(current_state_offset);
-      mass_triplets.insert(mass_triplets.end(), init_data.mass.begin(),
-                           init_data.mass.end());
-      AA_triplets.insert(AA_triplets.end(), init_data.weighted_AA.begin(),
-                         init_data.weighted_AA.end());
-      constrains_.insert(constrains_.end(), init_data.constrains.begin(),
-                         init_data.constrains.end());
-      init_position_(Eigen::seqN(current_state_offset, c.solver_state_num())) =
-          init_data.init_solver_state;
-
-      current_state_offset += c.solver_state_num();
-    }
-
-    curr_position_ = init_position_;
-    for (int i = 0; i < solver_state_num_; ++i) {
-      velocity_(i) = 0;
-    }
-
-    // set other solver matrices
-    int num = 3 * solver_state_num_;
-    mass_.resize(num, num);
-    mass_.setFromTriplets(mass_triplets.begin(), mass_triplets.end());
-    Eigen::SparseMatrix<float> AA(num, num);
-    AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
-    H_ = (mass_ / (dt_ * dt_) + AA);
-    Eigen::ArpackGeneralizedSelfAdjointEigenSolver<
-        Eigen::SparseMatrix<float>,
-        Eigen::SimplicialLLT<Eigen::SparseMatrix<float>>>
-        eigen_solver;
-    low_freq_mode_num_ = std::min(low_freq_mode_num_, num);
-    eigen_solver.compute(H_, low_freq_mode_num_, "SM");
-    if (eigen_solver.info() != Eigen::Success) {
-      // SPDLOG_ERROR("eigen decomposition fail");
-      // TODO: better signal warning
-      return Result::EigenDecompositionfail;
-    }
-    U_ = eigen_solver.eigenvectors();
-    UHU_ = eigen_solver.eigenvalues();
-    HX_ = H_ * init_position_;
-
-    // conjugate gradient solver depends on H_ !!
-    iterative_solver_.setMaxIterations(max_iteration);
-    iterative_solver_.compute(H_);
-    if (iterative_solver_.info() != Eigen::Success) {
-      // SPDLOG_ERROR("iterative solver decomposition fail");
-      // TODO: signal warning
-      return Result::IterativeSolverInitFail;
-    }
-
-    need_warmup_ = false;
+    Entity& e = *cloth;
+    auto collision_config = ECS_GET_PTR(registry_, e, collision_config);
+    assert(collision_config);
+    *collision_config = config;
     return Result::Success;
   }
 
-  Result step() {
-    if (need_warmup_) {
-      return Result::NeedInitSolverBeforeSolve;
+  Result set_cloth_mesh(ClothHandle handle, MeshConfig mesh_config) {
+    auto cloth = registry_.entity.get(Handle{handle.value});
+    if (!cloth) {
+      return Result::InvalidHandle;
     }
 
-    // basic linear velocity term
-    Eigen::VectorXf rhs =
-        (mass_ / dt_ / dt_) * curr_position_ + (mass_ / dt_) * velocity_ +
-        mass_ * constant_acce_field.replicate(solver_state_num_, 1);
+    is_solver_init = false;
 
-    // thread local buffer for rhs
-    std::vector<Eigen::VectorXf> buffers(
-        thread_num, Eigen::VectorXf::Zero(3 * solver_state_num_));
-    // project constrains
-#pragma omp parallel for num_threads(thread_num)
-    for (const auto& c : constrains_) {
-      Eigen::VectorXf& buffer = buffers[omp_get_thread_num()];
-      c->project(curr_position_, buffer);
+    // make tri mesh
+    Entity& e = *cloth;
+    auto tri_mesh = ECS_GET_PTR(registry_, e, tri_mesh);
+    assert(tri_mesh);
+    tri_mesh->V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
+                                              mesh_config.verts.num, 3);
+    tri_mesh->F = Eigen::Map<const RMatrix3i>(mesh_config.faces.data,
+                                              mesh_config.faces.num, 3);
+    igl::edges(tri_mesh->V, tri_mesh->F, tri_mesh->E);
+    tri_mesh->avg_edge_length = 0.0f;
+    for (int i = 0; i < tri_mesh->E.rows(); ++i) {
+      tri_mesh->avg_edge_length += (tri_mesh->V.row(tri_mesh->E(i, 0)) -
+                                    tri_mesh->V.row(tri_mesh->E(i, 1)))
+                                       .norm();
     }
-    // merge thread local rhs back to global rhs
-    for (Eigen::VectorXf& buffer : buffers) {
-      rhs += buffer;
+    tri_mesh->avg_edge_length /= tri_mesh->E.rows();
+
+    // make pin group
+    auto pin_group = ECS_GET_PTR(registry_, e, pin_group);
+    assert(pin_group);
+    pin_group->pin_index = Eigen::Map<const Eigen::VectorXi>(
+        mesh_config.pin_index.data, mesh_config.pin_index.num);
+    pin_group->pin_value.resize(3 * pin_group->pin_index.size());
+    for (int i = 0; i < pin_group->pin_index.size(); ++i) {
+      pin_group->pin_value(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(i);
     }
-
-    // sub space solve
-    Eigen::VectorXf b = U_.transpose() * (rhs - HX_);
-    Eigen::VectorXf q = b.array() / UHU_.array();
-    Eigen::VectorXf subspace_sol = init_position_ + U_ * q;
-
-    // iterative global solve
-    Eigen::VectorXf sol = iterative_solver_.solveWithGuess(rhs, subspace_sol);
-    if (iterative_solver_.info() != Eigen::Success &&
-        iterative_solver_.info() != Eigen::NoConvergence) {
-      return Result::IterativeSolveFail;
-    }
-
-    // CCD
-
-    velocity_ = (sol - curr_position_) / dt_;
-    curr_position_ = sol;
+    pin_group->prev_pin_value = {};
 
     return Result::Success;
   }
+
+  Result set_cloth_pin(ClothHandle handle, ConstView<float> pin) {
+    auto cloth = registry_.entity.get(Handle{handle.value});
+    if (!cloth) {
+      return Result::InvalidHandle;
+    }
+
+    Entity& e = *cloth;
+    auto pin_group = ECS_GET_PTR(registry_, e, pin_group);
+    assert(pin_group);
+
+    if (pin_group->pin_index.size() != pin.num) {
+      return Result::IncorrectPinNum;
+    }
+
+    pin_group->prev_pin_value = pin_group->prev_pin_value;
+    pin_group->pin_value = Eigen::Map<const Eigen::VectorXf>(pin.data, pin.num);
+
+    return Result::Success;
+  }
+
+  // Obstacle API
+  Result add_obstacle(CollisionConfig collision_config, MeshConfig mesh_config,
+                      ObstacleHandle& handle);
+  Result remove_obstacle(ObstacleHandle handle);
+  Result set_obstacle_collision_config(ObstacleHandle handle,
+                                       CollisionConfig config);
+  Result set_obstacle_mesh(const ObstacleHandle& handle,
+                           MeshConfig mesh_config);
+  Result set_obstacle_position(ClothHandle handle, ConstView<float> position);
 };
-
-World::World() { impl_ = std::make_unique<silk::World::WorldImpl>(); }
-
-World::~World() = default;
-
-World::World(World&&) = default;
-
-World& World::operator=(World&&) = default;
-
-Result World::add_cloth(ClothConfig config, ClothHandle& handle) {
-  return impl_->add_cloth(std::move(config), handle);
-}
-
-Result World::remove_cloth(const ClothHandle& handle) {
-  return impl_->remove_cloth(handle);
-}
-
-Result World::update_cloth_config(const ClothHandle& handle,
-                                  ClothConfig config) {
-  return impl_->update_cloth_config(handle, std::move(config));
-}
-
-Result World::update_cloth_pinned_verts(const ClothHandle& handle,
-                                        Eigen::VectorXf position) {
-  return impl_->update_cloth_pinned_verts(handle, position);
-}
-
-Result World::get_cloth_position(const ClothHandle& handle,
-                                 Eigen::VectorXf& position) const {
-  return impl_->get_cloth_position(handle, position);
-}
-
-Eigen::Vector3f World::get_constant_acce_field() const {
-  return impl_->constant_acce_field;
-}
-
-void World::set_constant_acce_field(Eigen::Vector3f acce) {
-  impl_->constant_acce_field = std::move(acce);
-}
-
-// TODO: impl int range check
-int World::get_max_iteration() const { return impl_->max_iteration; }
-
-void World::set_max_iterations(int iter) { impl_->max_iteration = iter; }
-
-int World::get_thread_num() const { return impl_->thread_num; }
-
-void World::set_thread_num(int num) { impl_->thread_num = num; }
-
-float World::get_dt() const { return impl_->get_dt(); }
-
-Result World::set_dt(float dt) { return impl_->set_dt(dt); }
-
-int World::get_low_freq_mode_num() const {
-  return impl_->get_low_freq_mode_num();
-}
-
-Result World::set_low_freq_mode_num(int num) {
-  return impl_->set_low_freq_mode_num(num);
-}
-
-void World::solver_reset() { impl_->solver_reset(); }
-
-Result World::solver_init() { return impl_->solver_init(); }
-
-Result World::step() { return impl_->step(); }
 
 }  // namespace silk

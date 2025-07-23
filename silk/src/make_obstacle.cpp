@@ -4,7 +4,7 @@
 #include <unordered_set>
 
 #include "mesh.hpp"
-#include "pinned_group.hpp"
+#include "pin_group.hpp"
 #include "silk/silk.hpp"
 #include "solver_data.hpp"
 
@@ -12,16 +12,16 @@ namespace silk {
 
 // for physical object
 Obstacle make_obstacle(const CollisionConfig& config, const TriMesh& tri_mesh,
-                       const PinnedGroup& pinned_group,
+                       const PinGroup& pin_group,
                        const SolverData& solver_data) {
   const CollisionConfig& c = config;
   const TriMesh& m = tri_mesh;
   const Eigen::VectorXf& mass = solver_data.mass;
 
-  std::unordered_set<int> pinned_set(pinned_group.pinnned_index.begin(),
-                                     pinned_group.pinnned_index.end());
-  auto is_pinned = [&pinned_set](int index) -> bool {
-    return (pinned_set.find(index) != pinned_set.end());
+  std::unordered_set<int> pin_set(pin_group.pinnned_index.begin(),
+                                  pin_group.pinnned_index.end());
+  auto is_pinned = [&pin_set](int index) -> bool {
+    return (pin_set.find(index) != pin_set.end());
   };
 
   Obstacle o;
@@ -199,15 +199,15 @@ void make_all_obstacles(Registry& registry) {
     // remove old obstacle if exists
     ECS_REMOVE(registry, e, obstacle);
 
-    auto collision_config = ECS_GET(registry, e, collision_config);
-    auto tri_mesh = ECS_GET(registry, e, tri_mesh);
-    auto pinned_group = ECS_GET(registry, e, pinned_group);
-    auto solver_data = ECS_GET(registry, e, solver_data);
+    auto collision_config = ECS_GET_PTR(registry, e, collision_config);
+    auto tri_mesh = ECS_GET_PTR(registry, e, tri_mesh);
+    auto pin_group = ECS_GET_PTR(registry, e, pin_group);
+    auto solver_data = ECS_GET_PTR(registry, e, solver_data);
 
     Handle h;
-    if (tri_mesh && pinned_group && solver_data) {
+    if (tri_mesh && pin_group && solver_data) {
       h = registry.obstacle.add(make_obstacle(*collision_config, *tri_mesh,
-                                              *pinned_group, *solver_data));
+                                              *pin_group, *solver_data));
       assert(!h.is_empty());
       e.obstacle = h;
       continue;

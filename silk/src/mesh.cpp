@@ -8,7 +8,7 @@
 namespace silk {
 
 std::optional<TriMesh> try_make_tri_mesh(MeshConfig mesh_config,
-                                         PininingConfig pinning_config) {
+                                         PinConfig pinning_config) {
   assert((mesh_config.validate() == Result::Success &&
           pinning_config.validate() == Result::Success));
 
@@ -21,8 +21,7 @@ std::optional<TriMesh> try_make_tri_mesh(MeshConfig mesh_config,
   igl::edges(mesh.F, mesh.E);
 
   if (pc.pinned_num != 0) {
-    mesh.pinned =
-        Eigen::Map<Eigen::VectorXi>(pc.pinned_vertices, pc.pinned_num);
+    mesh.pinned = Eigen::Map<Eigen::VectorXi>(pc.pinned_index, pc.pinned_num);
   }
 
   // check vertex index of pinned vertices lies in range

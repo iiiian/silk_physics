@@ -8,55 +8,60 @@ namespace silk {
 
 enum class Result {
   Success,
-  InvalidTimeStep,
-  InvalidLowFreqModeNum,
   InvalidConfig,
   TooManyBody,
   InvalidHandle,
-  IncorrectPositionConstrainLength,
-  IncorrentOutputPositionLength,
-  EigenDecompositionfail,
-  IterativeSolverInitFail,
-  NeedInitSolverBeforeSolve,
+  IncorrectPinNum,
+  IncorrectPositionNum,
+  EigenDecompositionFail,
+  NeedInitSolverFirst,
   IterativeSolveFail
 };
 
-class MeshConfig {
- public:
-  float* vertices;
-  int vert_num;
-  int* faces;
-  int face_num;
-
-  Result validate() const;
+template <typename T>
+struct View {
+  T* data;
+  int num;
 };
 
-class PininingConfig {
- public:
-  int* pinned_vertices;
-  int pinned_num;
-
-  Result validate() const;
+template <typename T>
+struct ConstView {
+  const T* data;
+  int num;
 };
 
-class CollisionConfig {
- public:
-  bool is_collision_on = true;
-  bool is_self_collision_on = true;
-  int group = 0;
-  float damping = 0.0f;
-  float friction = 0.0f;
-
-  Result validate() const;
+struct MeshConfig {
+  ConstView<float> verts;
+  ConstView<int> faces;
+  ConstView<int> pin_index;
 };
 
-class ClothConfig {
+struct CollisionConfig {
  public:
+  bool is_collision_on;
+  bool is_self_collision_on;
+  int group;
+  float damping;
+  float friction;
+};
+
+struct ClothConfig {
   float elastic_stiffness = 1.0f;
   float bending_stiffness = 1.0f;
   float density = 1.0f;
+};
 
-  Result validate() const;
+struct GlobalConfig {
+  float acceleration_x;
+  float acceleration_y;
+  float acceleration_z;
+  int max_iteration;
+  float r;
+  float dt;
+  float ccd_walkback;
+  float toi_tolerance;
+  float toi_refine_iteration;
+  float eps;
 };
 
 struct ClothHandle {
@@ -81,62 +86,40 @@ class World {
   World(World&&);
   World& operator=(World&&);
 
+  // Global API
+  [[nodiscard]] Result set_global_config(GlobalConfig config);
+  void clear();
+
+  // Solver API
+  [[nodiscard]] Result solver_init();
+  [[nodiscard]] Result solver_step();
+  [[nodiscard]] Result solver_reset();
+
   // cloth API
   [[nodiscard]] Result add_cloth(ClothConfig cloth_config,
                                  CollisionConfig collision_config,
-                                 MeshConfig mesh_config,
-                                 PininingConfig pinning_config,
-                                 ClothHandle& handle);
-  [[nodiscard]] Result remove_cloth(const ClothHandle& handle);
-  // update cloth config
-  [[nodiscard]] Result update_cloth(const ClothHandle& handle,
-                                    ClothConfig config);
-  // update cloth collision config
-  [[nodiscard]] Result update_cloth(const ClothHandle& handle,
-                                    CollisionConfig config);
-  // update cloth mesh and pinning config
-  [[nodiscard]] Result update_cloth(const ClothHandle& handle,
-                                    MeshConfig mesh_config,
-                                    PininingConfig pining_config);
-  [[nodiscard]] Result set_cloth_pinned(const ClothHandle& handle,
-                                        float* pinned_vertices, int pinned_num);
-  [[nodiscard]] Result get_cloth_state(const ClothHandle& handle,
-                                       float* position, int num) const;
+                                 MeshConfig mesh_config, ClothHandle& handle);
+  [[nodiscard]] Result remove_cloth(ClothHandle handle);
+  [[nodiscard]] Result get_cloth_position(ClothHandle handle,
+                                          View<float> position) const;
+  [[nodiscard]] Result set_cloth_config(ClothHandle handle, ClothConfig config);
+  [[nodiscard]] Result set_cloth_collision_config(ClothHandle handle,
+                                                  CollisionConfig config);
+  [[nodiscard]] Result set_cloth_mesh(ClothHandle handle,
+                                      MeshConfig mesh_config);
+  [[nodiscard]] Result set_cloth_pin(ClothHandle handle, ConstView<float> pin);
 
-  // obstacle API
+  // Obstacle API
   [[nodiscard]] Result add_obstacle(CollisionConfig collision_config,
                                     MeshConfig mesh_config,
                                     ObstacleHandle& handle);
-  [[nodiscard]] Result remove_obstacle(const ObstacleHandle& handle);
-  // update obstacle collision config
-  [[nodiscard]] Result update_obstacle(const ObstacleHandle& handle,
-                                       CollisionConfig config);
-  // update obstacle mesh
-  [[nodiscard]] Result update_obstacle(const ObstacleHandle& handle,
-                                       MeshConfig mesh_config);
-
-  // solver API
-
-  void get_acceleration(float& x_acceleration, float& y_acceleration,
-                        float& z_acceleration) const;
-  void set_acceleration(float x_acceleration, float y_acceleration,
-                        float z_acceleration);
-
-  int get_max_iteration() const;
-  void set_max_iterations(int iter);
-
-  int get_thread_num() const;
-  void set_thread_num(int num);
-
-  float get_dt() const;
-  [[nodiscard]] Result set_dt(float dt);
-
-  int get_low_freq_mode_num() const;
-  [[nodiscard]] Result set_low_freq_mode_num(int num);
-
-  void solver_reset();
-  [[nodiscard]] Result solver_init();
-  [[nodiscard]] Result step();
+  [[nodiscard]] Result remove_obstacle(ObstacleHandle handle);
+  [[nodiscard]] Result set_obstacle_collision_config(ObstacleHandle handle,
+                                                     CollisionConfig config);
+  [[nodiscard]] Result set_obstacle_mesh(const ObstacleHandle& handle,
+                                         MeshConfig mesh_config);
+  [[nodiscard]] Result set_obstacle_position(ClothHandle handle,
+                                             ConstView<float> position);
 };
 
 }  // namespace silk

@@ -106,7 +106,7 @@ std::optional<Eigen::Matrix<float, 6, 9>> cloth_jacobian_operator(
 
 SolverData make_cloth_solver_data(const ClothConfig& config,
                                   const TriMesh& tri_mesh,
-                                  const PinnedGroup& pinned_group,
+                                  const PinGroup& pin_group,
                                   int solver_offset) {
   const ClothConfig& c = config;
   const TriMesh& m = tri_mesh;
@@ -178,13 +178,13 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   }
 
   // pinned vertices
-  auto p = pinned_group;
-  if (p.pinnned_index.size() != 0) {
-    for (int idx : p.pinnned_index) {
+  auto p = pin_group;
+  if (p.pin_index.size() != 0) {
+    for (int idx : p.pin_index) {
       int offset = solver_offset + 3 * idx;
-      weighted_AA.emplace_back(offset, offset, p.pinned_sitffness);
-      weighted_AA.emplace_back(offset + 1, offset + 1, p.pinned_sitffness);
-      weighted_AA.emplace_back(offset + 2, offset + 2, p.pinned_sitffness);
+      weighted_AA.emplace_back(offset, offset, p.pin_sitffness);
+      weighted_AA.emplace_back(offset + 1, offset + 1, p.pin_sitffness);
+      weighted_AA.emplace_back(offset + 2, offset + 2, p.pin_sitffness);
     }
   }
 
@@ -207,13 +207,13 @@ void make_all_solver_data(Registry& registry) {
     // remove old solver data
     ECS_REMOVE(registry, e, solver_data);
 
-    auto cloth_config = ECS_GET(registry, e, cloth_config);
-    auto tri_mesh = ECS_GET(registry, e, tri_mesh);
-    auto pinned_group = ECS_GET(registry, e, pinned_group);
+    auto cloth_config = ECS_GET_PTR(registry, e, cloth_config);
+    auto tri_mesh = ECS_GET_PTR(registry, e, tri_mesh);
+    auto pin_group = ECS_GET_PTR(registry, e, pin_group);
 
-    if (cloth_config && tri_mesh && pinned_group) {
+    if (cloth_config && tri_mesh && pin_group) {
       SolverData data = make_cloth_solver_data(*cloth_config, *tri_mesh,
-                                               *pinned_group, offset_counter);
+                                               *pin_group, offset_counter);
       offset_counter += data.state_num;
 
       Handle h = registry.solver_data.add(std::move(data));

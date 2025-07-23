@@ -3,7 +3,7 @@
 #include <Eigen/Core>
 
 #include "obstacle.hpp"
-#include "pinned_group.hpp"
+#include "pin_group.hpp"
 #include "silk/silk.hpp"
 #include "solver_data.hpp"
 
@@ -84,13 +84,13 @@ void update_obstacle(const CollisionConfig& config,
   o.mesh_collider_tree.update(o.bbox);
 }
 
-void update_obstacle(const CollisionConfig& config,
-                     const PinnedGroup& pinned_group, Obstacle& obstacle) {
+void update_obstacle(const CollisionConfig& config, const PinGroup& pin_group,
+                     Obstacle& obstacle) {
   Obstacle& o = obstacle;
   const CollisionConfig& c = config;
 
   o.group = (c.is_collision_on) ? c.group : -1;
-  o.is_static = (pinned_group.prev_pinned_value.size() == 0);
+  o.is_static = (pin_group.prev_pin_value.size() == 0);
 
   // if pure collider is static, do not update mesh colliders
   if (o.is_static) {
@@ -111,8 +111,8 @@ void update_obstacle(const CollisionConfig& config,
     switch (mc.type) {
       case MeshColliderType::Point: {
         int o0 = 3 * mc.index(0);
-        p0.col(0) = get_vertex(pinned_group.prev_pinned_value, o0);
-        p1.col(0) = get_vertex(pinned_group.pinned_value, o0);
+        p0.col(0) = get_vertex(pin_group.prev_pin_value, o0);
+        p1.col(0) = get_vertex(pin_group.pin_value, o0);
         mc.bbox.min = p0.col(0).cwiseMin(p1.col(0));
         mc.bbox.max = p0.col(0).cwiseMax(p1.col(0));
         mc.bbox.pad_inplace(o.bbox_padding);
@@ -122,10 +122,10 @@ void update_obstacle(const CollisionConfig& config,
       case MeshColliderType::Edge: {
         int o0 = 3 * mc.index(0);
         int o1 = 3 * mc.index(1);
-        p0.col(0) = get_vertex(pinned_group.prev_pinned_value, o0);
-        p0.col(1) = get_vertex(pinned_group.prev_pinned_value, o1);
-        p1.col(0) = get_vertex(pinned_group.pinned_value, o0);
-        p1.col(1) = get_vertex(pinned_group.pinned_value, o1);
+        p0.col(0) = get_vertex(pin_group.prev_pin_value, o0);
+        p0.col(1) = get_vertex(pin_group.prev_pin_value, o1);
+        p1.col(0) = get_vertex(pin_group.pin_value, o0);
+        p1.col(1) = get_vertex(pin_group.pin_value, o1);
         mc.bbox.min =
             p0.col(0).cwiseMin(p0.col(1)).cwiseMin(p1.col(0)).cwiseMin(
                 p1.col(1));
@@ -140,12 +140,12 @@ void update_obstacle(const CollisionConfig& config,
         int o0 = 3 * mc.index(0);
         int o1 = 3 * mc.index(1);
         int o2 = 3 * mc.index(2);
-        p0.col(0) = get_vertex(pinned_group.prev_pinned_value, o0);
-        p0.col(1) = get_vertex(pinned_group.prev_pinned_value, o1);
-        p0.col(2) = get_vertex(pinned_group.prev_pinned_value, o2);
-        p1.col(0) = get_vertex(pinned_group.pinned_value, o0);
-        p1.col(1) = get_vertex(pinned_group.pinned_value, o1);
-        p1.col(2) = get_vertex(pinned_group.pinned_value, o2);
+        p0.col(0) = get_vertex(pin_group.prev_pin_value, o0);
+        p0.col(1) = get_vertex(pin_group.prev_pin_value, o1);
+        p0.col(2) = get_vertex(pin_group.prev_pin_value, o2);
+        p1.col(0) = get_vertex(pin_group.pin_value, o0);
+        p1.col(1) = get_vertex(pin_group.pin_value, o1);
+        p1.col(2) = get_vertex(pin_group.pin_value, o2);
         mc.bbox.min = p0.rowwise().minCoeff().cwiseMin(p1.rowwise().minCoeff());
         mc.bbox.max = p0.rowwise().maxCoeff().cwiseMax(p1.rowwise().maxCoeff());
         mc.bbox.pad_inplace(o.bbox_padding);
@@ -162,10 +162,10 @@ void update_all_obstacles(Registry& registry,
                           const Eigen::VectorXf& solver_state,
                           const Eigen::VectorXf& prev_solver_state) {
   for (const Entity& e : registry.entity.data()) {
-    auto collision_config = ECS_GET(registry, e, collision_config);
-    auto pinned_group = ECS_GET(registry, e, pinned_group);
-    auto solver_data = ECS_GET(registry, e, solver_data);
-    auto obstacle = ECS_GET(registry, e, obstacle);
+    auto collision_config = ECS_GET_PTR(registry, e, collision_config);
+    auto pin_group = ECS_GET_PTR(registry, e, pin_group);
+    auto solver_data = ECS_GET_PTR(registry, e, solver_data);
+    auto obstacle = ECS_GET_PTR(registry, e, obstacle);
 
     if (collision_config && solver_data && obstacle) {
       update_obstacle(*collision_config, *solver_data, solver_state,
@@ -173,8 +173,8 @@ void update_all_obstacles(Registry& registry,
       continue;
     }
 
-    if (collision_config && pinned_group && obstacle) {
-      update_obstacle(*collision_config, *pinned_group, *obstacle);
+    if (collision_config && pin_group && obstacle) {
+      update_obstacle(*collision_config, *pin_group, *obstacle);
       continue;
     }
   }

@@ -17,9 +17,9 @@ class Solver {
   Eigen::Vector3f const_acceleration = {0.0f, 0.0f, -1.0f};
   int max_iteration = 10;
   int thread_num = 4;
-  int r_ = 30;
-  float dt_ = 1.0f;
-  float ccd_line_search_walkback = 0.8f;
+  int r = 30;
+  float dt = 1.0f;
+  float ccd_walkback = 0.8f;
 
  private:
   int state_num_ = 0;
