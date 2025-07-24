@@ -4,7 +4,7 @@
 
 namespace silk {
 
-// update or create solver data
+// update or make new solver data
 void init_all_solver_data(Registry& registry);
 
 }  // namespace silk

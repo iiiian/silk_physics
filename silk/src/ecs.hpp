@@ -167,6 +167,7 @@ class Registry {
     remove<TriMesh>(entity);
     remove<Pin>(entity);
     remove<SolverData>(entity);
+    remove<ObstaclePosition>(entity);
     remove<ObjectCollider>(entity);
     this->entity.remove(entity_handle);
   }
@@ -189,6 +190,7 @@ class Registry {
     tri_mesh.clear();
     pin.clear();
     solver_data.clear();
+    obstacle_position.clear();
     object_collider.clear();
   }
 };

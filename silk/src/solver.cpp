@@ -14,10 +14,10 @@
 #include "collision.hpp"
 #include "collision_pipeline.hpp"
 #include "ecs.hpp"
-#include "eigen_helper.hpp"
-#include "init_object_collider.hpp"
-#include "init_solver_data.hpp"
+#include "eigen_utils.hpp"
+#include "object_collider_utils.hpp"
 #include "solver_constrain.hpp"
+#include "solver_data_utils.hpp"
 
 namespace silk {
 
@@ -87,9 +87,8 @@ bool Solver::init(Registry& registry) {
                        data->state_offset, AA_triplets);
     for (auto& constrain : data->constrains) {
       constrain->set_solver_state_offset(data->state_offset);
+      constrains_.push_back(constrain.get());
     }
-    constrains_.insert(constrains_.end(), data->constrains.begin(),
-                       data->constrains.end());
   }
 
   // compute internal matrices
@@ -150,7 +149,7 @@ bool Solver::lg_solve(Registry& registry, Eigen::VectorXf& predict_state) {
       int offset = solver_data->state_offset;
       for (int i = 0; i < p->index.size(); ++i) {
         b(Eigen::seqN(offset + 3 * p->index(i), 3)) +=
-            p->value(Eigen::seqN(3 * i, 3));
+            p->position(Eigen::seqN(3 * i, 3));
       }
     }
   }
@@ -196,6 +195,9 @@ bool Solver::lg_solve(Registry& registry, Eigen::VectorXf& predict_state) {
 
 bool Solver::step(Registry& registry,
                   const CollisionPipeline& collision_pipeline) {
+  init_all_object_collider(registry);
+  update_all_obstacle_object_collider(registry);
+
   // prediction based on linear velocity
   Eigen::VectorXf velocity = (curr_state_ - prev_state_) / dt;
   Eigen::VectorXf acceleration = (velocity - prev_velocity) / dt +
@@ -215,7 +217,7 @@ bool Solver::step(Registry& registry,
     }
 
     // update collision
-    init_all_object_colliders(registry, predict_state, prev_state_);
+    update_all_physical_object_collider(registry, predict_state, prev_state_);
     collisions_ = collision_pipeline.find_collision(
         registry.get_all<ObjectCollider>(), dt);
 

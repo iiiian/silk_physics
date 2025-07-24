@@ -1,4 +1,4 @@
-#include "init_solver_data.hpp"
+#include "solver_data_utils.hpp"
 
 #include <igl/cotmatrix.h>
 #include <igl/doublearea.h>
@@ -206,7 +206,7 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   return data;
 }
 
-void init_all_solver_data(Registry& registry) {
+void add_solver_data(Registry& registry, Entity& entity, int state_offset) {
   int offset_counter = 0;
   for (Entity& e : registry.get_all_entities()) {
     auto cloth_config = registry.get<ClothConfig>(e);
@@ -229,5 +229,7 @@ void init_all_solver_data(Registry& registry) {
     }
   }
 }
+
+void init_all_solver_data(Registry& registry) {}
 
 }  // namespace silk

@@ -75,7 +75,17 @@ class World::WorldImpl {
     if (!is_solver_init) {
       return Result::NeedInitSolverFirst;
     }
+
     solver_.step(registry_, collision_pipeline_);
+
+    for (Entity& e : registry_.get_all_entities()) {
+      auto obstacle_position = registry_.get<ObstaclePosition>(e);
+      if (obstacle_position) {
+        obstacle_position->prev_position = {};
+        obstacle_position->is_static = true;
+      }
+    }
+
     return Result::Success;
   }
 
@@ -107,9 +117,9 @@ class World::WorldImpl {
     Pin p;
     p.index = Eigen::Map<const Eigen::VectorXi>(mesh_config.pin_index.data,
                                                 mesh_config.pin_index.num);
-    p.value.resize(3 * p.index.size());
+    p.position.resize(3 * p.index.size());
     for (int i = 0; i < p.index.size(); ++i) {
-      p.value(Eigen::seqN(3 * i, 3)) = m.V.row(i);
+      p.position(Eigen::seqN(3 * i, 3)) = m.V.row(i);
     }
 
     auto [h, e] = registry_.add_entity();
@@ -224,9 +234,9 @@ class World::WorldImpl {
     assert(pin);
     pin->index = Eigen::Map<const Eigen::VectorXi>(mesh_config.pin_index.data,
                                                    mesh_config.pin_index.num);
-    pin->value.resize(3 * pin->index.size());
+    pin->position.resize(3 * pin->index.size());
     for (int i = 0; i < pin->index.size(); ++i) {
-      pin->value(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(i);
+      pin->position(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(i);
     }
 
     // remove outdated components
@@ -248,7 +258,8 @@ class World::WorldImpl {
       return Result::IncorrectPinNum;
     }
 
-    pin->value = Eigen::Map<const Eigen::VectorXf>(position.data, position.num);
+    pin->position =
+        Eigen::Map<const Eigen::VectorXf>(position.data, position.num);
 
     // remove outdated components
     registry_.remove<SolverData>(*e);
@@ -275,7 +286,7 @@ class World::WorldImpl {
 
     // make obstacle position
     ObstaclePosition p;
-    p.is_moving = false;
+    p.is_static = true;
     p.position = m.V.reshaped<Eigen::RowMajor>();
 
     auto [h, e] = registry_.add_entity();
@@ -328,6 +339,7 @@ class World::WorldImpl {
       return Result::IncorrectPinNum;
     }
 
+    pos->is_static = false;
     std::swap(pos->position, pos->prev_position);
     pos->position =
         Eigen::Map<const Eigen::VectorXf>(position.data, position.num);

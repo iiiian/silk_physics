@@ -1,4 +1,4 @@
-#include "init_object_collider.hpp"
+#include "object_collider_utils.hpp"
 
 #include <Eigen/Core>
 #include <unordered_set>
@@ -10,10 +10,10 @@
 
 namespace silk {
 
-// for physical object
-ObjectCollider make_object_collider(const CollisionConfig& config,
-                                    const TriMesh& tri_mesh, const Pin& pin,
-                                    const SolverData& solver_data) {
+ObjectCollider make_physical_object_collider(const CollisionConfig& config,
+                                             const TriMesh& tri_mesh,
+                                             const Pin& pin,
+                                             const SolverData& solver_data) {
   const CollisionConfig& c = config;
   const TriMesh& m = tri_mesh;
   const Eigen::VectorXf& mass = solver_data.mass;
@@ -105,9 +105,8 @@ ObjectCollider make_object_collider(const CollisionConfig& config,
   return o;
 }
 
-// for obstacle
-ObjectCollider make_object_collider(const CollisionConfig& config,
-                                    const TriMesh& tri_mesh) {
+ObjectCollider make_obstacle_object_collider(const CollisionConfig& config,
+                                             const TriMesh& tri_mesh) {
   const CollisionConfig& c = config;
   const TriMesh& m = tri_mesh;
 
@@ -194,12 +193,38 @@ ObjectCollider make_object_collider(const CollisionConfig& config,
   return o;
 }
 
-// for physical object
-void update_object_collider(const CollisionConfig& config,
-                            const SolverData& solver_data,
-                            const Eigen::VectorXf& solver_state,
-                            const Eigen::VectorXf& prev_solver_state,
-                            ObjectCollider& object_collider) {
+void init_all_object_collider(Registry& registry) {
+  for (Entity& e : registry.get_all_entities()) {
+    auto collision_config = registry.get<CollisionConfig>(e);
+    auto tri_mesh = registry.get<TriMesh>(e);
+    auto pin = registry.get<Pin>(e);
+    auto solver_data = registry.get<SolverData>(e);
+    auto object_collider = registry.get<ObjectCollider>(e);
+
+    if (object_collider) {
+      continue;
+    }
+
+    if (collision_config && tri_mesh && pin && solver_data) {
+      registry.set<ObjectCollider>(
+          e, make_physical_object_collider(*collision_config, *tri_mesh, *pin,
+                                           *solver_data));
+      continue;
+    };
+
+    if (collision_config && tri_mesh) {
+      registry.set<ObjectCollider>(
+          e, make_obstacle_object_collider(*collision_config, *tri_mesh));
+      continue;
+    }
+  }
+}
+
+void update_physical_object_collider(const CollisionConfig& config,
+                                     const SolverData& solver_data,
+                                     const Eigen::VectorXf& solver_state,
+                                     const Eigen::VectorXf& prev_solver_state,
+                                     ObjectCollider& object_collider) {
   ObjectCollider& o = object_collider;
   const CollisionConfig& c = config;
 
@@ -271,14 +296,34 @@ void update_object_collider(const CollisionConfig& config,
   o.mesh_collider_tree.update(o.bbox);
 }
 
-// for obstacle
-void update_object_collider(const CollisionConfig& config, const Pin& pin,
-                            ObjectCollider& object_collider) {
-  ObjectCollider& o = object_collider;
+void update_all_physical_object_collider(
+    Registry& registry, const Eigen::VectorXf& solver_state,
+    const Eigen::VectorXf& prev_solver_state) {
+  for (Entity& e : registry.get_all_entities()) {
+    auto collision_config = registry.get<CollisionConfig>(e);
+    auto tri_mesh = registry.get<TriMesh>(e);
+    auto pin = registry.get<Pin>(e);
+    auto solver_data = registry.get<SolverData>(e);
+    auto object_collider = registry.get<ObjectCollider>(e);
+
+    if (collision_config && tri_mesh && pin && solver_data && object_collider) {
+      update_physical_object_collider(*collision_config, *solver_data,
+                                      solver_state, prev_solver_state,
+                                      *object_collider);
+      continue;
+    };
+  }
+}
+
+void update_obstacle_object_collider(const CollisionConfig& config,
+                                     const ObstaclePosition& position,
+                                     ObjectCollider& object_collider) {
   const CollisionConfig& c = config;
+  const ObstaclePosition& p = position;
+  ObjectCollider& o = object_collider;
 
   o.group = (c.is_collision_on) ? c.group : -1;
-  o.is_static = (pin.prev_value.size() == 0);
+  o.is_static = p.is_static;
 
   // if pure collider is static, do not update mesh colliders
   if (o.is_static) {
@@ -299,8 +344,8 @@ void update_object_collider(const CollisionConfig& config, const Pin& pin,
     switch (mc.type) {
       case MeshColliderType::Point: {
         int o0 = 3 * mc.index(0);
-        p0.col(0) = get_vertex(pin.prev_value, o0);
-        p1.col(0) = get_vertex(pin.value, o0);
+        p0.col(0) = get_vertex(p.prev_position, o0);
+        p1.col(0) = get_vertex(p.position, o0);
         mc.bbox.min = p0.col(0).cwiseMin(p1.col(0));
         mc.bbox.max = p0.col(0).cwiseMax(p1.col(0));
         mc.bbox.pad_inplace(o.bbox_padding);
@@ -310,10 +355,10 @@ void update_object_collider(const CollisionConfig& config, const Pin& pin,
       case MeshColliderType::Edge: {
         int o0 = 3 * mc.index(0);
         int o1 = 3 * mc.index(1);
-        p0.col(0) = get_vertex(pin.prev_value, o0);
-        p0.col(1) = get_vertex(pin.prev_value, o1);
-        p1.col(0) = get_vertex(pin.value, o0);
-        p1.col(1) = get_vertex(pin.value, o1);
+        p0.col(0) = get_vertex(p.prev_position, o0);
+        p0.col(1) = get_vertex(p.prev_position, o1);
+        p1.col(0) = get_vertex(p.position, o0);
+        p1.col(1) = get_vertex(p.position, o1);
         mc.bbox.min =
             p0.col(0).cwiseMin(p0.col(1)).cwiseMin(p1.col(0)).cwiseMin(
                 p1.col(1));
@@ -328,12 +373,12 @@ void update_object_collider(const CollisionConfig& config, const Pin& pin,
         int o0 = 3 * mc.index(0);
         int o1 = 3 * mc.index(1);
         int o2 = 3 * mc.index(2);
-        p0.col(0) = get_vertex(pin.prev_value, o0);
-        p0.col(1) = get_vertex(pin.prev_value, o1);
-        p0.col(2) = get_vertex(pin.prev_value, o2);
-        p1.col(0) = get_vertex(pin.value, o0);
-        p1.col(1) = get_vertex(pin.value, o1);
-        p1.col(2) = get_vertex(pin.value, o2);
+        p0.col(0) = get_vertex(p.prev_position, o0);
+        p0.col(1) = get_vertex(p.prev_position, o1);
+        p0.col(2) = get_vertex(p.prev_position, o2);
+        p1.col(0) = get_vertex(p.position, o0);
+        p1.col(1) = get_vertex(p.position, o1);
+        p1.col(2) = get_vertex(p.position, o2);
         mc.bbox.min = p0.rowwise().minCoeff().cwiseMin(p1.rowwise().minCoeff());
         mc.bbox.max = p0.rowwise().maxCoeff().cwiseMax(p1.rowwise().maxCoeff());
         mc.bbox.pad_inplace(o.bbox_padding);
@@ -346,39 +391,17 @@ void update_object_collider(const CollisionConfig& config, const Pin& pin,
   o.mesh_collider_tree.update(o.bbox);
 }
 
-void init_all_object_colliders(Registry& registry,
-                               const Eigen::VectorXf& solver_state,
-                               const Eigen::VectorXf& prev_solver_state) {
+void update_all_obstacle_object_collider(Registry& registry) {
   for (Entity& e : registry.get_all_entities()) {
     auto collision_config = registry.get<CollisionConfig>(e);
-    auto tri_mesh = registry.get<TriMesh>(e);
-    auto pin = registry.get<Pin>(e);
-    auto solver_data = registry.get<SolverData>(e);
+    auto obstacle_position = registry.get<ObstaclePosition>(e);
     auto object_collider = registry.get<ObjectCollider>(e);
 
-    if (collision_config && tri_mesh && pin && solver_data) {
-      if (object_collider) {
-        update_object_collider(*collision_config, *solver_data, solver_state,
-                               prev_solver_state, *object_collider);
-      } else {
-        registry.set<ObjectCollider>(
-            e, make_object_collider(*collision_config, *tri_mesh, *pin,
-                                    *solver_data));
-      }
+    if (collision_config && obstacle_position && object_collider) {
+      update_obstacle_object_collider(*collision_config, *obstacle_position,
+                                      *object_collider);
       continue;
     };
-
-    if (collision_config && tri_mesh && pin) {
-      if (object_collider) {
-        update_object_collider(*collision_config, *pin, *object_collider);
-      } else {
-        registry.set<ObjectCollider>(
-            e, make_object_collider(*collision_config, *tri_mesh));
-      }
-      continue;
-    }
-
-    // add obstacle to registry and link to entity
   }
 }
 

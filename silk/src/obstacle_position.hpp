@@ -5,7 +5,7 @@
 namespace silk {
 
 struct ObstaclePosition {
-  bool is_moving;
+  bool is_static;
   Eigen::VectorXf position;
   Eigen::VectorXf prev_position;
 };

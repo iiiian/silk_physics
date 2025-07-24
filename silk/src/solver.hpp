@@ -2,7 +2,6 @@
 
 #include <Eigen/Core>
 #include <Eigen/Sparse>
-#include <memory>
 #include <vector>
 
 #include "collision.hpp"
@@ -35,7 +34,7 @@ class Solver {
   Eigen::MatrixXf U_;
   Eigen::VectorXf HX_;
 
-  std::vector<std::unique_ptr<ISolverConstrain>> constrains_;
+  std::vector<ISolverConstrain*> constrains_;
   std::vector<Collision> collisions_;
 
  public:
