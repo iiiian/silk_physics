@@ -9,15 +9,13 @@
 #include "collision.hpp"
 #include "collision_broadphase.hpp"
 #include "mesh_collider.hpp"
-#include "obstacle.hpp"
+#include "object_collider.hpp"
 
 namespace silk {
 
-std::optional<Collision> CollisionPipeline::narrow_phase(const Obstacle& oa,
-                                                         const MeshCollider& ma,
-                                                         const Obstacle& ob,
-                                                         const MeshCollider& mb,
-                                                         float dt) const {
+std::optional<Collision> CollisionPipeline::narrow_phase(
+    const ObjectCollider& oa, const MeshCollider& ma, const ObjectCollider& ob,
+    const MeshCollider& mb, float dt) const {
   // TODO: more damping and friction avg mode
   float damping = 0.5f * (oa.damping + ob.damping);
   float friction = 0.5f * (oa.friction + ob.friction);
@@ -93,10 +91,10 @@ std::optional<Collision> CollisionPipeline::narrow_phase(const Obstacle& oa,
   }
 }
 
-CollisionCache<Obstacle> CollisionPipeline::obstacle_broadphase(
-    std::vector<Obstacle>& obstacles) const {
+CollisionCache<ObjectCollider> CollisionPipeline::object_broadphase(
+    std::vector<ObjectCollider>& obstacles) const {
   // prepare obstacle proxies for sweep and prune
-  std::vector<Obstacle*> proxies(obstacles.size());
+  std::vector<ObjectCollider*> proxies(obstacles.size());
   for (int i = 0; i < obstacles.size(); ++i) {
     proxies[i] = obstacles.data() + i;
   }
@@ -104,12 +102,12 @@ CollisionCache<Obstacle> CollisionPipeline::obstacle_broadphase(
   // if group = -1, collision with others is disabled.
   // if groups are different, a and b does not collide.
   // if both a and b are pure collider, collision is meaningless.
-  CollisionFilterCallback<Obstacle> obstacle_filter = [](const Obstacle& a,
-                                                         const Obstacle& b) {
-    return (a.group != -1 && b.group != -1 && a.group == b.group &&
-            !(a.solver_offset == -1 && b.solver_offset == -1));
-  };
-  CollisionCache<Obstacle> ccache;
+  CollisionFilterCallback<ObjectCollider> obstacle_filter =
+      [](const ObjectCollider& a, const ObjectCollider& b) {
+        return (a.group != -1 && b.group != -1 && a.group == b.group &&
+                !(a.solver_offset == -1 && b.solver_offset == -1));
+      };
+  CollisionCache<ObjectCollider> ccache;
 
   // use sweep and prune to find collision
   int axis = sap_optimal_axis(proxies.data(), proxies.size());
@@ -120,8 +118,8 @@ CollisionCache<Obstacle> CollisionPipeline::obstacle_broadphase(
 }
 
 std::vector<Collision> CollisionPipeline::find_collision(
-    std::vector<Obstacle>& obstacles, float dt) const {
-  auto obstacle_ccache = obstacle_broadphase(obstacles);
+    std::vector<ObjectCollider>& obstacles, float dt) const {
+  auto obstacle_ccache = object_broadphase(obstacles);
   std::vector<Collision> collisions;
 
   // mesh level obstacle-obstacle collision

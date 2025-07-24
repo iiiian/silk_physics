@@ -25,7 +25,7 @@ class Manager {
 
   void clear() {
     for (Handle& s : slots_) {
-      s.set_is_valid(true);
+      s.set_is_valid(false);
       s.increment_generation();
     }
 
@@ -39,7 +39,7 @@ class Manager {
   }
 
   // return nullptr if handle is invalid
-  T* get(const Handle& handle) {
+  T* get(Handle handle) {
     if (handle.is_empty()) {
       return nullptr;
     }
@@ -50,11 +50,11 @@ class Manager {
       return nullptr;
     }
 
-    return data_[slot.get_index()];
+    return data_ + slot.get_index();
   }
 
   // return nullptr if handle is invalid
-  const T* get(const Handle& handle) const {
+  const T* get(Handle handle) const {
     if (handle.is_empty()) {
       return nullptr;
     }
@@ -65,11 +65,11 @@ class Manager {
       return nullptr;
     }
 
-    return data_[slot.get_index()];
+    return data_ + slot.get_index();
   }
 
-  // return nullopt if ready max resource
-  Handle add(T resource) {
+  // return empty handle if ready max resource
+  Handle add(T&& component) {
     if (free_slots_.empty()) {
       return Handle{};
     }
@@ -80,7 +80,7 @@ class Manager {
     Handle& slot = slots_[slot_idx];
     slot.set_is_valid(true);
     slot.set_index(data_.size());
-    data_.emplace_back(std::move(resource));
+    data_.push_back(std::forward<T>(component));
     slot_of_data_.push_back(slot_idx);
     return Handle{true, slot.get_generation(), slot_idx};
   }
@@ -111,8 +111,6 @@ class Manager {
 
   // return dense data vector
   const std::vector<T>& data() const { return data_; }
-
-  const std::vector<T>& get_dense_data() const { return data_; }
 };
 
 };  // namespace silk

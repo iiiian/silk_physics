@@ -6,7 +6,7 @@
 
 namespace silk {
 
-struct Obstacle {
+struct ObjectCollider {
   Bbox bbox;
   // if group = -1, collision is disabled
   // the default group should be 0

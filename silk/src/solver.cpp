@@ -14,10 +14,10 @@
 #include "collision.hpp"
 #include "collision_pipeline.hpp"
 #include "ecs.hpp"
-#include "make_obstacle.hpp"
-#include "make_solver_data.hpp"
+#include "eigen_helper.hpp"
+#include "init_object_collider.hpp"
+#include "init_solver_data.hpp"
 #include "solver_constrain.hpp"
-#include "update_obstacle.hpp"
 
 namespace silk {
 
@@ -45,13 +45,12 @@ void Solver::reset() {
 }
 
 bool Solver::init(Registry& registry) {
-  make_all_solver_data(registry);
-  make_all_obstacles(registry);
+  init_all_solver_data(registry);
 
   // count total state num
   state_num_ = 0;
-  for (Entity& e : registry.entity.data()) {
-    auto solver_data = ECS_GET_PTR(registry, e, solver_data);
+  for (Entity& e : registry.get_all_entities()) {
+    auto solver_data = registry.get<SolverData>(e);
     if (solver_data) {
       state_num_ += solver_data->state_num;
     }
@@ -62,9 +61,9 @@ bool Solver::init(Registry& registry) {
   curr_state_.resize(state_num_);
   prev_state_.resize(state_num_);
   prev_velocity = Eigen::VectorXf::Zero(state_num_);
-  for (Entity& e : registry.entity.data()) {
-    auto solver_data = ECS_GET_PTR(registry, e, solver_data);
-    auto tri_mesh = ECS_GET_PTR(registry, e, tri_mesh);
+  for (Entity& e : registry.get_all_entities()) {
+    auto solver_data = registry.get<SolverData>(e);
+    auto tri_mesh = registry.get<TriMesh>(e);
 
     if (solver_data && tri_mesh) {
       init_state_(
@@ -77,36 +76,26 @@ bool Solver::init(Registry& registry) {
   prev_state_ = init_state_;
 
   // collect solver data
-  std::vector<Eigen::Triplet<float>> mass_triplets;
+  Eigen::VectorXf mass(state_num_);
   std::vector<Eigen::Triplet<float>> AA_triplets;
   constrains_.clear();
-  for (Entity& e : registry.entity.data()) {
-    auto solver_data = ECS_GET_PTR(registry, e, solver_data);
-    if (solver_data) {
-      // vectorize vertex mass
-      auto& m = solver_data->mass;
-      for (int i = 0; i < solver_data->state_num; ++i) {
-        int offset = solver_data->state_offset + 3 * i;
-        mass_triplets.emplace_back(offset, offset, m(i));
-        mass_triplets.emplace_back(offset + 1, offset + 1, m(i));
-        mass_triplets.emplace_back(offset + 2, offset + 2, m(i));
-      }
+  for (Entity& e : registry.get_all_entities()) {
+    auto data = registry.get<SolverData>(e);
+    mass(Eigen::seqN(data->state_offset, data->state_num)) = data->mass;
 
-      AA_triplets.insert(AA_triplets.end(), solver_data->weighted_AA.begin(),
-                         solver_data->weighted_AA.end());
-      constrains_.insert(constrains_.end(), solver_data->constrains.begin(),
-                         solver_data->constrains.end());
-
-      solver_data->mass = {};
-      solver_data->weighted_AA = {};
-      solver_data->constrains = {};
+    sparse_to_triplets(data->weighted_AA, data->state_offset,
+                       data->state_offset, AA_triplets);
+    for (auto& constrain : data->constrains) {
+      constrain->set_solver_state_offset(data->state_offset);
     }
+    constrains_.insert(constrains_.end(), data->constrains.begin(),
+                       data->constrains.end());
   }
 
   // compute internal matrices
-
-  mass_.resize(state_num_, state_num_);
-  mass_.setFromTriplets(mass_triplets.begin(), mass_triplets.end());
+  Eigen::VectorXf vec_mass = mass.replicate(1, 3).reshaped<Eigen::RowMajor>();
+  mass_ = Eigen::SparseMatrix<float>(state_num_, state_num_);
+  mass_ = vec_mass.asDiagonal();
 
   Eigen::SparseMatrix<float> AA(state_num_, state_num_);
   AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
@@ -138,7 +127,7 @@ bool Solver::lg_solve(Registry& registry, Eigen::VectorXf& predict_state) {
   Eigen::VectorXf b = (mass_ / dt / dt) * predict_state +
                       (mass_ / dt) * (predict_state - prev_state_) +
                       mass_ * const_acceleration.replicate(state_num_, 1);
-  Eigen::SparseMatrix<float> A = H_;
+  Eigen::SparseMatrix<float> A(state_num_, state_num_);
 
   // porject barrier constrain
   // TODO: avoid hard-coded collision stiffness
@@ -152,16 +141,16 @@ bool Solver::lg_solve(Registry& registry, Eigen::VectorXf& predict_state) {
   }
 
   // project position constrain from pin groups
-  for (Entity& e : registry.entity.data()) {
-    auto solver_data = ECS_GET_PTR(registry, e, solver_data);
-    auto pin_group = ECS_GET_PTR(registry, e, pin_group);
-    if (solver_data && pin_group) {
-      auto p = pin_group;
+  for (Entity& e : registry.get_all_entities()) {
+    auto solver_data = registry.get<SolverData>(e);
+    auto pin = registry.get<Pin>(e);
+    if (solver_data && pin) {
+      auto p = pin;
 
       int offset = solver_data->state_offset;
-      for (int i = 0; i < p->pin_index.size(); ++i) {
-        b(Eigen::seqN(offset + 3 * p->pin_index(i), 3)) +=
-            p->pin_value(Eigen::seqN(3 * i, 3));
+      for (int i = 0; i < p->index.size(); ++i) {
+        b(Eigen::seqN(offset + 3 * p->index(i), 3)) +=
+            p->value(Eigen::seqN(3 * i, 3));
       }
     }
   }
@@ -185,14 +174,14 @@ bool Solver::lg_solve(Registry& registry, Eigen::VectorXf& predict_state) {
   if (collisions_.empty()) {
     q = subspace_b.array() / UHU_.array();
   } else {
-    q = (U_.transpose() * A * U_).householderQr().solve(subspace_b);
+    q = (UHU_ + U_.transpose() * A * U_).householderQr().solve(subspace_b);
   }
   Eigen::VectorXf subspace_sol = init_state_ + U_ * q;
 
   // iterative global solve
   Eigen::BiCGSTAB<Eigen::SparseMatrix<float>> iterative_solver;
   iterative_solver.setMaxIterations(max_iteration);
-  iterative_solver.compute(H_);
+  iterative_solver.compute(H_ + A);
   predict_state = iterative_solver.solveWithGuess(b, subspace_sol);
 
   // we do not care if iterative solver converges or not because looping
@@ -226,9 +215,9 @@ bool Solver::step(Registry& registry,
     }
 
     // update collision
-    update_all_obstacles(registry, predict_state, prev_state_);
-    collisions_ =
-        collision_pipeline.find_collision(registry.obstacle.data(), dt);
+    init_all_object_colliders(registry, predict_state, prev_state_);
+    collisions_ = collision_pipeline.find_collision(
+        registry.get_all<ObjectCollider>(), dt);
 
     // ccd line search
     if (!collisions_.empty()) {

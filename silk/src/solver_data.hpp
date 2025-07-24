@@ -12,7 +12,7 @@ struct SolverData {
   int state_offset;
   int state_num;
   Eigen::VectorXf mass;
-  std::vector<Eigen::Triplet<float>> weighted_AA;
+  Eigen::SparseMatrix<float> weighted_AA;
   std::vector<std::unique_ptr<ISolverConstrain>> constrains;
 };
 

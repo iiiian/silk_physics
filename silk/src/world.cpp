@@ -59,15 +59,7 @@ class World::WorldImpl {
   void clear() {
     is_solver_init = false;
     solver_.clear();
-
-    // nuke entire registry
-    registry_.entity.clear();
-    registry_.cloth_config.clear();
-    registry_.collision_config.clear();
-    registry_.tri_mesh.clear();
-    registry_.pin_group.clear();
-    registry_.solver_data.clear();
-    registry_.obstacle.clear();
+    registry_.clear();
   }
 
   // Solver API
@@ -97,7 +89,7 @@ class World::WorldImpl {
 
   // cloth API
   Result add_cloth(ClothConfig cloth_config, CollisionConfig collision_config,
-                   MeshConfig mesh_config, ClothHandle& handle) {
+                   MeshConfig mesh_config, Cloth& cloth) {
     // make tri mesh
     TriMesh m;
     m.V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
@@ -111,67 +103,51 @@ class World::WorldImpl {
     }
     m.avg_edge_length /= m.E.rows();
 
-    // make pin group
-    PinGroup p;
-    p.pin_index = Eigen::Map<const Eigen::VectorXi>(mesh_config.pin_index.data,
-                                                    mesh_config.pin_index.num);
-    p.pin_value.resize(3 * p.pin_index.size());
-    for (int i = 0; i < p.pin_index.size(); ++i) {
-      p.pin_value(Eigen::seqN(3 * i, 3)) = m.V.row(i);
+    // make pin
+    Pin p;
+    p.index = Eigen::Map<const Eigen::VectorXi>(mesh_config.pin_index.data,
+                                                mesh_config.pin_index.num);
+    p.value.resize(3 * p.index.size());
+    for (int i = 0; i < p.index.size(); ++i) {
+      p.value(Eigen::seqN(3 * i, 3)) = m.V.row(i);
     }
 
-    Entity e;
-    e.cloth_config = registry_.cloth_config.add(std::move(cloth_config));
-    e.collision_config =
-        registry_.collision_config.add(std::move(collision_config));
-    e.tri_mesh = registry_.tri_mesh.add(std::move(m));
-    e.pin_group = registry_.pin_group.add(std::move(p));
-    Handle h = registry_.entity.add(e);
-
-    if (h.is_empty() || e.cloth_config.is_empty() ||
-        e.collision_config.is_empty() || e.tri_mesh.is_empty() ||
-        e.pin_group.is_empty()) {
-      ECS_REMOVE(registry_, e, cloth_config);
-      ECS_REMOVE(registry_, e, collision_config);
-      ECS_REMOVE(registry_, e, tri_mesh);
-      ECS_REMOVE(registry_, e, pin_group);
-      registry_.entity.remove(h);
+    auto [h, e] = registry_.add_entity();
+    if (h.is_empty()) {
       return Result::TooManyBody;
     }
+    assert(e);
+    registry_.set<ClothConfig>(*e, std::move(cloth_config));
+    registry_.set<CollisionConfig>(*e, std::move(collision_config));
+    registry_.set<TriMesh>(*e, std::move(m));
+    registry_.set<Pin>(*e, std::move(p));
 
+    cloth = Cloth{h.value};
     is_solver_init = false;
     return Result::Success;
   }
 
-  Result remove_cloth(ClothHandle handle) {
-    Handle h{handle.value};
-    auto cloth = registry_.entity.get(h);
-    if (!cloth) {
+  Result remove_cloth(Cloth cloth) {
+    Handle h{cloth.value};
+    auto entity = registry_.get_entity(h);
+    if (!entity) {
       return Result::InvalidHandle;
     }
 
     is_solver_init = false;
-    Entity& e = *cloth;
-    ECS_REMOVE(registry_, e, cloth_config);
-    ECS_REMOVE(registry_, e, collision_config);
-    ECS_REMOVE(registry_, e, tri_mesh);
-    ECS_REMOVE(registry_, e, pin_group);
-    ECS_REMOVE(registry_, e, solver_data);
-    ECS_REMOVE(registry_, e, obstacle);
-    registry_.entity.remove(h);
+    registry_.remove_entity(h);
 
     return Result::Success;
   }
 
-  Result get_cloth_position(ClothHandle handle, View<float> position) const {
-    auto cloth = registry_.entity.get(Handle{handle.value});
-    if (!cloth) {
+  Result get_cloth_position(Cloth cloth, View<float> position) const {
+    const Entity* e = registry_.get_entity(Handle{cloth.value});
+    if (!e) {
       return Result::InvalidHandle;
     }
 
-    const Entity& e = *cloth;
     if (is_solver_init) {
-      auto solver_data = ECS_GET_PTR(registry_, e, solver_data);
+      auto solver_data = registry_.get<SolverData>(*e);
       assert(solver_data);
 
       if (position.num < solver_data->state_num) {
@@ -186,7 +162,7 @@ class World::WorldImpl {
              solver_data->state_num);
       return Result::Success;
     } else {
-      auto mesh = ECS_GET_PTR(registry_, e, tri_mesh);
+      auto mesh = registry_.get<TriMesh>(*e);
       assert(mesh);
 
       if (position.num < 3 * mesh->V.rows()) {
@@ -199,102 +175,165 @@ class World::WorldImpl {
     return Result::Success;
   }
 
-  Result set_cloth_config(ClothHandle handle, ClothConfig config) {
-    auto cloth = registry_.entity.get(Handle{handle.value});
-    if (!cloth) {
+  Result set_cloth_config(Cloth cloth, ClothConfig config) {
+    Entity* e = registry_.get_entity(Handle{cloth.value});
+    if (!e) {
       return Result::InvalidHandle;
     }
 
     is_solver_init = false;
-    Entity& e = *cloth;
-    auto cloth_config = ECS_GET_PTR(registry_, e, cloth_config);
+
+    auto cloth_config = registry_.get<ClothConfig>(*e);
     assert(cloth_config);
     *cloth_config = config;
+
+    // remove outdated components
+    registry_.remove<SolverData>(*e);
+    registry_.remove<ObjectCollider>(*e);
+
     return Result::Success;
   }
 
-  Result set_cloth_collision_config(ClothHandle handle,
-                                    CollisionConfig config) {
-    auto cloth = registry_.entity.get(Handle{handle.value});
-    if (!cloth) {
+  Result set_cloth_collision_config(Cloth cloth, CollisionConfig config) {
+    Entity* e = registry_.get_entity(Handle{cloth.value});
+    if (!e) {
       return Result::InvalidHandle;
     }
 
-    Entity& e = *cloth;
-    auto collision_config = ECS_GET_PTR(registry_, e, collision_config);
+    auto collision_config = registry_.get<CollisionConfig>(*e);
     assert(collision_config);
+
     *collision_config = config;
     return Result::Success;
   }
 
-  Result set_cloth_mesh(ClothHandle handle, MeshConfig mesh_config) {
-    auto cloth = registry_.entity.get(Handle{handle.value});
-    if (!cloth) {
+  Result set_cloth_pin_index(Cloth cloth, MeshConfig mesh_config) {
+    Entity* e = registry_.get_entity(Handle{cloth.value});
+    if (!e) {
       return Result::InvalidHandle;
     }
 
     is_solver_init = false;
 
     // make tri mesh
-    Entity& e = *cloth;
-    auto tri_mesh = ECS_GET_PTR(registry_, e, tri_mesh);
+    auto tri_mesh = registry_.get<TriMesh>(*e);
     assert(tri_mesh);
-    tri_mesh->V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
-                                              mesh_config.verts.num, 3);
-    tri_mesh->F = Eigen::Map<const RMatrix3i>(mesh_config.faces.data,
-                                              mesh_config.faces.num, 3);
-    igl::edges(tri_mesh->V, tri_mesh->F, tri_mesh->E);
-    tri_mesh->avg_edge_length = 0.0f;
-    for (int i = 0; i < tri_mesh->E.rows(); ++i) {
-      tri_mesh->avg_edge_length += (tri_mesh->V.row(tri_mesh->E(i, 0)) -
-                                    tri_mesh->V.row(tri_mesh->E(i, 1)))
-                                       .norm();
-    }
-    tri_mesh->avg_edge_length /= tri_mesh->E.rows();
 
-    // make pin group
-    auto pin_group = ECS_GET_PTR(registry_, e, pin_group);
-    assert(pin_group);
-    pin_group->pin_index = Eigen::Map<const Eigen::VectorXi>(
-        mesh_config.pin_index.data, mesh_config.pin_index.num);
-    pin_group->pin_value.resize(3 * pin_group->pin_index.size());
-    for (int i = 0; i < pin_group->pin_index.size(); ++i) {
-      pin_group->pin_value(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(i);
+    // make pin
+    auto pin = registry_.get<Pin>(*e);
+    assert(pin);
+    pin->index = Eigen::Map<const Eigen::VectorXi>(mesh_config.pin_index.data,
+                                                   mesh_config.pin_index.num);
+    pin->value.resize(3 * pin->index.size());
+    for (int i = 0; i < pin->index.size(); ++i) {
+      pin->value(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(i);
     }
-    pin_group->prev_pin_value = {};
+
+    // remove outdated components
+    registry_.remove<SolverData>(*e);
+    registry_.remove<ObjectCollider>(*e);
 
     return Result::Success;
   }
 
-  Result set_cloth_pin(ClothHandle handle, ConstView<float> pin) {
-    auto cloth = registry_.entity.get(Handle{handle.value});
-    if (!cloth) {
+  Result set_cloth_pin_position(Cloth cloth, ConstView<float> position) {
+    Entity* e = registry_.get_entity(Handle{cloth.value});
+    if (!e) {
       return Result::InvalidHandle;
     }
+    auto pin = registry_.get<Pin>(*e);
+    assert(pin);
 
-    Entity& e = *cloth;
-    auto pin_group = ECS_GET_PTR(registry_, e, pin_group);
-    assert(pin_group);
-
-    if (pin_group->pin_index.size() != pin.num) {
+    if (3 * pin->index.size() != position.num) {
       return Result::IncorrectPinNum;
     }
 
-    pin_group->prev_pin_value = pin_group->prev_pin_value;
-    pin_group->pin_value = Eigen::Map<const Eigen::VectorXf>(pin.data, pin.num);
+    pin->value = Eigen::Map<const Eigen::VectorXf>(position.data, position.num);
+
+    // remove outdated components
+    registry_.remove<SolverData>(*e);
+    registry_.remove<ObjectCollider>(*e);
 
     return Result::Success;
   }
 
   // Obstacle API
   Result add_obstacle(CollisionConfig collision_config, MeshConfig mesh_config,
-                      ObstacleHandle& handle);
-  Result remove_obstacle(ObstacleHandle handle);
-  Result set_obstacle_collision_config(ObstacleHandle handle,
-                                       CollisionConfig config);
-  Result set_obstacle_mesh(const ObstacleHandle& handle,
-                           MeshConfig mesh_config);
-  Result set_obstacle_position(ClothHandle handle, ConstView<float> position);
+                      Obstacle& obstacle) {
+    // make tri mesh
+    TriMesh m;
+    m.V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
+                                      mesh_config.verts.num, 3);
+    m.F = Eigen::Map<const RMatrix3i>(mesh_config.faces.data,
+                                      mesh_config.faces.num, 3);
+    igl::edges(m.V, m.F, m.E);
+    m.avg_edge_length = 0.0f;
+    for (int i = 0; i < m.E.rows(); ++i) {
+      m.avg_edge_length += (m.V.row(m.E(i, 0)) - m.V.row(m.E(i, 1))).norm();
+    }
+    m.avg_edge_length /= m.E.rows();
+
+    // make obstacle position
+    ObstaclePosition p;
+    p.is_moving = false;
+    p.position = m.V.reshaped<Eigen::RowMajor>();
+
+    auto [h, e] = registry_.add_entity();
+    if (h.is_empty()) {
+      return Result::TooManyBody;
+    }
+    assert(e);
+    registry_.set<CollisionConfig>(*e, std::move(collision_config));
+    registry_.set<TriMesh>(*e, std::move(m));
+    registry_.set<ObstaclePosition>(*e, std::move(p));
+
+    obstacle = Obstacle{h.value};
+    return Result::Success;
+  }
+
+  Result remove_obstacle(Obstacle obstacle) {
+    Handle h{obstacle.value};
+    auto entity = registry_.get_entity(h);
+    if (!entity) {
+      return Result::InvalidHandle;
+    }
+
+    registry_.remove_entity(h);
+    return Result::Success;
+  }
+
+  Result set_obstacle_collision_config(Obstacle obstacle,
+                                       CollisionConfig config) {
+    Entity* e = registry_.get_entity(Handle{obstacle.value});
+    if (!e) {
+      return Result::InvalidHandle;
+    }
+
+    auto collision_config = registry_.get<CollisionConfig>(*e);
+    assert(collision_config);
+
+    *collision_config = config;
+    return Result::Success;
+  }
+
+  Result set_obstacle_position(Obstacle obstacle, ConstView<float> position) {
+    Entity* e = registry_.get_entity(Handle{obstacle.value});
+    if (!e) {
+      return Result::InvalidHandle;
+    }
+    auto pos = registry_.get<ObstaclePosition>(*e);
+    assert(pos);
+
+    if (pos->position.size() != position.num) {
+      return Result::IncorrectPinNum;
+    }
+
+    std::swap(pos->position, pos->prev_position);
+    pos->position =
+        Eigen::Map<const Eigen::VectorXf>(position.data, position.num);
+
+    return Result::Success;
+  }
 };
 
 }  // namespace silk

@@ -64,11 +64,11 @@ struct GlobalConfig {
   float eps;
 };
 
-struct ClothHandle {
+struct Cloth {
   uint32_t value;
 };
 
-struct ObstacleHandle {
+struct Obstacle {
   uint32_t value;
 };
 
@@ -98,27 +98,25 @@ class World {
   // cloth API
   [[nodiscard]] Result add_cloth(ClothConfig cloth_config,
                                  CollisionConfig collision_config,
-                                 MeshConfig mesh_config, ClothHandle& handle);
-  [[nodiscard]] Result remove_cloth(ClothHandle handle);
-  [[nodiscard]] Result get_cloth_position(ClothHandle handle,
+                                 MeshConfig mesh_config, Cloth& handle);
+  [[nodiscard]] Result remove_cloth(Cloth handle);
+  [[nodiscard]] Result get_cloth_position(Cloth handle,
                                           View<float> position) const;
-  [[nodiscard]] Result set_cloth_config(ClothHandle handle, ClothConfig config);
-  [[nodiscard]] Result set_cloth_collision_config(ClothHandle handle,
+  [[nodiscard]] Result set_cloth_config(Cloth handle, ClothConfig config);
+  [[nodiscard]] Result set_cloth_collision_config(Cloth handle,
                                                   CollisionConfig config);
-  [[nodiscard]] Result set_cloth_mesh(ClothHandle handle,
-                                      MeshConfig mesh_config);
-  [[nodiscard]] Result set_cloth_pin(ClothHandle handle, ConstView<float> pin);
+  [[nodiscard]] Result set_cloth_mesh(Cloth handle, MeshConfig mesh_config);
+  [[nodiscard]] Result set_cloth_pin(Cloth handle, ConstView<float> pin);
 
   // Obstacle API
   [[nodiscard]] Result add_obstacle(CollisionConfig collision_config,
-                                    MeshConfig mesh_config,
-                                    ObstacleHandle& handle);
-  [[nodiscard]] Result remove_obstacle(ObstacleHandle handle);
-  [[nodiscard]] Result set_obstacle_collision_config(ObstacleHandle handle,
+                                    MeshConfig mesh_config, Obstacle& handle);
+  [[nodiscard]] Result remove_obstacle(Obstacle handle);
+  [[nodiscard]] Result set_obstacle_collision_config(Obstacle handle,
                                                      CollisionConfig config);
-  [[nodiscard]] Result set_obstacle_mesh(const ObstacleHandle& handle,
+  [[nodiscard]] Result set_obstacle_mesh(const Obstacle& handle,
                                          MeshConfig mesh_config);
-  [[nodiscard]] Result set_obstacle_position(ClothHandle handle,
+  [[nodiscard]] Result set_obstacle_position(Cloth handle,
                                              ConstView<float> position);
 };
 

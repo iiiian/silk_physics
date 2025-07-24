@@ -1,4 +1,4 @@
-#include "make_solver_data.hpp"
+#include "init_solver_data.hpp"
 
 #include <igl/cotmatrix.h>
 #include <igl/doublearea.h>
@@ -12,7 +12,6 @@
 #include <unsupported/Eigen/KroneckerProduct>
 
 #include "ecs.hpp"
-#include "eigen_helper.hpp"
 #include "solver_constrain.hpp"
 
 namespace silk {
@@ -20,22 +19,30 @@ namespace silk {
 class ClothElasticConstrain : public ISolverConstrain {
  private:
   Eigen::Matrix<float, 6, 9> jacobian_op_;
-  Eigen::Vector3i offset_;  // vertex offsets
+  Eigen::Vector3i index_;  // vertex indexes
+  int solver_state_offset_;
   float weight_;
 
  public:
   ClothElasticConstrain(Eigen::Matrix<float, 6, 9> jacobian_op,
-                        Eigen::Vector3i offset, float weight)
-      : jacobian_op_(jacobian_op), offset_(offset), weight_(weight) {}
+                        Eigen::Vector3i index, float weight)
+      : jacobian_op_(jacobian_op), index_(index), weight_(weight) {}
 
   // impl solver constrain interface
+
+  void set_solver_state_offset(int offset) override {
+    solver_state_offset_ = offset;
+  }
+
   void project(const Eigen::VectorXf& solver_state,
                Eigen::VectorXf& out) const override {
+    Eigen::Vector3i offset = solver_state_offset_ + 3 * index_.array();
+
     // assemble local vectorized vertex position
     Eigen::Matrix<float, 9, 1> buffer;
-    buffer(Eigen::seqN(0, 3)) = solver_state(Eigen::seqN(offset_(0), 3));
-    buffer(Eigen::seqN(3, 3)) = solver_state(Eigen::seqN(offset_(1), 3));
-    buffer(Eigen::seqN(6, 3)) = solver_state(Eigen::seqN(offset_(2), 3));
+    buffer(Eigen::seqN(0, 3)) = solver_state(Eigen::seqN(offset(0), 3));
+    buffer(Eigen::seqN(3, 3)) = solver_state(Eigen::seqN(offset(1), 3));
+    buffer(Eigen::seqN(6, 3)) = solver_state(Eigen::seqN(offset(2), 3));
 
     // deformation matrix
     Eigen::Matrix<float, 3, 2> F = (jacobian_op_ * buffer).reshaped(3, 2);
@@ -52,9 +59,9 @@ class ClothElasticConstrain : public ISolverConstrain {
     // compute the elastic rhs, reuse buffer
     buffer = weight_ * jacobian_op_.transpose() * T.reshaped();
     // add it back to thread local rhs
-    out(Eigen::seqN(offset_(0), 3)) += buffer(Eigen::seqN(0, 3));
-    out(Eigen::seqN(offset_(1), 3)) += buffer(Eigen::seqN(3, 3));
-    out(Eigen::seqN(offset_(2), 3)) += buffer(Eigen::seqN(6, 3));
+    out(Eigen::seqN(offset(0), 3)) += buffer(Eigen::seqN(0, 3));
+    out(Eigen::seqN(offset(1), 3)) += buffer(Eigen::seqN(3, 3));
+    out(Eigen::seqN(offset(2), 3)) += buffer(Eigen::seqN(6, 3));
   }
 };
 
@@ -105,17 +112,16 @@ std::optional<Eigen::Matrix<float, 6, 9>> cloth_jacobian_operator(
 }
 
 SolverData make_cloth_solver_data(const ClothConfig& config,
-                                  const TriMesh& tri_mesh,
-                                  const PinGroup& pin_group,
-                                  int solver_offset) {
+                                  const TriMesh& tri_mesh, const Pin& pin,
+                                  int state_offset) {
   const ClothConfig& c = config;
   const TriMesh& m = tri_mesh;
 
+  std::vector<std::unique_ptr<ISolverConstrain>> constrains;
+  std::vector<Eigen::Triplet<float>> AA_triplets;
+
   int vert_num = m.V.rows();
   int face_num = m.F.rows();
-
-  std::vector<Eigen::Triplet<float>> weighted_AA;
-  std::vector<std::unique_ptr<ISolverConstrain>> constrains;
 
   Eigen::SparseMatrix<float> mass;
   igl::massmatrix(m.V, m.F, igl::MASSMATRIX_TYPE_VORONOI, mass);
@@ -135,7 +141,6 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   // this is the weighted AA for bending energy.
   // assume initial curvature is 0 so there is no solver constrain for bending
   Eigen::SparseMatrix<float> CWC = c.bending_stiffness * C.transpose() * W * C;
-  vectorize_sparse_to_triplets(CWC, weighted_AA, solver_offset, solver_offset);
 
   // triangle area
   Eigen::VectorXf area;
@@ -153,9 +158,8 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
     }
 
     float weight = c.elastic_stiffness * area(f);
-    Eigen::Vector3i offset = solver_offset + 3 * m.F.row(f).array();
     constrains.emplace_back(
-        std::make_unique<ClothElasticConstrain>(*jop, offset, weight));
+        std::make_unique<ClothElasticConstrain>(*jop, m.F.row(f), weight));
     Eigen::Matrix<float, 9, 9> local_AA = (*jop).transpose() * (*jop);
 
     // convert local AA to global AA
@@ -169,7 +173,7 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
               continue;
             }
             // TODO: consider purging value near zero to save compute
-            weighted_AA.emplace_back(3 * m.F(f, vi) + i, 3 * m.F(f, vj) + j,
+            AA_triplets.emplace_back(3 * m.F(f, vi) + i, 3 * m.F(f, vj) + j,
                                      val);
           }
         }
@@ -178,48 +182,49 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   }
 
   // pinned vertices
-  auto p = pin_group;
-  if (p.pin_index.size() != 0) {
-    for (int idx : p.pin_index) {
-      int offset = solver_offset + 3 * idx;
-      weighted_AA.emplace_back(offset, offset, p.pin_sitffness);
-      weighted_AA.emplace_back(offset + 1, offset + 1, p.pin_sitffness);
-      weighted_AA.emplace_back(offset + 2, offset + 2, p.pin_sitffness);
+  auto p = pin;
+  if (p.index.size() != 0) {
+    for (int idx : p.index) {
+      int offset = 3 * idx;
+      AA_triplets.emplace_back(offset, offset, p.pin_sitffness);
+      AA_triplets.emplace_back(offset + 1, offset + 1, p.pin_sitffness);
+      AA_triplets.emplace_back(offset + 2, offset + 2, p.pin_sitffness);
     }
   }
 
   SolverData data;
-  data.state_offset = solver_offset;
   data.state_num = 3 * m.V.rows();
+  data.state_offset = state_offset;
   data.mass.resize(vert_num);
   for (int i = 0; i < vert_num; ++i) {
     data.mass(i) = mass.coeff(i, i);
   }
-  data.weighted_AA = std::move(weighted_AA);
+  data.weighted_AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
+  data.weighted_AA += CWC;
   data.constrains = std::move(constrains);
 
   return data;
 }
 
-void make_all_solver_data(Registry& registry) {
+void init_all_solver_data(Registry& registry) {
   int offset_counter = 0;
-  for (Entity& e : registry.entity.data()) {
-    // remove old solver data
-    ECS_REMOVE(registry, e, solver_data);
+  for (Entity& e : registry.get_all_entities()) {
+    auto cloth_config = registry.get<ClothConfig>(e);
+    auto tri_mesh = registry.get<TriMesh>(e);
+    auto pin = registry.get<Pin>(e);
+    auto solver_data = registry.get<SolverData>(e);
 
-    auto cloth_config = ECS_GET_PTR(registry, e, cloth_config);
-    auto tri_mesh = ECS_GET_PTR(registry, e, tri_mesh);
-    auto pin_group = ECS_GET_PTR(registry, e, pin_group);
-
-    if (cloth_config && tri_mesh && pin_group) {
-      SolverData data = make_cloth_solver_data(*cloth_config, *tri_mesh,
-                                               *pin_group, offset_counter);
-      offset_counter += data.state_num;
-
-      Handle h = registry.solver_data.add(std::move(data));
-      assert(!h.is_empty());
-      e.solver_data = h;
-
+    if (cloth_config && tri_mesh && pin) {
+      // if solver data already exists, just update the solver state offset
+      if (solver_data) {
+        solver_data->state_offset = offset_counter;
+        offset_counter += solver_data->state_num;
+      } else {
+        SolverData new_data = make_cloth_solver_data(*cloth_config, *tri_mesh,
+                                                     *pin, offset_counter);
+        offset_counter += new_data.state_num;
+        registry.set<SolverData>(e, std::move(new_data));
+      }
       continue;
     }
   }

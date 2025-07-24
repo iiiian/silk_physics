@@ -6,9 +6,9 @@
 namespace silk {
 
 template <typename Scalar>
-void sparse_to_triplets(const Eigen::SparseMatrix<Scalar>& m,
-                        std::vector<Eigen::Triplet<Scalar>>& triplets,
-                        int row_offset = 0, int col_offset = 0) {
+void sparse_to_triplets(const Eigen::SparseMatrix<Scalar>& m, int row_offset,
+                        int col_offset,
+                        std::vector<Eigen::Triplet<Scalar>>& triplets) {
   using Iter = typename Eigen::SparseMatrix<Scalar>::InnerIterator;
   for (int i = 0; i < m.outerSize(); ++i) {
     for (Iter it(m, i); it; ++it) {  // it++ doesn't work
@@ -19,9 +19,9 @@ void sparse_to_triplets(const Eigen::SparseMatrix<Scalar>& m,
 }
 
 template <typename Scalar>
-void vectorize_sparse_to_triplets(const Eigen::SparseMatrix<Scalar>& m,
-                                  std::vector<Eigen::Triplet<Scalar>>& triplets,
-                                  int row_offset = 0, int col_offset = 0) {
+void vectorize_sparse_to_triplets(
+    const Eigen::SparseMatrix<Scalar>& m, int row_offset, int col_offset,
+    std::vector<Eigen::Triplet<Scalar>>& triplets) {
   using Iter = typename Eigen::SparseMatrix<Scalar>::InnerIterator;
   for (int i = 0; i < m.outerSize(); ++i) {
     for (Iter it(m, i); it; ++it) {
