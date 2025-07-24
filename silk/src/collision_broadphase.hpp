@@ -1,19 +1,152 @@
 #pragma once
 
+#include <pdqsort.h>
+
 #include <Eigen/Core>
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <limits>
-#include <random>
 #include <vector>
 
-#include "../bbox.hpp"
-#include "collision_helper.hpp"
-#include "sap.hpp"
+#include "bbox.hpp"
 
 namespace silk {
+
+template <typename C>
+using CollisionCache = std::vector<std::pair<C*, C*>>;
+
+template <typename C>
+using CollisionFilterCallback = std::function<bool(const C&, const C&)>;
+
+struct MeanVariance {
+  Eigen::Vector3f mean;
+  Eigen::Vector3f variance;
+};
+
+template <typename C>
+MeanVariance proxy_mean_variance(C* const* proxies, int proxy_num) {
+  assert((proxy_num > 0));
+
+  Eigen::Vector3f mean = Eigen::Vector3f::Zero();
+  Eigen::Vector3f variance = Eigen::Vector3f::Zero();
+  for (int i = 0; i < proxy_num; ++i) {
+    Eigen::Vector3f center = proxies[i]->bbox.center();
+    mean += center;
+    variance += center.cwiseAbs2();
+  }
+  mean /= proxy_num;
+  variance = variance / proxy_num - mean.cwiseAbs2();
+
+  return {std::move(mean), std::move(variance)};
+}
+
+template <typename C>
+int sap_optimal_axis(C* const* proxies, int proxy_num) {
+  assert((proxy_num > 0));
+
+  auto [mean, var] = proxy_mean_variance(proxies, proxy_num);
+  int axis;
+  var.maxCoeff(&axis);
+  return axis;
+}
+
+template <typename C>
+int sap_optimal_axis(C* const* proxies_a, int proxy_num_a, C* const* proxies_b,
+                     int proxy_num_b) {
+  assert((proxy_num_a > 0));
+  assert((proxy_num_b > 0));
+
+  auto [mean_a, var_a] = proxy_mean_variance(proxies_a, proxy_num_a);
+  auto [mean_b, var_b] = proxy_mean_variance(proxies_b, proxy_num_b);
+  Eigen::Vector3f mean = (proxy_num_a * mean_a + proxy_num_b * mean_b) /
+                         (proxy_num_a + proxy_num_b);
+  Eigen::Vector3f tmp_a = (mean_a - mean).array().square();
+  Eigen::Vector3f tmp_b = (mean_b - mean).array().square();
+  Eigen::Vector3f var =
+      proxy_num_a * (var_a + tmp_a) + proxy_num_b * (var_b + tmp_b);
+  int axis;
+  var.maxCoeff(&axis);
+  return axis;
+}
+
+template <typename C>
+void sap_sort_proxies(C** proxies, int proxy_num, int axis) {
+  assert((proxy_num != 0));
+
+  auto comp = [axis](C* a, C* b) -> bool {
+    return (a->bbox.min(axis) < b->bbox.min(axis));
+  };
+  pdqsort_branchless(proxies, proxies + proxy_num, comp);
+}
+
+template <typename C>
+void sap_sorted_collision(C* p1, C* const* proxies, int proxy_num, int axis,
+                          CollisionFilterCallback<C> filter,
+                          CollisionCache<C>& cache) {
+  assert((proxy_num != 0));
+
+  if (p1->bbox.max(axis) < proxies[0]->bbox.min(axis)) {
+    return;
+  }
+
+  for (int i = 0; i < proxy_num; ++i) {
+    C* p2 = proxies[i];
+    // axis test
+    if (p1->bbox.max(axis) < p2->bbox.min(axis)) {
+      break;
+    }
+    // user provided collision filter
+    if (!filter(*p1, *p2)) {
+      continue;
+    }
+
+    if (Bbox::is_colliding(p1->bbox, p2->bbox)) {
+      cache.emplace_back(p1, p2);
+    }
+  }
+}
+
+template <typename C>
+void sap_sorted_group_self_collision(C* const* proxies, int proxy_num, int axis,
+                                     CollisionFilterCallback<C> filter,
+                                     CollisionCache<C>& cache) {
+  assert((proxy_num > 0));
+
+  for (int i = 0; i < proxy_num - 1; ++i) {
+    sap_sorted_collision(proxies[i], proxies + i + 1, proxy_num - i - 1, axis,
+                         filter, cache);
+  }
+}
+
+template <typename C>
+void sap_sorted_group_group_collision(C* const* proxies_a, int proxy_num_a,
+                                      C* const* proxies_b, int proxy_num_b,
+                                      int axis,
+                                      CollisionFilterCallback<C> filter,
+                                      CollisionCache<C>& cache) {
+  assert((proxy_num_a > 0));
+  assert((proxy_num_b > 0));
+
+  int a = 0;
+  int b = 0;
+  while (a < proxy_num_a && b < proxy_num_b) {
+    C* pa = proxies_a[a];
+    C* pb = proxies_b[b];
+
+    if (pa->bbox.min(axis) < pb->bbox.min(axis)) {
+      sap_sorted_collision(pa, proxies_b + b, proxy_num_b - b, axis, filter,
+                           cache);
+      a++;
+    } else {
+      sap_sorted_collision(pb, proxies_a + a, proxy_num_a - a, axis, filter,
+                           cache);
+      b++;
+    }
+  }
+}
 
 struct KDNode {
   KDNode* parent = nullptr;
@@ -55,8 +188,6 @@ class KDTree {
  public:
  private:
   static constexpr int NODE_PROXY_NUM_THRESHOLD = 1024;
-  static constexpr int APPROX_PLANE_SAMPLE_NUM = 16;
-  static constexpr int APPROX_PLANE_SAMPLE_THRESHOLD = 32;
 
   int collider_num_ = 0;
   C* colliders_ = nullptr;
@@ -94,15 +225,15 @@ class KDTree {
     local_cache_.resize(omp_get_max_threads());
   }
 
-  void update(const Bbox& bbox) {
+  void update(const Bbox& root_bbox) {
     assert(root_);
 
-    root_->bbox = bbox;
+    root_->bbox = root_bbox;
     lift_unfit_up();
     optimize_structure();
   }
 
-  void test_self_collision(CollisionFilter<C> filter,
+  void test_self_collision(CollisionFilterCallback<C> filter,
                            CollisionCache<C>& cache) {
     assert(root_);
 
@@ -145,7 +276,7 @@ class KDTree {
   }
 
   static void test_tree_collision(KDTree& ta, KDTree& tb,
-                                  CollisionFilter<C> filter,
+                                  CollisionFilterCallback<C> filter,
                                   CollisionCache<C>& cache) {
     assert(ta.root_ && tb.root_);
 
@@ -277,33 +408,6 @@ class KDTree {
 
     auto [mean, var] =
         proxy_mean_variance(proxies_.data() + n->proxy_start, n->proxy_num());
-    var.maxCoeff(&n->axis);
-    n->position = mean(n->axis);
-  }
-
-  // find approximate split plane based on mean and variance of bbox center.
-  // sample a few bbox only.
-  void find_approx_plane(KDNode* n) {
-    static std::random_device rand_device;
-    static std::mt19937 rand_generator(rand_device());
-
-    assert((n->proxy_num() > 0));
-
-    if (n->proxy_num() <= APPROX_PLANE_SAMPLE_THRESHOLD) {
-      find_optimal_plane(n);
-      return;
-    }
-
-    int start = n->proxy_start;
-    int end = n->proxy_start + APPROX_PLANE_SAMPLE_NUM;
-    for (int i = start; i < end; ++i) {
-      std::uniform_int_distribution<int> rand_dist(i, n->proxy_end - 1);
-      int rand_idx = rand_dist(rand_generator);
-      std::swap(proxies_[i], proxies_[rand_idx]);
-    }
-
-    auto [mean, var] =
-        proxy_mean_variance(proxies_.data() + start, APPROX_PLANE_SAMPLE_NUM);
     var.maxCoeff(&n->axis);
     n->position = mean(n->axis);
   }
@@ -780,7 +884,7 @@ class KDTree {
     }
   }
 
-  void test_node_collision(KDNode* n, CollisionFilter<C> filter) {
+  void test_node_collision(KDNode* n, CollisionFilterCallback<C> filter) {
     C** proxy_start = proxies_.data() + n->proxy_start;
     int proxy_num = n->proxy_num();
     if (proxy_num == 0) {

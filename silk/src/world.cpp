@@ -1,13 +1,11 @@
-#include <Eigen/Core>
-#include <Eigen/Sparse>
-#include <Eigen/SparseCholesky>
-#include <iostream>  // fix a bug in eigen arpack that miss this include
-#include <unsupported/Eigen/ArpackSupport>
-#include <vector>
+#include <igl/edges.h>
 
-#include "cloth.hpp"
-#include "physical_body.hpp"
-#include "resource_manager.hpp"
+#include <Eigen/Core>
+#include <cassert>
+#include <cstring>
+
+#include "collision_pipeline.hpp"
+#include "ecs.hpp"
 #include "solver.hpp"
 
 namespace silk {
@@ -16,12 +14,6 @@ std::string to_string(Result result) {
   switch (result) {
     case Result::Success: {
       return "Success";
-    }
-    case Result::InvalidTimeStep: {
-      return "InvalidTimeStep";
-    }
-    case Result::InvalidLowFreqModeNum: {
-      return "InvalidLowFreqModeNum";
     }
     case Result::InvalidConfig: {
       return "InvalidConfig";
@@ -32,443 +24,377 @@ std::string to_string(Result result) {
     case Result::InvalidHandle: {
       return "InvalidHandle";
     }
-    case Result::IncorrectPositionConstrainLength: {
-      return "IncorrectPositionConstrainLength";
-    }
-    case Result::IncorrentOutputPositionLength: {
-      return "IncorrentOutputPositionLength";
-    }
-    case Result::EigenDecompositionfail: {
-      return "EigenDecompositionfail";
-    }
-    case Result::IterativeSolverInitFail: {
-      return "IterativeSolverInitFail";
-    }
-    case Result::NeedInitSolverBeforeSolve: {
-      return "NeedInitSolverBeforeSolve";
-    }
-    case Result::IterativeSolveFail: {
-      return "IterativeSolveFail";
-    }
     default:
       assert(false && "unknown result");
       return "Unknown";
   }
 }
 
-struct BodyPositionOffset {
-  SolverBody* body;
-  int offset;
-};
-
-struct FaceCollider {
-  SolverBody* body;
-  int v1;
-  int v2;
-  int v3;
-};
-
 class World::WorldImpl {
  private:
-  // collision internal
-
-  // solver internal
-  bool need_warmup_ = true;
-  int total_vert_num_;
-  Eigen::VectorXf curr_position_;
-  Eigen::VectorXf init_position_;
-  Eigen::VectorXf velocity_;
-  Eigen::SparseMatrix<float> mass_;
-  Eigen::SparseMatrix<float> H_;  // iterative solver depends on this matrix !!
-  Eigen::MatrixXf UHU_;
-  Eigen::MatrixXf U_;
-  Eigen::VectorXf HX_;
-  std::vector<BodyPositionOffset> body_position_offsets_;
-  std::vector<std::unique_ptr<SolverConstrain>> constrains_;
-  Eigen::ConjugateGradient<Eigen::SparseMatrix<float>,
-                           Eigen::Upper | Eigen::Lower,
-                           Eigen::IncompleteCholesky<float>>
-      iterative_solver_;
-
-  // solver parameters (need recompute warmup)
-  int low_freq_mode_num_;
-  float dt_;
-
-  // entities
-  ResourceManager<SolverCloth> clothes_;
-
-  void init_solver_body_offset() {
-    body_position_offsets_.clear();
-    total_vert_num_ = 0;
-
-    auto init_offset = [this](SolverBody& body) {
-      body_position_offsets_.emplace_back(
-          BodyPositionOffset{&body, 3 * total_vert_num_});
-      body.set_position_offset(3 * total_vert_num_);
-      total_vert_num_ += body.get_vert_num();
-    };
-
-    for (SolverCloth& body : clothes_.get_dense_data()) {
-      init_offset(body);
-    }
-  }
-
-  void init_solver_position_and_velocity() {
-    velocity_ = Eigen::VectorXf::Zero(3 * total_vert_num_);
-    curr_position_.resize(3 * total_vert_num_);
-    for (BodyPositionOffset& body_offset : body_position_offsets_) {
-      int num = 3 * body_offset.body->get_vert_num();
-      curr_position_(Eigen::seqN(body_offset.offset, num)) =
-          body_offset.body->get_init_position();
-    }
-    init_position_ = curr_position_;
-  }
-
-  SolverBody* resolve_handle(const Handle& handle) {
-    ResourceHandle r_handle{handle.value};
-    switch (handle.type) {
-      case HandleType::Cloth: {
-        return dynamic_cast<PDObject*>(clothes_.get_resources(r_handle));
-      }
-      case HandleType::RigidBody:
-        assert(false && "not impl");
-        return nullptr;
-      case HandleType::SoftBody:
-        assert(false && "not impl");
-        return nullptr;
-      case HandleType::Hair:
-        assert(false && "not impl");
-        return nullptr;
-      case HandleType::Collider:
-        assert(false && "not impl");
-        return nullptr;
-      default:
-        assert(false && "unknown handle type");
-        return nullptr;
-    }
-  }
-
-  const SolverBody* resolve_handle(const Handle& handle) const {
-    ResourceHandle r_handle{handle.value};
-    switch (handle.type) {
-      case HandleType::Cloth: {
-        return dynamic_cast<const PDObject*>(clothes_.get_resources(r_handle));
-      }
-      case HandleType::RigidBody:
-        assert(false && "not impl");
-        return nullptr;
-      case HandleType::SoftBody:
-        assert(false && "not impl");
-        return nullptr;
-      case HandleType::Hair:
-        assert(false && "not impl");
-        return nullptr;
-      case HandleType::Collider:
-        assert(false && "not impl");
-        return nullptr;
-      default:
-        assert(false && "unknown handle type");
-        return nullptr;
-    }
-  }
+  bool is_solver_init = false;
+  Registry registry_;
+  Solver solver_;
+  CollisionPipeline collision_pipeline_;
 
  public:
-  Eigen::Vector3f constant_acce_field = {0.0f, 0.0f, -1.0f};
-  int max_iteration = 5;
-  int thread_num = 4;
+  // Global API
+  Result set_global_config(GlobalConfig config) {
+    is_solver_init = false;
 
-  float get_dt() const { return dt_; }
+    auto& c = config;
+    solver_.const_acceleration = {c.acceleration_x, c.acceleration_y,
+                                  c.acceleration_z};
+    solver_.max_iteration = c.max_iteration;
+    solver_.r = c.r;
+    solver_.dt = c.dt;
+    solver_.ccd_walkback = c.ccd_walkback;
+    collision_pipeline_.toi_tolerance = c.toi_tolerance;
+    collision_pipeline_.toi_refine_it = c.toi_refine_iteration;
+    collision_pipeline_.eps = c.eps;
 
-  Result set_dt(float dt) {
-    if (dt <= 0) {
-      return Result::InvalidTimeStep;
-    }
-    dt_ = dt;
-    need_warmup_ = true;
     return Result::Success;
   }
 
-  int get_low_freq_mode_num() const { return low_freq_mode_num_; }
+  void clear() {
+    is_solver_init = false;
+    solver_.clear();
+    registry_.clear();
+  }
 
-  Result set_low_freq_mode_num(int num) {
-    if (num == 0) {
-      return Result::InvalidLowFreqModeNum;
+  // Solver API
+  Result solver_init() {
+    if (!solver_.init(registry_)) {
+      return Result::EigenDecompositionFail;
     }
-
-    low_freq_mode_num_ = num;
-    need_warmup_ = true;
+    is_solver_init = true;
     return Result::Success;
   }
 
-  Result add_cloth(ClothConfig config, Handle& handle) {
-    if (!config.is_valid()) {
-      return Result::InvalidConfig;
+  Result solver_step() {
+    if (!is_solver_init) {
+      return Result::NeedInitSolverFirst;
     }
 
-    auto resource_handle =
-        clothes_.add_resource(SolverCloth{std::move(config)});
-    if (!resource_handle) {
+    solver_.step(registry_, collision_pipeline_);
+
+    for (Entity& e : registry_.get_all_entities()) {
+      auto obstacle_position = registry_.get<ObstaclePosition>(e);
+      if (obstacle_position) {
+        obstacle_position->prev_position = {};
+        obstacle_position->is_static = true;
+      }
+    }
+
+    return Result::Success;
+  }
+
+  Result solver_reset() {
+    if (!is_solver_init) {
+      return Result::NeedInitSolverFirst;
+    }
+    solver_.reset();
+    return Result::Success;
+  }
+
+  // cloth API
+  Result add_cloth(ClothConfig cloth_config, CollisionConfig collision_config,
+                   MeshConfig mesh_config, Cloth& cloth) {
+    // make tri mesh
+    TriMesh m;
+    m.V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
+                                      mesh_config.verts.num, 3);
+    m.F = Eigen::Map<const RMatrix3i>(mesh_config.faces.data,
+                                      mesh_config.faces.num, 3);
+    igl::edges(m.F, m.E);
+    m.avg_edge_length = 0.0f;
+    for (int i = 0; i < m.E.rows(); ++i) {
+      m.avg_edge_length += (m.V.row(m.E(i, 0)) - m.V.row(m.E(i, 1))).norm();
+    }
+    m.avg_edge_length /= m.E.rows();
+
+    // make pin
+    Pin p;
+    p.index = Eigen::Map<const Eigen::VectorXi>(mesh_config.pin_index.data,
+                                                mesh_config.pin_index.num);
+    p.position.resize(3 * p.index.size());
+    for (int i = 0; i < p.index.size(); ++i) {
+      p.position(Eigen::seqN(3 * i, 3)) = m.V.row(i);
+    }
+
+    auto [h, e] = registry_.add_entity();
+    if (h.is_empty()) {
       return Result::TooManyBody;
     }
+    assert(e);
+    registry_.set<ClothConfig>(*e, std::move(cloth_config));
+    registry_.set<CollisionConfig>(*e, std::move(collision_config));
+    registry_.set<TriMesh>(*e, std::move(m));
+    registry_.set<Pin>(*e, std::move(p));
 
-    handle.type = HandleType::Cloth;
-    handle.value = resource_handle->get_value();
-
-    need_warmup_ = true;
+    cloth = Cloth{h.value};
+    is_solver_init = false;
     return Result::Success;
   }
 
-  Result remove_cloth(const Handle& handle) {
-    if (handle.type != HandleType::Cloth) {
-      return Result::InvalidHandle;
-    }
-    ResourceHandle r_handle{handle.value};
-    if (!clothes_.remove_resource(r_handle)) {
+  Result remove_cloth(Cloth cloth) {
+    Handle h{cloth.value};
+    auto entity = registry_.get_entity(h);
+    if (!entity) {
       return Result::InvalidHandle;
     }
 
-    need_warmup_ = true;
+    is_solver_init = false;
+    registry_.remove_entity(h);
+
     return Result::Success;
   }
 
-  Result update_cloth(ClothConfig config, const Handle& handle) {
-    if (handle.type != HandleType::Cloth) {
+  Result get_cloth_position(Cloth cloth, Span<float> position) const {
+    const Entity* e = registry_.get_entity(Handle{cloth.value});
+    if (!e) {
       return Result::InvalidHandle;
     }
-    ResourceHandle resource_handle{handle.value};
-    SolverCloth* cloth = clothes_.get_resources(resource_handle);
-    if (!cloth) {
-      return Result::InvalidHandle;
-    }
-    if (!config.is_valid()) {
-      return Result::InvalidConfig;
-    }
-    *cloth = SolverCloth{std::move(config)};
 
-    need_warmup_ = true;
-    return Result::Success;
-  }
+    if (is_solver_init) {
+      auto solver_data = registry_.get<SolverData>(*e);
+      assert(solver_data);
 
-  void solver_reset() {
-    need_warmup_ = true;
-    curr_position_ = {};
-    init_position_ = {};
-    velocity_ = {};
-    mass_ = {};
-    H_ = {};
-    UHU_ = {};
-    U_ = {};
-    HX_ = {};
-    body_position_offsets_.clear();
-    constrains_.clear();
-    total_vert_num_ = 0;
-  }
-
-  Result solver_init() {
-    init_solver_body_offset();
-    init_solver_position_and_velocity();
-    std::vector<Eigen::Triplet<float>> mass_triplets;
-    std::vector<Eigen::Triplet<float>> AA_triplets;
-
-    auto collect_solver_init_data = [this, &mass_triplets,
-                                     &AA_triplets](SolverBody& body) {
-      SolverInitData init_data = body.compute_solver_init_data();
-      for (auto& t : init_data.mass) {
-        mass_triplets.emplace_back(std::move(t));
+      if (position.num < solver_data->state_num) {
+        return Result::IncorrectPositionNum;
       }
-      for (auto& t : init_data.weighted_AA) {
-        AA_triplets.emplace_back(std::move(t));
+
+      auto solver_state = solver_.get_solver_state();
+      assert((solver_state.size() >=
+              solver_data->state_offset + solver_data->state_num));
+
+      memcpy(position.data, solver_state.data() + solver_data->state_offset,
+             solver_data->state_num * sizeof(float));
+      return Result::Success;
+    } else {
+      auto mesh = registry_.get<TriMesh>(*e);
+      assert(mesh);
+
+      if (position.num < 3 * mesh->V.rows()) {
+        return Result::IncorrectPositionNum;
       }
-      for (auto& t : init_data.constrains) {
-        constrains_.emplace_back(std::move(t));
-      }
-    };
 
-    for (SolverCloth& body : clothes_.get_dense_data()) {
-      collect_solver_init_data(dynamic_cast<PDObject&>(body));
+      memcpy(position.data, mesh->V.data(), 3 * mesh->V.rows() * sizeof(float));
     }
-
-    // set other solver matrices
-    int num = 3 * total_vert_num_;
-    mass_.resize(num, num);
-    mass_.setFromTriplets(mass_triplets.begin(), mass_triplets.end());
-    Eigen::SparseMatrix<float> AA(num, num);
-    AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
-    H_ = (mass_ / (dt_ * dt_) + AA);
-    Eigen::ArpackGeneralizedSelfAdjointEigenSolver<
-        Eigen::SparseMatrix<float>,
-        Eigen::SimplicialLLT<Eigen::SparseMatrix<float>>>
-        eigen_solver;
-    low_freq_mode_num_ = std::min(low_freq_mode_num_, num);
-    eigen_solver.compute(H_, low_freq_mode_num_, "SM");
-    if (eigen_solver.info() != Eigen::Success) {
-      // SPDLOG_ERROR("eigen decomposition fail");
-      // TODO: better signal warning
-      return Result::EigenDecompositionfail;
-    }
-    U_ = eigen_solver.eigenvectors();
-    UHU_ = eigen_solver.eigenvalues();
-    HX_ = H_ * init_position_;
-
-    // conjugate gradient solver depends on H_ !!
-    iterative_solver_.setMaxIterations(max_iteration);
-    iterative_solver_.compute(H_);
-    if (iterative_solver_.info() != Eigen::Success) {
-      // SPDLOG_ERROR("iterative solver decomposition fail");
-      // TODO: signal warning
-      return Result::IterativeSolverInitFail;
-    }
-
-    need_warmup_ = false;
-    return Result::Success;
-  }
-
-  Result step() {
-    if (need_warmup_) {
-      return Result::NeedInitSolverBeforeSolve;
-    }
-
-    // basic linear velocity term
-    Eigen::VectorXf rhs =
-        (mass_ / dt_ / dt_) * curr_position_ + (mass_ / dt_) * velocity_ +
-        mass_ * constant_acce_field.replicate(total_vert_num_, 1);
-
-    // thread local buffer for rhs
-    std::vector<Eigen::VectorXf> buffers(
-        thread_num, Eigen::VectorXf::Zero(3 * total_vert_num_));
-    // project constrains
-#pragma omp parallel for num_threads(thread_num)
-    for (const auto& c : constrains_) {
-      Eigen::VectorXf& buffer = buffers[omp_get_thread_num()];
-      c->project(curr_position_, buffer);
-    }
-    // merge thread local rhs back to global rhs
-    for (Eigen::VectorXf& buffer : buffers) {
-      rhs += buffer;
-    }
-
-    // sub space solve
-    Eigen::VectorXf b = U_.transpose() * (rhs - HX_);
-    Eigen::VectorXf q = b.array() / UHU_.array();
-    Eigen::VectorXf subspace_sol = init_position_ + U_ * q;
-
-    // iterative global solve
-    Eigen::VectorXf sol = iterative_solver_.solveWithGuess(rhs, subspace_sol);
-    if (iterative_solver_.info() != Eigen::Success &&
-        iterative_solver_.info() != Eigen::NoConvergence) {
-      return Result::IterativeSolveFail;
-    }
-
-    // CCD
-
-    velocity_ = (sol - curr_position_) / dt_;
-    curr_position_ = sol;
 
     return Result::Success;
   }
 
-  Result update_position_constrain(const Handle& handle,
-                                   Eigen::Ref<const Eigen::VectorXf> position) {
-    SolverBody* body = resolve_handle(handle);
-    if (!body) {
+  Result set_cloth_config(Cloth cloth, ClothConfig config) {
+    Entity* e = registry_.get_entity(Handle{cloth.value});
+    if (!e) {
       return Result::InvalidHandle;
     }
 
-    auto pinned_verts = body->get_pinned_verts();
-    if (position.size() != 3 * pinned_verts.size()) {
-      return Result::IncorrectPositionConstrainLength;
-    }
-    int offset = body->get_position_offset();
-    for (int idx = 0; idx < pinned_verts.size(); ++idx) {
-      curr_position_(Eigen::seqN(offset + 3 * pinned_verts(idx), 3)) =
-          position(Eigen::seqN(3 * idx, 3));
-    }
+    is_solver_init = false;
+
+    auto cloth_config = registry_.get<ClothConfig>(*e);
+    assert(cloth_config);
+    *cloth_config = config;
+
+    // remove outdated components
+    registry_.remove<SolverData>(*e);
+    registry_.remove<ObjectCollider>(*e);
 
     return Result::Success;
   }
 
-  Result get_current_position(const Handle& handle,
-                              Eigen::Ref<Eigen::VectorXf> position) const {
-    const SolverBody* body = resolve_handle(handle);
-    if (!body) {
+  Result set_cloth_collision_config(Cloth cloth, CollisionConfig config) {
+    Entity* e = registry_.get_entity(Handle{cloth.value});
+    if (!e) {
       return Result::InvalidHandle;
     }
 
-    int offset = body->get_position_offset();
-    int num = 3 * body->get_vert_num();
-    if (position.size() != num) {
-      return Result::IncorrentOutputPositionLength;
+    auto collision_config = registry_.get<CollisionConfig>(*e);
+    assert(collision_config);
+
+    *collision_config = config;
+    return Result::Success;
+  }
+
+  Result set_cloth_pin_index(Cloth cloth, MeshConfig mesh_config) {
+    Entity* e = registry_.get_entity(Handle{cloth.value});
+    if (!e) {
+      return Result::InvalidHandle;
     }
 
-    position = curr_position_(Eigen::seqN(offset, num));
+    is_solver_init = false;
+
+    // make tri mesh
+    auto tri_mesh = registry_.get<TriMesh>(*e);
+    assert(tri_mesh);
+
+    // make pin
+    auto pin = registry_.get<Pin>(*e);
+    assert(pin);
+    pin->index = Eigen::Map<const Eigen::VectorXi>(mesh_config.pin_index.data,
+                                                   mesh_config.pin_index.num);
+    pin->position.resize(3 * pin->index.size());
+    for (int i = 0; i < pin->index.size(); ++i) {
+      pin->position(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(i);
+    }
+
+    // remove outdated components
+    registry_.remove<SolverData>(*e);
+    registry_.remove<ObjectCollider>(*e);
+
+    return Result::Success;
+  }
+
+  Result set_cloth_pin_position(Cloth cloth, ConstSpan<float> position) {
+    Entity* e = registry_.get_entity(Handle{cloth.value});
+    if (!e) {
+      return Result::InvalidHandle;
+    }
+    auto pin = registry_.get<Pin>(*e);
+    assert(pin);
+
+    if (3 * pin->index.size() != position.num) {
+      return Result::IncorrectPinNum;
+    }
+
+    pin->position =
+        Eigen::Map<const Eigen::VectorXf>(position.data, position.num);
+
+    // remove outdated components
+    registry_.remove<SolverData>(*e);
+    registry_.remove<ObjectCollider>(*e);
+
+    return Result::Success;
+  }
+
+  // Obstacle API
+  Result add_obstacle(CollisionConfig collision_config, MeshConfig mesh_config,
+                      Obstacle& obstacle) {
+    // make tri mesh
+    TriMesh m;
+    m.V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
+                                      mesh_config.verts.num, 3);
+    m.F = Eigen::Map<const RMatrix3i>(mesh_config.faces.data,
+                                      mesh_config.faces.num, 3);
+    igl::edges(m.F, m.E);
+    m.avg_edge_length = 0.0f;
+    for (int i = 0; i < m.E.rows(); ++i) {
+      m.avg_edge_length += (m.V.row(m.E(i, 0)) - m.V.row(m.E(i, 1))).norm();
+    }
+    m.avg_edge_length /= m.E.rows();
+
+    // make obstacle position
+    ObstaclePosition p;
+    p.is_static = true;
+    p.position = m.V.reshaped<Eigen::RowMajor>();
+
+    auto [h, e] = registry_.add_entity();
+    if (h.is_empty()) {
+      return Result::TooManyBody;
+    }
+    assert(e);
+    registry_.set<CollisionConfig>(*e, std::move(collision_config));
+    registry_.set<TriMesh>(*e, std::move(m));
+    registry_.set<ObstaclePosition>(*e, std::move(p));
+
+    obstacle = Obstacle{h.value};
+    return Result::Success;
+  }
+
+  Result remove_obstacle(Obstacle obstacle) {
+    Handle h{obstacle.value};
+    auto entity = registry_.get_entity(h);
+    if (!entity) {
+      return Result::InvalidHandle;
+    }
+
+    registry_.remove_entity(h);
+    return Result::Success;
+  }
+
+  Result set_obstacle_collision_config(Obstacle obstacle,
+                                       CollisionConfig config) {
+    Entity* e = registry_.get_entity(Handle{obstacle.value});
+    if (!e) {
+      return Result::InvalidHandle;
+    }
+
+    auto collision_config = registry_.get<CollisionConfig>(*e);
+    assert(collision_config);
+
+    *collision_config = config;
+    return Result::Success;
+  }
+
+  Result set_obstacle_position(Obstacle obstacle, ConstSpan<float> position) {
+    Entity* e = registry_.get_entity(Handle{obstacle.value});
+    if (!e) {
+      return Result::InvalidHandle;
+    }
+    auto pos = registry_.get<ObstaclePosition>(*e);
+    assert(pos);
+
+    if (pos->position.size() != position.num) {
+      return Result::IncorrectPinNum;
+    }
+
+    pos->is_static = false;
+    std::swap(pos->position, pos->prev_position);
+    pos->position =
+        Eigen::Map<const Eigen::VectorXf>(position.data, position.num);
+
     return Result::Success;
   }
 };
 
-World::World() { impl_ = std::make_unique<silk::World::WorldImpl>(); }
-
+World::World() : impl_(new WorldImpl) {}
 World::~World() = default;
-
 World::World(World&&) = default;
-
 World& World::operator=(World&&) = default;
 
-[[nodiscard]] Result World::add_cloth(ClothConfig config, Handle& handle) {
-  return impl_->add_cloth(std::move(config), handle);
+Result World::set_global_config(GlobalConfig config) {
+  return impl_->set_global_config(config);
 }
-
-[[nodiscard]] Result World::remove_cloth(const Handle& handle) {
-  return impl_->remove_cloth(handle);
+void World::clear() { impl_->clear(); }
+Result World::solver_init() { return impl_->solver_init(); }
+Result World::solver_step() { return impl_->solver_step(); }
+Result World::solver_reset() { return impl_->solver_reset(); }
+Result World::add_cloth(ClothConfig cloth_config,
+                        CollisionConfig collision_config,
+                        MeshConfig mesh_config, Cloth& cloth) {
+  return impl_->add_cloth(cloth_config, collision_config, mesh_config, cloth);
 }
-
-[[nodiscard]] Result World::update_cloth(ClothConfig config,
-                                         const Handle& handle) {
-  return impl_->update_cloth(std::move(config), handle);
+Result World::remove_cloth(Cloth cloth) { return impl_->remove_cloth(cloth); }
+Result World::get_cloth_position(Cloth cloth, Span<float> position) const {
+  return impl_->get_cloth_position(cloth, position);
 }
-
-Eigen::Vector3f World::get_constant_acce_field() const {
-  return impl_->constant_acce_field;
+Result World::set_cloth_config(Cloth cloth, ClothConfig config) {
+  return impl_->set_cloth_config(cloth, config);
 }
-
-void World::set_constant_acce_field(Eigen::Vector3f acce) {
-  impl_->constant_acce_field = std::move(acce);
+Result World::set_cloth_collision_config(Cloth cloth, CollisionConfig config) {
+  return impl_->set_cloth_collision_config(cloth, config);
 }
-
-// TODO: impl int range check
-int World::get_max_iteration() const { return impl_->max_iteration; }
-
-void World::set_max_iterations(int iter) { impl_->max_iteration = iter; }
-
-int World::get_thread_num() const { return impl_->thread_num; }
-
-void World::set_thread_num(int num) { impl_->thread_num = num; }
-
-float World::get_dt() const { return impl_->get_dt(); }
-
-[[nodiscard]] Result World::set_dt(float dt) { return impl_->set_dt(dt); }
-
-int World::get_low_freq_mode_num() const {
-  return impl_->get_low_freq_mode_num();
+Result World::set_cloth_pin_index(Cloth cloth, MeshConfig mesh_config) {
+  return impl_->set_cloth_pin_index(cloth, mesh_config);
 }
-
-[[nodiscard]] Result World::set_low_freq_mode_num(int num) {
-  return impl_->set_low_freq_mode_num(num);
+Result World::set_cloth_pin_position(Cloth cloth, ConstSpan<float> position) {
+  return impl_->set_cloth_pin_position(cloth, position);
 }
-
-void World::solver_reset() { impl_->solver_reset(); }
-
-[[nodiscard]] Result World::solver_init() { return impl_->solver_init(); }
-
-[[nodiscard]] Result World::step() { return impl_->step(); }
-
-[[nodiscard]] Result World::update_position_constrain(
-    const Handle& handle, Eigen::Ref<const Eigen::VectorXf> position) {
-  return impl_->update_position_constrain(handle, position);
+Result World::add_obstacle(CollisionConfig collision_config,
+                           MeshConfig mesh_config, Obstacle& obstacle) {
+  return impl_->add_obstacle(collision_config, mesh_config, obstacle);
 }
-
-[[nodiscard]] Result World::get_current_position(
-    const Handle& handle, Eigen::Ref<Eigen::VectorXf> position) const {
-  return impl_->get_current_position(handle, position);
+Result World::remove_obstacle(Obstacle obstacle) {
+  return impl_->remove_obstacle(obstacle);
+}
+Result World::set_obstacle_collision_config(Obstacle obstacle,
+                                            CollisionConfig config) {
+  return impl_->set_obstacle_collision_config(obstacle, config);
+}
+Result World::set_obstacle_position(Obstacle obstacle,
+                                    ConstSpan<float> position) {
+  return impl_->set_obstacle_position(obstacle, position);
 }
 
 }  // namespace silk

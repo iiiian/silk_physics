@@ -25,12 +25,12 @@ if(SILK_BUILD_DEMO OR SILK_BUILD_TEST)
     add_subdirectory(extern/spdlog)
 endif()
 
-if(SILK_BUILD_DEMO)
-    add_subdirectory(extern/polyscope)
-    add_subdirectory(extern/portable-file-dialogs)
-
-    add_subdirectory(demo)
-endif()
+# if(SILK_BUILD_DEMO)
+#     add_subdirectory(extern/polyscope)
+#     add_subdirectory(extern/portable-file-dialogs)
+#
+#     add_subdirectory(demo)
+# endif()
 
 if(SILK_BUILD_TEST)
     find_package(Alembic CONFIG REQUIRED)

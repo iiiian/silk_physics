@@ -1,61 +1,75 @@
 #pragma once
 
-#include <Eigen/Core>
 #include <cstdint>
 #include <memory>
 #include <string>
 
 namespace silk {
 
-using Verts = Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor>;
-using Faces = Eigen::Matrix<int, Eigen::Dynamic, 3, Eigen::RowMajor>;
-
-class Mesh {
- public:
-  Verts V;
-  Faces F;
-
-  Mesh() = default;
-  Mesh(const Verts& verts, const Faces& faces);
-  Mesh(float* verts, int vert_num, int* faces, int face_num);
-
-  bool is_valid() const;
-};
-
-class ClothConfig {
- public:
-  bool enable_collision = true;
-  bool enable_self_collision = true;
-  float elastic_stiffness = 1.0f;
-  float bending_stiffness = 1.0f;
-  float density = 1.0f;
-
-  Mesh mesh;
-  Eigen::VectorXi pinned_verts;
-
-  bool is_valid() const;
-};
-
-enum class HandleType { Cloth, RigidBody, SoftBody, Hair, Collider };
-
-struct Handle {
-  HandleType type;
-  uint32_t value;
-};
-
 enum class Result {
   Success,
-  InvalidTimeStep,
-  InvalidLowFreqModeNum,
   InvalidConfig,
   TooManyBody,
   InvalidHandle,
-  IncorrectPositionConstrainLength,
-  IncorrentOutputPositionLength,
-  EigenDecompositionfail,
-  IterativeSolverInitFail,
-  NeedInitSolverBeforeSolve,
+  IncorrectPinNum,
+  IncorrectPositionNum,
+  EigenDecompositionFail,
+  NeedInitSolverFirst,
   IterativeSolveFail
+};
+
+template <typename T>
+struct Span {
+  T* data;
+  int num;
+};
+
+template <typename T>
+struct ConstSpan {
+  const T* data;
+  int num;
+};
+
+struct MeshConfig {
+  ConstSpan<float> verts;
+  ConstSpan<int> faces;
+  ConstSpan<int> pin_index;
+};
+
+struct CollisionConfig {
+ public:
+  bool is_collision_on;
+  bool is_self_collision_on;
+  int group;
+  float damping;
+  float friction;
+};
+
+struct ClothConfig {
+  float elastic_stiffness = 1.0f;
+  float bending_stiffness = 1.0f;
+  float density = 1.0f;
+};
+
+struct GlobalConfig {
+  float acceleration_x;
+  float acceleration_y;
+  float acceleration_z;
+  int max_iteration;
+  float r;
+  float dt;
+  float ccd_walkback;
+  float toi_tolerance;
+  float toi_refine_iteration;
+  float eps;
+};
+
+struct Cloth {
+  uint32_t value;
+};
+
+struct Obstacle {
+  uint32_t value;
 };
 
 std::string to_string(Result result);
@@ -72,37 +86,37 @@ class World {
   World(World&&);
   World& operator=(World&&);
 
-  // cloth API
-  [[nodiscard]] Result add_cloth(ClothConfig config, Handle& handle);
-  [[nodiscard]] Result remove_cloth(const Handle& handle);
-  [[nodiscard]] Result update_cloth(ClothConfig config, const Handle& handle);
+  // Global API
+  [[nodiscard]] Result set_global_config(GlobalConfig config);
+  void clear();
 
-  // solver API
-
-  Eigen::Vector3f get_constant_acce_field() const;
-  void set_constant_acce_field(Eigen::Vector3f acce);
-
-  int get_max_iteration() const;
-  void set_max_iterations(int iter);
-
-  int get_thread_num() const;
-  void set_thread_num(int num);
-
-  float get_dt() const;
-  [[nodiscard]] Result set_dt(float dt);
-
-  int get_low_freq_mode_num() const;
-  [[nodiscard]] Result set_low_freq_mode_num(int num);
-
-  void solver_reset();
+  // Solver API
   [[nodiscard]] Result solver_init();
-  [[nodiscard]] Result step();
+  [[nodiscard]] Result solver_step();
+  [[nodiscard]] Result solver_reset();
 
-  // position API
-  [[nodiscard]] Result update_position_constrain(
-      const Handle& handle, Eigen::Ref<const Eigen::VectorXf> positions);
-  [[nodiscard]] Result get_current_position(
-      const Handle& handle, Eigen::Ref<Eigen::VectorXf> positions) const;
+  // cloth API
+  [[nodiscard]] Result add_cloth(ClothConfig cloth_config,
+                                 CollisionConfig collision_config,
+                                 MeshConfig mesh_config, Cloth& cloth);
+  [[nodiscard]] Result remove_cloth(Cloth cloth);
+  [[nodiscard]] Result get_cloth_position(Cloth cloth,
+                                          Span<float> position) const;
+  [[nodiscard]] Result set_cloth_config(Cloth cloth, ClothConfig config);
+  [[nodiscard]] Result set_cloth_collision_config(Cloth cloth,
+                                                  CollisionConfig config);
+  [[nodiscard]] Result set_cloth_pin_index(Cloth cloth, MeshConfig mesh_config);
+  [[nodiscard]] Result set_cloth_pin_position(Cloth cloth,
+                                              ConstSpan<float> position);
+
+  // Obstacle API
+  [[nodiscard]] Result add_obstacle(CollisionConfig collision_config,
+                                    MeshConfig mesh_config, Obstacle& obstacle);
+  [[nodiscard]] Result remove_obstacle(Obstacle obstacle);
+  [[nodiscard]] Result set_obstacle_collision_config(Obstacle obstacle,
+                                                     CollisionConfig config);
+  [[nodiscard]] Result set_obstacle_position(Obstacle obstacle,
+                                             ConstSpan<float> position);
 };
 
 }  // namespace silk

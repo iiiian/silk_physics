@@ -13,9 +13,9 @@ Bbox Bbox::merge(const Bbox& a, const Bbox& b) {
   return {a.min.cwiseMin(b.min), a.max.cwiseMax(b.max)};
 }
 
-Bbox Bbox::extend(const Bbox& bbox, float margin) {
-  assert((margin > 0));
-  return {bbox.min.array() - margin, bbox.max.array() + margin};
+Bbox Bbox::pad(const Bbox& bbox, float padding) {
+  assert((padding > 0));
+  return {bbox.min.array() - padding, bbox.max.array() + padding};
 }
 
 bool Bbox::is_disjoint(const Bbox& a, const Bbox& b) {
@@ -42,11 +42,11 @@ void Bbox::merge_inplace(const Bbox& other) {
   max = max.cwiseMax(other.max);
 }
 
-void Bbox::extend_inplace(float margin) {
-  assert((margin > 0));
+void Bbox::pad_inplace(float padding) {
+  assert((padding > 0));
 
-  min = min.array() - margin;
-  max = max.array() + margin;
+  min = min.array() - padding;
+  max = max.array() + padding;
 }
 
 }  // namespace silk

@@ -1,37 +1,51 @@
 #pragma once
 
 #include <Eigen/Core>
-#include <Eigen/SparseCore>
-#include <memory>
+#include <Eigen/Sparse>
 #include <vector>
+
+#include "collision.hpp"
+#include "collision_pipeline.hpp"
+#include "ecs.hpp"
+#include "solver_constrain.hpp"
 
 namespace silk {
 
-class SolverConstrain {
+class Solver {
  public:
-  virtual ~SolverConstrain() = default;
+  Eigen::Vector3f const_acceleration = {0.0f, 0.0f, -1.0f};
+  int max_iteration = 10;
+  int thread_num = 4;
+  int r = 30;
+  float dt = 1.0f;
+  float ccd_walkback = 0.8f;
 
-  virtual void project(const Eigen::VectorXf& position,
-                       Eigen::VectorXf& out) const = 0;
-};
+ private:
+  int state_num_ = 0;
 
-class PositionConstrain : public SolverConstrain {
-  Eigen::VectorXi vert_indexes_;
-  int offset_;
-  float weight_;
+  Eigen::VectorXf init_state_;
+  Eigen::VectorXf curr_state_;
+  Eigen::VectorXf prev_state_;
+  Eigen::VectorXf prev_velocity;
+
+  Eigen::SparseMatrix<float> mass_;
+  Eigen::SparseMatrix<float> H_;
+  Eigen::MatrixXf UHU_;
+  Eigen::MatrixXf U_;
+  Eigen::VectorXf HX_;
+
+  std::vector<ISolverConstrain*> constrains_;
+  std::vector<Collision> collisions_;
 
  public:
-  PositionConstrain(Eigen::VectorXi vert_indexes, int offset, float weight);
+  const Eigen::VectorXf& get_solver_state() const;
+  void clear();
+  void reset();
+  bool init(Registry& registry);
+  bool step(Registry& registry, const CollisionPipeline& collision_pipeline);
 
-  // impl solver constrain interface
-  void project(const Eigen::VectorXf& position,
-               Eigen::VectorXf& out) const override;
-};
-
-struct SolverInitData {
-  std::vector<Eigen::Triplet<float>> mass;
-  std::vector<Eigen::Triplet<float>> weighted_AA;
-  std::vector<std::unique_ptr<SolverConstrain>> constrains;
+ private:
+  bool lg_solve(Registry& registry, Eigen::VectorXf& predict_state);
 };
 
 }  // namespace silk

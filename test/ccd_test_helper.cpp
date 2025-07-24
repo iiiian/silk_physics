@@ -22,23 +22,23 @@ std::string Query::to_string() const {
   ss << type_str << "result = " << result_str << "\n";
   ss << "    line " << source_line << " from " << source << "\n";
   if (type == QueryType::EdgeEdge) {
+    ss << "    v00: " << v00.transpose() << "\n";
     ss << "    v10: " << v10.transpose() << "\n";
     ss << "    v20: " << v20.transpose() << "\n";
     ss << "    v30: " << v30.transpose() << "\n";
-    ss << "    v40: " << v40.transpose() << "\n";
+    ss << "    v01: " << v01.transpose() << "\n";
     ss << "    v11: " << v11.transpose() << "\n";
     ss << "    v21: " << v21.transpose() << "\n";
     ss << "    v31: " << v31.transpose() << "\n";
-    ss << "    v41: " << v41.transpose() << "\n";
   } else {
+    ss << "    v00: " << v00.transpose() << "\n";
     ss << "    v10: " << v10.transpose() << "\n";
     ss << "    v20: " << v20.transpose() << "\n";
-    ss << "    v30: " << v30.transpose() << "\n";
-    ss << "    p0 : " << v40.transpose() << "\n";
+    ss << "    p0 : " << v30.transpose() << "\n";
+    ss << "    v01: " << v01.transpose() << "\n";
     ss << "    v11: " << v11.transpose() << "\n";
     ss << "    v21: " << v21.transpose() << "\n";
-    ss << "    v31: " << v31.transpose() << "\n";
-    ss << "    p1 : " << v41.transpose() << "\n";
+    ss << "    p1 : " << v31.transpose() << "\n";
   }
   return ss.str();
 }
@@ -118,23 +118,23 @@ std::vector<Query> parse_queries_from_csv(const fs::path &path,
       q.source_line = start_line;
 
       if (type == QueryType::EdgeEdge) {
-        q.v10 = buf[0];
-        q.v20 = buf[1];
-        q.v30 = buf[2];
-        q.v40 = buf[3];
-        q.v11 = buf[4];
-        q.v21 = buf[5];
-        q.v31 = buf[6];
-        q.v41 = buf[7];
-      } else {
-        q.v40 = buf[0];
+        q.v00 = buf[0];
         q.v10 = buf[1];
         q.v20 = buf[2];
         q.v30 = buf[3];
-        q.v41 = buf[4];
+        q.v01 = buf[4];
         q.v11 = buf[5];
         q.v21 = buf[6];
         q.v31 = buf[7];
+      } else {
+        q.v30 = buf[0];
+        q.v00 = buf[1];
+        q.v10 = buf[2];
+        q.v20 = buf[3];
+        q.v31 = buf[4];
+        q.v01 = buf[5];
+        q.v11 = buf[6];
+        q.v21 = buf[7];
       }
 
       out.push_back(q);

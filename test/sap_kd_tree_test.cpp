@@ -1,5 +1,3 @@
-#include "sap_kd_tree.hpp"
-
 #include <spdlog/spdlog.h>
 
 #include <Eigen/Core>
@@ -8,6 +6,7 @@
 #include <vector>
 
 #include "abc_file_loader.hpp"
+#include "collision_broadphase.hpp"
 #include "collision_broadphase_test_helper.hpp"
 
 using namespace silk;
@@ -36,14 +35,14 @@ TEST_CASE("sap-kd-tree-animation-test", "[collision broadphase]") {
   KDTree<SimpleCollider> sphere_tree;
   sphere_tree.init(sphere_colliders.data(), sphere_fnum);
 
-  CollisionFilter<SimpleCollider> self_collision_filter =
+  CollisionFilterCallback<SimpleCollider> self_collision_filter =
       [](const SimpleCollider& a, const SimpleCollider& b) -> bool {
     return (a.v0 != b.v0 && a.v0 != b.v1 && a.v0 != b.v2 && a.v1 != b.v0 &&
             a.v1 != b.v1 && a.v1 != b.v2 && a.v2 != b.v0 && a.v2 != b.v1 &&
             a.v2 != b.v2);
   };
 
-  CollisionFilter<SimpleCollider> inter_collision_filter =
+  CollisionFilterCallback<SimpleCollider> inter_collision_filter =
       [](const SimpleCollider& a, const SimpleCollider& b) -> bool {
     return true;
   };

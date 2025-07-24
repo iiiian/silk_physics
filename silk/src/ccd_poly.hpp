@@ -27,14 +27,8 @@ class CCDPoly {
  public:
   // fail when poly completely degenerate. aka always coplanar case
   static std::optional<CCDPoly> try_make_ccd_poly(
-      Eigen::Ref<const Eigen::Vector3f> x10,
-      Eigen::Ref<const Eigen::Vector3f> x20,
-      Eigen::Ref<const Eigen::Vector3f> x30,
-      Eigen::Ref<const Eigen::Vector3f> x40,
-      Eigen::Ref<const Eigen::Vector3f> x11,
-      Eigen::Ref<const Eigen::Vector3f> x21,
-      Eigen::Ref<const Eigen::Vector3f> x31,
-      Eigen::Ref<const Eigen::Vector3f> x41, float tol, int refine_it,
+      const Eigen::Matrix<float, 3, 4>& position_t0,
+      const Eigen::Matrix<float, 3, 4>& position_t1, float tol, int refine_it,
       float eps);
 
   std::optional<float> solve() const;
