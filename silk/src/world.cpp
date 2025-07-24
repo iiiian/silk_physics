@@ -150,7 +150,7 @@ class World::WorldImpl {
     return Result::Success;
   }
 
-  Result get_cloth_position(Cloth cloth, View<float> position) const {
+  Result get_cloth_position(Cloth cloth, Span<float> position) const {
     const Entity* e = registry_.get_entity(Handle{cloth.value});
     if (!e) {
       return Result::InvalidHandle;
@@ -169,7 +169,7 @@ class World::WorldImpl {
               solver_data->state_offset + solver_data->state_num));
 
       memcpy(position.data, solver_state.data() + solver_data->state_offset,
-             solver_data->state_num);
+             solver_data->state_num * sizeof(float));
       return Result::Success;
     } else {
       auto mesh = registry_.get<TriMesh>(*e);
@@ -179,7 +179,7 @@ class World::WorldImpl {
         return Result::IncorrectPositionNum;
       }
 
-      memcpy(position.data, mesh->V.data(), 3 * mesh->V.rows());
+      memcpy(position.data, mesh->V.data(), 3 * mesh->V.rows() * sizeof(float));
     }
 
     return Result::Success;
@@ -246,7 +246,7 @@ class World::WorldImpl {
     return Result::Success;
   }
 
-  Result set_cloth_pin_position(Cloth cloth, ConstView<float> position) {
+  Result set_cloth_pin_position(Cloth cloth, ConstSpan<float> position) {
     Entity* e = registry_.get_entity(Handle{cloth.value});
     if (!e) {
       return Result::InvalidHandle;
@@ -327,7 +327,7 @@ class World::WorldImpl {
     return Result::Success;
   }
 
-  Result set_obstacle_position(Obstacle obstacle, ConstView<float> position) {
+  Result set_obstacle_position(Obstacle obstacle, ConstSpan<float> position) {
     Entity* e = registry_.get_entity(Handle{obstacle.value});
     if (!e) {
       return Result::InvalidHandle;
@@ -347,5 +347,54 @@ class World::WorldImpl {
     return Result::Success;
   }
 };
+
+World::World() : impl_(new WorldImpl) {}
+World::~World() = default;
+World::World(World&&) = default;
+World& World::operator=(World&&) = default;
+
+Result World::set_global_config(GlobalConfig config) {
+  return impl_->set_global_config(config);
+}
+void World::clear() { impl_->clear(); }
+Result World::solver_init() { return impl_->solver_init(); }
+Result World::solver_step() { return impl_->solver_step(); }
+Result World::solver_reset() { return impl_->solver_reset(); }
+Result World::add_cloth(ClothConfig cloth_config,
+                        CollisionConfig collision_config,
+                        MeshConfig mesh_config, Cloth& cloth) {
+  return impl_->add_cloth(cloth_config, collision_config, mesh_config, cloth);
+}
+Result World::remove_cloth(Cloth cloth) { return impl_->remove_cloth(cloth); }
+Result World::get_cloth_position(Cloth cloth, Span<float> position) const {
+  return impl_->get_cloth_position(cloth, position);
+}
+Result World::set_cloth_config(Cloth cloth, ClothConfig config) {
+  return impl_->set_cloth_config(cloth, config);
+}
+Result World::set_cloth_collision_config(Cloth cloth, CollisionConfig config) {
+  return impl_->set_cloth_collision_config(cloth, config);
+}
+Result World::set_cloth_pin_index(Cloth cloth, MeshConfig mesh_config) {
+  return impl_->set_cloth_pin_index(cloth, mesh_config);
+}
+Result World::set_cloth_pin_position(Cloth cloth, ConstSpan<float> position) {
+  return impl_->set_cloth_pin_position(cloth, position);
+}
+Result World::add_obstacle(CollisionConfig collision_config,
+                           MeshConfig mesh_config, Obstacle& obstacle) {
+  return impl_->add_obstacle(collision_config, mesh_config, obstacle);
+}
+Result World::remove_obstacle(Obstacle obstacle) {
+  return impl_->remove_obstacle(obstacle);
+}
+Result World::set_obstacle_collision_config(Obstacle obstacle,
+                                            CollisionConfig config) {
+  return impl_->set_obstacle_collision_config(obstacle, config);
+}
+Result World::set_obstacle_position(Obstacle obstacle,
+                                    ConstSpan<float> position) {
+  return impl_->set_obstacle_position(obstacle, position);
+}
 
 }  // namespace silk

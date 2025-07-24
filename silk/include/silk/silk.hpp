@@ -19,21 +19,21 @@ enum class Result {
 };
 
 template <typename T>
-struct View {
+struct Span {
   T* data;
   int num;
 };
 
 template <typename T>
-struct ConstView {
+struct ConstSpan {
   const T* data;
   int num;
 };
 
 struct MeshConfig {
-  ConstView<float> verts;
-  ConstView<int> faces;
-  ConstView<int> pin_index;
+  ConstSpan<float> verts;
+  ConstSpan<int> faces;
+  ConstSpan<int> pin_index;
 };
 
 struct CollisionConfig {
@@ -98,26 +98,25 @@ class World {
   // cloth API
   [[nodiscard]] Result add_cloth(ClothConfig cloth_config,
                                  CollisionConfig collision_config,
-                                 MeshConfig mesh_config, Cloth& handle);
-  [[nodiscard]] Result remove_cloth(Cloth handle);
-  [[nodiscard]] Result get_cloth_position(Cloth handle,
-                                          View<float> position) const;
-  [[nodiscard]] Result set_cloth_config(Cloth handle, ClothConfig config);
-  [[nodiscard]] Result set_cloth_collision_config(Cloth handle,
+                                 MeshConfig mesh_config, Cloth& cloth);
+  [[nodiscard]] Result remove_cloth(Cloth cloth);
+  [[nodiscard]] Result get_cloth_position(Cloth cloth,
+                                          Span<float> position) const;
+  [[nodiscard]] Result set_cloth_config(Cloth cloth, ClothConfig config);
+  [[nodiscard]] Result set_cloth_collision_config(Cloth cloth,
                                                   CollisionConfig config);
-  [[nodiscard]] Result set_cloth_mesh(Cloth handle, MeshConfig mesh_config);
-  [[nodiscard]] Result set_cloth_pin(Cloth handle, ConstView<float> pin);
+  [[nodiscard]] Result set_cloth_pin_index(Cloth cloth, MeshConfig mesh_config);
+  [[nodiscard]] Result set_cloth_pin_position(Cloth cloth,
+                                              ConstSpan<float> position);
 
   // Obstacle API
   [[nodiscard]] Result add_obstacle(CollisionConfig collision_config,
-                                    MeshConfig mesh_config, Obstacle& handle);
-  [[nodiscard]] Result remove_obstacle(Obstacle handle);
-  [[nodiscard]] Result set_obstacle_collision_config(Obstacle handle,
+                                    MeshConfig mesh_config, Obstacle& obstacle);
+  [[nodiscard]] Result remove_obstacle(Obstacle obstacle);
+  [[nodiscard]] Result set_obstacle_collision_config(Obstacle obstacle,
                                                      CollisionConfig config);
-  [[nodiscard]] Result set_obstacle_mesh(const Obstacle& handle,
-                                         MeshConfig mesh_config);
-  [[nodiscard]] Result set_obstacle_position(Cloth handle,
-                                             ConstView<float> position);
+  [[nodiscard]] Result set_obstacle_position(Obstacle obstacle,
+                                             ConstSpan<float> position);
 };
 
 }  // namespace silk
