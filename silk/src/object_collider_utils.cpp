@@ -60,7 +60,7 @@ ObjectCollider make_physical_object_collider(const CollisionConfig& config,
     auto& p0 = mc.position_t0;
     auto& p1 = mc.position_t1;
     mc.type = MeshColliderType::Edge;
-    mc.index = m.E.row(i);
+    mc.index(Eigen::seqN(0, 2)) = m.E.row(i);
     mc.weight(0) = is_pinned(mc.index(0)) ? 0.0f : mass(mc.index(0));
     mc.weight(1) = is_pinned(mc.index(1)) ? 0.0f : mass(mc.index(1));
     p0.col(0) = m.V.row(mc.index(0));
@@ -148,7 +148,7 @@ ObjectCollider make_obstacle_object_collider(const CollisionConfig& config,
     auto& p1 = mc.position_t1;
 
     mc.type = MeshColliderType::Edge;
-    mc.index = m.E.row(i);
+    mc.index(Eigen::seqN(0, 2)) = m.E.row(i);
     mc.weight(0) = 0.0f;
     mc.weight(1) = 0.0f;
     p0.col(0) = m.V.row(mc.index(0));

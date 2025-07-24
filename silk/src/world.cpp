@@ -106,7 +106,7 @@ class World::WorldImpl {
                                       mesh_config.verts.num, 3);
     m.F = Eigen::Map<const RMatrix3i>(mesh_config.faces.data,
                                       mesh_config.faces.num, 3);
-    igl::edges(m.V, m.F, m.E);
+    igl::edges(m.F, m.E);
     m.avg_edge_length = 0.0f;
     for (int i = 0; i < m.E.rows(); ++i) {
       m.avg_edge_length += (m.V.row(m.E(i, 0)) - m.V.row(m.E(i, 1))).norm();
@@ -277,7 +277,7 @@ class World::WorldImpl {
                                       mesh_config.verts.num, 3);
     m.F = Eigen::Map<const RMatrix3i>(mesh_config.faces.data,
                                       mesh_config.faces.num, 3);
-    igl::edges(m.V, m.F, m.E);
+    igl::edges(m.F, m.E);
     m.avg_edge_length = 0.0f;
     for (int i = 0; i < m.E.rows(); ++i) {
       m.avg_edge_length += (m.V.row(m.E(i, 0)) - m.V.row(m.E(i, 1))).norm();

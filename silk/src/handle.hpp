@@ -64,7 +64,7 @@ struct Handle {
   uint32_t get_index() const { return value & INDEX_MASK; }
 
   void set_index(uint32_t index) {
-    assert((index >= 0 && index < MAX_INDEX));
+    assert((index < MAX_INDEX));
 
     uint32_t index_bit = index & INDEX_MASK;
     value = index_bit | (value & ~INDEX_MASK);

@@ -50,7 +50,7 @@ class Manager {
       return nullptr;
     }
 
-    return data_ + slot.get_index();
+    return data_.data() + slot.get_index();
   }
 
   // return nullptr if handle is invalid
@@ -65,7 +65,7 @@ class Manager {
       return nullptr;
     }
 
-    return data_ + slot.get_index();
+    return data_.data() + slot.get_index();
   }
 
   // return empty handle if ready max resource

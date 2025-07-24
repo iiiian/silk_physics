@@ -20,11 +20,11 @@ struct CCDConfig {
 std::optional<Collision> point_triangle_ccd(
     const Eigen::Matrix<float, 3, 4>& position_t0,
     const Eigen::Matrix<float, 3, 4>& position_t1,
-    const Eigen::Vector3f& weight, const CCDConfig& config);
+    const Eigen::Vector4f& weight, const CCDConfig& config);
 
 std::optional<Collision> edge_edge_ccd(
     const Eigen::Matrix<float, 3, 4>& position_t0,
     const Eigen::Matrix<float, 3, 4>& position_t1,
-    const Eigen::Vector3f& weight, const CCDConfig& config);
+    const Eigen::Vector4f& weight, const CCDConfig& config);
 
 }  // namespace silk
