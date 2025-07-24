@@ -26,7 +26,7 @@ class ClothElasticConstrain : public ISolverConstrain {
  public:
   ClothElasticConstrain(Eigen::Matrix<float, 6, 9> jacobian_op,
                         Eigen::Vector3i index, float weight)
-      : jacobian_op_(jacobian_op), index_(index), weight_(weight) {}
+      : jacobian_op_(std::move(jacobian_op)), index_(std::move(index)), weight_(weight) {}
 
   // impl solver constrain interface
 

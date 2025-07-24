@@ -1,7 +1,6 @@
 #include "ccd.hpp"
 
 #include <Eigen/Core>
-#include <Eigen/Geometry>
 #include <cmath>
 #include <optional>
 
@@ -179,7 +178,7 @@ std::optional<Collision> edge_edge_collision(
       n /= std::sqrt(dist2);
     }
   } else {
-    // non parallel edge, compute the closest point between two infinite line
+    // non-parallel edge, compute the closest point between two infinite line
     // then clamp if necessary
     e10_para = (x32dx32 * x10dx21 - x10dx32 * x32dx20) / det;
     bool is_e10_para_clamped = false;

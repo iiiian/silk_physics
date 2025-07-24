@@ -56,7 +56,7 @@ struct GlobalConfig {
   float acceleration_y;
   float acceleration_z;
   int max_iteration;
-  float r;
+  int r;
   float dt;
   float ccd_walkback;
   float toi_tolerance;

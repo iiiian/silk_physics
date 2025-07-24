@@ -13,6 +13,32 @@
 
 namespace silk {
 
+CollisionCache<ObjectCollider> CollisionPipeline::object_broadphase(
+    std::vector<ObjectCollider>& object_colliders) {
+  // prepare object collider proxies for sweep and prune
+  std::vector<ObjectCollider*> proxies(object_colliders.size());
+  for (int i = 0; i < object_colliders.size(); ++i) {
+    proxies[i] = object_colliders.data() + i;
+  }
+
+  // if group = -1, collision with others is disabled.
+  // if groups are different, a and b does not collide.
+  // if both a and b are pure collider, collision is meaningless.
+  CollisionFilterCallback<ObjectCollider> object_filter =
+      [](const ObjectCollider& a, const ObjectCollider& b) {
+        return (a.group != -1 && b.group != -1 && a.group == b.group &&
+                !(a.solver_offset == -1 && b.solver_offset == -1));
+      };
+  CollisionCache<ObjectCollider> ccache;
+
+  // use sweep and prune to find collision
+  int axis = sap_optimal_axis(proxies.data(), proxies.size());
+  sap_sort_proxies(proxies.data(), proxies.size(), axis);
+  sap_sorted_group_self_collision(proxies.data(), proxies.size(), axis,
+                                  object_filter, ccache);
+  return ccache;
+}
+
 std::optional<Collision> CollisionPipeline::narrow_phase(
     const ObjectCollider& oa, const MeshCollider& ma, const ObjectCollider& ob,
     const MeshCollider& mb, float dt) const {
@@ -91,47 +117,21 @@ std::optional<Collision> CollisionPipeline::narrow_phase(
   }
 }
 
-CollisionCache<ObjectCollider> CollisionPipeline::object_broadphase(
-    std::vector<ObjectCollider>& obstacles) const {
-  // prepare obstacle proxies for sweep and prune
-  std::vector<ObjectCollider*> proxies(obstacles.size());
-  for (int i = 0; i < obstacles.size(); ++i) {
-    proxies[i] = obstacles.data() + i;
-  }
-
-  // if group = -1, collision with others is disabled.
-  // if groups are different, a and b does not collide.
-  // if both a and b are pure collider, collision is meaningless.
-  CollisionFilterCallback<ObjectCollider> obstacle_filter =
-      [](const ObjectCollider& a, const ObjectCollider& b) {
-        return (a.group != -1 && b.group != -1 && a.group == b.group &&
-                !(a.solver_offset == -1 && b.solver_offset == -1));
-      };
-  CollisionCache<ObjectCollider> ccache;
-
-  // use sweep and prune to find collision
-  int axis = sap_optimal_axis(proxies.data(), proxies.size());
-  sap_sort_proxies(proxies.data(), proxies.size(), axis);
-  sap_sorted_group_self_collision(proxies.data(), proxies.size(), axis,
-                                  obstacle_filter, ccache);
-  return ccache;
-}
-
 std::vector<Collision> CollisionPipeline::find_collision(
-    std::vector<ObjectCollider>& obstacles, float dt) const {
-  auto obstacle_ccache = object_broadphase(obstacles);
+    std::vector<ObjectCollider>& object_colliders, float dt) const {
+  auto object_ccache = object_broadphase(object_colliders);
   std::vector<Collision> collisions;
 
-  // mesh level obstacle-obstacle collision
+  // mesh level object-object collision
   CollisionFilterCallback<MeshCollider> dummy_filter =
       [](const MeshCollider& a, const MeshCollider& b) -> bool { return true; };
   CollisionCache<MeshCollider> mesh_ccache;
-  for (auto& [oa, ob] : obstacle_ccache) {
-    // obstacle-obstacle collision broadphase
+  for (auto& [oa, ob] : object_ccache) {
+    // object-object collision broadphase
     KDTree<MeshCollider>::test_tree_collision(oa->mesh_collider_tree,
                                               ob->mesh_collider_tree,
                                               dummy_filter, mesh_ccache);
-    // obstacle obstacle collision narrowphase
+    // object object collision narrowphase
     for (auto& [ma, mb] : mesh_ccache) {
       auto collision = narrow_phase(*oa, *ma, *ob, *mb, dt);
       if (collision) {
@@ -140,7 +140,7 @@ std::vector<Collision> CollisionPipeline::find_collision(
     }
   }
 
-  // mesh level obstacle self collision
+  // mesh level self collision
   CollisionFilterCallback<MeshCollider> neighbor_filter =
       [](const MeshCollider& a, const MeshCollider& b) -> bool {
     if (a.type == MeshColliderType::Point &&
@@ -168,7 +168,7 @@ std::vector<Collision> CollisionPipeline::find_collision(
     }
     return false;
   };
-  for (auto& o : obstacles) {
+  for (auto& o : object_colliders) {
     if (o.solver_offset == -1 || !o.is_self_collision_on) {
       continue;
     }

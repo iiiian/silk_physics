@@ -21,13 +21,9 @@ using CollisionCache = std::vector<std::pair<C*, C*>>;
 template <typename C>
 using CollisionFilterCallback = std::function<bool(const C&, const C&)>;
 
-struct MeanVariance {
-  Eigen::Vector3f mean;
-  Eigen::Vector3f variance;
-};
-
 template <typename C>
-MeanVariance proxy_mean_variance(C* const* proxies, int proxy_num) {
+std::pair<Eigen::Vector3f, Eigen::Vector3f> proxy_mean_variance(
+    C* const* proxies, int proxy_num) {
   assert((proxy_num > 0));
 
   Eigen::Vector3f mean = Eigen::Vector3f::Zero();
@@ -40,7 +36,7 @@ MeanVariance proxy_mean_variance(C* const* proxies, int proxy_num) {
   mean /= proxy_num;
   variance = variance / proxy_num - mean.cwiseAbs2();
 
-  return {std::move(mean), std::move(variance)};
+  return std::make_pair(std::move(mean), std::move(variance));
 }
 
 template <typename C>
@@ -185,7 +181,6 @@ struct KDNode {
 
 template <typename C>
 class KDTree {
- public:
  private:
   static constexpr int NODE_PROXY_NUM_THRESHOLD = 1024;
 
@@ -280,7 +275,7 @@ class KDTree {
                                   CollisionCache<C>& cache) {
     assert(ta.root_ && tb.root_);
 
-    // this should never happens in normal scenario
+    // this should never happen in normal scenario
     if (ta.root_->generation == std::numeric_limits<uint32_t>::max()) {
       ta.reset_generation();
     }
@@ -289,7 +284,7 @@ class KDTree {
     }
 
     // since root is guaranteed to be visited during tree-tree collision test,
-    // the generate of root node is the last generation of tree. The current
+    // the generation of root node is the last generation of tree. The current
     // generation is last generation plus one
     uint32_t gen_a = ta.root_->generation + 1;
     uint32_t gen_b = tb.root_->generation + 1;
@@ -306,8 +301,8 @@ class KDTree {
       }
 
       // the node has never been visited if generation doesn't match
-      bool is_na_new = !(na->generation == gen_a);
-      bool is_nb_new = !(nb->generation == gen_b);
+      bool is_na_new = na->generation != gen_a;
+      bool is_nb_new = nb->generation != gen_b;
       na->generation = gen_a;
       nb->generation = gen_b;
 
@@ -401,7 +396,7 @@ class KDTree {
   }
 
   // find optimal split plane based on mean and variance of bbox center.
-  // plane axis should has the max variance and the plane position is the
+  // plane axis should have the max variance and the plane position is the
   // mean.
   void find_optimal_plane(KDNode* n) const {
     assert((n->proxy_num() > 0));
@@ -588,7 +583,7 @@ class KDTree {
     n->proxy_end -= right_num;
   }
 
-  void set_children_bbox(KDNode* n) {
+  static void set_children_bbox(KDNode* n) {
     assert((n->left && n->right));
 
     n->left->bbox = n->bbox;
@@ -596,6 +591,7 @@ class KDTree {
     n->right->bbox = n->bbox;
     n->right->bbox.min(n->axis) = n->position;
   }
+
   // find optimal split plane then split the leaf
   void split_leaf(KDNode* n) {
     assert(!(n->left || n->right));
@@ -662,12 +658,12 @@ class KDTree {
     left_num += n->left->population;
     right_num += n->right->population;
 
-    float num = n->proxy_num();
-    float t_min = 0.5f * num * (0.5f * num - 1.0f);
-    float t_max = 0.5f * num * (num - 1.0f);
-    float t = 0.5f * (left_num * left_num + middle_num * middle_num +
-                      right_num * right_num - num) +
-              middle_num * (left_num + right_num);
+    int num = n->proxy_num();
+    float t_min = 0.5f * float(num) * (0.5f * float(num) - 1.0f);
+    float t_max = 0.5f * float(num) * (float(num) - 1.0f);
+    float t = 0.5f * float((left_num * left_num + middle_num * middle_num +
+                            right_num * right_num - num) +
+                           middle_num * (left_num + right_num));
     float cost = (t - t_min) / (t_max - t_min);
     float balance = float(std::min(left_num, right_num)) /
                     float((middle_num + std::max(left_num, right_num)));
@@ -911,7 +907,7 @@ class KDTree {
       sap_sort_proxies(proxy_start, proxy_num, axis);
       sap_sort_proxies(ext_start, ext_num, axis);
 
-      // buffer will be overwrite once main thread traverse to another branch.
+      // buffer will be overwrited once main thread traverse to another branch.
       // hence external collider buffer needs to be copied.
       std::vector<C*> ext_copy(ext_start, ext_start + ext_num);
 #pragma omp task firstprivate(proxy_start, proxy_num, axis, ext_copy)

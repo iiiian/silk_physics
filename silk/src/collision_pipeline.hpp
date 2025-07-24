@@ -19,12 +19,13 @@ class CollisionPipeline {
       std::vector<ObjectCollider>& object_colliders, float dt) const;
 
  private:
+  static CollisionCache<ObjectCollider> object_broadphase(
+      std::vector<ObjectCollider>& object_colliders);
+
   std::optional<Collision> narrow_phase(const ObjectCollider& oa,
                                         const MeshCollider& ma,
                                         const ObjectCollider& ob,
                                         const MeshCollider& mb, float dt) const;
-  CollisionCache<ObjectCollider> object_broadphase(
-      std::vector<ObjectCollider>& obstacles) const;
 };
 
 }  // namespace silk

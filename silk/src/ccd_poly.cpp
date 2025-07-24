@@ -1,7 +1,6 @@
 #include "ccd_poly.hpp"
 
 #include <Eigen/Dense>
-#include <Eigen/Geometry>
 #include <cassert>
 #include <cmath>
 

@@ -9,7 +9,7 @@ namespace silk {
 // in Manager.
 //
 // Bit layout: | is valid (2) | generation (GEN_BITS) | index (INDEX_BITS) |
-struct Handle {
+class Handle {
  public:
   // bit operation helper
   static constexpr uint32_t GEN_BITS = 11;
@@ -22,14 +22,13 @@ struct Handle {
   static constexpr uint32_t IS_VALID_SHIFT = GEN_BITS + INDEX_BITS;
   static constexpr uint32_t IS_VALID_MASK = 1u << IS_VALID_SHIFT;
 
- public:
   uint32_t value = 0;
 
   Handle() = default;
 
-  Handle(uint32_t value) : value(value) {};
+  explicit Handle(uint32_t value) : value(value) {};
 
-  Handle(uint32_t is_valid, uint32_t generation, uint32_t index) {
+  Handle(bool is_valid, uint32_t generation, uint32_t index) {
     assert((generation < MAX_GEN));
     assert((index < MAX_INDEX));
 

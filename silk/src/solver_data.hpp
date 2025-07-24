@@ -16,7 +16,7 @@ struct SolverData {
   std::vector<std::unique_ptr<ISolverConstrain>> constrains;
 
   // Since by default copy ctor is available and Eigen::SparseMatrix lacks
-  // noexcept move ctor, we have to explicitly delet copy ctor to avoid error
+  // noexcept move ctor, we have to explicitly delete copy ctor to avoid error
   // when used in containers like std::vector
   SolverData() = default;
   SolverData(SolverData&) = delete;
