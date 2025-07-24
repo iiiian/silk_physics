@@ -92,8 +92,7 @@ class Manager {
       return false;
     }
 
-    // swap removed data element with the last element
-    std::swap(data_[dead_slot.get_index()], data_.back());
+    data_[dead_slot.get_index()] = std::move_if_noexcept(data_.back());
     slots_[slot_of_data_.back()].set_index(dead_slot.get_index());
     slot_of_data_[dead_slot.get_index()] = slot_of_data_.back();
     data_.pop_back();

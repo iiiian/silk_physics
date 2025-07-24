@@ -15,7 +15,6 @@ struct TriMesh {
   RMatrix3f V;
   RMatrix2i E;
   RMatrix3i F;
-
   float avg_edge_length;
 };
 
