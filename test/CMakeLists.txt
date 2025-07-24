@@ -1,15 +1,14 @@
 set(SILK_DIR ${CMAKE_SOURCE_DIR}/silk/src)
-set(SILK_COLLISION_DIR ${CMAKE_SOURCE_DIR}/silk/src/collision)
 
 # ccd correctness test
 add_executable(
     ccd_correctness_test
     ccd_correctness_test.cpp
     ccd_test_helper.cpp
-    ${SILK_COLLISION_DIR}/ccd.cpp
-    ${SILK_COLLISION_DIR}/ccd_poly.cpp
+    ${SILK_DIR}/ccd.cpp
+    ${SILK_DIR}/ccd_poly.cpp
 )
-target_include_directories(ccd_correctness_test PRIVATE ${SILK_COLLISION_DIR})
+target_include_directories(ccd_correctness_test PRIVATE ${SILK_DIR})
 target_link_libraries(ccd_correctness_test PRIVATE Catch2::Catch2WithMain)
 target_link_libraries(ccd_correctness_test PRIVATE Eigen3::Eigen)
 target_compile_definitions(
@@ -22,10 +21,10 @@ add_executable(
     ccd_performance_test
     ccd_performance_test.cpp
     ccd_test_helper.cpp
-    ${SILK_COLLISION_DIR}/ccd.cpp
-    ${SILK_COLLISION_DIR}/ccd_poly.cpp
+    ${SILK_DIR}/ccd.cpp
+    ${SILK_DIR}/ccd_poly.cpp
 )
-target_include_directories(ccd_performance_test PRIVATE ${SILK_COLLISION_DIR})
+target_include_directories(ccd_performance_test PRIVATE ${SILK_DIR})
 target_link_libraries(
     ccd_performance_test
     PRIVATE Catch2::Catch2WithMain
@@ -35,15 +34,6 @@ target_compile_definitions(
     ccd_performance_test
     PRIVATE SAMPLE_QUERY_ROOT="${CMAKE_SOURCE_DIR}/misc/ccd-sample-queries"
 )
-
-# resource manager test
-add_executable(
-    resource_manager_test
-    resource_manager_test.cpp
-    ${SILK_DIR}/resource_manager.cpp
-)
-target_include_directories(resource_manager_test PRIVATE ${SILK_DIR})
-target_link_libraries(resource_manager_test PRIVATE Catch2::Catch2WithMain)
 
 # sap kd tree test
 add_executable(
@@ -55,7 +45,7 @@ add_executable(
 )
 target_include_directories(
     sap_test
-    PRIVATE ${SILK_COLLISION_DIR} ${CMAKE_SOURCE_DIR}/extern/pdqsort
+    PRIVATE ${SILK_DIR} ${CMAKE_SOURCE_DIR}/extern/pdqsort
 )
 target_link_libraries(
     sap_test
@@ -79,7 +69,7 @@ add_executable(
 )
 target_include_directories(
     sap_kd_tree_test
-    PRIVATE ${SILK_COLLISION_DIR} ${CMAKE_SOURCE_DIR}/extern/pdqsort
+    PRIVATE ${SILK_DIR} ${CMAKE_SOURCE_DIR}/extern/pdqsort
 )
 target_link_libraries(
     sap_kd_tree_test
@@ -103,7 +93,7 @@ add_executable(
 )
 target_include_directories(
     sap_performance_test
-    PRIVATE ${SILK_COLLISION_DIR} ${CMAKE_SOURCE_DIR}/extern/pdqsort
+    PRIVATE ${SILK_DIR} ${CMAKE_SOURCE_DIR}/extern/pdqsort
 )
 target_link_libraries(
     sap_performance_test
@@ -127,7 +117,7 @@ add_executable(
 )
 target_include_directories(
     sap_kd_tree_performance_test
-    PRIVATE ${SILK_COLLISION_DIR} ${CMAKE_SOURCE_DIR}/extern/pdqsort
+    PRIVATE ${SILK_DIR} ${CMAKE_SOURCE_DIR}/extern/pdqsort
 )
 target_link_libraries(
     sap_kd_tree_performance_test
@@ -145,11 +135,11 @@ target_compile_definitions(
 add_executable(
     ccd_poly
     ccd_poly_test.cpp
-    ${SILK_COLLISION_DIR}/ccd_poly.cpp
+    ${SILK_DIR}/ccd_poly.cpp
 )
-target_include_directories(ccd_poly PRIVATE ${SILK_COLLISION_DIR})
+target_include_directories(ccd_poly PRIVATE ${SILK_DIR})
 target_link_libraries(ccd_poly PRIVATE Catch2::Catch2WithMain Eigen3::Eigen)
 
 include(CTest)
 include(Catch)
-catch_discover_tests(ccd_correctness_test ccd_performance_test resource_manager_test sap_test sap_kd_tree_test sap_performance_test sap_kd_tree_performance_test ccd_poly)
+catch_discover_tests(ccd_correctness_test ccd_performance_test sap_test sap_kd_tree_test sap_performance_test sap_kd_tree_performance_test ccd_poly)

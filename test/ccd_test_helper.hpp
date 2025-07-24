@@ -14,12 +14,12 @@ struct Query {
   int source_line;
 
   // edge edge case
-  //     edge 1 = v1 v2, edge 2 = v3 v4
+  //     edge 1 = v0 v1, edge 2 = v2 v3
   // point triangle case
   //     triangle = v1 v2 v3, point = v4
   // suffix 0 = at t0, suffix 1 = at t1
-  Eigen::Vector3d v10, v20, v30, v40;
-  Eigen::Vector3d v11, v21, v31, v41;
+  Eigen::Vector3d v00, v10, v20, v30;
+  Eigen::Vector3d v01, v11, v21, v31;
 
   std::string to_string() const;
 };

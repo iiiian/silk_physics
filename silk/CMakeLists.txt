@@ -15,6 +15,7 @@ target_compile_options(
         $<$<CONFIG:Debug>:
         -Wall
         -Wextra
+        -Wpedantic
         -fdiagnostics-color
         -Wno-unused-parameter
         -Wno-sign-compare # prevent libigl vomiting error

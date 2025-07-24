@@ -3,9 +3,9 @@
 #include <Eigen/Core>
 #include <vector>
 
-#include "../bbox.hpp"
 #include "abc_file_loader.hpp"
-#include "collision_internal.hpp"
+#include "bbox.hpp"
+#include "collision_broadphase.hpp"
 
 struct SimpleCollider {
   silk::Bbox bbox;

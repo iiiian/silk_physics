@@ -37,7 +37,7 @@ void update_colliders(std::vector<SimpleCollider>& colliders,
 
     c.bbox.min = m.colwise().minCoeff();
     c.bbox.max = m.colwise().maxCoeff();
-    c.bbox.extend_inplace(h);
+    c.bbox.pad_inplace(h);
   }
 }
 

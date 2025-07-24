@@ -21,9 +21,9 @@ add_subdirectory(extern/arpack-ng)
 
 add_subdirectory(silk)
 
-# if(SILK_BUILD_DEMO OR SILK_BUILD_TEST)
-#     add_subdirectory(extern/spdlog)
-# endif()
+if(SILK_BUILD_DEMO OR SILK_BUILD_TEST)
+    add_subdirectory(extern/spdlog)
+endif()
 
 # if(SILK_BUILD_DEMO)
 #     add_subdirectory(extern/polyscope)
@@ -32,10 +32,10 @@ add_subdirectory(silk)
 #     add_subdirectory(demo)
 # endif()
 
-# if(SILK_BUILD_TEST)
-#     find_package(Alembic CONFIG REQUIRED)
-#     add_subdirectory(extern/catch2)
-#
-#     enable_testing()
-#     add_subdirectory(test)
-# endif()
+if(SILK_BUILD_TEST)
+    find_package(Alembic CONFIG REQUIRED)
+    add_subdirectory(extern/catch2)
+
+    enable_testing()
+    add_subdirectory(test)
+endif()
