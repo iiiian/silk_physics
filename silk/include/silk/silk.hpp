@@ -20,14 +20,14 @@ enum class Result {
 
 template <typename T>
 struct Span {
-  T* data;
-  int num;
+  T* data = nullptr;
+  int num = 0;
 };
 
 template <typename T>
 struct ConstSpan {
-  const T* data;
-  int num;
+  const T* data = nullptr;
+  int num = 0;
 };
 
 struct MeshConfig {
@@ -38,11 +38,11 @@ struct MeshConfig {
 
 struct CollisionConfig {
  public:
-  bool is_collision_on;
-  bool is_self_collision_on;
-  int group;
-  float damping;
-  float friction;
+  bool is_collision_on = true;
+  bool is_self_collision_on = true;
+  int group = 0;
+  float damping = 0.3f;
+  float friction = 0.3f;
 };
 
 struct ClothConfig {
@@ -52,24 +52,24 @@ struct ClothConfig {
 };
 
 struct GlobalConfig {
-  float acceleration_x;
-  float acceleration_y;
-  float acceleration_z;
-  int max_iteration;
-  int r;
-  float dt;
-  float ccd_walkback;
-  float toi_tolerance;
-  float toi_refine_iteration;
-  float eps;
+  float acceleration_x = 0.0f;
+  float acceleration_y = 0.0f;
+  float acceleration_z = 0.0f;
+  int max_iteration = 5;
+  int r = 30;
+  float dt = 1.0f / 60.0f;
+  float ccd_walkback = 0.8f;
+  float toi_tolerance = 0.1f;
+  float toi_refine_iteration = 5;
+  float eps = 1e-6f;
 };
 
 struct Cloth {
-  uint32_t value;
+  uint32_t value = 0;
 };
 
 struct Obstacle {
-  uint32_t value;
+  uint32_t value = 0;
 };
 
 std::string to_string(Result result);
