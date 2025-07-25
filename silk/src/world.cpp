@@ -100,7 +100,7 @@ class World::WorldImpl {
   // cloth API
   Result add_cloth(ClothConfig cloth_config, CollisionConfig collision_config,
                    MeshConfig mesh_config, ConstSpan<int> pin_index,
-                   Cloth& cloth) {
+                   uint32_t& handle) {
     // make tri mesh
     TriMesh m;
     m.V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
@@ -135,27 +135,36 @@ class World::WorldImpl {
     registry_.set<TriMesh>(*e, std::move(m));
     registry_.set<Pin>(*e, std::move(p));
 
-    cloth = Cloth{h.value};
+    handle = h.value;
     is_solver_init = false;
     return Result::Success;
   }
 
-  Result remove_cloth(Cloth cloth) {
-    Handle h{cloth.value};
-    auto entity = registry_.get_entity(h);
+  Result remove_cloth(uint32_t handle) {
+    auto entity = registry_.get_entity(handle);
     if (!entity) {
       return Result::InvalidHandle;
     }
 
+    auto cloth_config = registry_.get<ClothConfig>(*entity);
+    if (!cloth_config) {
+      return Result::InvalidHandle;
+    }
+
     is_solver_init = false;
-    registry_.remove_entity(h);
+    registry_.remove_entity(handle);
 
     return Result::Success;
   }
 
-  Result get_cloth_position(Cloth cloth, Span<float> position) const {
-    const Entity* e = registry_.get_entity(Handle{cloth.value});
+  Result get_cloth_position(uint32_t handle, Span<float> position) const {
+    const Entity* e = registry_.get_entity(handle);
     if (!e) {
+      return Result::InvalidHandle;
+    }
+
+    auto cloth_config = registry_.get<ClothConfig>(*e);
+    if (!cloth_config) {
       return Result::InvalidHandle;
     }
 
@@ -188,16 +197,18 @@ class World::WorldImpl {
     return Result::Success;
   }
 
-  Result set_cloth_config(Cloth cloth, ClothConfig config) {
-    Entity* e = registry_.get_entity(Handle{cloth.value});
+  Result set_cloth_config(uint32_t handle, ClothConfig config) {
+    Entity* e = registry_.get_entity(handle);
     if (!e) {
       return Result::InvalidHandle;
     }
 
-    is_solver_init = false;
-
     auto cloth_config = registry_.get<ClothConfig>(*e);
-    assert(cloth_config);
+    if (!cloth_config) {
+      return Result::InvalidHandle;
+    }
+
+    is_solver_init = false;
     *cloth_config = config;
 
     // remove outdated components
@@ -207,9 +218,14 @@ class World::WorldImpl {
     return Result::Success;
   }
 
-  Result set_cloth_collision_config(Cloth cloth, CollisionConfig config) {
-    Entity* e = registry_.get_entity(Handle{cloth.value});
+  Result set_cloth_collision_config(uint32_t handle, CollisionConfig config) {
+    Entity* e = registry_.get_entity(handle);
     if (!e) {
+      return Result::InvalidHandle;
+    }
+
+    auto cloth_config = registry_.get<ClothConfig>(*e);
+    if (!cloth_config) {
       return Result::InvalidHandle;
     }
 
@@ -220,10 +236,15 @@ class World::WorldImpl {
     return Result::Success;
   }
 
-  Result set_cloth_mesh_config(Cloth cloth, MeshConfig mesh_config,
+  Result set_cloth_mesh_config(uint32_t handle, MeshConfig mesh_config,
                                ConstSpan<int> pin_index) {
-    Entity* e = registry_.get_entity(Handle{cloth.value});
+    Entity* e = registry_.get_entity(handle);
     if (!e) {
+      return Result::InvalidHandle;
+    }
+
+    auto cloth_config = registry_.get<ClothConfig>(*e);
+    if (!cloth_config) {
       return Result::InvalidHandle;
     }
 
@@ -261,9 +282,14 @@ class World::WorldImpl {
     return Result::Success;
   }
 
-  Result set_cloth_pin_index(Cloth cloth, ConstSpan<int> pin_index) {
-    Entity* e = registry_.get_entity(Handle{cloth.value});
+  Result set_cloth_pin_index(uint32_t handle, ConstSpan<int> pin_index) {
+    Entity* e = registry_.get_entity(handle);
     if (!e) {
+      return Result::InvalidHandle;
+    }
+
+    auto cloth_config = registry_.get<ClothConfig>(*e);
+    if (!cloth_config) {
       return Result::InvalidHandle;
     }
 
@@ -294,11 +320,17 @@ class World::WorldImpl {
     return Result::Success;
   }
 
-  Result set_cloth_pin_position(Cloth cloth, ConstSpan<float> position) {
-    Entity* e = registry_.get_entity(Handle{cloth.value});
+  Result set_cloth_pin_position(uint32_t handle, ConstSpan<float> position) {
+    Entity* e = registry_.get_entity(handle);
     if (!e) {
       return Result::InvalidHandle;
     }
+
+    auto cloth_config = registry_.get<ClothConfig>(*e);
+    if (!cloth_config) {
+      return Result::InvalidHandle;
+    }
+
     auto pin = registry_.get<Pin>(*e);
     assert(pin);
 
@@ -318,7 +350,7 @@ class World::WorldImpl {
 
   // Obstacle API
   Result add_obstacle(CollisionConfig collision_config, MeshConfig mesh_config,
-                      Obstacle& obstacle) {
+                      uint32_t& handle) {
     // make tri mesh
     TriMesh m;
     m.V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
@@ -346,25 +378,34 @@ class World::WorldImpl {
     registry_.set<TriMesh>(*e, std::move(m));
     registry_.set<ObstaclePosition>(*e, std::move(p));
 
-    obstacle = Obstacle{h.value};
+    handle = h.value;
     return Result::Success;
   }
 
-  Result remove_obstacle(Obstacle obstacle) {
-    Handle h{obstacle.value};
-    auto entity = registry_.get_entity(h);
+  Result remove_obstacle(uint32_t handle) {
+    auto entity = registry_.get_entity(handle);
     if (!entity) {
       return Result::InvalidHandle;
     }
 
-    registry_.remove_entity(h);
+    auto obstacle_position = registry_.get<ObstaclePosition>(*entity);
+    if (!obstacle_position) {
+      return Result::InvalidHandle;
+    }
+
+    registry_.remove_entity(handle);
     return Result::Success;
   }
 
-  Result set_obstacle_collision_config(Obstacle obstacle,
+  Result set_obstacle_collision_config(uint32_t handle,
                                        CollisionConfig config) {
-    Entity* e = registry_.get_entity(Handle{obstacle.value});
+    Entity* e = registry_.get_entity(handle);
     if (!e) {
+      return Result::InvalidHandle;
+    }
+
+    auto obstacle_position = registry_.get<ObstaclePosition>(*e);
+    if (!obstacle_position) {
       return Result::InvalidHandle;
     }
 
@@ -375,9 +416,14 @@ class World::WorldImpl {
     return Result::Success;
   }
 
-  Result set_obstacle_mesh_config(Obstacle obstacle, MeshConfig config) {
-    Entity* e = registry_.get_entity(Handle{obstacle.value});
+  Result set_obstacle_mesh_config(uint32_t handle, MeshConfig config) {
+    Entity* e = registry_.get_entity(handle);
     if (!e) {
+      return Result::InvalidHandle;
+    }
+
+    auto obstacle_position = registry_.get<ObstaclePosition>(*e);
+    if (!obstacle_position) {
       return Result::InvalidHandle;
     }
 
@@ -402,13 +448,16 @@ class World::WorldImpl {
     return Result::Success;
   }
 
-  Result set_obstacle_position(Obstacle obstacle, ConstSpan<float> position) {
-    Entity* e = registry_.get_entity(Handle{obstacle.value});
+  Result set_obstacle_position(uint32_t handle, ConstSpan<float> position) {
+    Entity* e = registry_.get_entity(handle);
     if (!e) {
       return Result::InvalidHandle;
     }
+
     auto pos = registry_.get<ObstaclePosition>(*e);
-    assert(pos);
+    if (!pos) {
+      return Result::InvalidHandle;
+    }
 
     if (pos->position.size() != position.num) {
       return Result::IncorrectPinNum;
@@ -438,48 +487,52 @@ Result World::solver_reset() { return impl_->solver_reset(); }
 Result World::add_cloth(ClothConfig cloth_config,
                         CollisionConfig collision_config,
                         MeshConfig mesh_config, ConstSpan<int> pin_index,
-                        Cloth& cloth) {
+                        uint32_t& handle) {
   return impl_->add_cloth(cloth_config, collision_config, mesh_config,
-                          pin_index, cloth);
+                          pin_index, handle);
 }
-Result World::remove_cloth(Cloth cloth) { return impl_->remove_cloth(cloth); }
-Result World::get_cloth_position(Cloth cloth, Span<float> position) const {
-  return impl_->get_cloth_position(cloth, position);
+Result World::remove_cloth(uint32_t handle) {
+  return impl_->remove_cloth(handle);
 }
-Result World::set_cloth_config(Cloth cloth, ClothConfig config) {
-  return impl_->set_cloth_config(cloth, config);
+Result World::get_cloth_position(uint32_t handle, Span<float> position) const {
+  return impl_->get_cloth_position(handle, position);
 }
-Result World::set_cloth_collision_config(Cloth cloth, CollisionConfig config) {
-  return impl_->set_cloth_collision_config(cloth, config);
+Result World::set_cloth_config(uint32_t handle, ClothConfig config) {
+  return impl_->set_cloth_config(handle, config);
+}
+Result World::set_cloth_collision_config(uint32_t handle,
+                                         CollisionConfig config) {
+  return impl_->set_cloth_collision_config(handle, config);
 }
 
-Result World::set_cloth_mesh_config(Cloth cloth, MeshConfig mesh_config,
+Result World::set_cloth_mesh_config(uint32_t handle, MeshConfig mesh_config,
                                     ConstSpan<int> pin_index) {
-  return impl_->set_cloth_mesh_config(cloth, mesh_config, pin_index);
+  return impl_->set_cloth_mesh_config(handle, mesh_config, pin_index);
 }
-Result World::set_cloth_pin_index(Cloth cloth, ConstSpan<int> pin_index) {
-  return impl_->set_cloth_pin_index(cloth, pin_index);
+Result World::set_cloth_pin_index(uint32_t handle, ConstSpan<int> pin_index) {
+  return impl_->set_cloth_pin_index(handle, pin_index);
 }
-Result World::set_cloth_pin_position(Cloth cloth, ConstSpan<float> position) {
-  return impl_->set_cloth_pin_position(cloth, position);
+Result World::set_cloth_pin_position(uint32_t handle,
+                                     ConstSpan<float> position) {
+  return impl_->set_cloth_pin_position(handle, position);
 }
 Result World::add_obstacle(CollisionConfig collision_config,
-                           MeshConfig mesh_config, Obstacle& obstacle) {
-  return impl_->add_obstacle(collision_config, mesh_config, obstacle);
+                           MeshConfig mesh_config, uint32_t& handle) {
+  return impl_->add_obstacle(collision_config, mesh_config, handle);
 }
-Result World::remove_obstacle(Obstacle obstacle) {
-  return impl_->remove_obstacle(obstacle);
+Result World::remove_obstacle(uint32_t handle) {
+  return impl_->remove_obstacle(handle);
 }
-Result World::set_obstacle_collision_config(Obstacle obstacle,
+Result World::set_obstacle_collision_config(uint32_t handle,
                                             CollisionConfig config) {
-  return impl_->set_obstacle_collision_config(obstacle, config);
+  return impl_->set_obstacle_collision_config(handle, config);
 }
-Result World::set_obstacle_mesh_config(Obstacle obstacle, MeshConfig config) {
-  return impl_->set_obstacle_mesh_config(obstacle, config);
+Result World::set_obstacle_mesh_config(uint32_t handle, MeshConfig config) {
+  return impl_->set_obstacle_mesh_config(handle, config);
 }
-Result World::set_obstacle_position(Obstacle obstacle,
+Result World::set_obstacle_position(uint32_t handle,
                                     ConstSpan<float> position) {
-  return impl_->set_obstacle_position(obstacle, position);
+  return impl_->set_obstacle_position(handle, position);
 }
 
 }  // namespace silk

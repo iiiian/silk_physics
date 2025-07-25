@@ -63,14 +63,6 @@ struct GlobalConfig {
   float eps = 1e-6f;
 };
 
-struct Cloth {
-  uint32_t value = 0;
-};
-
-struct Obstacle {
-  uint32_t value = 0;
-};
-
 std::string to_string(Result result);
 
 class World {
@@ -98,30 +90,30 @@ class World {
   [[nodiscard]] Result add_cloth(ClothConfig cloth_config,
                                  CollisionConfig collision_config,
                                  MeshConfig mesh_config,
-                                 ConstSpan<int> pin_index, Cloth& cloth);
-  [[nodiscard]] Result remove_cloth(Cloth cloth);
-  [[nodiscard]] Result get_cloth_position(Cloth cloth,
+                                 ConstSpan<int> pin_index, uint32_t& handle);
+  [[nodiscard]] Result remove_cloth(uint32_t handle);
+  [[nodiscard]] Result get_cloth_position(uint32_t handle,
                                           Span<float> position) const;
-  [[nodiscard]] Result set_cloth_config(Cloth cloth, ClothConfig config);
-  [[nodiscard]] Result set_cloth_collision_config(Cloth cloth,
+  [[nodiscard]] Result set_cloth_config(uint32_t handle, ClothConfig config);
+  [[nodiscard]] Result set_cloth_collision_config(uint32_t handle,
                                                   CollisionConfig config);
-  [[nodiscard]] Result set_cloth_mesh_config(Cloth cloth,
+  [[nodiscard]] Result set_cloth_mesh_config(uint32_t handle,
                                              MeshConfig mesh_config,
                                              ConstSpan<int> pin_index);
-  [[nodiscard]] Result set_cloth_pin_index(Cloth cloth,
+  [[nodiscard]] Result set_cloth_pin_index(uint32_t handle,
                                            ConstSpan<int> pin_index);
-  [[nodiscard]] Result set_cloth_pin_position(Cloth cloth,
+  [[nodiscard]] Result set_cloth_pin_position(uint32_t handle,
                                               ConstSpan<float> position);
 
   // Obstacle API
   [[nodiscard]] Result add_obstacle(CollisionConfig collision_config,
-                                    MeshConfig mesh_config, Obstacle& obstacle);
-  [[nodiscard]] Result remove_obstacle(Obstacle obstacle);
-  [[nodiscard]] Result set_obstacle_collision_config(Obstacle obstacle,
+                                    MeshConfig mesh_config, uint32_t& handle);
+  [[nodiscard]] Result remove_obstacle(uint32_t handle);
+  [[nodiscard]] Result set_obstacle_collision_config(uint32_t handle,
                                                      CollisionConfig config);
-  [[nodiscard]] Result set_obstacle_mesh_config(Obstacle obstacle,
+  [[nodiscard]] Result set_obstacle_mesh_config(uint32_t handle,
                                                 MeshConfig config);
-  [[nodiscard]] Result set_obstacle_position(Obstacle obstacle,
+  [[nodiscard]] Result set_obstacle_position(uint32_t handle,
                                              ConstSpan<float> position);
 };
 

@@ -26,7 +26,7 @@ class Handle {
 
   Handle() = default;
 
-  explicit Handle(uint32_t value) : value(value) {};
+  Handle(uint32_t value) : value(value) {};
 
   Handle(bool is_valid, uint32_t generation, uint32_t index) {
     assert((generation < MAX_GEN));
