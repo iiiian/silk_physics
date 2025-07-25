@@ -33,7 +33,6 @@ struct ConstSpan {
 struct MeshConfig {
   ConstSpan<float> verts;
   ConstSpan<int> faces;
-  ConstSpan<int> pin_index;
 };
 
 struct CollisionConfig {
@@ -98,14 +97,19 @@ class World {
   // cloth API
   [[nodiscard]] Result add_cloth(ClothConfig cloth_config,
                                  CollisionConfig collision_config,
-                                 MeshConfig mesh_config, Cloth& cloth);
+                                 MeshConfig mesh_config,
+                                 ConstSpan<int> pin_index, Cloth& cloth);
   [[nodiscard]] Result remove_cloth(Cloth cloth);
   [[nodiscard]] Result get_cloth_position(Cloth cloth,
                                           Span<float> position) const;
   [[nodiscard]] Result set_cloth_config(Cloth cloth, ClothConfig config);
   [[nodiscard]] Result set_cloth_collision_config(Cloth cloth,
                                                   CollisionConfig config);
-  [[nodiscard]] Result set_cloth_pin_index(Cloth cloth, MeshConfig mesh_config);
+  [[nodiscard]] Result set_cloth_mesh_config(Cloth cloth,
+                                             MeshConfig mesh_config,
+                                             ConstSpan<int> pin_index);
+  [[nodiscard]] Result set_cloth_pin_index(Cloth cloth,
+                                           ConstSpan<int> pin_index);
   [[nodiscard]] Result set_cloth_pin_position(Cloth cloth,
                                               ConstSpan<float> position);
 
@@ -115,6 +119,8 @@ class World {
   [[nodiscard]] Result remove_obstacle(Obstacle obstacle);
   [[nodiscard]] Result set_obstacle_collision_config(Obstacle obstacle,
                                                      CollisionConfig config);
+  [[nodiscard]] Result set_obstacle_mesh_config(Obstacle obstacle,
+                                                MeshConfig config);
   [[nodiscard]] Result set_obstacle_position(Obstacle obstacle,
                                              ConstSpan<float> position);
 };

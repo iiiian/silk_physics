@@ -99,7 +99,8 @@ class World::WorldImpl {
 
   // cloth API
   Result add_cloth(ClothConfig cloth_config, CollisionConfig collision_config,
-                   MeshConfig mesh_config, Cloth& cloth) {
+                   MeshConfig mesh_config, ConstSpan<int> pin_index,
+                   Cloth& cloth) {
     // make tri mesh
     TriMesh m;
     m.V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
@@ -115,11 +116,13 @@ class World::WorldImpl {
 
     // make pin
     Pin p;
-    p.index = Eigen::Map<const Eigen::VectorXi>(mesh_config.pin_index.data,
-                                                mesh_config.pin_index.num);
-    p.position.resize(3 * p.index.size());
-    for (int i = 0; i < p.index.size(); ++i) {
-      p.position(Eigen::seqN(3 * i, 3)) = m.V.row(i);
+    if (pin_index.data != nullptr && pin_index.num != 0) {
+      p.index =
+          Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.num);
+      p.position.resize(3 * p.index.size());
+      for (int i = 0; i < p.index.size(); ++i) {
+        p.position(Eigen::seqN(3 * i, 3)) = m.V.row(i);
+      }
     }
 
     auto [h, e] = registry_.add_entity();
@@ -217,7 +220,48 @@ class World::WorldImpl {
     return Result::Success;
   }
 
-  Result set_cloth_pin_index(Cloth cloth, MeshConfig mesh_config) {
+  Result set_cloth_mesh_config(Cloth cloth, MeshConfig mesh_config,
+                               ConstSpan<int> pin_index) {
+    Entity* e = registry_.get_entity(Handle{cloth.value});
+    if (!e) {
+      return Result::InvalidHandle;
+    }
+
+    auto m = registry_.get<TriMesh>(*e);
+    auto p = registry_.get<Pin>(*e);
+    assert(m);
+    assert(p);
+
+    // make tri mesh
+    m->V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
+                                       mesh_config.verts.num, 3);
+    m->F = Eigen::Map<const RMatrix3i>(mesh_config.faces.data,
+                                       mesh_config.faces.num, 3);
+    igl::edges(m->F, m->E);
+    m->avg_edge_length = 0.0f;
+    for (int i = 0; i < m->E.rows(); ++i) {
+      m->avg_edge_length +=
+          (m->V.row(m->E(i, 0)) - m->V.row(m->E(i, 1))).norm();
+    }
+    m->avg_edge_length /= m->E.rows();
+
+    // make pin
+    if (pin_index.data != nullptr && pin_index.num != 0) {
+      p->index =
+          Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.num);
+      p->position.resize(3 * p->index.size());
+      for (int i = 0; i < p->index.size(); ++i) {
+        p->position(Eigen::seqN(3 * i, 3)) = m->V.row(i);
+      }
+    } else {
+      p = {};
+    }
+
+    is_solver_init = false;
+    return Result::Success;
+  }
+
+  Result set_cloth_pin_index(Cloth cloth, ConstSpan<int> pin_index) {
     Entity* e = registry_.get_entity(Handle{cloth.value});
     if (!e) {
       return Result::InvalidHandle;
@@ -232,11 +276,15 @@ class World::WorldImpl {
     // make pin
     auto pin = registry_.get<Pin>(*e);
     assert(pin);
-    pin->index = Eigen::Map<const Eigen::VectorXi>(mesh_config.pin_index.data,
-                                                   mesh_config.pin_index.num);
-    pin->position.resize(3 * pin->index.size());
-    for (int i = 0; i < pin->index.size(); ++i) {
-      pin->position(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(i);
+    if (pin_index.data != nullptr && pin_index.num != 0) {
+      pin->index =
+          Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.num);
+      pin->position.resize(3 * pin->index.size());
+      for (int i = 0; i < pin->index.size(); ++i) {
+        pin->position(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(i);
+      }
+    } else {
+      pin = {};
     }
 
     // remove outdated components
@@ -327,6 +375,33 @@ class World::WorldImpl {
     return Result::Success;
   }
 
+  Result set_obstacle_mesh_config(Obstacle obstacle, MeshConfig config) {
+    Entity* e = registry_.get_entity(Handle{obstacle.value});
+    if (!e) {
+      return Result::InvalidHandle;
+    }
+
+    auto m = registry_.get<TriMesh>(*e);
+    assert(m);
+
+    m->V = Eigen::Map<const RMatrix3f>(config.verts.data, config.verts.num, 3);
+    m->F = Eigen::Map<const RMatrix3i>(config.faces.data, config.faces.num, 3);
+    igl::edges(m->F, m->E);
+    m->avg_edge_length = 0.0f;
+    for (int i = 0; i < m->E.rows(); ++i) {
+      m->avg_edge_length +=
+          (m->V.row(m->E(i, 0)) - m->V.row(m->E(i, 1))).norm();
+    }
+    m->avg_edge_length /= m->E.rows();
+
+    // make obstacle position
+    ObstaclePosition p;
+    p.is_static = true;
+    p.position = m->V.reshaped<Eigen::RowMajor>();
+
+    return Result::Success;
+  }
+
   Result set_obstacle_position(Obstacle obstacle, ConstSpan<float> position) {
     Entity* e = registry_.get_entity(Handle{obstacle.value});
     if (!e) {
@@ -362,8 +437,10 @@ Result World::solver_step() { return impl_->solver_step(); }
 Result World::solver_reset() { return impl_->solver_reset(); }
 Result World::add_cloth(ClothConfig cloth_config,
                         CollisionConfig collision_config,
-                        MeshConfig mesh_config, Cloth& cloth) {
-  return impl_->add_cloth(cloth_config, collision_config, mesh_config, cloth);
+                        MeshConfig mesh_config, ConstSpan<int> pin_index,
+                        Cloth& cloth) {
+  return impl_->add_cloth(cloth_config, collision_config, mesh_config,
+                          pin_index, cloth);
 }
 Result World::remove_cloth(Cloth cloth) { return impl_->remove_cloth(cloth); }
 Result World::get_cloth_position(Cloth cloth, Span<float> position) const {
@@ -375,8 +452,13 @@ Result World::set_cloth_config(Cloth cloth, ClothConfig config) {
 Result World::set_cloth_collision_config(Cloth cloth, CollisionConfig config) {
   return impl_->set_cloth_collision_config(cloth, config);
 }
-Result World::set_cloth_pin_index(Cloth cloth, MeshConfig mesh_config) {
-  return impl_->set_cloth_pin_index(cloth, mesh_config);
+
+Result World::set_cloth_mesh_config(Cloth cloth, MeshConfig mesh_config,
+                                    ConstSpan<int> pin_index) {
+  return impl_->set_cloth_mesh_config(cloth, mesh_config, pin_index);
+}
+Result World::set_cloth_pin_index(Cloth cloth, ConstSpan<int> pin_index) {
+  return impl_->set_cloth_pin_index(cloth, pin_index);
 }
 Result World::set_cloth_pin_position(Cloth cloth, ConstSpan<float> position) {
   return impl_->set_cloth_pin_position(cloth, position);
@@ -391,6 +473,9 @@ Result World::remove_obstacle(Obstacle obstacle) {
 Result World::set_obstacle_collision_config(Obstacle obstacle,
                                             CollisionConfig config) {
   return impl_->set_obstacle_collision_config(obstacle, config);
+}
+Result World::set_obstacle_mesh_config(Obstacle obstacle, MeshConfig config) {
+  return impl_->set_obstacle_mesh_config(obstacle, config);
 }
 Result World::set_obstacle_position(Obstacle obstacle,
                                     ConstSpan<float> position) {
