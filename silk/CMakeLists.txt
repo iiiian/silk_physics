@@ -32,8 +32,7 @@ target_include_directories(
 
 target_link_libraries(
     silk
-    PUBLIC Eigen3::Eigen
-    PRIVATE igl::core arpack OpenMP::OpenMP_CXX
+    PRIVATE Eigen3::Eigen igl::core arpack OpenMP::OpenMP_CXX
 )
 
 # -------------------------------------------------
