@@ -5,12 +5,10 @@
 #include <limits>
 #include <random>
 
-Eigen::Index KDTree::next_axis(Eigen::Index idx) {
-  return (idx == 2) ? 0 : idx + 1;
-}
+int KDTree::next_axis(int idx) { return (idx == 2) ? 0 : idx + 1; }
 
-void KDTree::fisher_yates_shuffle(Iter begin, Iter end, size_t n) const {
-  size_t size = std::distance(begin, end);
+void KDTree::fisher_yates_shuffle(Iter begin, Iter end, int n) const {
+  int size = std::distance(begin, end);
   assert((size != 0));
   assert((n <= size));
   assert((n != 0));
@@ -18,31 +16,29 @@ void KDTree::fisher_yates_shuffle(Iter begin, Iter end, size_t n) const {
   static std::random_device rand_device;
   static std::mt19937 rand_generator(rand_device());
 
-  for (size_t i = 0; i < n - 1; ++i) {
-    std::uniform_int_distribution<size_t> rand_dist(i, size - 1);
-    size_t rand_idx = rand_dist(rand_generator);
+  for (int i = 0; i < n - 1; ++i) {
+    std::uniform_int_distribution<int> rand_dist(i, size - 1);
+    int rand_idx = rand_dist(rand_generator);
 
     std::swap(*(begin + i), *(begin + rand_idx));
   }
 }
 
-Eigen::Index KDTree::heuristic_median(Iter begin, Iter end,
-                                      Eigen::Index axis) const {
-  size_t size = std::distance(begin, end);
+int KDTree::heuristic_median(Iter begin, Iter end, int axis) const {
+  int size = std::distance(begin, end);
   assert((median_sample_num != 0));
   assert((size != 0));
   assert((axis < 3));
 
   // choose random samples and shuffle them to the start
-  size_t sample_count = size;
+  int sample_count = size;
   if (size > median_sample_num) {
     sample_count = median_sample_num;
     fisher_yates_shuffle(begin, end, median_sample_num);
   }
 
   // sort random samples based on axis
-  auto comp = [this, &axis](const Eigen::Index &a,
-                            const Eigen::Index &b) -> bool {
+  auto comp = [this, &axis](const int &a, const int &b) -> bool {
     const Eigen::MatrixX3f &verts = *this->_p_verts;
     return (verts(a, axis) < verts(b, axis));
   };
@@ -54,7 +50,7 @@ Eigen::Index KDTree::heuristic_median(Iter begin, Iter end,
   return *begin;
 }
 
-KDNode *KDTree::build_sub_tree(Iter begin, Iter end, size_t depth,
+KDNode *KDTree::build_sub_tree(Iter begin, Iter end, int depth,
                                KDNode *parent) {
   _stats.node_num++;
 
@@ -65,7 +61,7 @@ KDNode *KDTree::build_sub_tree(Iter begin, Iter end, size_t depth,
 
   // reaching leaf
   if (depth + 1 == max_depth || std::distance(begin, end) <= leaf_vert_num) {
-    p_node->leaf_verts_idx = std::vector<Eigen::Index>(begin, end);
+    p_node->leaf_verts_idx = std::vector<int>(begin, end);
 
     _stats.current_max_depth = std::max(_stats.current_max_depth, depth);
     _stats.leaf_node_num++;
@@ -83,7 +79,7 @@ KDNode *KDTree::build_sub_tree(Iter begin, Iter end, size_t depth,
   // partition the children into left and right
   Iter child_begin = std::next(begin);
   Iter child_end = end;
-  auto pred = [this, p_node](const Eigen::Index &idx) -> bool {
+  auto pred = [this, p_node](const int &idx) -> bool {
     return (this->_p_verts->coeff(idx, p_node->axis) <
             p_node->node_vert(p_node->axis));
   };
@@ -120,7 +116,7 @@ KDTree::~KDTree() { delete_tree(_p_root); }
 
 void KDTree::update_closest(const Eigen::RowVector3f &point,
                             const KDNode *p_node, float &min_dist_square,
-                            Eigen::Index &target_idx) const {
+                            int &target_idx) const {
   if (p_node == nullptr) {
     return;
   }
@@ -158,7 +154,7 @@ void KDTree::update_closest(const Eigen::RowVector3f &point,
 
 void KDTree::update_neighbors(const Eigen::RowVector3f &point,
                               float radius_square, const KDNode *p_node,
-                              std::vector<Eigen::Index> &result) const {
+                              std::vector<int> &result) const {
   if (p_node == nullptr) {
     return;
   }
@@ -200,8 +196,8 @@ void KDTree::init(const Eigen::MatrixX3f *p_verts) {
   _p_verts = p_verts;
   _stats.leaves_depth_counter.resize(max_depth, 0);
 
-  std::vector<Eigen::Index> verts_idx(p_verts->rows());
-  for (Eigen::Index i = 0; i < p_verts->rows(); ++i) {
+  std::vector<int> verts_idx(p_verts->rows());
+  for (int i = 0; i < p_verts->rows(); ++i) {
     verts_idx[i] = i;
   }
 
@@ -215,20 +211,20 @@ void KDTree::clear() {
   _stats = {};
 }
 
-std::vector<Eigen::Index> KDTree::find_neighbors(
-    const Eigen::RowVector3f &point, float radius) const {
+std::vector<int> KDTree::find_neighbors(const Eigen::RowVector3f &point,
+                                        float radius) const {
   assert((_p_root != nullptr));
 
-  std::vector<Eigen::Index> result;
+  std::vector<int> result;
   update_neighbors(point, radius * radius, _p_root, result);
   return result;
 }
 
-Eigen::Index KDTree::find_closest(const Eigen::RowVector3f &point) const {
+int KDTree::find_closest(const Eigen::RowVector3f &point) const {
   assert((_p_root != nullptr));
 
   float min_dist_square = std::numeric_limits<float>::max();
-  Eigen::Index target_idx = 0;
+  int target_idx = 0;
   update_closest(point, _p_root, min_dist_square, target_idx);
 
   return target_idx;
