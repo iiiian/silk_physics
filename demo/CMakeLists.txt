@@ -2,11 +2,12 @@ set(DEMO_SOURCES
     src/demo.cpp
     src/kd_tree.cpp
     src/main.cpp
-    src/widgets/cloth_simulator_widget.cpp
     src/widgets/help_bar_widget.cpp
-    src/widgets/mesh_statistic_widget.cpp
+    src/widgets/object_setting_widget.cpp
     src/widgets/scene_widget.cpp
-    src/widgets/selector_widget.cpp
+    src/widgets/sim_setting_widget.cpp
+    src/widgets/simulator_widget.cpp
+    src/widgets/statistic_widget.cpp
 )
 
 add_executable(
