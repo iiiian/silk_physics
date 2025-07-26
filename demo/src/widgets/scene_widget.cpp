@@ -24,7 +24,7 @@ bool SceneWidget::load_object_from_path(const std::string& path) {
 
   bool success = false;
   Eigen::MatrixXf V;
-  Eigen::MatrixXf F;
+  Eigen::MatrixXi F;
   Eigen::MatrixX3f N;
   if (p.extension() == ".off") {
     success = igl::readOFF(path, V, F);
@@ -63,17 +63,16 @@ bool SceneWidget::load_object_from_path(const std::string& path) {
   obj.face_num = F.rows();
 
   ctx_.objects.push_back(std::move(obj));
-  ctx_.selection = ctx_.objects.size();
+  ctx_.selection = ctx_.objects.size() - 1;
   py::view::resetCameraToHomeView();
 
   return true;
 }
 
 void SceneWidget::draw() {
-  // Only enabled in normal mode
   ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal);
-
   if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen)) {
+    // add object botton
     if (ImGui::Button("Load Object")) {
       // Configure file dialog
       std::vector<std::string> filters = {"All Supported Formats",

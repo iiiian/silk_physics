@@ -128,12 +128,13 @@ void SimulatorWidget::update_pos(Object& obj) {
     return;
   }
 
-  std::vector<float> new_pos(obj.V.size());
-  auto res = ctx_.silk_world.get_cloth_position(
-      obj.silk_handle, {new_pos.data(), int(new_pos.size())});
+  Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor> V;
+  V.resize(obj.V.rows(), 3);
+  auto res = ctx_.silk_world.get_cloth_position(obj.silk_handle,
+                                                {V.data(), int(V.size())});
   assert((res == silk::Result::Success));
 
-  obj.mesh->updateVertexPositions(new_pos);
+  obj.mesh->updateVertexPositions(V);
 }
 
 void SimulatorWidget::solver_step() {
@@ -168,10 +169,10 @@ void SimulatorWidget::handle_drag_selection() {
   if (is_first_click) {
     py::PickResult pick = py::pickAtScreenCoords({mouse_pos.x, mouse_pos.y});
     if (pick.isHit) {
-      auto pred = [structure = pick.structure](Object& obj) {
+      auto pred = [structure = pick.structure](Object& obj) -> bool {
         return (obj.mesh == structure);
       };
-      auto it = std::find(ctx_.objects.begin(), ctx_.objects.end(), pred);
+      auto it = std::find_if(ctx_.objects.begin(), ctx_.objects.end(), pred);
       if (it != ctx_.objects.end() && !it->pinned.empty()) {
         selected_obj = &(*it);
       }

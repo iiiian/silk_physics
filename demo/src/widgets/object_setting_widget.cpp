@@ -116,37 +116,40 @@ ObjectSettingWidget::ObjectSettingWidget(Context& context) : ctx_(context) {}
 void ObjectSettingWidget::draw() {
   ImGui::BeginDisabled((ctx_.selection == -1));
 
-  if (ctx_.selection != -1) {
-    Object& obj = ctx_.objects[ctx_.selection];
+  if (ImGui::CollapsingHeader("Object Settings",
+                              ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ctx_.selection != -1) {
+      Object& obj = ctx_.objects[ctx_.selection];
 
-    // object type combo box
-    ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal);
-    const char* type_names[] = {"None", "Cloth", "Obstacle"};
-    int type_idx = static_cast<int>(obj.type);
-    if (ImGui::Combo("Object Type", &type_idx, type_names,
-                     IM_ARRAYSIZE(type_names))) {
-      obj.type = static_cast<SilkObjectType>(type_idx);
-    }
-    ImGui::EndDisabled();
-
-    // cloth related settings
-    if (obj.type == SilkObjectType::Cloth) {
+      // object type combo box
       ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal);
-      draw_cloth_setting();
-      draw_collision_setting();
+      const char* type_names[] = {"None", "Cloth", "Obstacle"};
+      int type_idx = static_cast<int>(obj.type);
+      if (ImGui::Combo("Object Type", &type_idx, type_names,
+                       IM_ARRAYSIZE(type_names))) {
+        obj.type = static_cast<SilkObjectType>(type_idx);
+      }
       ImGui::EndDisabled();
 
-      ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal &&
-                           ctx_.ui_mode != UIMode::Paint);
-      draw_pin_group_setting();
-      ImGui::EndDisabled();
-    }
+      // cloth related settings
+      if (obj.type == SilkObjectType::Cloth) {
+        ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal);
+        draw_cloth_setting();
+        draw_collision_setting();
+        ImGui::EndDisabled();
 
-    // obstacle related settings
-    if (obj.type == SilkObjectType::Obstacle) {
-      ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal);
-      draw_collision_setting();
-      ImGui::EndDisabled();
+        ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal &&
+                             ctx_.ui_mode != UIMode::Paint);
+        draw_pin_group_setting();
+        ImGui::EndDisabled();
+      }
+
+      // obstacle related settings
+      if (obj.type == SilkObjectType::Obstacle) {
+        ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal);
+        draw_collision_setting();
+        ImGui::EndDisabled();
+      }
     }
   }
 

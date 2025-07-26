@@ -6,17 +6,13 @@
 namespace py = polyscope;
 
 Demo::Demo() {
-  py::state::userCallback = [this]() { this->draw(); };
-}
-
-Demo::Demo() {
   compute_dpi_scaling();
   update_style();
   py::state::userCallback = [this]() { this->draw(); };
 }
 
 void Demo::compute_dpi_scaling() {
-  dpi_scaling_ = py::getPlatformDisplayScale();
+  dpi_scaling_ = ImGui::GetIO().DisplayFramebufferScale.x;
 }
 
 void Demo::update_style() {
