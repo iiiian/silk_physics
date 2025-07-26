@@ -5,7 +5,7 @@ set(DEMO_SOURCES
     src/widgets/cloth_simulator_widget.cpp
     src/widgets/help_bar_widget.cpp
     src/widgets/mesh_statistic_widget.cpp
-    src/widgets/model_loader_widget.cpp
+    src/widgets/scene_widget.cpp
     src/widgets/selector_widget.cpp
 )
 

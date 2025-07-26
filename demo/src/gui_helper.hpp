@@ -5,42 +5,52 @@
 
 #include <Eigen/Core>
 #include <cstdint>
+#include <silk/silk.hpp>
+#include <vector>
 
-#include "eigen_alias.hpp"
-#include "flags.hpp"
+enum class SilkObjectType : int { None = 0, Cloth = 1, Obstacle = 2 };
 
-enum class UIMode { Normal, Paint, ClothSim };
-// clang-format off
-const std::string NORMAL_MODE_HELP_TXT =
-    "NORMAL MODE    |    Left Click Rotate / Right Click Move";
-const std::string PAINT_MODE_HELP_TXT =
-    "PAINT MODE    |    Left Click Paint / Right Click Erase";
-const std::string CLOTH_SIM_MODE_HELP_TXT =
-    "CLOTH SIM MODE    |    Left Click Rotate / Right Click Move/ Ctrl + Left Click Drag";
-// clang-format on
+class Object {
+ public:
+  std::string name;
 
-enum class EventFlag : uint32_t { NoEvent = 0, MeshChange = 1 };
-template <>
-inline constexpr bool is_bitflag_v<EventFlag> = true;
+  Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor> V;
+  Eigen::Matrix<int, Eigen::Dynamic, 3, Eigen::RowMajor> F;
+  polyscope::SurfaceMesh* mesh;
+  int vert_num = 0;
+  int edge_num = 0;
+  int face_num = 0;
 
-struct UIContext {
-  UIMode ui_mode = UIMode::Normal;
-  polyscope::SurfaceMesh* p_surface = nullptr;
-  float mesh_diag = 0;
-  std::unordered_set<int> selection;
-  std::string help_text = NORMAL_MODE_HELP_TXT;
+  SilkObjectType type = SilkObjectType::None;
+  uint32_t silk_handle = 0;
+
+  std::unordered_set<int> pinned;
+  silk::ClothConfig cloth_config;
+  silk::CollisionConfig collision_config;
+
+  bool pinned_changed = true;
+  bool physical_config_changed = true;
+  bool collision_config_changed = true;
+
+  glm::mat4x4 old_transformation;
 };
 
-struct EngineContext {
-  // Basic mesh
-  // V needs to be row major for easy vectorization
-  Verts V;
-  Faces F;
+enum class UIMode { Normal, Paint, Sim };
+// clang-format off
+// clang-format on
+
+struct Context {
+  UIMode ui_mode = UIMode::Normal;
+  int selection = -1;
+  std::vector<Object> objects;
+  silk::GlobalConfig global_config;
+  silk::World silk_world;
 };
 
 class IWidget {
  public:
   virtual ~IWidget() = default;
-  virtual EventFlag draw() = 0;
-  virtual void on_event(EventFlag events) = 0;
+  virtual void draw() = 0;
 };
+
+void update_mesh_stat(Object& obj);

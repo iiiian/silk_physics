@@ -26,12 +26,36 @@ struct KDTreeStatistic {
 };
 
 class KDTree {
+ public:
+  using Verts = Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor>;
+
+ private:
   using Iter = std::vector<int>::iterator;
 
-  KDNode *_p_root = nullptr;
-  const Eigen::MatrixX3f *_p_verts = nullptr;
-  KDTreeStatistic _stats;
+  // A node is deemed unbalanced if
+  // (vertex num) / (total vertex num) < (threshold)
+  static constexpr float UNBALANCE_THRESHOLD = 0.3f;
+  static constexpr int MEDIUM_SAMPL_NUM = 11;
+  static constexpr int MAX_DEPTH = 15;
+  static constexpr int LEAF_VERT_NUM = 5;
 
+  KDNode *p_root_ = nullptr;
+  Verts V_;
+  KDTreeStatistic stats_;
+
+ public:
+  KDTree(Verts V);
+  ~KDTree();
+  KDTree(KDTree &) = delete;
+  KDTree &operator=(KDTree &) = delete;
+
+  std::vector<int> find_neighbors(const Eigen::RowVector3f &point,
+                                  float radius) const;
+  int find_closest(const Eigen::RowVector3f &point) const;
+
+  KDTreeStatistic get_statistic() const;
+
+ private:
   int next_axis(int idx);
   // choose n element randomly and place them at the begining of the span
   void fisher_yates_shuffle(Iter begin, Iter end, int n) const;
@@ -47,27 +71,4 @@ class KDTree {
 
   void update_neighbors(const Eigen::RowVector3f &point, float radius,
                         const KDNode *p_node, std::vector<int> &result) const;
-
- public:
-  // A node is deemed unbalanced if
-  // (vertex num) / (total vertex num) < (threshold)
-  const float _unbalance_node_threshold = 0.3;
-
-  int median_sample_num = 11;
-  int max_depth = 15;
-  int leaf_vert_num = 5;
-
-  KDTree() = default;
-  ~KDTree();
-  KDTree(KDTree &) = delete;
-  KDTree &operator=(KDTree &) = delete;
-
-  void init(const Eigen::MatrixX3f *p_verts);
-  void clear();
-  std::vector<int> find_neighbors(const Eigen::RowVector3f &point,
-                                  float radius) const;
-  int find_closest(const Eigen::RowVector3f &point) const;
-
-  KDTreeStatistic get_statistic() const;
-  const KDNode *get_root() const;
 };
