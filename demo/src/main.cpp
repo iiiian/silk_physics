@@ -10,6 +10,7 @@ namespace py = polyscope;
 int main(int argc, char** argv) {
   spdlog::set_level(spdlog::level::debug);
 
+  py::options::buildDefaultGuiPanels = false;
   py::init();
   py::view::setUpDir(polyscope::UpDir::ZUp);
   py::view::setFrontDir(polyscope::FrontDir::XFront);
