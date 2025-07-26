@@ -1,21 +1,22 @@
 #pragma once
 
 #include "gui_helper.hpp"
-#include "widgets/cloth_simulator_widget.hpp"
 #include "widgets/help_bar_widget.hpp"
-#include "widgets/mesh_statistic_widget.hpp"
-#include "widgets/model_loader_widget.hpp"
-#include "widgets/selector_widget.hpp"
+#include "widgets/object_setting_widget.hpp"
+#include "widgets/scene_widget.hpp"
+#include "widgets/sim_setting_widget.hpp"
+#include "widgets/simulator_widget.hpp"
+#include "widgets/statistic_widget.hpp"
 
 class Demo {
-  UIContext ui_ctx_ = {};
-  EngineContext engine_ctx_ = {};
+  Context ctx_ = {};
 
-  ModelLoaderWidget model_loader_widget_{ui_ctx_, engine_ctx_};
-  SelectorWidget selector_widget_{ui_ctx_};
-  ClothSimulatorWidget cloth_sim_widget_{ui_ctx_, engine_ctx_};
-  HelpBarWidget help_bar_widget_{ui_ctx_};
-  MeshStatisticWidget mesh_stat_widget_{engine_ctx_};
+  SceneWidget scene_widget_{ctx_};
+  ObjectSettingWidget object_setting_widget_{ctx_};
+  SimSettingWidget sim_setting_widget_{ctx_};
+  SimulatorWidget simulator_widget_{ctx_};
+  HelpBarWidget help_bar_widget_{ctx_};
+  StatisticWidget statistic_widget_{ctx_};
 
   void draw();
 

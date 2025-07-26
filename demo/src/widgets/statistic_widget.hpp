@@ -2,11 +2,10 @@
 
 #include "../gui_helper.hpp"
 
-class HelpBarWidget : public IWidget {
+class StatisticWidget : public IWidget {
   Context& ctx_;
 
  public:
-  explicit HelpBarWidget(Context& context);
-
+  explicit StatisticWidget(Context& context);
   void draw() override;
 };
