@@ -59,7 +59,7 @@ struct GlobalConfig {
   float dt = 1.0f / 60.0f;
   float ccd_walkback = 0.8f;
   float toi_tolerance = 0.1f;
-  float toi_refine_iteration = 5;
+  int toi_refine_iteration = 5;
   float eps = 1e-6f;
 };
 
