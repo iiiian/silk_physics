@@ -14,7 +14,7 @@ void SimulatorWidget::init_cloth(Object& obj) {
   bool is_changed = obj.physical_config_changed ||
                     obj.collision_config_changed || obj.pinned_changed;
 
-  if (is_changed) {
+  if (is_changed && obj.silk_handle != 0) {
     auto res = ctx_.silk_world.remove_cloth(obj.silk_handle);
     assert((res == silk::Result::Success));
   }
@@ -26,6 +26,7 @@ void SimulatorWidget::init_cloth(Object& obj) {
 
     std::vector<float> vert_data;
     obj.mesh->vertexPositions.ensureHostBufferPopulated();
+    assert(obj.mesh->vertexPositions.data.size() != 0);
     for (auto vec3 : obj.mesh->vertexPositions.data) {
       vert_data.push_back(vec3[0]);
       vert_data.push_back(vec3[1]);
@@ -34,6 +35,7 @@ void SimulatorWidget::init_cloth(Object& obj) {
 
     silk::MeshConfig mesh_config;
     mesh_config.verts = {vert_data.data(), int(vert_data.size())};
+    mesh_config.faces = {obj.F.data(), int(obj.F.size())};
 
     auto res =
         ctx_.silk_world.add_cloth(obj.cloth_config, obj.collision_config,

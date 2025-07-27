@@ -43,6 +43,8 @@ void Demo::draw() {
   sim_setting_widget_.draw();
   simulator_widget_.draw();
   ImGui::End();
+
+  help_bar_widget_.draw();
 }
 
 void Demo::run() { py::show(); }
