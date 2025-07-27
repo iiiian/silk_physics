@@ -86,6 +86,10 @@ class Manager {
   }
 
   bool remove(const Handle& handle) {
+    if (handle.is_empty()) {
+      return false;
+    }
+
     Handle& dead_slot = slots_[handle.get_index()];
     if (!dead_slot.get_is_valid() ||
         dead_slot.get_generation() != handle.get_generation()) {
