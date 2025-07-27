@@ -195,11 +195,42 @@ class KDTree {
 
  public:
   KDTree() = default;
+
   KDTree(KDTree&) = delete;
-  KDTree(KDTree&&) = default;
+
+  KDTree(KDTree&& tree) {
+    collider_num_ = tree.collider_num_;
+    colliders_ = tree.colliders_;
+    root_ = tree.root_;
+    stack_ = std::move(tree.stack_);
+    proxies_ = std::move(tree.proxies_);
+    buffer_ = std::move(tree.buffer_);
+    local_cache_ = std::move(tree.local_cache_);
+
+    tree.collider_num_ = 0;
+    tree.colliders_ = nullptr;
+    tree.root_ = nullptr;
+  }
+
   ~KDTree() { delete_subtree(root_); }
+
   KDTree& operator=(KDTree&) = delete;
-  KDTree& operator=(KDTree&&) = default;
+
+  KDTree& operator=(KDTree&& tree) {
+    collider_num_ = tree.collider_num_;
+    colliders_ = tree.colliders_;
+    root_ = tree.root_;
+    stack_ = std::move(tree.stack_);
+    proxies_ = std::move(tree.proxies_);
+    buffer_ = std::move(tree.buffer_);
+    local_cache_ = std::move(tree.local_cache_);
+
+    tree.collider_num_ = 0;
+    tree.colliders_ = nullptr;
+    tree.root_ = nullptr;
+
+    return *this;
+  }
 
   void init(C* colliders, int collider_num) {
     assert(colliders);

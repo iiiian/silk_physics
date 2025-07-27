@@ -81,7 +81,10 @@ bool Solver::init(Registry& registry) {
   constrains_.clear();
   for (Entity& e : registry.get_all_entities()) {
     auto data = registry.get<SolverData>(e);
-    mass(Eigen::seqN(data->state_offset, data->state_num)) = data->mass;
+
+    // vectorize mass
+    mass(Eigen::seqN(data->state_offset, data->state_num)) =
+        data->mass.replicate(1, 3).reshaped<Eigen::RowMajor>();
 
     sparse_to_triplets(data->weighted_AA, data->state_offset,
                        data->state_offset, AA_triplets);
@@ -92,9 +95,8 @@ bool Solver::init(Registry& registry) {
   }
 
   // compute internal matrices
-  Eigen::VectorXf vec_mass = mass.replicate(1, 3).reshaped<Eigen::RowMajor>();
   mass_ = Eigen::SparseMatrix<float>(state_num_, state_num_);
-  mass_ = vec_mass.asDiagonal();
+  mass_ = mass.asDiagonal();
 
   Eigen::SparseMatrix<float> AA(state_num_, state_num_);
   AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
@@ -125,7 +127,7 @@ bool Solver::lg_solve(Registry& registry, Eigen::VectorXf& predict_state) {
   // momentum energy term
   Eigen::VectorXf b = (mass_ / dt / dt) * predict_state +
                       (mass_ / dt) * (predict_state - prev_state_) +
-                      mass_ * const_acceleration.replicate(state_num_, 1);
+                      mass_ * const_acceleration.replicate(state_num_ / 3, 1);
   Eigen::SparseMatrix<float> A(state_num_, state_num_);
 
   // porject barrier constrain
@@ -200,8 +202,10 @@ bool Solver::step(Registry& registry,
 
   // prediction based on linear velocity
   Eigen::VectorXf velocity = (curr_state_ - prev_state_) / dt;
-  Eigen::VectorXf acceleration = (velocity - prev_velocity) / dt +
-                                 const_acceleration.replicate(state_num_, 1);
+  Eigen::VectorXf acceleration =
+      (velocity - prev_velocity) / dt +
+      const_acceleration.replicate(state_num_ / 3, 1);
+
   Eigen::VectorXf predict_state =
       curr_state_ + dt * velocity + dt * dt * acceleration;
   prev_velocity = velocity;
@@ -232,6 +236,8 @@ bool Solver::step(Registry& registry,
       state_diff = (predict_state - curr_state_).cwiseAbs().sum();
     }
   }
+
+  exit(0);
 
   return true;
 }

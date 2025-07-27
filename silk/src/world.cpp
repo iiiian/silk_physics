@@ -104,9 +104,10 @@ class World::WorldImpl {
     // make tri mesh
     TriMesh m;
     m.V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
-                                      mesh_config.verts.num, 3);
+                                      mesh_config.verts.num / 3, 3);
+    assert((mesh_config.faces.num != 0));
     m.F = Eigen::Map<const RMatrix3i>(mesh_config.faces.data,
-                                      mesh_config.faces.num, 3);
+                                      mesh_config.faces.num / 3, 3);
     igl::edges(m.F, m.E);
     m.avg_edge_length = 0.0f;
     for (int i = 0; i < m.E.rows(); ++i) {
@@ -255,9 +256,9 @@ class World::WorldImpl {
 
     // make tri mesh
     m->V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
-                                       mesh_config.verts.num, 3);
+                                       mesh_config.verts.num / 3, 3);
     m->F = Eigen::Map<const RMatrix3i>(mesh_config.faces.data,
-                                       mesh_config.faces.num, 3);
+                                       mesh_config.faces.num / 3, 3);
     igl::edges(m->F, m->E);
     m->avg_edge_length = 0.0f;
     for (int i = 0; i < m->E.rows(); ++i) {
@@ -354,9 +355,9 @@ class World::WorldImpl {
     // make tri mesh
     TriMesh m;
     m.V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
-                                      mesh_config.verts.num, 3);
+                                      mesh_config.verts.num / 3, 3);
     m.F = Eigen::Map<const RMatrix3i>(mesh_config.faces.data,
-                                      mesh_config.faces.num, 3);
+                                      mesh_config.faces.num / 3, 3);
     igl::edges(m.F, m.E);
     m.avg_edge_length = 0.0f;
     for (int i = 0; i < m.E.rows(); ++i) {
@@ -430,8 +431,10 @@ class World::WorldImpl {
     auto m = registry_.get<TriMesh>(*e);
     assert(m);
 
-    m->V = Eigen::Map<const RMatrix3f>(config.verts.data, config.verts.num, 3);
-    m->F = Eigen::Map<const RMatrix3i>(config.faces.data, config.faces.num, 3);
+    m->V =
+        Eigen::Map<const RMatrix3f>(config.verts.data, config.verts.num / 3, 3);
+    m->F =
+        Eigen::Map<const RMatrix3i>(config.faces.data, config.faces.num / 3, 3);
     igl::edges(m->F, m->E);
     m->avg_edge_length = 0.0f;
     for (int i = 0; i < m->E.rows(); ++i) {

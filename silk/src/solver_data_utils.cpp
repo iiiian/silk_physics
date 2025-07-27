@@ -12,6 +12,7 @@
 #include <unsupported/Eigen/KroneckerProduct>
 
 #include "ecs.hpp"
+#include "eigen_utils.hpp"
 #include "solver_constrain.hpp"
 
 namespace silk {
@@ -26,7 +27,9 @@ class ClothElasticConstrain : public ISolverConstrain {
  public:
   ClothElasticConstrain(Eigen::Matrix<float, 6, 9> jacobian_op,
                         Eigen::Vector3i index, float weight)
-      : jacobian_op_(std::move(jacobian_op)), index_(std::move(index)), weight_(weight) {}
+      : jacobian_op_(std::move(jacobian_op)),
+        index_(std::move(index)),
+        weight_(weight) {}
 
   // impl solver constrain interface
 
@@ -141,6 +144,7 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   // this is the weighted AA for bending energy.
   // assume initial curvature is 0 so there is no solver constrain for bending
   Eigen::SparseMatrix<float> CWC = c.bending_stiffness * C.transpose() * W * C;
+  vectorize_sparse_to_triplets(CWC, 0, 0, AA_triplets);
 
   // triangle area
   Eigen::VectorXf area;
@@ -199,14 +203,14 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   for (int i = 0; i < vert_num; ++i) {
     data.mass(i) = mass.coeff(i, i);
   }
+  data.weighted_AA.resize(data.state_num, data.state_num);
   data.weighted_AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
-  data.weighted_AA += CWC;
   data.constrains = std::move(constrains);
 
   return data;
 }
 
-void add_solver_data(Registry& registry, Entity& entity, int state_offset) {
+void init_all_solver_data(Registry& registry) {
   int offset_counter = 0;
   for (Entity& e : registry.get_all_entities()) {
     auto cloth_config = registry.get<ClothConfig>(e);
@@ -229,7 +233,5 @@ void add_solver_data(Registry& registry, Entity& entity, int state_offset) {
     }
   }
 }
-
-void init_all_solver_data(Registry& registry) {}
 
 }  // namespace silk
