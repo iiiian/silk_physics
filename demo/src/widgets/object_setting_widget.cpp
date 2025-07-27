@@ -77,10 +77,6 @@ void ObjectSettingWidget::select_vertices_in_sphere(bool add_to_selection) {
 }
 
 void ObjectSettingWidget::handle_paint_input() {
-  if (ctx_.ui_mode != UIMode::Paint) {
-    return;
-  }
-
   Object& obj = ctx_.objects[ctx_.selection];
 
   ImVec2 mouse_pos = ImGui::GetMousePos();
@@ -234,16 +230,18 @@ void ObjectSettingWidget::draw_collision_setting() {
 }
 
 void ObjectSettingWidget::draw_pin_group_setting() {
-  ImGui::SeparatorText("Collision Setting");
+  ImGui::SeparatorText("Pining Setting");
 
   Object& obj = ctx_.objects[ctx_.selection];
 
   ImGui::Text("%d vertices pinned", int(obj.pinned.size()));
 
-  ImGui::DragFloat("Brush Size", &selector_radius_);
+  if (ImGui::DragFloat("Brush Size", &selector_radius_)) {
+    selector_sphere_->setPointRadius(selector_radius_, false);
+  }
 
   bool is_painting = (ctx_.ui_mode == UIMode::Paint);
-  if (ImGui::Button(is_painting ? "Paint Pinned Vertices" : "Stop Painting")) {
+  if (ImGui::Button(is_painting ? "Stop Painting" : "Start Painting")) {
     if (is_painting) {
       leave_paint_mode();
     } else {

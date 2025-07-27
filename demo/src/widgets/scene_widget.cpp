@@ -133,6 +133,15 @@ void SceneWidget::draw() {
       }
     }
     ImGui::EndDisabled();
+
+    std::vector<const char*> names;
+    names.reserve(ctx_.objects.size());
+    for (const auto& obj : ctx_.objects) {
+      names.push_back(obj.name.c_str());
+    }
+
+    ImGui::SetNextItemWidth(-1);
+    ImGui::ListBox("##Objects", &ctx_.selection, names.data(), names.size(), 5);
   }
 
   ImGui::EndDisabled();
