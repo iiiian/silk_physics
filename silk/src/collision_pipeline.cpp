@@ -2,7 +2,9 @@
 
 #include <Eigen/Core>
 #include <cassert>
+#include <iostream>
 #include <optional>
+#include <unordered_set>
 #include <vector>
 
 #include "ccd.hpp"
@@ -122,6 +124,9 @@ std::vector<Collision> CollisionPipeline::find_collision(
   auto object_ccache = object_broadphase(object_colliders);
   std::vector<Collision> collisions;
 
+  std::cout << "object phase detect " << object_ccache.size() << " pairs"
+            << std::endl;
+
   // mesh level object-object collision
   CollisionFilterCallback<MeshCollider> dummy_filter =
       [](const MeshCollider& a, const MeshCollider& b) -> bool { return true; };
@@ -131,6 +136,10 @@ std::vector<Collision> CollisionPipeline::find_collision(
     KDTree<MeshCollider>::test_tree_collision(oa->mesh_collider_tree,
                                               ob->mesh_collider_tree,
                                               dummy_filter, mesh_ccache);
+
+    std::cout << "mesh tree tree broadphase detect " << mesh_ccache.size()
+              << " pairs" << std::endl;
+
     // object object collision narrowphase
     for (auto& [ma, mb] : mesh_ccache) {
       auto collision = narrow_phase(*oa, *ma, *ob, *mb, dt);
@@ -138,6 +147,8 @@ std::vector<Collision> CollisionPipeline::find_collision(
         collisions.emplace_back(std::move(*collision));
       }
     }
+
+    mesh_ccache.clear();
   }
 
   // mesh level self collision
@@ -174,16 +185,69 @@ std::vector<Collision> CollisionPipeline::find_collision(
     }
 
     // self collision broadphase
-    mesh_ccache.clear();
     o.mesh_collider_tree.test_self_collision(neighbor_filter, mesh_ccache);
 
+    std::cout << "mesh tree self broadphase detect " << mesh_ccache.size()
+              << " pairs out of " << o.mesh_colliders.size() << " primitives"
+              << std::endl;
+
+    int pt_counter = 0;
+    int ee_counter = 0;
+    for (auto& p : mesh_ccache) {
+      if (p.first->type == MeshColliderType::Edge ||
+          p.second->type == MeshColliderType::Edge) {
+        ++ee_counter;
+      } else {
+        ++pt_counter;
+      }
+    }
+    std::cout << pt_counter << " pt pairs and " << ee_counter << " ee pairs"
+              << std::endl;
+
+    // Canonicalize without UB from raw '<' on unrelated pointers
+    auto canon = [](std::pair<MeshCollider*, MeshCollider*>& p) {
+      if (std::less<>{}(p.second, p.first)) std::swap(p.first, p.second);
+      return p;
+    };
+
+    struct Hash {
+      size_t operator()(
+          const std::pair<MeshCollider*, MeshCollider*>& p) const {
+        return std::hash<void*>{}(p.first) ^
+               (std::hash<void*>{}(p.second) << 1);
+      }
+    };
+    struct Eq {
+      bool operator()(
+          const std::pair<MeshCollider*, MeshCollider*>& a,
+          const std::pair<MeshCollider*, MeshCollider*>& b) const noexcept {
+        return a.first == b.first && a.second == b.second;
+      }
+    };
+
+    std::unordered_set<std::pair<MeshCollider*, MeshCollider*>, Hash, Eq> seen;
+
+    for (auto raw : mesh_ccache) {
+      std::pair<MeshCollider*, MeshCollider*> p = canon(raw);
+      if (!seen.insert(p).second) {
+        assert(false && "duplicate pair");
+      }
+    }
+
     // self collision narrowphase
+    int narrowphase_count = 0;
     for (auto& [ma, mb] : mesh_ccache) {
       auto collision = narrow_phase(o, *ma, o, *mb, dt);
       if (collision) {
         collisions.emplace_back(std::move(*collision));
       }
+      ++narrowphase_count;
+      if (narrowphase_count % 1000 == 0) {
+        std::cout << "narrow phase count " << narrowphase_count << std::endl;
+      }
     }
+
+    mesh_ccache.clear();
   }
 
   return collisions;
