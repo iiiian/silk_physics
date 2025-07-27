@@ -53,34 +53,38 @@ float CCDPoly::eval_derivative(float x) const {
 
 float CCDPoly::refine_newton(float x) const {
   for (int i = 0; i < refine_it_; ++i) {
-    x = x - x / eval_derivative(x);
+    x = x - eval(x) / eval_derivative(x);
   }
   return x;
 }
 
 float CCDPoly::forward_newton(float x) const {
   float x_next = x + tol_;
-  float x_next_val = eval(x_next);
-  while (x_next_val > 0) {
-    x = x_next - x_next_val / eval_derivative(x_next);
+  float x_next_eval = eval(x_next);
+  while (x_next_eval > 0) {
+    x = x_next - x_next_eval / eval_derivative(x_next);
     x_next = x + tol_;
-    x_next_val = eval(x_next);
+    x_next_eval = eval(x_next);
+
+    assert((x > 0.0f && x < 1.0f));
   }
 
-  if (x < tol_) {
-    return refine_newton(x);
-  }
+  // if (x < tol_) {
+  //   return refine_newton(x);
+  // }
 
   return x;
 }
 
 float CCDPoly::backward_newton(float x) const {
   float x_next = x - tol_;
-  float x_next_val = eval(x_next);
-  while (x_next_val < 0) {
-    x = x_next - x_next_val / eval_derivative(x_next);
+  float x_next_eval = eval(x_next);
+  while (x_next_eval < 0) {
+    x = x_next - x_next_eval / eval_derivative(x_next);
     x_next = x - tol_;
-    x_next_val = eval(x_next);
+    x_next_eval = eval(x_next);
+
+    assert((x > 0.0f && x < 1.0f));
   }
 
   if (x_next < tol_) {
