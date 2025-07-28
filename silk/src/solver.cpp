@@ -214,7 +214,7 @@ bool Solver::step(Registry& registry,
 
   float state_diff = std::numeric_limits<float>::infinity();
   int iter_count = 0;
-  while (state_diff > 1e-3f) {
+  while (state_diff > 5e-2f) {
     while (state_diff > 5e-2f) {
       std::cout << "Iter " << iter_count << ", state diff = " << state_diff
                 << std::endl;
@@ -227,31 +227,28 @@ bool Solver::step(Registry& registry,
 
     std::cout << "reach outer loop" << std::endl;
 
-    // update collision
-    update_all_physical_object_collider(registry, predict_state, prev_state_);
-
-    std::cout << "outer loop obj collider update fin" << std::endl;
-
-    collisions_ = collision_pipeline.find_collision(
-        registry.get_all<ObjectCollider>(), dt);
-
-    std::cout << "outer loop collision fin" << std::endl;
-
-    // ccd line search
-    if (!collisions_.empty()) {
-      float toi = std::numeric_limits<float>::infinity();
-      for (auto& c : collisions_) {
-        toi = std::min(toi, c.toi);
-      }
-
-      curr_state_ += ccd_walkback * toi * (predict_state - curr_state_);
-      state_diff = (predict_state - curr_state_).cwiseAbs().sum();
-    }
-
-    exit(0);
+    // // update collision
+    // update_all_physical_object_collider(registry, predict_state,
+    // prev_state_);
+    //
+    // std::cout << "outer loop obj collider update fin" << std::endl;
+    //
+    // collisions_ = collision_pipeline.find_collision(
+    //     registry.get_all<ObjectCollider>(), dt);
+    //
+    // std::cout << "outer loop collision fin" << std::endl;
+    //
+    // // ccd line search
+    // if (!collisions_.empty()) {
+    //   float toi = std::numeric_limits<float>::infinity();
+    //   for (auto& c : collisions_) {
+    //     toi = std::min(toi, c.toi);
+    //   }
+    //
+    //   curr_state_ += ccd_walkback * toi * (predict_state - curr_state_);
+    //   state_diff = (predict_state - curr_state_).cwiseAbs().sum();
+    // }
   }
-
-  exit(0);
 
   return true;
 }

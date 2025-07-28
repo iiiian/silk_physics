@@ -50,7 +50,7 @@ class World::WorldImpl {
     solver_.dt = c.dt;
     solver_.ccd_walkback = c.ccd_walkback;
     collision_pipeline_.toi_tolerance = c.toi_tolerance;
-    collision_pipeline_.toi_refine_it = c.toi_refine_iteration;
+    // collision_pipeline_.toi_refine_it = c.toi_refine_iteration;
     collision_pipeline_.eps = c.eps;
 
     return Result::Success;

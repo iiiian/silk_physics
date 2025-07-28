@@ -2,6 +2,7 @@
 
 #include <Eigen/Core>
 #include <cassert>
+#include <chrono>
 #include <iostream>
 #include <optional>
 #include <unordered_set>
@@ -48,7 +49,7 @@ std::optional<Collision> CollisionPipeline::narrow_phase(
   float damping = 0.5f * (oa.damping + ob.damping);
   float friction = 0.5f * (oa.friction + ob.friction);
   float h = std::min(oa.bbox_padding, ob.bbox_padding);
-  CCDConfig config = {dt, damping, friction, h, toi_tolerance, toi_refine_it,
+  CCDConfig config = {dt, damping, friction, h, toi_tolerance, toi_bisect_it,
                       eps};
 
   Eigen::Matrix<float, 3, 4> position_t0;
@@ -204,48 +205,60 @@ std::vector<Collision> CollisionPipeline::find_collision(
     std::cout << pt_counter << " pt pairs and " << ee_counter << " ee pairs"
               << std::endl;
 
-    // Canonicalize without UB from raw '<' on unrelated pointers
-    auto canon = [](std::pair<MeshCollider*, MeshCollider*>& p) {
-      if (std::less<>{}(p.second, p.first)) std::swap(p.first, p.second);
-      return p;
-    };
-
-    struct Hash {
-      size_t operator()(
-          const std::pair<MeshCollider*, MeshCollider*>& p) const {
-        return std::hash<void*>{}(p.first) ^
-               (std::hash<void*>{}(p.second) << 1);
-      }
-    };
-    struct Eq {
-      bool operator()(
-          const std::pair<MeshCollider*, MeshCollider*>& a,
-          const std::pair<MeshCollider*, MeshCollider*>& b) const noexcept {
-        return a.first == b.first && a.second == b.second;
-      }
-    };
-
-    std::unordered_set<std::pair<MeshCollider*, MeshCollider*>, Hash, Eq> seen;
-
-    for (auto raw : mesh_ccache) {
-      std::pair<MeshCollider*, MeshCollider*> p = canon(raw);
-      if (!seen.insert(p).second) {
-        assert(false && "duplicate pair");
-      }
-    }
+    // // Canonicalize without UB from raw '<' on unrelated pointers
+    // auto canon = [](std::pair<MeshCollider*, MeshCollider*>& p) {
+    //   if (std::less<>{}(p.second, p.first)) std::swap(p.first, p.second);
+    //   return p;
+    // };
+    //
+    // struct Hash {
+    //   size_t operator()(
+    //       const std::pair<MeshCollider*, MeshCollider*>& p) const {
+    //     return std::hash<void*>{}(p.first) ^
+    //            (std::hash<void*>{}(p.second) << 1);
+    //   }
+    // };
+    // struct Eq {
+    //   bool operator()(
+    //       const std::pair<MeshCollider*, MeshCollider*>& a,
+    //       const std::pair<MeshCollider*, MeshCollider*>& b) const noexcept {
+    //     return a.first == b.first && a.second == b.second;
+    //   }
+    // };
+    //
+    // std::unordered_set<std::pair<MeshCollider*, MeshCollider*>, Hash, Eq>
+    // seen;
+    //
+    // for (auto raw : mesh_ccache) {
+    //   std::pair<MeshCollider*, MeshCollider*> p = canon(raw);
+    //   if (!seen.insert(p).second) {
+    //     assert(false && "duplicate pair");
+    //   }
+    // }
 
     // self collision narrowphase
-    int narrowphase_count = 0;
-    for (auto& [ma, mb] : mesh_ccache) {
-      auto collision = narrow_phase(o, *ma, o, *mb, dt);
-      if (collision) {
-        collisions.emplace_back(std::move(*collision));
-      }
-      ++narrowphase_count;
-      if (narrowphase_count % 1000 == 0) {
-        std::cout << "narrow phase count " << narrowphase_count << std::endl;
+
+    auto timer0 = std::chrono::steady_clock::now();
+
+    for (int i = 0; i < 100; ++i) {
+      int narrowphase_count = 0;
+      collisions.clear();
+      for (auto& [ma, mb] : mesh_ccache) {
+        auto collision = narrow_phase(o, *ma, o, *mb, dt);
+        if (collision) {
+          collisions.emplace_back(std::move(*collision));
+        }
+        ++narrowphase_count;
+        // if (narrowphase_count % 1000 == 0) {
+        //   std::cout << "narrow phase count " << narrowphase_count <<
+        //   std::endl;
+        // }
       }
     }
+
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - timer0);
+    std::cout << ms.count() << std::endl;
 
     mesh_ccache.clear();
   }

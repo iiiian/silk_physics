@@ -51,47 +51,21 @@ float CCDPoly::eval_derivative(float x) const {
   return x * (x * 3 * a_ + 2 * b_) + c_;
 }
 
-float CCDPoly::refine_newton(float x) const {
-  for (int i = 0; i < refine_it_; ++i) {
-    x = x - eval(x) / eval_derivative(x);
-  }
-  return x;
-}
-
-float CCDPoly::forward_newton(float x) const {
-  float x_next = x + tol_;
-  float x_next_eval = eval(x_next);
-  while (x_next_eval > 0) {
-    x = x_next - x_next_eval / eval_derivative(x_next);
-    x_next = x + tol_;
-    x_next_eval = eval(x_next);
-
-    assert((x > 0.0f && x < 1.0f));
+std::optional<float> CCDPoly::bisect(float l, float r) const {
+  for (int i = 0; i < bisect_it_; ++i) {
+    float m = 0.5f * (l + r);
+    if (eval(m) > h_) {
+      l = m;
+    } else {
+      r = m;
+    }
   }
 
-  // if (x < tol_) {
-  //   return refine_newton(x);
-  // }
-
-  return x;
-}
-
-float CCDPoly::backward_newton(float x) const {
-  float x_next = x - tol_;
-  float x_next_eval = eval(x_next);
-  while (x_next_eval < 0) {
-    x = x_next - x_next_eval / eval_derivative(x_next);
-    x_next = x - tol_;
-    x_next_eval = eval(x_next);
-
-    assert((x > 0.0f && x < 1.0f));
+  if (l < eps_) {
+    return std::nullopt;
   }
 
-  if (x_next < tol_) {
-    return refine_newton(x);
-  }
-
-  return x_next;
+  return l;
 }
 
 std::optional<float> CCDPoly::cubic_ccd() const {
@@ -104,7 +78,7 @@ std::optional<float> CCDPoly::cubic_ccd() const {
   }
 
   float tmp0 = b_ * b_ - 3 * a_ * c_;
-  float eval_t1 = a_ + b_ + c_ + d_;
+  float eval_t1 = eval(1.0f);
   // case 1, 2, 3, 4
   if (tmp0 < eps_) {
     // case 1, 3
@@ -113,25 +87,14 @@ std::optional<float> CCDPoly::cubic_ccd() const {
     }
 
     // case 2, 4
-    if (eval_t1 > eps_) {
+    if (eval_t1 > h_) {
       return std::nullopt;
     }
-    if (eval_t1 > -eps_) {
+    if (eval_t1 > -h_) {
       return eval_t1;
     }
 
-    float eval_mirror = eval(-b_ / a_ / 3);  // mirror point
-    if (std::abs(eval_mirror) < eps_) {
-      return eval_mirror;
-    }
-    // collision between mirror point, t1
-    if (eval_mirror > 0) {
-      return backward_newton(1.0f);
-    }
-    // collision between t0, mirror point
-    else {
-      return forward_newton(0.0f);
-    }
+    return bisect(0.0f, 1.0f);
   }
 
   float tmp1 = -b_ / (3 * a_);  // mirror point
@@ -144,159 +107,153 @@ std::optional<float> CCDPoly::cubic_ccd() const {
   if (a_ > 0) {
     // t0 after e2
     // no collision
-    if (0 > e2) {
+    if (0.0f > e2) {
       return std::nullopt;
     }
 
     // t0 after e1 before e2, t1 before e2
     // potential collision between t0 t1
-    if (0 > e1 && 1 < e2) {
-      if (eval_t1 > eps_) {
+    if (0.0f > e1 && 1.0f < e2) {
+      if (eval_t1 > h_) {
         return std::nullopt;
       }
-      if (eval_t1 > -eps_) {
+      if (eval_t1 > -h_) {
         return eval_t1;
       }
-      if (tmp1 > 1.0f) {
-        return backward_newton(1.0f);
-      } else {
-        return forward_newton(tmp1);
-      }
+
+      return bisect(0.0f, 1.0f);
     }
 
     // t0 after e1 before e2, t1 after e2
     // potential collision between t0, e2
-    if (0 > e1 && 1 > e2) {
+    if (0.0f > e1 && 1.0f > e2) {
       float eval_e2 = eval(e2);
-      if (eval_e2 > eps_) {
+      if (eval_e2 > h_) {
         return std::nullopt;
       }
-      if (eval_e2 > -eps_) {
+      if (eval_e2 > -h_) {
         return eval_e2;
       }
-      // start from mirror point
-      return forward_newton(tmp1);
+
+      return bisect(0.0f, e2);
     }
 
     // t0 before e1, t1 before e1
     // no collision
-    if (1 < e1) {
+    if (1.0f < e1) {
       return std::nullopt;
     }
 
     // t0 before e1, t1 after e1 before e2
     // potential collision between e1 t1
-    if (1 < e2) {
-      if (eval_t1 > eps_) {
+    if (1.0f < e2) {
+      if (eval_t1 > h_) {
         return std::nullopt;
       }
-      if (eval_t1 > -eps_) {
+      if (eval_t1 > -h_) {
         return eval_t1;
       }
-      if (tmp1 > 1.0f) {
-        return backward_newton(1.0f);
-      } else {
-        return forward_newton(tmp1);
-      }
+      return bisect(e1, 1.0f);
     }
 
     // t0 before e1, t1 after e2
     // potential between e1 e2
     float eval_e2 = eval(e2);
-    if (eval_e2 > eps_) {
+    if (eval_e2 > h_) {
       return std::nullopt;
     }
-    if (eval_e2 > -eps_) {
+    if (eval_e2 > -h_) {
       return eval_e2;
     }
-    if (eval(tmp1) > 0) {
-      return forward_newton(tmp1);
-    } else {
-      return backward_newton(tmp1);
-    }
+    return bisect(e1, e2);
   }
 
   // case 6
 
   // t0 after e2
   // potential collision between t0 t1
-  if (0 > e2) {
-    if (eval_t1 > eps_) {
+  if (0.0f > e2) {
+    if (eval_t1 > h_) {
       return std::nullopt;
     }
-    if (eval_t1 > -eps_) {
+    if (eval_t1 > -h_) {
       return eval_t1;
     }
-    return backward_newton(1.0f);
+
+    return bisect(0.0f, 1.0f);
   }
 
   // t0 after e1 before e2, t1 before e2
   // no collision
-  if (0 > e1 && 1 < e2) {
+  if (0.0f > e1 && 1.0f < e2) {
     return std::nullopt;
   }
 
   // t0 after e1 before e2 , t1 after e2
   // potential collision between e2 t1
-  if (0 > e1 && 1 > e2) {
-    if (eval_t1 > eps_) {
+  if (0.0f > e1 && 1.0f > e2) {
+    if (eval_t1 > h_) {
       return std::nullopt;
     }
-    if (eval_t1 > -eps_) {
+    if (eval_t1 > -h_) {
       return eval_t1;
     }
-    return backward_newton(1.0f);
+
+    return bisect(e2, 1.0f);
   }
 
   // t0 before e1, t1 before e1
   // potential collision before t0 t1
-  if (1 < e1) {
-    if (eval_t1 > eps_) {
+  if (1.0f < e1) {
+    if (eval_t1 > h_) {
       return std::nullopt;
     }
-    if (eval_t1 > -eps_) {
+    if (eval_t1 > -h_) {
       return eval_t1;
     }
-    return forward_newton(0.0f);
+
+    return bisect(0.0f, 1.0f);
   }
 
   // t0 before e1, t1 after e1 before e2
   // potential collision t0 e1
-  if (1 < e2) {
+  if (1.0f < e2) {
     float eval_e1 = eval(e1);
-    if (eval_e1 > eps_) {
+    if (eval_e1 > h_) {
       return std::nullopt;
     }
-    if (eval_e1 > -eps_) {
+    if (eval_e1 > -h_) {
       return eval_e1;
     }
-    return forward_newton(0.0f);
+
+    return bisect(0.0f, 1.0f);
   }
 
   // t0 before e1, t1 after e2
   // potential collision between t0 e1 and e2 t1
   // test t0 e1 collision
   float eval_e1 = eval(e1);
-  if (eval_e1 < eps_) {
-    if (eval_e1 > -eps_) {
+  if (eval_e1 < h_ && d_ > h_) {
+    if (eval_e1 > -h_) {
       return eval_e1;
     }
-    return forward_newton(0.0f);
+
+    return bisect(0.0f, e1);
   }
   // no collision between t0 e1, test e2 t1
-  if (eval_t1 > eps_) {
+  if (eval_t1 > h_) {
     return std::nullopt;
   }
-  if (eval_t1 > -eps_) {
+  if (eval_t1 > -h_) {
     return eval_t1;
   }
-  return backward_newton(1.0f);
+  return bisect(e2, 1.0f);
 }
 
 std::optional<CCDPoly> CCDPoly::try_make_ccd_poly(
     const Eigen::Matrix<float, 3, 4>& position_t0,
-    const Eigen::Matrix<float, 3, 4>& position_t1, float tol, int refine_it,
-    float eps) {
+    const Eigen::Matrix<float, 3, 4>& position_t1, float tol, int bisect_it,
+    float h, float eps) {
   // unpack position
   auto x00 = position_t0.col(0);  // vertex 0 at t0
   auto x10 = position_t0.col(1);  // vertex 1 at t0
@@ -351,7 +308,10 @@ std::optional<CCDPoly> CCDPoly::try_make_ccd_poly(
   poly.c_ = c;
   poly.d_ = d;
   poly.tol_ = tol;
-  poly.refine_it_ = refine_it;
+  poly.bisect_it_ = bisect_it;
+  // poly.refine_it_ = refine_it;
+  // poly.h_ = p10cp20.norm() * h;
+  poly.h_ = 1e-6f;
   poly.eps_ = eps;
 
   return poly;

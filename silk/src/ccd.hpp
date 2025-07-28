@@ -13,7 +13,7 @@ struct CCDConfig {
   float friction;
   float h;
   float tol;
-  int refine_it;
+  int bisect_it;
   float eps;
 };
 

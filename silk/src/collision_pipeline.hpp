@@ -12,7 +12,7 @@ namespace silk {
 class CollisionPipeline {
  public:
   float toi_tolerance = 0.05;
-  int toi_refine_it = 10;
+  int toi_bisect_it = 4;
   float eps = 1e-6;
 
   std::vector<Collision> find_collision(

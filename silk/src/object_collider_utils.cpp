@@ -30,7 +30,8 @@ ObjectCollider make_physical_object_collider(const CollisionConfig& config,
   o.is_static = false;
   o.solver_offset = solver_data.state_offset;
   o.is_self_collision_on = c.is_self_collision_on;
-  o.bbox_padding = 0.05f * m.avg_edge_length;
+  // o.bbox_padding = 0.05f * m.avg_edge_length;
+  o.bbox_padding = 1e-6f;
   o.damping = config.damping;
   o.friction = config.friction;
 
@@ -117,7 +118,8 @@ ObjectCollider make_obstacle_object_collider(const CollisionConfig& config,
   o.is_static = false;
   o.solver_offset = -1;
   o.is_self_collision_on = c.is_self_collision_on;
-  o.bbox_padding = 0.05f * m.avg_edge_length;
+  // o.bbox_padding = 0.05f * m.avg_edge_length;
+  o.bbox_padding = 1e-6f;
   o.damping = config.damping;
   o.friction = config.friction;
 
