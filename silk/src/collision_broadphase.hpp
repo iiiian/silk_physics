@@ -198,7 +198,7 @@ class KDTree {
 
   KDTree(KDTree&) = delete;
 
-  KDTree(KDTree&& tree) {
+  KDTree(KDTree&& tree) noexcept {
     collider_num_ = tree.collider_num_;
     colliders_ = tree.colliders_;
     root_ = tree.root_;
@@ -216,7 +216,7 @@ class KDTree {
 
   KDTree& operator=(KDTree&) = delete;
 
-  KDTree& operator=(KDTree&& tree) {
+  KDTree& operator=(KDTree&& tree) noexcept {
     collider_num_ = tree.collider_num_;
     colliders_ = tree.colliders_;
     root_ = tree.root_;
