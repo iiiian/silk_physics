@@ -43,7 +43,7 @@ void ObjectSettingWidget::update_selection_visual() {
   Object& obj = ctx_.objects[ctx_.selection];
 
   std::vector<double> indicator(obj.mesh->nVertices(), 0.0);
-  for (int idx : obj.pinned) {
+  for (int idx : obj.pin_group) {
     indicator[idx] = 1.0;
   }
   obj.mesh->addVertexScalarQuantity("pinned", indicator)->setEnabled(true);
@@ -58,13 +58,13 @@ void ObjectSettingWidget::select_vertices_in_sphere(bool add_to_selection) {
   size_t changed_count = 0;
   if (add_to_selection) {
     for (auto match : matches) {
-      if (obj.pinned.insert(match).second) {
+      if (obj.pin_group.insert(match).second) {
         changed_count++;
       }
     }
   } else {
     for (auto match : matches) {
-      if (obj.pinned.erase(match) > 0) {
+      if (obj.pin_group.erase(match) > 0) {
         changed_count++;
       }
     }
@@ -234,10 +234,12 @@ void ObjectSettingWidget::draw_pin_group_setting() {
 
   Object& obj = ctx_.objects[ctx_.selection];
 
-  ImGui::Text("%d vertices pinned", int(obj.pinned.size()));
+  ImGui::Text("%d vertices pinned", int(obj.pin_group.size()));
 
   if (ImGui::DragFloat("Brush Size", &selector_radius_)) {
-    selector_sphere_->setPointRadius(selector_radius_, false);
+    if (selector_sphere_) {
+      selector_sphere_->setPointRadius(selector_radius_, false);
+    }
   }
 
   bool is_painting = (ctx_.ui_mode == UIMode::Paint);

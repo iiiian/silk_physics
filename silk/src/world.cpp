@@ -24,6 +24,22 @@ std::string to_string(Result result) {
     case Result::InvalidHandle: {
       return "InvalidHandle";
     }
+
+    case Result::IncorrectPinNum: {
+      return "IncorrectPinNum";
+    }
+    case Result::IncorrectPositionNum: {
+      return "IncorrectPositionNum";
+    }
+    case Result::EigenDecompositionFail: {
+      return "EigenDecompositionFail";
+    }
+    case Result::NeedInitSolverFirst: {
+      return "NeedInitSolverFirst";
+    }
+    case Result::IterativeSolveFail: {
+      return "IterativeSolveFail";
+    }
     default:
       assert(false && "unknown result");
       return "Unknown";
@@ -122,7 +138,7 @@ class World::WorldImpl {
           Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.num);
       p.position.resize(3 * p.index.size());
       for (int i = 0; i < p.index.size(); ++i) {
-        p.position(Eigen::seqN(3 * i, 3)) = m.V.row(i);
+        p.position(Eigen::seqN(3 * i, 3)) = m.V.row(p.index(i));
       }
     }
 
@@ -273,7 +289,7 @@ class World::WorldImpl {
           Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.num);
       p->position.resize(3 * p->index.size());
       for (int i = 0; i < p->index.size(); ++i) {
-        p->position(Eigen::seqN(3 * i, 3)) = m->V.row(i);
+        p->position(Eigen::seqN(3 * i, 3)) = m->V.row(p->index(i));
       }
     } else {
       p = {};
@@ -308,7 +324,7 @@ class World::WorldImpl {
           Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.num);
       pin->position.resize(3 * pin->index.size());
       for (int i = 0; i < pin->index.size(); ++i) {
-        pin->position(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(i);
+        pin->position(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(pin->index(i));
       }
     } else {
       pin = {};
@@ -341,10 +357,6 @@ class World::WorldImpl {
 
     pin->position =
         Eigen::Map<const Eigen::VectorXf>(position.data, position.num);
-
-    // remove outdated components
-    registry_.remove<SolverData>(*e);
-    registry_.remove<ObjectCollider>(*e);
 
     return Result::Success;
   }
@@ -444,9 +456,8 @@ class World::WorldImpl {
     m->avg_edge_length /= m->E.rows();
 
     // make obstacle position
-    ObstaclePosition p;
-    p.is_static = true;
-    p.position = m->V.reshaped<Eigen::RowMajor>();
+    obstacle_position->is_static = true;
+    obstacle_position->position = m->V.reshaped<Eigen::RowMajor>();
 
     return Result::Success;
   }

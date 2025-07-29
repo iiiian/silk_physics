@@ -4,6 +4,7 @@
 #include <spdlog/spdlog.h>
 
 #include <Eigen/Core>
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <vector>
@@ -16,21 +17,30 @@ void SimulatorWidget::init_cloth(Object& obj) {
 
   if (is_changed && obj.silk_handle != 0) {
     auto res = ctx_.silk_world.remove_cloth(obj.silk_handle);
+    obj.silk_handle = 0;
     assert((res == silk::Result::Success));
   }
 
   if (obj.silk_handle == 0) {
-    std::vector<int> pinned;
-    pinned.insert(pinned.end(), obj.pinned.begin(), obj.pinned.end());
-    silk::ConstSpan<int> pinnd_span{pinned.data(), int(pinned.size())};
+    obj.pin_index.clear();
+    obj.pin_index.insert(obj.pin_index.end(), obj.pin_group.begin(),
+                         obj.pin_group.end());
+    std::sort(obj.pin_index.begin(), obj.pin_index.end());
+    silk::ConstSpan<int> pinnd_span{obj.pin_index.data(),
+                                    int(obj.pin_index.size())};
 
     std::vector<float> vert_data;
-    obj.mesh->vertexPositions.ensureHostBufferPopulated();
-    assert(obj.mesh->vertexPositions.data.size() != 0);
-    for (auto vec3 : obj.mesh->vertexPositions.data) {
-      vert_data.push_back(vec3[0]);
-      vert_data.push_back(vec3[1]);
-      vert_data.push_back(vec3[2]);
+    // obj.mesh->vertexPositions.ensureHostBufferPopulated();
+    // assert(obj.mesh->vertexPositions.data.size() != 0);
+    // for (auto vec3 : obj.mesh->vertexPositions.data) {
+    //   vert_data.push_back(vec3[0]);
+    //   vert_data.push_back(vec3[1]);
+    //   vert_data.push_back(vec3[2]);
+    // }
+    for (int i = 0; i < obj.V.rows(); ++i) {
+      vert_data.push_back(obj.V(i, 0));
+      vert_data.push_back(obj.V(i, 1));
+      vert_data.push_back(obj.V(i, 2));
     }
 
     silk::MeshConfig mesh_config;
@@ -88,7 +98,10 @@ void SimulatorWidget::enter_sim_mode() {
   auto res = ctx_.silk_world.set_global_config(ctx_.global_config);
   assert(res == silk::Result::Success);
   res = ctx_.silk_world.solver_init();
-  assert(res == silk::Result::Success);
+  if (res != silk::Result::Success) {
+    SPDLOG_ERROR("solver init fail, reason: {}", silk::to_string(res));
+    return;
+  }
 
   py::state::doDefaultMouseInteraction = false;
   is_first_click = true;
@@ -108,14 +121,16 @@ void SimulatorWidget::leave_sim_mode() {
 }
 
 void SimulatorWidget::update_pin(const Object& obj) {
-  if (obj.type != SilkObjectType::Cloth || obj.pinned.empty()) {
+  return;  // debug
+
+  if (obj.type != SilkObjectType::Cloth || obj.pin_group.empty()) {
     return;
   }
 
   obj.mesh->vertexPositions.ensureHostBufferPopulated();
   auto& vpos = obj.mesh->vertexPositions.data;
   std::vector<float> pin_pos;
-  for (int i : obj.pinned) {
+  for (int i : obj.pin_index) {
     pin_pos.push_back(vpos[i][0]);
     pin_pos.push_back(vpos[i][1]);
     pin_pos.push_back(vpos[i][2]);
@@ -175,7 +190,7 @@ void SimulatorWidget::handle_drag_selection() {
         return (obj.mesh == structure);
       };
       auto it = std::find_if(ctx_.objects.begin(), ctx_.objects.end(), pred);
-      if (it != ctx_.objects.end() && !it->pinned.empty()) {
+      if (it != ctx_.objects.end() && !it->pin_group.empty()) {
         selected_obj = &(*it);
       }
     }
@@ -191,8 +206,8 @@ void SimulatorWidget::handle_drag_selection() {
 
   py::CameraParameters camera = py::view::getCameraParametersForCurrentView();
   // choose a random selected vertex to calculate distance
-  glm::vec3 rand_pos =
-      selected_obj->mesh->vertexPositions.data[*selected_obj->pinned.begin()];
+  glm::vec3 rand_pos = selected_obj->mesh->vertexPositions
+                           .data[*selected_obj->pin_group.begin()];
   float plane_dist =
       glm::dot(camera.getLookDir(), rand_pos - camera.getPosition());
 
@@ -213,7 +228,7 @@ void SimulatorWidget::handle_drag_selection() {
 
   selected_obj->mesh->vertexPositions.ensureHostBufferPopulated();
   auto& vpos = selected_obj->mesh->vertexPositions.data;
-  for (int i : selected_obj->pinned) {
+  for (int i : selected_obj->pin_group) {
     vpos[i] += delta;
   }
   selected_obj->mesh->vertexPositions.markHostBufferUpdated();
@@ -241,8 +256,9 @@ void SimulatorWidget::draw() {
     prev_mouse_pos_ = ImGui::GetMousePos();
 
     auto now = std::chrono::steady_clock::now();
-    std::chrono::duration<float> elapse_sec = now - prev_update_time_;
-    if (elapse_sec.count() >= ctx_.global_config.dt) {
+    if (std::chrono::duration_cast<std::chrono::microseconds>(now -
+                                                              prev_update_time_)
+            .count() >= 1e6f * ctx_.global_config.dt) {
       solver_step();
       prev_update_time_ = std::chrono::steady_clock::now();
     }

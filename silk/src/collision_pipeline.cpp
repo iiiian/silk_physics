@@ -258,10 +258,12 @@ std::vector<Collision> CollisionPipeline::find_collision(
 
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - timer0);
-    std::cout << ms.count() << std::endl;
+    // std::cout << ms.count() << std::endl;
 
     mesh_ccache.clear();
   }
+
+  std::cout << "find " << collisions.size() << " collisions" << std::endl;
 
   return collisions;
 }

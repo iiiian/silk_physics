@@ -56,8 +56,11 @@ class ClothElasticConstrain : public ISolverConstrain {
         F, Eigen::ComputeFullV | Eigen::ComputeFullU);
     // this is the projection, deformation F cause by purely rotation +
     // translation
-    Eigen::Matrix<float, 3, 2> T =
-        svd.matrixU().block<3, 2>(0, 0) * svd.matrixV().transpose();
+    Eigen::Vector2f sin = svd.singularValues();
+    sin(0) = (sin(0) > 0.0f) ? 1 : -1;
+    sin(1) = (sin(1) > 0.0f) ? 1 : -1;
+    Eigen::Matrix<float, 3, 2> T = svd.matrixU().block<3, 2>(0, 0) *
+                                   sin.asDiagonal() * svd.matrixV().transpose();
 
     // compute the elastic rhs, reuse buffer
     buffer = weight_ * jacobian_op_.transpose() * T.reshaped();
@@ -90,7 +93,7 @@ std::optional<Eigen::Matrix<float, 6, 9>> cloth_jacobian_operator(
   // dX = ( d1 d2 )
   Eigen::Matrix<float, 2, 2> dX;
   dX(0, 0) = bx.dot(e0);
-  dX(1, 0) = 0;
+  dX(1, 0) = 0.0f;
   dX(0, 1) = bx.dot(e1);
   dX(1, 1) = by.dot(e1);
 
@@ -126,9 +129,8 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   int vert_num = m.V.rows();
   int face_num = m.F.rows();
 
-  Eigen::SparseMatrix<float> mass;
-  igl::massmatrix(m.V, m.F, igl::MASSMATRIX_TYPE_VORONOI, mass);
-  mass *= c.density;
+  Eigen::SparseMatrix<float> voroni_mass;
+  igl::massmatrix(m.V, m.F, igl::MASSMATRIX_TYPE_VORONOI, voroni_mass);
 
   // cotangent matrix
   Eigen::SparseMatrix<float> C;
@@ -138,7 +140,7 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   Eigen::SparseMatrix<float> W(vert_num, vert_num);
   W.setIdentity();
   for (int i = 0; i < vert_num; ++i) {
-    W.coeffRef(i, i) = 1.0f / mass.coeff(i, i);
+    W.coeffRef(i, i) = 1.0f / voroni_mass.coeff(i, i);
   }
 
   // this is the weighted AA for bending energy.
@@ -190,9 +192,9 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   if (p.index.size() != 0) {
     for (int idx : p.index) {
       int offset = 3 * idx;
-      AA_triplets.emplace_back(offset, offset, p.pin_sitffness);
-      AA_triplets.emplace_back(offset + 1, offset + 1, p.pin_sitffness);
-      AA_triplets.emplace_back(offset + 2, offset + 2, p.pin_sitffness);
+      AA_triplets.emplace_back(offset, offset, p.pin_stiffness);
+      AA_triplets.emplace_back(offset + 1, offset + 1, p.pin_stiffness);
+      AA_triplets.emplace_back(offset + 2, offset + 2, p.pin_stiffness);
     }
   }
 
@@ -201,7 +203,7 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   data.state_offset = state_offset;
   data.mass.resize(vert_num);
   for (int i = 0; i < vert_num; ++i) {
-    data.mass(i) = mass.coeff(i, i);
+    data.mass(i) = config.density * voroni_mass.coeff(i, i);
   }
   data.weighted_AA.resize(data.state_num, data.state_num);
   data.weighted_AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
