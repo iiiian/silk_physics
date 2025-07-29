@@ -24,7 +24,8 @@ class Object {
   SilkObjectType type = SilkObjectType::None;
   uint32_t silk_handle = 0;
 
-  std::unordered_set<int> pinned;
+  std::unordered_set<int> pin_group;
+  std::vector<int> pin_index;
   silk::ClothConfig cloth_config;
   silk::CollisionConfig collision_config;
 

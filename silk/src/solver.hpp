@@ -26,7 +26,6 @@ class Solver {
   Eigen::VectorXf init_state_;
   Eigen::VectorXf curr_state_;
   Eigen::VectorXf prev_state_;
-  Eigen::VectorXf prev_velocity;
 
   Eigen::SparseMatrix<float> mass_;
   Eigen::SparseMatrix<float> H_;
@@ -45,7 +44,8 @@ class Solver {
   bool step(Registry& registry, const CollisionPipeline& collision_pipeline);
 
  private:
-  bool lg_solve(Registry& registry, Eigen::VectorXf& predict_state);
+  bool lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
+                Eigen::VectorXf& state);
 };
 
 }  // namespace silk

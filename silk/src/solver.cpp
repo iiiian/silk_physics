@@ -27,7 +27,6 @@ void Solver::clear() {
   init_state_ = {};
   curr_state_ = {};
   prev_state_ = {};
-  prev_velocity = {};
   mass_ = {};
   H_ = {};
   UHU_ = {};
@@ -40,7 +39,6 @@ void Solver::clear() {
 void Solver::reset() {
   curr_state_ = init_state_;
   prev_state_ = init_state_;
-  prev_velocity = Eigen::VectorXf::Zero(state_num_);
   collisions_.clear();
 }
 
@@ -60,7 +58,6 @@ bool Solver::init(Registry& registry) {
   init_state_.resize(state_num_);
   curr_state_.resize(state_num_);
   prev_state_.resize(state_num_);
-  prev_velocity = Eigen::VectorXf::Zero(state_num_);
   for (Entity& e : registry.get_all_entities()) {
     auto solver_data = registry.get<SolverData>(e);
     auto tri_mesh = registry.get<TriMesh>(e);
@@ -101,7 +98,8 @@ bool Solver::init(Registry& registry) {
   Eigen::SparseMatrix<float> AA(state_num_, state_num_);
   AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
 
-  H_ = (mass_ / (dt * dt) + AA);
+  H_ = mass_ / (dt * dt) + AA;
+  // H_ = (mass_ / (dt * dt));
 
   // TODO: replace arpack with modern solution.
   Eigen::ArpackGeneralizedSelfAdjointEigenSolver<
@@ -123,46 +121,30 @@ bool Solver::init(Registry& registry) {
   return true;
 }
 
-bool Solver::lg_solve(Registry& registry, Eigen::VectorXf& predict_state) {
-  // momentum energy term
-  Eigen::VectorXf b = (mass_ / dt / dt) * predict_state +
-                      (mass_ / dt) * (predict_state - prev_state_) +
-                      mass_ * const_acceleration.replicate(state_num_ / 3, 1);
+bool Solver::lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
+                      Eigen::VectorXf& state) {
+  // init rhs is momentum energy term + pin position constrain
+  Eigen::VectorXf b = init_rhs;
   Eigen::SparseMatrix<float> A(state_num_, state_num_);
 
-  // porject barrier constrain
+  // project barrier constrain
   // TODO: avoid hard-coded collision stiffness
   for (auto& c : collisions_) {
     for (int i = 0; i < 4; ++i) {
-      A.coeffRef(c.offset(i), c.offset(i)) = 1e6f * c.position(0, i);
-      A.coeffRef(c.offset(i) + 1, c.offset(i) + 1) = 1e6f * c.position(1, i);
-      A.coeffRef(c.offset(i) + 2, c.offset(i) + 2) = 1e6f * c.position(2, i);
-      b(Eigen::seqN(c.offset(i), 3)) = 1e6f * c.position.col(i);
+      A.coeffRef(c.offset(i), c.offset(i)) = 1e10f * c.position(0, i);
+      A.coeffRef(c.offset(i) + 1, c.offset(i) + 1) = 1e10f * c.position(1, i);
+      A.coeffRef(c.offset(i) + 2, c.offset(i) + 2) = 1e10f * c.position(2, i);
+      b(Eigen::seqN(c.offset(i), 3)) = 1e10f * c.position.col(i);
     }
   }
 
-  // project position constrain from pin groups
-  for (Entity& e : registry.get_all_entities()) {
-    auto solver_data = registry.get<SolverData>(e);
-    auto pin = registry.get<Pin>(e);
-    if (solver_data && pin) {
-      auto p = pin;
-
-      int offset = solver_data->state_offset;
-      for (int i = 0; i < p->index.size(); ++i) {
-        b(Eigen::seqN(offset + 3 * p->index(i), 3)) +=
-            p->position(Eigen::seqN(3 * i, 3));
-      }
-    }
-  }
-
-  // project other constrains
+  // project physical constrains
   std::vector<Eigen::VectorXf> buffers(thread_num,
                                        Eigen::VectorXf::Zero(state_num_));
 #pragma omp parallel for num_threads(thread_num)
   for (const auto& c : constrains_) {
     Eigen::VectorXf& buffer = buffers[omp_get_thread_num()];
-    c->project(curr_state_, buffer);
+    c->project(state, buffer);
   }
   // merge thread local b back to global b
   for (Eigen::VectorXf& buffer : buffers) {
@@ -171,24 +153,29 @@ bool Solver::lg_solve(Registry& registry, Eigen::VectorXf& predict_state) {
 
   // subspace solve
   Eigen::VectorXf subspace_b = U_.transpose() * (b - HX_);
-  Eigen::VectorXf q;
+  Eigen::VectorXf subspace_q;
   if (collisions_.empty()) {
-    q = subspace_b.array() / UHU_.array();
+    subspace_q = subspace_b.array() / UHU_.array();
   } else {
-    q = (UHU_ + U_.transpose() * A * U_).householderQr().solve(subspace_b);
+    subspace_q =
+        (UHU_ + U_.transpose() * A * U_).householderQr().solve(subspace_b);
   }
-  Eigen::VectorXf subspace_sol = init_state_ + U_ * q;
+  Eigen::VectorXf subspace_sol = init_state_ + U_ * subspace_q;
 
   // iterative global solve
   Eigen::BiCGSTAB<Eigen::SparseMatrix<float>> iterative_solver;
-  iterative_solver.setMaxIterations(max_iteration);
+  // iterative_solver.setMaxIterations(max_iteration);
+  iterative_solver.setMaxIterations(100);
   iterative_solver.compute(H_ + A);
-  predict_state = iterative_solver.solveWithGuess(b, subspace_sol);
+  state = iterative_solver.solveWithGuess(b, subspace_sol);
 
   // we do not care if iterative solver converges or not because looping
   // lg_solve is more effective
   if (iterative_solver.info() != Eigen::Success &&
       iterative_solver.info() != Eigen::NoConvergence) {
+    if (iterative_solver.info() == Eigen::NoConvergence) {
+      std::cout << "iterative solver diverges" << std::endl;
+    }
     return false;
   }
 
@@ -203,51 +190,65 @@ bool Solver::step(Registry& registry,
   // prediction based on linear velocity
   Eigen::VectorXf velocity = (curr_state_ - prev_state_) / dt;
   Eigen::VectorXf acceleration =
-      (velocity - prev_velocity) / dt +
       const_acceleration.replicate(state_num_ / 3, 1);
+  Eigen::VectorXf init_rhs = (mass_ / (dt * dt)) * curr_state_ +
+                             (mass_ / dt) * velocity + mass_ * acceleration;
 
-  Eigen::VectorXf predict_state =
-      curr_state_ + dt * velocity + dt * dt * acceleration;
-  prev_velocity = velocity;
+  // project position constrain from pin groups
+  for (Entity& e : registry.get_all_entities()) {
+    auto solver_data = registry.get<SolverData>(e);
+    auto pin = registry.get<Pin>(e);
+    if (solver_data && pin) {
+      auto p = pin;
+
+      int offset = solver_data->state_offset;
+      for (int i = 0; i < p->index.size(); ++i) {
+        init_rhs(Eigen::seqN(offset + 3 * p->index(i), 3)) +=
+            p->pin_stiffness * p->position(Eigen::seqN(3 * i, 3));
+      }
+    }
+  }
+
   prev_state_ = curr_state_;
+  Eigen::VectorXf predict_state =
+      curr_state_ + dt * velocity + (dt * dt) * acceleration;
   curr_state_ = predict_state;
+  // Eigen::VectorXf predict_state = curr_state_;
 
   float state_diff = std::numeric_limits<float>::infinity();
   int iter_count = 0;
-  while (state_diff > 5e-2f) {
-    while (state_diff > 5e-2f) {
+  while (state_diff > 1e-3f) {
+    while (state_diff > 1e-3f) {
+      lg_solve(registry, init_rhs, predict_state);
+      state_diff = (predict_state - curr_state_).cwiseAbs().sum();
+      curr_state_ = predict_state;
+
       std::cout << "Iter " << iter_count << ", state diff = " << state_diff
                 << std::endl;
       ++iter_count;
-
-      lg_solve(registry, predict_state);
-      state_diff = (predict_state - curr_state_).cwiseAbs().sum();
-      curr_state_ = predict_state;
     }
 
     std::cout << "reach outer loop" << std::endl;
 
-    // // update collision
-    // update_all_physical_object_collider(registry, predict_state,
-    // prev_state_);
-    //
-    // std::cout << "outer loop obj collider update fin" << std::endl;
-    //
-    // collisions_ = collision_pipeline.find_collision(
-    //     registry.get_all<ObjectCollider>(), dt);
-    //
-    // std::cout << "outer loop collision fin" << std::endl;
-    //
-    // // ccd line search
-    // if (!collisions_.empty()) {
-    //   float toi = std::numeric_limits<float>::infinity();
-    //   for (auto& c : collisions_) {
-    //     toi = std::min(toi, c.toi);
-    //   }
-    //
-    //   curr_state_ += ccd_walkback * toi * (predict_state - curr_state_);
-    //   state_diff = (predict_state - curr_state_).cwiseAbs().sum();
-    // }
+    // update collision
+    update_all_physical_object_collider(registry, predict_state, prev_state_);
+
+    std::cout << "outer loop obj collider update fin" << std::endl;
+
+    collisions_ = collision_pipeline.find_collision(
+        registry.get_all<ObjectCollider>(), dt);
+
+    // ccd line search
+    if (!collisions_.empty()) {
+      float toi = std::numeric_limits<float>::infinity();
+      for (auto& c : collisions_) {
+        toi = std::min(toi, c.toi);
+      }
+
+      std::cout << "min toi " << toi << std::endl;
+      curr_state_ += ccd_walkback * toi * (predict_state - curr_state_);
+      state_diff = (predict_state - curr_state_).cwiseAbs().sum();
+    }
   }
 
   return true;

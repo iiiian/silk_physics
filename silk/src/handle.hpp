@@ -8,7 +8,7 @@ namespace silk {
 // dual-use bitfield. can be used as handle in ecs system or internal index map
 // in Manager.
 //
-// Bit layout: | is valid (2) | generation (GEN_BITS) | index (INDEX_BITS) |
+// Bit layout: | is valid (1) | generation (GEN_BITS) | index (INDEX_BITS) |
 class Handle {
  public:
   // bit operation helper
@@ -57,7 +57,7 @@ class Handle {
   }
 
   void increment_generation() {
-    set_generation((get_generation() + 1) | MAX_GEN_MASK);
+    set_generation((get_generation() + 1) & MAX_GEN_MASK);
   }
 
   uint32_t get_index() const { return value & INDEX_MASK; }
