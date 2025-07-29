@@ -660,6 +660,7 @@ class KDTree {
 
     filter(n);
     set_children_bbox(n);
+    set_plane_bbox(n);
   }
 
   // collapse subtree into leaf
@@ -736,7 +737,7 @@ class KDTree {
       KDNode* current = stack_.back();
       stack_.pop_back();
 
-      if (!current->is_leaf() && current->population != 0) {
+      if (!current->is_leaf()) {
         stack_.push_back(current->left);
         stack_.push_back(current->right);
       }
@@ -746,6 +747,7 @@ class KDTree {
       current->proxy_end = n->proxy_start;
       assert((current->proxy_end <= collider_num_));
       current->population = 0;
+      current->delay_offset = 0;
     }
 
     // lift right subtree
@@ -754,7 +756,7 @@ class KDTree {
       KDNode* current = stack_.back();
       stack_.pop_back();
 
-      if (!current->is_leaf() && current->population != 0) {
+      if (!current->is_leaf()) {
         stack_.push_back(current->left);
         stack_.push_back(current->right);
       }
@@ -764,6 +766,7 @@ class KDTree {
       current->proxy_end = n->proxy_end;
       assert((current->proxy_end <= collider_num_));
       current->population = 0;
+      current->delay_offset = 0;
     }
   }
 
@@ -829,6 +832,10 @@ class KDTree {
       stack_.pop_back();
 
       // propagate and apply delay offset
+      if (n->delay_offset == 0) {
+        return;
+      }
+
       if (!n->is_leaf()) {
         n->left->delay_offset += n->delay_offset;
         n->right->delay_offset += n->delay_offset;
@@ -843,11 +850,10 @@ class KDTree {
       if (n->is_leaf()) {
         if (n->proxy_num() > NODE_PROXY_NUM_THRESHOLD) {
           split_leaf(n);
-          set_plane_bbox(n);
-          n->generation = 0;
           stack_.push_back(n->right);
           stack_.push_back(n->left);
         }
+        n->generation = 0;
         continue;
       }
 
