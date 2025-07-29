@@ -523,12 +523,16 @@ class KDTree {
         if (n->is_left()) {
           int unfit_num = partition_unfit_proxy_right(n);
           n->proxy_end -= unfit_num;
+          assert((n->proxy_end <= collider_num_));
           n->parent->proxy_start -= unfit_num;
+          assert((n->parent->proxy_start >= 0));
           n->population = n->proxy_num();
         } else {
           int unfit_num = partition_unfit_proxy_left(n);
           n->proxy_start += unfit_num;
+          assert((n->proxy_start >= 0));
           n->parent->proxy_end += unfit_num;
+          assert((n->parent->proxy_end <= collider_num_));
           n->population = n->proxy_num();
         }
       } else {
@@ -538,7 +542,9 @@ class KDTree {
                             n->right->population);
 
           n->proxy_end -= unfit_num;
+          assert((n->proxy_end < collider_num_));
           n->parent->proxy_start -= unfit_num;
+          assert((n->parent->proxy_start >= 0));
           n->population =
               n->proxy_num() + n->left->population + n->right->population;
           n->right->delay_offset = -unfit_num;
@@ -547,7 +553,9 @@ class KDTree {
           shift_proxy_left(n->proxy_start, unfit_num, n->left->population);
 
           n->proxy_start += unfit_num;
+          assert((n->proxy_start >= 0));
           n->parent->proxy_end += unfit_num;
+          assert((n->parent->proxy_end <= collider_num_));
           n->population =
               n->proxy_num() + n->left->population + n->right->population;
           n->left->delay_offset = unfit_num;
@@ -563,6 +571,7 @@ class KDTree {
 
   void filter(KDNode* n) {
     assert((n->left && n->right));
+    assert((n->delay_offset == 0));
 
     // partition proxies by plane.
     // strictly left  -> move to left partition
@@ -598,6 +607,7 @@ class KDTree {
       n->left->right->delay_offset += left_num;
     }
     n->left->proxy_end += left_num;
+    assert((n->left->proxy_end + n->left->delay_offset < collider_num_));
     n->left->population += left_num;
 
     // move right partition down one node level
@@ -607,11 +617,14 @@ class KDTree {
       n->right->left->delay_offset -= right_num;
     }
     n->right->proxy_start -= right_num;
+    assert((n->right->proxy_start + n->right->delay_offset >= 0));
     n->right->population += right_num;
 
     // update node
     n->proxy_start += left_num;
+    assert((n->proxy_start >= 0));
     n->proxy_end -= right_num;
+    assert((n->proxy_end <= collider_num_));
   }
 
   static void set_children_bbox(KDNode* n) {
@@ -634,12 +647,16 @@ class KDTree {
     n->left = new KDNode{};
     n->left->parent = n;
     n->left->proxy_start = n->proxy_start;
+    assert((n->left->proxy_start >= 0));
     n->left->proxy_end = n->proxy_start;
+    assert((n->left->proxy_end <= collider_num_));
 
     n->right = new KDNode{};
     n->right->parent = n;
     n->right->proxy_start = n->proxy_end;
+    assert((n->right->proxy_start >= 0));
     n->right->proxy_end = n->proxy_end;
+    assert((n->right->proxy_end <= collider_num_));
 
     filter(n);
     set_children_bbox(n);
@@ -650,7 +667,9 @@ class KDTree {
     assert((n->left && n->right));
 
     n->proxy_start -= n->left->population;
+    assert((n->proxy_start >= 0));
     n->proxy_end += n->right->population;
+    assert((n->proxy_end <= collider_num_));
 
     delete_subtree(n->left);
     n->left = nullptr;
@@ -705,7 +724,9 @@ class KDTree {
     assert((n->left && n->right));
 
     n->proxy_start -= n->left->population;
+    assert((n->proxy_start >= 0));
     n->proxy_end += n->right->population;
+    assert((n->proxy_end <= collider_num_));
 
     size_t init_stack_size = stack_.size();
 
@@ -721,7 +742,9 @@ class KDTree {
       }
 
       current->proxy_start = n->proxy_start;
+      assert((current->proxy_start >= 0));
       current->proxy_end = n->proxy_start;
+      assert((current->proxy_end <= collider_num_));
       current->population = 0;
     }
 
@@ -737,7 +760,9 @@ class KDTree {
       }
 
       current->proxy_start = n->proxy_end;
+      assert((current->proxy_start >= 0));
       current->proxy_end = n->proxy_end;
+      assert((current->proxy_end <= collider_num_));
       current->population = 0;
     }
   }
@@ -809,7 +834,9 @@ class KDTree {
         n->right->delay_offset += n->delay_offset;
       }
       n->proxy_start += n->delay_offset;
+      assert((n->proxy_start >= 0));
       n->proxy_end += n->delay_offset;
+      assert((n->proxy_end <= collider_num_));
       n->delay_offset = 0;
 
       // split a leaf if proxy num is too large
