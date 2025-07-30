@@ -281,14 +281,14 @@ std::optional<CCDPoly> CCDPoly::try_make_ccd_poly(
   float c = v10cp20.dot(p30) + p10cv20.dot(p30) + p10cp20.dot(v30);
   float d = p10cp20.dot(p30);
 
-  float max_coeff =
-      std::max({std::abs(a), std::abs(b), std::abs(c), std::abs(d)});
+  float max_coeff = std::max(std::max(std::abs(a), std::abs(b)),
+                             std::max(std::abs(c), std::abs(d)));
   // Big trouble, complete coplaner ccd
   if (std::abs(max_coeff) < eps) {
     return std::nullopt;
   }
 
-  float scale = 1 / max_coeff;
+  float scale = 1.0f / max_coeff;
   a *= scale;
   b *= scale;
   c *= scale;

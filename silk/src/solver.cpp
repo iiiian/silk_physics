@@ -5,6 +5,7 @@
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 #include <Eigen/SparseCholesky>
+#include <Eigen/UmfPackSupport>
 #include <iostream>  // fix a bug in eigen arpack that miss this include
 #include <limits>
 #include <memory>
@@ -125,15 +126,15 @@ bool Solver::lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
                       Eigen::VectorXf& state) {
   // init rhs is momentum energy term + pin position constrain
   Eigen::VectorXf b = init_rhs;
-  Eigen::SparseMatrix<float> A(state_num_, state_num_);
 
   // project barrier constrain
   // TODO: avoid hard-coded collision stiffness
+  Eigen::SparseMatrix<float> dH(state_num_, state_num_);
   for (auto& c : collisions_) {
     for (int i = 0; i < 4; ++i) {
-      A.coeffRef(c.offset(i), c.offset(i)) = 1e10f * c.position(0, i);
-      A.coeffRef(c.offset(i) + 1, c.offset(i) + 1) = 1e10f * c.position(1, i);
-      A.coeffRef(c.offset(i) + 2, c.offset(i) + 2) = 1e10f * c.position(2, i);
+      dH.coeffRef(c.offset(i), c.offset(i)) = 1e10f * c.position(0, i);
+      dH.coeffRef(c.offset(i) + 1, c.offset(i) + 1) = 1e10f * c.position(1, i);
+      dH.coeffRef(c.offset(i) + 2, c.offset(i) + 2) = 1e10f * c.position(2, i);
       b(Eigen::seqN(c.offset(i), 3)) = 1e10f * c.position.col(i);
     }
   }
@@ -152,32 +153,33 @@ bool Solver::lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
   }
 
   // subspace solve
-  Eigen::VectorXf subspace_b = U_.transpose() * (b - HX_);
-  Eigen::VectorXf subspace_q;
-  if (collisions_.empty()) {
-    subspace_q = subspace_b.array() / UHU_.array();
-  } else {
-    subspace_q =
-        (UHU_ + U_.transpose() * A * U_).householderQr().solve(subspace_b);
-  }
-  Eigen::VectorXf subspace_sol = init_state_ + U_ * subspace_q;
+  // Eigen::VectorXf subspace_b = U_.transpose() * (b - HX_);
+  // Eigen::VectorXf subspace_q;
+  // if (collisions_.empty()) {
+  //   subspace_q = subspace_b.array() / UHU_.array();
+  // } else {
+  //   subspace_q =
+  //       (UHU_ + U_.transpose() * dH * U_).householderQr().solve(subspace_b);
+  // }
+  // Eigen::VectorXf subspace_sol = init_state_ + U_ * subspace_q;
 
-  // iterative global solve
-  Eigen::BiCGSTAB<Eigen::SparseMatrix<float>> iterative_solver;
+  Eigen::SparseMatrix<float> A = H_ + dH;
+  A.makeCompressed();
+  Eigen::UmfPackLU<Eigen::SparseMatrix<float>> umf_solver{A};
+  state = umf_solver.solve(b);
+
+  // // iterative global solve
+  // Eigen::BiCGSTAB<Eigen::SparseMatrix<float>> iterative_solver;
   // iterative_solver.setMaxIterations(max_iteration);
-  iterative_solver.setMaxIterations(100);
-  iterative_solver.compute(H_ + A);
-  state = iterative_solver.solveWithGuess(b, subspace_sol);
-
-  // we do not care if iterative solver converges or not because looping
-  // lg_solve is more effective
-  if (iterative_solver.info() != Eigen::Success &&
-      iterative_solver.info() != Eigen::NoConvergence) {
-    if (iterative_solver.info() == Eigen::NoConvergence) {
-      std::cout << "iterative solver diverges" << std::endl;
-    }
-    return false;
-  }
+  // iterative_solver.compute(H_ + dH);
+  // state = iterative_solver.solveWithGuess(b, subspace_sol);
+  //
+  // // we do not care if iterative solver converges or not because looping
+  // // lg_solve is more effective
+  // if (iterative_solver.info() != Eigen::Success &&
+  //     iterative_solver.info() != Eigen::NoConvergence) {
+  //   return false;
+  // }
 
   return true;
 }
@@ -223,20 +225,22 @@ bool Solver::step(Registry& registry,
       state_diff = (predict_state - curr_state_).cwiseAbs().sum();
       curr_state_ = predict_state;
 
-      std::cout << "Iter " << iter_count << ", state diff = " << state_diff
-                << std::endl;
+      // std::cout << "Iter " << iter_count << ", state diff = " << state_diff
+      //           << std::endl;
       ++iter_count;
     }
 
-    std::cout << "reach outer loop" << std::endl;
+    // std::cout << "reach outer loop" << std::endl;
 
     // update collision
     update_all_physical_object_collider(registry, predict_state, prev_state_);
 
-    std::cout << "outer loop obj collider update fin" << std::endl;
+    // std::cout << "outer loop obj collider update fin" << std::endl;
 
     collisions_ = collision_pipeline.find_collision(
         registry.get_all<ObjectCollider>(), dt);
+
+    collisions_.clear();
 
     // ccd line search
     if (!collisions_.empty()) {
@@ -245,7 +249,7 @@ bool Solver::step(Registry& registry,
         toi = std::min(toi, c.toi);
       }
 
-      std::cout << "min toi " << toi << std::endl;
+      // std::cout << "min toi " << toi << std::endl;
       curr_state_ += ccd_walkback * toi * (predict_state - curr_state_);
       state_diff = (predict_state - curr_state_).cwiseAbs().sum();
     }

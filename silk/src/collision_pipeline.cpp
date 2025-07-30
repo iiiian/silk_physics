@@ -1,5 +1,7 @@
 #include "collision_pipeline.hpp"
 
+#include <omp.h>
+
 #include <Eigen/Core>
 #include <cassert>
 #include <chrono>
@@ -125,8 +127,8 @@ std::vector<Collision> CollisionPipeline::find_collision(
   auto object_ccache = object_broadphase(object_colliders);
   std::vector<Collision> collisions;
 
-  std::cout << "object phase detect " << object_ccache.size() << " pairs"
-            << std::endl;
+  // std::cout << "object phase detect " << object_ccache.size() << " pairs"
+  //           << std::endl;
 
   // mesh level object-object collision
   CollisionFilterCallback<MeshCollider> dummy_filter =
@@ -138,8 +140,8 @@ std::vector<Collision> CollisionPipeline::find_collision(
                                               ob->mesh_collider_tree,
                                               dummy_filter, mesh_ccache);
 
-    std::cout << "mesh tree tree broadphase detect " << mesh_ccache.size()
-              << " pairs" << std::endl;
+    // std::cout << "mesh tree tree broadphase detect " << mesh_ccache.size()
+    //           << " pairs" << std::endl;
 
     // object object collision narrowphase
     for (auto& [ma, mb] : mesh_ccache) {
@@ -188,82 +190,49 @@ std::vector<Collision> CollisionPipeline::find_collision(
     // self collision broadphase
     o.mesh_collider_tree.test_self_collision(neighbor_filter, mesh_ccache);
 
-    std::cout << "mesh tree self broadphase detect " << mesh_ccache.size()
-              << " pairs out of " << o.mesh_colliders.size() << " primitives"
-              << std::endl;
+    // std::cout << "mesh tree self broadphase detect " << mesh_ccache.size()
+    //           << " pairs out of " << o.mesh_colliders.size() << " primitives"
+    //           << std::endl;
 
-    int pt_counter = 0;
-    int ee_counter = 0;
-    for (auto& p : mesh_ccache) {
-      if (p.first->type == MeshColliderType::Edge ||
-          p.second->type == MeshColliderType::Edge) {
-        ++ee_counter;
-      } else {
-        ++pt_counter;
-      }
-    }
-    std::cout << pt_counter << " pt pairs and " << ee_counter << " ee pairs"
-              << std::endl;
-
-    // // Canonicalize without UB from raw '<' on unrelated pointers
-    // auto canon = [](std::pair<MeshCollider*, MeshCollider*>& p) {
-    //   if (std::less<>{}(p.second, p.first)) std::swap(p.first, p.second);
-    //   return p;
-    // };
-    //
-    // struct Hash {
-    //   size_t operator()(
-    //       const std::pair<MeshCollider*, MeshCollider*>& p) const {
-    //     return std::hash<void*>{}(p.first) ^
-    //            (std::hash<void*>{}(p.second) << 1);
-    //   }
-    // };
-    // struct Eq {
-    //   bool operator()(
-    //       const std::pair<MeshCollider*, MeshCollider*>& a,
-    //       const std::pair<MeshCollider*, MeshCollider*>& b) const noexcept {
-    //     return a.first == b.first && a.second == b.second;
-    //   }
-    // };
-    //
-    // std::unordered_set<std::pair<MeshCollider*, MeshCollider*>, Hash, Eq>
-    // seen;
-    //
-    // for (auto raw : mesh_ccache) {
-    //   std::pair<MeshCollider*, MeshCollider*> p = canon(raw);
-    //   if (!seen.insert(p).second) {
-    //     assert(false && "duplicate pair");
+    // int pt_counter = 0;
+    // int ee_counter = 0;
+    // for (auto& p : mesh_ccache) {
+    //   if (p.first->type == MeshColliderType::Edge ||
+    //       p.second->type == MeshColliderType::Edge) {
+    //     ++ee_counter;
+    //   } else {
+    //     ++pt_counter;
     //   }
     // }
+    // std::cout << pt_counter << " pt pairs and " << ee_counter << " ee pairs"
+    //           << std::endl;
 
     // self collision narrowphase
 
-    auto timer0 = std::chrono::steady_clock::now();
+    // auto timer0 = std::chrono::steady_clock::now();
 
-    for (int i = 0; i < 100; ++i) {
-      int narrowphase_count = 0;
-      collisions.clear();
-      for (auto& [ma, mb] : mesh_ccache) {
-        auto collision = narrow_phase(o, *ma, o, *mb, dt);
-        if (collision) {
-          collisions.emplace_back(std::move(*collision));
-        }
-        ++narrowphase_count;
-        // if (narrowphase_count % 1000 == 0) {
-        //   std::cout << "narrow phase count " << narrowphase_count <<
-        //   std::endl;
-        // }
+    // int narrowphase_count = 0;
+    collisions.clear();
+    for (auto& [ma, mb] : mesh_ccache) {
+      auto collision = narrow_phase(o, *ma, o, *mb, dt);
+      if (collision) {
+        collisions.emplace_back(std::move(*collision));
       }
+      // ++narrowphase_count;
+      // if (narrowphase_count % 1000 == 0) {
+      //   std::cout << "narrow phase count " << narrowphase_count <<
+      //   std::endl;
+      // }
     }
 
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - timer0);
+    // auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+    //     std::chrono::steady_clock::now() - timer0);
     // std::cout << ms.count() << std::endl;
 
     mesh_ccache.clear();
   }
 
-  std::cout << "find " << collisions.size() << " collisions" << std::endl;
+  // std::cout << "find " << collisions.size() << " collisions" << std::endl;
 
   return collisions;
 }

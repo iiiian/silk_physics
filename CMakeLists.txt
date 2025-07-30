@@ -13,6 +13,11 @@ find_package(LAPACK REQUIRED)
 add_subdirectory(extern/eigen)
 add_subdirectory(extern/libigl)
 add_subdirectory(extern/arpack-ng)
+# only enable UMFPACK and its dependencies
+set(SUITESPARSE_ENABLE_PROJECTS
+    "suitesparse_config;amd;camd;ccolamd;colamd;cholmod;umfpack;"
+)
+add_subdirectory(extern/suite-sparse)
 
 add_subdirectory(silk)
 

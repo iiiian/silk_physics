@@ -32,7 +32,18 @@ target_include_directories(
 
 target_link_libraries(
     silk
-    PRIVATE Eigen3::Eigen igl::core arpack OpenMP::OpenMP_CXX
+    PRIVATE
+        Eigen3::Eigen
+        igl::core
+        arpack
+        OpenMP::OpenMP_CXX
+        SuiteSparse::SuiteSparseConfig
+        SuiteSparse::AMD
+        SuiteSparse::CAMD
+        SuiteSparse::CCOLAMD
+        SuiteSparse::COLAMD
+        SuiteSparse::CHOLMOD
+        SuiteSparse::UMFPACK
 )
 
 # -------------------------------------------------
