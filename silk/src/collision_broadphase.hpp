@@ -84,16 +84,14 @@ void sap_sorted_collision(C* p1, C* const* proxies, int proxy_num, int axis,
                           CollisionCache<C>& cache) {
   assert((proxy_num != 0));
 
-  if (p1->bbox.max(axis) < proxies[0]->bbox.min(axis)) {
-    return;
-  }
-
   for (int i = 0; i < proxy_num; ++i) {
     C* p2 = proxies[i];
+
     // axis test
     if (p1->bbox.max(axis) < p2->bbox.min(axis)) {
       break;
     }
+
     // user provided collision filter
     if (!filter(*p1, *p2)) {
       continue;
@@ -385,7 +383,6 @@ class KDTree {
         int axis = sap_optimal_axis(start_a, num_a, start_b, num_b);
         sap_sort_proxies(start_a, num_a, axis);
         sap_sort_proxies(start_b, num_b, axis);
-        // auto cache = ta.local_cache_[omp_get_thread_num()];
         sap_sorted_group_group_collision(start_a, num_a, start_b, num_b, axis,
                                          filter, cache);
       }
@@ -832,19 +829,17 @@ class KDTree {
       stack_.pop_back();
 
       // propagate and apply delay offset
-      if (n->delay_offset == 0) {
-        return;
+      if (n->delay_offset != 0) {
+        if (!n->is_leaf()) {
+          n->left->delay_offset += n->delay_offset;
+          n->right->delay_offset += n->delay_offset;
+        }
+        n->proxy_start += n->delay_offset;
+        assert((n->proxy_start >= 0));
+        n->proxy_end += n->delay_offset;
+        assert((n->proxy_end <= collider_num_));
+        n->delay_offset = 0;
       }
-
-      if (!n->is_leaf()) {
-        n->left->delay_offset += n->delay_offset;
-        n->right->delay_offset += n->delay_offset;
-      }
-      n->proxy_start += n->delay_offset;
-      assert((n->proxy_start >= 0));
-      n->proxy_end += n->delay_offset;
-      assert((n->proxy_end <= collider_num_));
-      n->delay_offset = 0;
 
       // split a leaf if proxy num is too large
       if (n->is_leaf()) {
@@ -962,6 +957,7 @@ class KDTree {
         sap_sorted_group_self_collision(proxy_start, proxy_num, axis, filter,
                                         cache);
       }
+
     } else {
       // node-node and node-external test
       C** ext_start = buffer_.data() + n->ext_start;
@@ -974,6 +970,7 @@ class KDTree {
       // buffer will be overwrited once main thread traverse to another branch.
       // hence external collider buffer needs to be copied.
       std::vector<C*> ext_copy(ext_start, ext_start + ext_num);
+
 #pragma omp task firstprivate(proxy_start, proxy_num, axis, ext_copy)
       {
         auto& cache = local_cache_[omp_get_thread_num()];
