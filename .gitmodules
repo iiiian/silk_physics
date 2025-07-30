@@ -25,3 +25,6 @@
 [submodule "extern/pdqsort"]
 	path = extern/pdqsort
 	url = https://github.com/orlp/pdqsort.git
+[submodule "extern/suite-sparse"]
+	path = extern/suite-sparse
+	url = https://github.com/DrTimothyAldenDavis/SuiteSparse.git
