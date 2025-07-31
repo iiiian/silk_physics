@@ -56,11 +56,12 @@ class ClothElasticConstrain : public ISolverConstrain {
         F, Eigen::ComputeFullV | Eigen::ComputeFullU);
     // this is the projection, deformation F cause by purely rotation +
     // translation
-    Eigen::Vector2f sin = svd.singularValues();
-    sin(0) = (sin(0) > 0.0f) ? 1 : -1;
-    sin(1) = (sin(1) > 0.0f) ? 1 : -1;
+    Eigen::Vector2f sigma = svd.singularValues();
+    sigma(0) = std::clamp(sigma(0), 0.9f, 1.1f);
+    sigma(1) = std::clamp(sigma(1), 0.9f, 1.1f);
     Eigen::Matrix<float, 3, 2> T = svd.matrixU().block<3, 2>(0, 0) *
-                                   sin.asDiagonal() * svd.matrixV().transpose();
+                                   sigma.asDiagonal() *
+                                   svd.matrixV().transpose();
 
     // compute the elastic rhs, reuse buffer
     buffer = weight_ * jacobian_op_.transpose() * T.reshaped();

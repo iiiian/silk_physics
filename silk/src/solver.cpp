@@ -153,33 +153,28 @@ bool Solver::lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
   }
 
   // subspace solve
-  // Eigen::VectorXf subspace_b = U_.transpose() * (b - HX_);
-  // Eigen::VectorXf subspace_q;
-  // if (collisions_.empty()) {
-  //   subspace_q = subspace_b.array() / UHU_.array();
-  // } else {
-  //   subspace_q =
-  //       (UHU_ + U_.transpose() * dH * U_).householderQr().solve(subspace_b);
-  // }
-  // Eigen::VectorXf subspace_sol = init_state_ + U_ * subspace_q;
+  Eigen::VectorXf subspace_b = U_.transpose() * (b - HX_);
+  Eigen::VectorXf subspace_q;
+  if (collisions_.empty()) {
+    subspace_q = subspace_b.array() / UHU_.array();
+  } else {
+    subspace_q =
+        (UHU_ + U_.transpose() * dH * U_).householderQr().solve(subspace_b);
+  }
+  Eigen::VectorXf subspace_sol = init_state_ + U_ * subspace_q;
 
-  Eigen::SparseMatrix<float> A = H_ + dH;
-  A.makeCompressed();
-  Eigen::UmfPackLU<Eigen::SparseMatrix<float>> umf_solver{A};
-  state = umf_solver.solve(b);
+  // iterative global solve
+  Eigen::BiCGSTAB<Eigen::SparseMatrix<float>> iterative_solver;
+  iterative_solver.setMaxIterations(max_iteration);
+  iterative_solver.compute(H_ + dH);
+  state = iterative_solver.solveWithGuess(b, subspace_sol);
 
-  // // iterative global solve
-  // Eigen::BiCGSTAB<Eigen::SparseMatrix<float>> iterative_solver;
-  // iterative_solver.setMaxIterations(max_iteration);
-  // iterative_solver.compute(H_ + dH);
-  // state = iterative_solver.solveWithGuess(b, subspace_sol);
-  //
-  // // we do not care if iterative solver converges or not because looping
-  // // lg_solve is more effective
-  // if (iterative_solver.info() != Eigen::Success &&
-  //     iterative_solver.info() != Eigen::NoConvergence) {
-  //   return false;
-  // }
+  // we do not care if iterative solver converges or not because looping
+  // lg_solve is more effective
+  if (iterative_solver.info() != Eigen::Success &&
+      iterative_solver.info() != Eigen::NoConvergence) {
+    return false;
+  }
 
   return true;
 }
@@ -239,8 +234,7 @@ bool Solver::step(Registry& registry,
 
     collisions_ = collision_pipeline.find_collision(
         registry.get_all<ObjectCollider>(), dt);
-
-    collisions_.clear();
+    std::cout << "get " << collisions_.size() << "collision" << std::endl;
 
     // ccd line search
     if (!collisions_.empty()) {
