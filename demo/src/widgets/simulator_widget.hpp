@@ -22,7 +22,7 @@ class SimulatorWidget : public IWidget {
   void leave_sim_mode();
   void update_pin(const Object& obj);
   void update_pos(Object& obj);
-  void solver_step();
+  void solver_step(int substep);
   void handle_drag_selection();
 
  public:

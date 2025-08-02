@@ -604,7 +604,7 @@ class KDTree {
       n->left->right->delay_offset += left_num;
     }
     n->left->proxy_end += left_num;
-    assert((n->left->proxy_end + n->left->delay_offset < collider_num_));
+    assert((n->left->proxy_end + n->left->delay_offset <= collider_num_));
     n->left->population += left_num;
 
     // move right partition down one node level
@@ -795,6 +795,7 @@ class KDTree {
       other = n->left;
     }
 
+    main->left->delay_offset = -n->proxy_num();
     n->left = main->left;
     n->right = main->right;
     n->axis = main->axis;
@@ -871,8 +872,8 @@ class KDTree {
       }
 
       // original plane is not optimal, try translating the plane
-      int left_num = n->left->population;
-      int right_num = n->right->population;
+      // int left_num = n->left->population;
+      // int right_num = n->right->population;
       lift_subtree(n);
       translate(n);
       if (evaluate(n)) {
@@ -886,8 +887,10 @@ class KDTree {
       }
 
       // translated plane is still not optimal, erase the node
-      erase(n, (left_num > right_num));
+      collapse(n);
       stack_.push_back(n);
+      // erase(n, (left_num > right_num));
+      // stack_.push_back(n);
     }
   }
 

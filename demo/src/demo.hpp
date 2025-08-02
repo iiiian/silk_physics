@@ -18,12 +18,6 @@ class Demo {
   HelpBarWidget help_bar_widget_{ctx_};
   StatisticWidget statistic_widget_{ctx_};
 
-  float dpi_scaling_ = 1.f;
-
-  void compute_dpi_scaling();
-
-  void update_style();
-
   void draw();
 
  public:

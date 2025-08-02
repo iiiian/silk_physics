@@ -72,7 +72,7 @@ class ClothElasticConstrain : public ISolverConstrain {
   }
 };
 
-std::optional<Eigen::Matrix<float, 6, 9>> cloth_jacobian_operator(
+std::optional<Eigen::Matrix<float, 6, 9>> triangle_jacobian_operator(
     Eigen::Ref<const Eigen::Vector3f> v0, Eigen::Ref<const Eigen::Vector3f> v1,
     Eigen::Ref<const Eigen::Vector3f> v2, float zero_threshold) {
   // convert triangle to 2D
@@ -157,8 +157,8 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   // in-plane deformation energy
   for (int f = 0; f < face_num; ++f) {
     // TODO: avoid hardcoded jacobian zero_threshold
-    auto jop = cloth_jacobian_operator(m.V.row(m.F(f, 0)), m.V.row(m.F(f, 1)),
-                                       m.V.row(m.F(f, 2)), 0.0f);
+    auto jop = triangle_jacobian_operator(
+        m.V.row(m.F(f, 0)), m.V.row(m.F(f, 1)), m.V.row(m.F(f, 2)), 0.0f);
     if (!jop) {
       // TODO: handle degenerate triangle better?
       continue;

@@ -106,6 +106,7 @@ void SimulatorWidget::enter_sim_mode() {
   py::state::doDefaultMouseInteraction = false;
   is_first_click = true;
   selected_obj = nullptr;
+  prev_update_time_ = std::chrono::steady_clock::now();
   ctx_.ui_mode = UIMode::Sim;
   SPDLOG_INFO("Enter sim mode");
 }
@@ -154,16 +155,18 @@ void SimulatorWidget::update_pos(Object& obj) {
   obj.mesh->updateVertexPositions(V);
 }
 
-void SimulatorWidget::solver_step() {
+void SimulatorWidget::solver_step(int substep) {
   for (auto& obj : ctx_.objects) {
     update_pin(obj);
   }
 
-  auto res = ctx_.silk_world.solver_step();
-  if (res != silk::Result::Success) {
-    SPDLOG_ERROR("solve fail, Reason: {}", silk::to_string(res));
-    leave_sim_mode();
-    return;
+  for (int i = 0; i < substep; ++i) {
+    auto res = ctx_.silk_world.solver_step();
+    if (res != silk::Result::Success) {
+      SPDLOG_ERROR("solve fail, Reason: {}", silk::to_string(res));
+      leave_sim_mode();
+      return;
+    }
   }
 
   for (Object& obj : ctx_.objects) {
@@ -256,11 +259,13 @@ void SimulatorWidget::draw() {
     prev_mouse_pos_ = ImGui::GetMousePos();
 
     auto now = std::chrono::steady_clock::now();
-    if (std::chrono::duration_cast<std::chrono::microseconds>(now -
-                                                              prev_update_time_)
-            .count() >= 1e6f * ctx_.global_config.dt) {
-      solver_step();
-      prev_update_time_ = std::chrono::steady_clock::now();
+    int elaspes_ms = std::chrono::duration_cast<std::chrono::microseconds>(
+                         now - prev_update_time_)
+                         .count();
+    int substep = elaspes_ms / (1e6f * ctx_.global_config.dt);
+    if (substep > 0) {
+      solver_step(substep);
     }
+    prev_update_time_ = std::chrono::steady_clock::now();
   }
 }

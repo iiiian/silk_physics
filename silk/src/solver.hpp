@@ -28,7 +28,7 @@ class Solver {
   Eigen::VectorXf prev_state_;
 
   Eigen::SparseMatrix<float> mass_;
-  Eigen::SparseMatrix<float> H_;
+  Eigen::SparseMatrix<float> H_;  // use row major format for iterative solver
   Eigen::MatrixXf UHU_;
   Eigen::MatrixXf U_;
   Eigen::VectorXf HX_;

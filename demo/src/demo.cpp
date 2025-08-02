@@ -6,24 +6,13 @@
 namespace py = polyscope;
 
 Demo::Demo() {
-  compute_dpi_scaling();
-  update_style();
   py::state::userCallback = [this]() { this->draw(); };
-}
-
-void Demo::compute_dpi_scaling() {
-  dpi_scaling_ = ImGui::GetIO().DisplayFramebufferScale.x;
-}
-
-void Demo::update_style() {
-  ImGuiStyle& style = ImGui::GetStyle();
-  style.ScaleAllSizes(dpi_scaling_);
 }
 
 void Demo::draw() {
   // left panel
   const auto& display_size = ImGui::GetIO().DisplaySize;
-  const float panel_width = 400.f * dpi_scaling_;
+  const float panel_width = 400.f * py::options::uiScale;
   ImGui::SetNextWindowPos(ImVec2(0.f, 0.f));
   ImGui::SetNextWindowSize(ImVec2(panel_width, display_size.y));
   ImGui::Begin("Left Panel", nullptr,

@@ -54,7 +54,7 @@ float CCDPoly::eval_derivative(float x) const {
 std::optional<float> CCDPoly::bisect(float l, float r) const {
   for (int i = 0; i < bisect_it_; ++i) {
     float m = 0.5f * (l + r);
-    if (eval(m) > h_) {
+    if (eval(m) > cy_) {
       l = m;
     } else {
       r = m;
@@ -87,10 +87,10 @@ std::optional<float> CCDPoly::cubic_ccd() const {
     }
 
     // case 2, 4
-    if (eval_t1 > h_) {
+    if (eval_t1 > cy_) {
       return std::nullopt;
     }
-    if (eval_t1 > -h_) {
+    if (eval_t1 > -cy_) {
       return eval_t1;
     }
 
@@ -114,10 +114,10 @@ std::optional<float> CCDPoly::cubic_ccd() const {
     // t0 after e1 before e2, t1 before e2
     // potential collision between t0 t1
     if (0.0f > e1 && 1.0f < e2) {
-      if (eval_t1 > h_) {
+      if (eval_t1 > cy_) {
         return std::nullopt;
       }
-      if (eval_t1 > -h_) {
+      if (eval_t1 > -cy_) {
         return eval_t1;
       }
 
@@ -128,10 +128,10 @@ std::optional<float> CCDPoly::cubic_ccd() const {
     // potential collision between t0, e2
     if (0.0f > e1 && 1.0f > e2) {
       float eval_e2 = eval(e2);
-      if (eval_e2 > h_) {
+      if (eval_e2 > cy_) {
         return std::nullopt;
       }
-      if (eval_e2 > -h_) {
+      if (eval_e2 > -cy_) {
         return eval_e2;
       }
 
@@ -147,10 +147,10 @@ std::optional<float> CCDPoly::cubic_ccd() const {
     // t0 before e1, t1 after e1 before e2
     // potential collision between e1 t1
     if (1.0f < e2) {
-      if (eval_t1 > h_) {
+      if (eval_t1 > cy_) {
         return std::nullopt;
       }
-      if (eval_t1 > -h_) {
+      if (eval_t1 > -cy_) {
         return eval_t1;
       }
       return bisect(e1, 1.0f);
@@ -159,10 +159,10 @@ std::optional<float> CCDPoly::cubic_ccd() const {
     // t0 before e1, t1 after e2
     // potential between e1 e2
     float eval_e2 = eval(e2);
-    if (eval_e2 > h_) {
+    if (eval_e2 > cy_) {
       return std::nullopt;
     }
-    if (eval_e2 > -h_) {
+    if (eval_e2 > -cy_) {
       return eval_e2;
     }
     return bisect(e1, e2);
@@ -173,10 +173,10 @@ std::optional<float> CCDPoly::cubic_ccd() const {
   // t0 after e2
   // potential collision between t0 t1
   if (0.0f > e2) {
-    if (eval_t1 > h_) {
+    if (eval_t1 > cy_) {
       return std::nullopt;
     }
-    if (eval_t1 > -h_) {
+    if (eval_t1 > -cy_) {
       return eval_t1;
     }
 
@@ -192,10 +192,10 @@ std::optional<float> CCDPoly::cubic_ccd() const {
   // t0 after e1 before e2 , t1 after e2
   // potential collision between e2 t1
   if (0.0f > e1 && 1.0f > e2) {
-    if (eval_t1 > h_) {
+    if (eval_t1 > cy_) {
       return std::nullopt;
     }
-    if (eval_t1 > -h_) {
+    if (eval_t1 > -cy_) {
       return eval_t1;
     }
 
@@ -205,10 +205,10 @@ std::optional<float> CCDPoly::cubic_ccd() const {
   // t0 before e1, t1 before e1
   // potential collision before t0 t1
   if (1.0f < e1) {
-    if (eval_t1 > h_) {
+    if (eval_t1 > cy_) {
       return std::nullopt;
     }
-    if (eval_t1 > -h_) {
+    if (eval_t1 > -cy_) {
       return eval_t1;
     }
 
@@ -219,10 +219,10 @@ std::optional<float> CCDPoly::cubic_ccd() const {
   // potential collision t0 e1
   if (1.0f < e2) {
     float eval_e1 = eval(e1);
-    if (eval_e1 > h_) {
+    if (eval_e1 > cy_) {
       return std::nullopt;
     }
-    if (eval_e1 > -h_) {
+    if (eval_e1 > -cy_) {
       return eval_e1;
     }
 
@@ -233,18 +233,18 @@ std::optional<float> CCDPoly::cubic_ccd() const {
   // potential collision between t0 e1 and e2 t1
   // test t0 e1 collision
   float eval_e1 = eval(e1);
-  if (eval_e1 < h_ && d_ > h_) {
-    if (eval_e1 > -h_) {
+  if (eval_e1 < cy_ && d_ > cy_) {
+    if (eval_e1 > -cy_) {
       return eval_e1;
     }
 
     return bisect(0.0f, e1);
   }
   // no collision between t0 e1, test e2 t1
-  if (eval_t1 > h_) {
+  if (eval_t1 > cy_) {
     return std::nullopt;
   }
-  if (eval_t1 > -h_) {
+  if (eval_t1 > -cy_) {
     return eval_t1;
   }
   return bisect(e2, 1.0f);
@@ -276,6 +276,8 @@ std::optional<CCDPoly> CCDPoly::try_make_ccd_poly(
   Eigen::Vector3f v10cp20 = v10.cross(p20);
   Eigen::Vector3f p10cp20 = p10.cross(p20);
 
+  float poly_eps = h * p10cp20.norm();
+
   float a = v10cv20.dot(v30);
   float b = p10cv20.dot(v30) + v10cp20.dot(v30) + v10cv20.dot(p30);
   float c = v10cp20.dot(p30) + p10cv20.dot(p30) + p10cp20.dot(v30);
@@ -283,8 +285,9 @@ std::optional<CCDPoly> CCDPoly::try_make_ccd_poly(
 
   float max_coeff = std::max(std::max(std::abs(a), std::abs(b)),
                              std::max(std::abs(c), std::abs(d)));
+
   // Big trouble, complete coplaner ccd
-  if (std::abs(max_coeff) < eps) {
+  if (max_coeff < poly_eps) {
     return std::nullopt;
   }
 
@@ -309,9 +312,7 @@ std::optional<CCDPoly> CCDPoly::try_make_ccd_poly(
   poly.d_ = d;
   poly.tol_ = tol;
   poly.bisect_it_ = bisect_it;
-  // poly.refine_it_ = refine_it;
-  // poly.h_ = p10cp20.norm() * h;
-  poly.h_ = 1e-6f;
+  poly.cy_ = poly_eps;
   poly.eps_ = eps;
 
   return poly;

@@ -100,7 +100,6 @@ bool Solver::init(Registry& registry) {
   AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
 
   H_ = mass_ / (dt * dt) + AA;
-  // H_ = (mass_ / (dt * dt));
 
   // TODO: replace arpack with modern solution.
   Eigen::ArpackGeneralizedSelfAdjointEigenSolver<
@@ -132,9 +131,10 @@ bool Solver::lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
   Eigen::SparseMatrix<float> dH(state_num_, state_num_);
   for (auto& c : collisions_) {
     for (int i = 0; i < 4; ++i) {
-      dH.coeffRef(c.offset(i), c.offset(i)) = 1e10f * c.position(0, i);
-      dH.coeffRef(c.offset(i) + 1, c.offset(i) + 1) = 1e10f * c.position(1, i);
-      dH.coeffRef(c.offset(i) + 2, c.offset(i) + 2) = 1e10f * c.position(2, i);
+      dH.coeffRef(c.offset(i), c.offset(i)) = 1e10f;
+      dH.coeffRef(c.offset(i) + 1, c.offset(i) + 1) = 1e10f;
+      dH.coeffRef(c.offset(i) + 2, c.offset(i) + 2) = 1e10f;
+
       b(Eigen::seqN(c.offset(i), 3)) = 1e10f * c.position.col(i);
     }
   }
@@ -153,26 +153,32 @@ bool Solver::lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
   }
 
   // subspace solve
-  Eigen::VectorXf subspace_b = U_.transpose() * (b - HX_);
-  Eigen::VectorXf subspace_q;
-  if (collisions_.empty()) {
-    subspace_q = subspace_b.array() / UHU_.array();
-  } else {
-    subspace_q =
-        (UHU_ + U_.transpose() * dH * U_).householderQr().solve(subspace_b);
-  }
-  Eigen::VectorXf subspace_sol = init_state_ + U_ * subspace_q;
+  // Eigen::VectorXf subspace_b = U_.transpose() * (b - HX_ - dH * init_state_);
+  // Eigen::VectorXf subspace_dx =
+  //     (UHU_ + U_.transpose() * dH * U_).householderQr().solve(subspace_b);
+  // Eigen::VectorXf subspace_x = init_state_ + U_ * subspace_dx;
 
-  // iterative global solve
-  Eigen::BiCGSTAB<Eigen::SparseMatrix<float>> iterative_solver;
-  iterative_solver.setMaxIterations(max_iteration);
-  iterative_solver.compute(H_ + dH);
-  state = iterative_solver.solveWithGuess(b, subspace_sol);
+  // // iterative global solve
+  // Eigen::BiCGSTAB<Eigen::SparseMatrix<float>> iterative_solver;
+  // iterative_solver.setMaxIterations(max_iteration);
+  // iterative_solver.compute(H_ + dH);
+  // state = iterative_solver.solveWithGuess(b, state);
+  //
+  // // we do not care if iterative solver converges or not because looping
+  // // lg_solve is more effective
+  // if (iterative_solver.info() != Eigen::Success &&
+  //     iterative_solver.info() != Eigen::NoConvergence) {
+  //   return false;
+  // }
+  //
+  // std::cout << "iterative solver iter " << iterative_solver.iterations()
+  //           << std::endl;
 
-  // we do not care if iterative solver converges or not because looping
-  // lg_solve is more effective
-  if (iterative_solver.info() != Eigen::Success &&
-      iterative_solver.info() != Eigen::NoConvergence) {
+  Eigen::SimplicialLDLT<Eigen::SparseMatrix<float>> ldlt_solver;
+  ldlt_solver.compute(H_ + dH);
+  state = ldlt_solver.solve(b);
+
+  if (ldlt_solver.info() != Eigen::Success) {
     return false;
   }
 
@@ -212,29 +218,42 @@ bool Solver::step(Registry& registry,
   curr_state_ = predict_state;
   // Eigen::VectorXf predict_state = curr_state_;
 
-  float state_diff = std::numeric_limits<float>::infinity();
+  collisions_.clear();
+
+  bool has_converge = false;
+  float state_diff = 1e6f;
   int iter_count = 0;
-  while (state_diff > 1e-3f) {
-    while (state_diff > 1e-3f) {
+
+  while (!has_converge) {
+    while (!has_converge) {
       lg_solve(registry, init_rhs, predict_state);
-      state_diff = (predict_state - curr_state_).cwiseAbs().sum();
+      // float new_state_diff = (predict_state - curr_state_).cwiseAbs().sum();
+      // std::cout << "new state diff " << new_state_diff << " , state diff "
+      //           << state_diff << std::endl;
+      //
+      // has_converge = (new_state_diff < state_diff &&
+      //                 (state_diff - new_state_diff) < 0.1f * state_diff);
+      // state_diff = new_state_diff;
+
+      has_converge =
+          ((predict_state - curr_state_).array().abs() < 1e-3f).all();
+
       curr_state_ = predict_state;
 
-      // std::cout << "Iter " << iter_count << ", state diff = " << state_diff
-      //           << std::endl;
+      std::cout << "Iter " << iter_count << std::endl;
       ++iter_count;
     }
 
-    // std::cout << "reach outer loop" << std::endl;
+    std::cout << "reach outer loop" << std::endl;
 
     // update collision
     update_all_physical_object_collider(registry, predict_state, prev_state_);
 
-    // std::cout << "outer loop obj collider update fin" << std::endl;
+    std::cout << "outer loop obj collider update fin" << std::endl;
 
     collisions_ = collision_pipeline.find_collision(
         registry.get_all<ObjectCollider>(), dt);
-    std::cout << "get " << collisions_.size() << "collision" << std::endl;
+    std::cout << "get " << collisions_.size() << " collision" << std::endl;
 
     // ccd line search
     if (!collisions_.empty()) {
@@ -243,9 +262,12 @@ bool Solver::step(Registry& registry,
         toi = std::min(toi, c.toi);
       }
 
-      // std::cout << "min toi " << toi << std::endl;
-      curr_state_ += ccd_walkback * toi * (predict_state - curr_state_);
-      state_diff = (predict_state - curr_state_).cwiseAbs().sum();
+      predict_state =
+          ccd_walkback * toi * (predict_state - prev_state_) + prev_state_;
+      has_converge =
+          ((predict_state - curr_state_).array().abs() < 1e-3f).all();
+
+      std::cout << ", toi " << toi << std::endl;
     }
   }
 
