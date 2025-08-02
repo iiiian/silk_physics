@@ -11,7 +11,7 @@ class CCDPoly {
 
   float tol_;
   int bisect_it_ = 4;
-  float h_;
+  float cy_;
   float eps_;
 
   std::optional<float> linear_ccd(float a, float b) const;

@@ -50,7 +50,8 @@ std::optional<Collision> CollisionPipeline::narrow_phase(
   // TODO: more damping and friction avg mode
   float damping = 0.5f * (oa.damping + ob.damping);
   float friction = 0.5f * (oa.friction + ob.friction);
-  float h = std::min(oa.bbox_padding, ob.bbox_padding);
+  float h =
+      std::min(oa.bbox_padding, ob.bbox_padding);  // 5% of avg edge length
   CCDConfig config = {dt, damping, friction, h, toi_tolerance, toi_bisect_it,
                       eps};
 
@@ -60,6 +61,8 @@ std::optional<Collision> CollisionPipeline::narrow_phase(
 
   // edge edge collision
   if (ma.type == MeshColliderType::Edge) {
+    return std::nullopt;
+
     position_t0.block(0, 0, 3, 2) = ma.position_t0.block(0, 0, 3, 2);
     position_t0.block(0, 2, 3, 2) = mb.position_t0.block(0, 0, 3, 2);
     position_t1.block(0, 0, 3, 2) = ma.position_t1.block(0, 0, 3, 2);
@@ -211,18 +214,12 @@ std::vector<Collision> CollisionPipeline::find_collision(
 
     // auto timer0 = std::chrono::steady_clock::now();
 
-    // int narrowphase_count = 0;
     collisions.clear();
     for (auto& [ma, mb] : mesh_ccache) {
       auto collision = narrow_phase(o, *ma, o, *mb, dt);
       if (collision) {
         collisions.emplace_back(std::move(*collision));
       }
-      // ++narrowphase_count;
-      // if (narrowphase_count % 1000 == 0) {
-      //   std::cout << "narrow phase count " << narrowphase_count <<
-      //   std::endl;
-      // }
     }
 
     // auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
