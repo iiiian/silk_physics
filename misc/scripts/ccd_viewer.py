@@ -89,7 +89,9 @@ def get_trajectory_data(d: pd.Series, t: float) -> PolyData:
         for i in range(4):
             lines.extend([2, v_toi_indices[i], v_t_indices[i]])
 
-    flat_points = [coord for point in points for coord in point]
+    flat_points = []
+    for coor in points:
+        flat_points.extend(coor)
     return PolyData(points=flat_points, lines=lines)
 
 
@@ -109,7 +111,9 @@ def create_scene_geometries(d: pd.Series, t: float, point_size: float, edge_thic
         geometries.append(
             GeometryRepresentation(
                 children=[point_polydata],
-                property={"color": [1, 0, 0], "pointSize": point_size},
+                # representation 0 = point
+                # see https://github.com/Kitware/vtk-js/blob/master/Sources/Rendering/Core/Property/Constants.js#L7-L11
+                property={"color": [1, 0, 0], "pointSize": point_size, "representation": 0},
             )
         )
         # Triangle (blue)
@@ -121,8 +125,7 @@ def create_scene_geometries(d: pd.Series, t: float, point_size: float, edge_thic
         geometries.append(
             GeometryRepresentation(
                 children=[tri_polydata],
-                property={"color": [0, 0, 1], "lineWidth": edge_thickness},
-                representation="wireframe",
+                property={"color": [0, 0, 1], "lineWidth": edge_thickness, "representation": 2},
             )
         )
     elif d["type"] == "EdgeEdge":
@@ -135,7 +138,7 @@ def create_scene_geometries(d: pd.Series, t: float, point_size: float, edge_thic
         geometries.append(
             GeometryRepresentation(
                 children=[edge1_polydata],
-                property={"color": [1, 0, 0], "lineWidth": edge_thickness},
+                property={"color": [1, 0, 0], "lineWidth": edge_thickness, "representation": 2},
             )
         )
         # Edge 2 (blue)
@@ -147,7 +150,7 @@ def create_scene_geometries(d: pd.Series, t: float, point_size: float, edge_thic
         geometries.append(
             GeometryRepresentation(
                 children=[edge2_polydata],
-                property={"color": [0, 0, 1], "lineWidth": edge_thickness},
+                property={"color": [0, 0, 1], "lineWidth": edge_thickness, "representation": 2},
             )
         )
 
@@ -156,7 +159,7 @@ def create_scene_geometries(d: pd.Series, t: float, point_size: float, edge_thic
     geometries.append(
         GeometryRepresentation(
             children=[trajectory_polydata],
-            property={"color": [1, 1, 0], "lineWidth": trajectory_thickness},
+            property={"color": [1, 1, 0], "lineWidth": trajectory_thickness, "representation": 2},
         )
     )
 
@@ -190,8 +193,15 @@ def parse_reflection_csv(path: Path) -> pd.DataFrame:
     def parse_coordinate(string):
         return np.fromiter(string.split(","), dtype=float)
 
-    converters = {f"x{i}{j}": parse_coordinate for i in range(4) for j in range(2)}
-    converters.update({f"x{i}r": parse_coordinate for i in range(4)})
+    converters = {}
+    # Initial and final positions (x00, x01, x10, x11, ...)
+    for i in range(4):
+        for j in range(2):
+            converters[f"x{i}{j}"] = parse_coordinate
+
+    # Reflected positions (x0r, x1r, ...)
+    for i in range(4):
+        converters[f"x{i}r"] = parse_coordinate
 
     df = pd.read_csv(path, sep=";", converters=converters)
     return df
@@ -209,25 +219,15 @@ def main():
 
     csv_path = Path(sys.argv[1])
     df = parse_reflection_csv(csv_path)
-    # For now, we only view the first entry.
-    # A dropdown could be added later to select the entry.
-    d = df.iloc[0]
-    toi = d["toi"]
-
-    # Create marks for the time slider
-    time_slider_marks = {
-        toi: {
-            "label": f"TOI={toi:.2f}",
-            "style": {"color": "#f50", "fontWeight": "bold"}
-        }
-    }
 
     app = Dash(__name__, external_stylesheets=['https://codepen.io/chriddyp/pen/bWLwgP.css'])
 
     app.layout = html.Div(
         style={"display": "flex", "height": "100vh", "width": "100vw", "margin": "0"},
         children=[
-            # Left Panel
+            # current collision entry index
+            dcc.Store(id='collision-index', data=0),
+            # Left Control Panel
             html.Div(
                 style={
                     "width": "350px",
@@ -239,7 +239,16 @@ def main():
                     "overflowY": "auto",
                 },
                 children=[
+                    # Collision entry nagivation
+                    html.H4("Collision Navigator"),
+                    html.Div(id='collision-counter', style={"display": "flex", "justify-content": "space-evenly", "align-items": "center"}),
+                    html.Div(style={"display": "flex", "justify-content": "space-evenly", "align-items": "center"}, children=[
+                        html.Button('Previous', id='prev-button', n_clicks=0),
+                        html.Button('Next', id='next-button', n_clicks=0),
+                    ]),
+                    # CCD viewer control
                     html.H4("Controls"),
+                    # time slider
                     html.Label("Time (t)"),
                     dcc.Slider(
                         id="time-slider",
@@ -247,9 +256,9 @@ def main():
                         max=1,
                         step=0.01,
                         value=0,
-                        marks=time_slider_marks,
                         tooltip={"placement": "bottom", "always_visible": True},
                     ),
+                    # time slider play/pause button
                     html.Button('Play', id='play-pause-button', n_clicks=0, style={"width": "100%"}),
                     dcc.Interval(id='interval-component', interval=100, n_intervals=0, disabled=True),
                     html.Label("Point Size"),
@@ -258,10 +267,11 @@ def main():
                         min=1,
                         max=20,
                         step=1,
-                        value=10,
+                        value=15,
                         marks={i: str(i) for i in range(1, 21, 2)},
                         tooltip={"placement": "bottom", "always_visible": True},
                     ),
+                    # edge thickness slider
                     html.Label("Edge Thickness"),
                     dcc.Slider(
                         id="edge-thickness-slider",
@@ -272,6 +282,7 @@ def main():
                         marks={i: str(i) for i in range(1, 11)},
                         tooltip={"placement": "bottom", "always_visible": True},
                     ),
+                    # trajectory thickness slider
                     html.Label("Trajectory Thickness"),
                     dcc.Slider(
                         id="trajectory-thickness-slider",
@@ -283,6 +294,7 @@ def main():
                         tooltip={"placement": "bottom", "always_visible": True},
                     ),
                     html.Hr(),
+                    # Exact vertex position table
                     html.H4("Vertex Positions at t"),
                     dash_table.DataTable(
                         id="vertex-table",
@@ -300,7 +312,7 @@ def main():
                     ),
                 ],
             ),
-            # Right Panel
+            # Right CCD viewer
             html.Div(
                 style={"flex": "1", "overflow": "hidden"},
                 children=[
@@ -313,15 +325,59 @@ def main():
     @app.callback(
         Output("view", "children"),
         Output("vertex-table", "data"),
+        Output("time-slider", "marks"),
+        Output("collision-counter", "children"),
         Input("time-slider", "value"),
         Input("point-size-slider", "value"),
         Input("edge-thickness-slider", "value"),
         Input("trajectory-thickness-slider", "value"),
+        Input("collision-index", "data"),
     )
-    def update_view(t, point_size, edge_thickness, trajectory_thickness):
+    def update_view(t, point_size, edge_thickness, trajectory_thickness, collision_index):
+        d = df.iloc[collision_index]
+        toi = d["toi"]
+        time_slider_marks = {
+            toi: {
+                "label": f"TOI={toi:.2f}",
+                "style": {"color": "#f50", "fontWeight": "bold"}
+            }
+        }
+
         geometries = create_scene_geometries(d, t, point_size, edge_thickness, trajectory_thickness)
         table_data = create_vertex_table_data(d, t)
-        return geometries, table_data
+        counter_text = f"At {collision_index + 1} / {len(df)} collisions"
+        return geometries, table_data, time_slider_marks, counter_text
+
+    @app.callback(
+        Output("view", "triggerResetCamera"),
+        Input("collision-index", "data"),
+        Input("view", "triggerResetCamera"),
+    )
+    def reset_camera(collision_index, current_trigger):
+        # triggerResetCamera is a number. camera will reset whenever this number changed
+        if current_trigger == 0:
+            return 1
+        else:
+            return 0
+
+    @app.callback(
+        Output('collision-index', 'data'),
+        Input('prev-button', 'n_clicks'),
+        Input('next-button', 'n_clicks'),
+        State('collision-index', 'data'),
+    )
+    def update_collision_index(prev_clicks, next_clicks, current_index):
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            return 0
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+        # update collision index, which will trigger view update and camera reset
+        if button_id == 'prev-button':
+            return max(0, current_index - 1)
+        elif button_id == 'next-button':
+            return min(len(df) - 1, current_index + 1)
+        return current_index
 
     @app.callback(
         Output('interval-component', 'disabled'),
