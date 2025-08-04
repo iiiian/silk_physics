@@ -1,4 +1,4 @@
-#include "ccd_test_helper.hpp"
+#include "ccd_test_utils.hpp"
 
 #include <Eigen/Core>
 #include <array>

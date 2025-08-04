@@ -32,10 +32,10 @@ if(SILK_BUILD_DEMO)
     add_subdirectory(demo)
 endif()
 
-# if(SILK_BUILD_TEST)
-#     find_package(Alembic CONFIG REQUIRED)
-#     add_subdirectory(extern/catch2)
-#
-#     enable_testing()
-#     add_subdirectory(test)
-# endif()
+if(SILK_BUILD_TEST)
+    find_package(Alembic CONFIG REQUIRED)
+    add_subdirectory(extern/catch2)
+
+    enable_testing()
+    add_subdirectory(test)
+endif()

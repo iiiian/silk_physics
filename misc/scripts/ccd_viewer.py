@@ -1,5 +1,6 @@
 import pandas as pd
-from dash import Dash, html
+from dash import Dash, dcc, html
+from dash.dependencies import Input, Output
 import sys
 from pathlib import Path
 from dash_vtk import GeometryRepresentation, PolyData, View
@@ -109,10 +110,10 @@ def make_ee_poly_data(df: pd.DataFrame, idx: int, t: float) -> PolyData:
     lines += [2, 4, 5]
     lines += [2, 6, 7]
     if t >= toi:
-        # triangle at collision
+        # edges at collision
         lines += [2, 8, 9]
         lines += [2, 10, 11]
-        # triangle after reflection
+        # edges after reflection
         lines += [2, 12, 13]
         lines += [2, 14, 15]
 
@@ -169,24 +170,57 @@ if __name__ == "__main__":
 
     csv_path = Path(sys.argv[1])
     df = parse_reflection_csv(csv_path)
-    # print(df)
 
     app = Dash()
 
-    poly_data = make_poly_data(df, 0, 0.0)
     app.layout = html.Div(
-        style={"width": "100%", "height": "100vh"},
+        style={
+            "display": "flex",
+            "flexDirection": "column",
+            "width": "100vw",
+            "height": "100vh",
+            "margin": 0,
+            "padding": 0,
+        },
         children=[
-            View(
-                [
-                    GeometryRepresentation(
-                        [
-                            poly_data,
-                        ]
+            html.Div(
+                style={"flex": "0 0 auto", "padding": "5px"},
+                children=[
+                    dcc.Slider(
+                        id="time-slider",
+                        min=0,
+                        max=1,
+                        step=0.01,
+                        value=0,
+                        marks={i / 10: str(i / 10) for i in range(11)},
                     )
-                ]
-            )
+                ],
+            ),
+            html.Div(
+                style={"flex": "1 1 auto", "overflow": "hidden"},
+                children=[
+                    View(
+                        id="view",
+                        style={"width": "100%", "height": "100%"},
+                        children=[
+                            GeometryRepresentation(
+                                id="geometry",
+                                children=[
+                                    make_poly_data(df, 0, 0.0),
+                                ],
+                            )
+                        ],
+                    )
+                ],
+            ),
         ],
     )
+
+    @app.callback(
+        Output("geometry", "children"),
+        [Input("time-slider", "value")],
+    )
+    def update_figure(t):
+        return [make_poly_data(df, 0, t)]
 
     app.run(debug=True)
