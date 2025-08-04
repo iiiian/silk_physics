@@ -20,38 +20,28 @@ def interpolate(x0: np.ndarray, x1: np.ndarray, t: float) -> np.ndarray:
 
 def get_vertex_positions_at_t(d: pd.Series, t: float) -> list:
     """Calculate the positions of all 4 vertices at a given time t."""
+    assert "toi" in d and pd.notna(d["toi"])
     toi = d["toi"]
 
-    if t < 1.0 and t < toi:
+    if t < toi:
         p0 = interpolate(d["x00"], d["x01"], t)
         p1 = interpolate(d["x10"], d["x11"], t)
         p2 = interpolate(d["x20"], d["x21"], t)
         p3 = interpolate(d["x30"], d["x31"], t)
     else:
-        # This logic handles both t >= toi and the final state at t=1
-        # which might be post-reflection.
-        time_of_impact = d.get("toi", 1.0)
-
-        # Clamp t to be at least the time of impact if it's passed
-        effective_t = max(t, time_of_impact)
-
-        # Calculate position at time of impact
-        p0_toi = interpolate(d["x00"], d["x01"], time_of_impact)
-        p1_toi = interpolate(d["x10"], d["x11"], time_of_impact)
-        p2_toi = interpolate(d["x20"], d["x21"], time_of_impact)
-        p3_toi = interpolate(d["x30"], d["x31"], time_of_impact)
-
-        if t < time_of_impact:
-            return [p0_toi, p1_toi, p2_toi, p3_toi]
+        # Position at time of impact
+        p0_toi = interpolate(d["x00"], d["x01"], toi)
+        p1_toi = interpolate(d["x10"], d["x11"], toi)
+        p2_toi = interpolate(d["x20"], d["x21"], toi)
+        p3_toi = interpolate(d["x30"], d["x31"], toi)
 
         # Calculate how far into the reflection we are
         reflection_alpha = 0
-        if (1.0 - time_of_impact) > 1e-9:  # Avoid division by zero
-            reflection_alpha = (t - time_of_impact) / (1.0 - time_of_impact)
-
+        if (1.0 - toi) > 1e-9:  # Avoid division by zero
+            reflection_alpha = (t - toi) / (1.0 - toi)
         reflection_alpha = np.clip(reflection_alpha, 0, 1)
 
-        # Interpolate from TOI position to reflected position
+        # Interpolate from TOI to reflected position
         p0 = interpolate(p0_toi, d["x0r"], reflection_alpha)
         p1 = interpolate(p1_toi, d["x1r"], reflection_alpha)
         p2 = interpolate(p2_toi, d["x2r"], reflection_alpha)
@@ -225,10 +215,11 @@ def main():
     toi = d["toi"]
 
     # Create marks for the time slider
-    time_slider_marks = {i / 10: f"{i / 10:.1f}" for i in range(11)}
-    time_slider_marks[toi] = {
-        'label': f'TOI={toi:.2f}',
-        'style': {'color': '#f50', 'fontWeight': 'bold'}
+    time_slider_marks = {
+        toi: {
+            "label": f"TOI={toi:.2f}",
+            "style": {"color": "#f50", "fontWeight": "bold"}
+        }
     }
 
     app = Dash(__name__, external_stylesheets=['https://codepen.io/chriddyp/pen/bWLwgP.css'])
@@ -354,7 +345,7 @@ def main():
     def update_slider(n, current_time):
         if current_time >= 1:
             return 0
-        return round(current_time + 0.01, 2)
+        return round(current_time + 0.02, 2)
 
     app.run(debug=True)
 
