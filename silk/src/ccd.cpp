@@ -8,7 +8,6 @@
 
 namespace silk {
 
-// return normal if collide
 std::optional<Collision> point_triangle_collision(
     float toi, const Eigen::Matrix<float, 3, 4>& position_t0,
     const Eigen::Matrix<float, 3, 4>& position_t1,
@@ -297,9 +296,8 @@ std::optional<Collision> point_triangle_ccd(
     const Eigen::Matrix<float, 3, 4>& position_t0,
     const Eigen::Matrix<float, 3, 4>& position_t1,
     const Eigen::Vector4f& weight, const CCDConfig& config) {
-  auto poly =
-      CCDPoly::try_make_ccd_poly(position_t0, position_t1, config.tol,
-                                 config.bisect_it, config.h, config.eps);
+  auto poly = CCDPoly::try_make_ccd_poly(position_t0, position_t1, config.tol,
+                                         config.bisect_it, config.eps);
   if (!poly) {
     return std::nullopt;
   }
@@ -317,9 +315,8 @@ std::optional<Collision> edge_edge_ccd(
     const Eigen::Matrix<float, 3, 4>& position_t0,
     const Eigen::Matrix<float, 3, 4>& position_t1,
     const Eigen::Vector4f& weight, const CCDConfig& config) {
-  auto poly =
-      CCDPoly::try_make_ccd_poly(position_t0, position_t1, config.tol,
-                                 config.bisect_it, config.h, config.eps);
+  auto poly = CCDPoly::try_make_ccd_poly(position_t0, position_t1, config.tol,
+                                         config.bisect_it, config.eps);
   if (!poly) {
     return std::nullopt;
   }

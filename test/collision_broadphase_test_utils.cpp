@@ -1,4 +1,4 @@
-#include "collision_broadphase_test_helper.hpp"
+#include "collision_broadphase_test_utils.hpp"
 
 #include <omp.h>
 

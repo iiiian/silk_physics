@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "ccd.hpp"
-#include "ccd_test_helper.hpp"
+#include "ccd_test_utils.hpp"
 
 namespace fs = std::filesystem;
 
@@ -74,7 +74,7 @@ void benchmark_query_category(const fs::path &root, const std::string &name) {
             << ch::duration_cast<ch::microseconds>(elapsed).count() << " us \n";
 }
 
-TEST_CASE("ccd-benchmark", "[ccd]") {
+TEST_CASE("ccd-benchmark", "[collision]") {
   fs::path root{SAMPLE_QUERY_ROOT};
 
   SECTION("chain") { benchmark_query_category(root, "chain"); }

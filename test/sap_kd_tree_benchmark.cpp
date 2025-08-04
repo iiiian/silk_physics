@@ -8,7 +8,7 @@
 
 #include "abc_file_loader.hpp"
 #include "collision_broadphase.hpp"
-#include "collision_broadphase_test_helper.hpp"
+#include "collision_broadphase_test_utils.hpp"
 
 using namespace silk;
 namespace fs = std::filesystem;
@@ -16,7 +16,7 @@ namespace fs = std::filesystem;
 const fs::path root{PHYSICS_SCENE_ROOT};
 const fs::path cloth_sphere_abc = root / "cloth_sphere_collision_dense.abc";
 
-TEST_CASE("sap-kd-tree-animation-performance-test", "[collision broadphase]") {
+TEST_CASE("sap-kd-tree-benchmark", "[collision]") {
   // object 0 is the cloth
   // object 1 is a icosphere
   // the cloth will fall onto the icosphere

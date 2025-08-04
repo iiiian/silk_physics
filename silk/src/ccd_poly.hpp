@@ -11,7 +11,6 @@ class CCDPoly {
 
   float tol_;
   int bisect_it_ = 4;
-  float cy_;
   float eps_;
 
   std::optional<float> linear_ccd(float a, float b) const;
@@ -28,7 +27,7 @@ class CCDPoly {
   static std::optional<CCDPoly> try_make_ccd_poly(
       const Eigen::Matrix<float, 3, 4>& position_t0,
       const Eigen::Matrix<float, 3, 4>& position_t1, float tol, int bisect_it,
-      float h, float eps);
+      float eps);
 
   std::optional<float> solve() const;
 };

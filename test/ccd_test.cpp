@@ -1,19 +1,16 @@
+#include "ccd.hpp"
+
 #include <Eigen/Core>
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <string>
 
-#include "ccd.hpp"
-#include "ccd_test_helper.hpp"
+#include "ccd_test_utils.hpp"
 
 namespace fs = std::filesystem;
 
 void test_query_category(const fs::path &root, const std::string &name) {
   QueryCategory category{root / name};
-  float tol = 0.05f;
-  float eps = 1e-6;
-  // solver.h = 0.001;
-  int refine_iter = 10;
 
   for (const auto &q : category.edge_edge) {
     std::string fail_case = (q.result) ? "False negative" : "False positive";
@@ -22,7 +19,7 @@ void test_query_category(const fs::path &root, const std::string &name) {
     double dist2_a = (q.v10 - q.v00).squaredNorm();
     double dist2_b = (q.v30 - q.v20).squaredNorm();
     double dist2 = std::min(dist2_a, dist2_b);
-    float h = 0.01 * std::sqrt(dist2);
+    float h = 0.05f * std::sqrt(dist2);
 
     Eigen::Matrix<float, 3, 4> pos0, pos1;
     pos0.col(0) = q.v00.cast<float>();
@@ -34,7 +31,14 @@ void test_query_category(const fs::path &root, const std::string &name) {
     pos1.col(2) = q.v21.cast<float>();
     pos1.col(3) = q.v31.cast<float>();
 
-    silk::CCDConfig config{1.0f, 0.0f, 0.0f, h, tol, refine_iter, eps};
+    silk::CCDConfig config;
+    config.dt = 1.0f;
+    config.damping = 0.3f;
+    config.friction = 0.3f;
+    config.h = h;
+    config.tol = 0.05f;
+    config.bisect_it = 4;
+    config.eps = 1e-6f;
 
     CHECK(silk::edge_edge_ccd(pos0, pos1, Eigen::Vector4f(0, 1, 2, 3), config)
               .has_value() == q.result);
@@ -48,7 +52,7 @@ void test_query_category(const fs::path &root, const std::string &name) {
     double dist2_b = (q.v20 - q.v10).squaredNorm();
     double dist2_c = (q.v00 - q.v20).squaredNorm();
     double dist2 = std::min(std::min(dist2_a, dist2_b), dist2_c);
-    float h = 0.01 * std::sqrt(dist2);
+    float h = 0.05f * std::sqrt(dist2);
 
     Eigen::Matrix<float, 3, 4> pos0, pos1;
     pos0.col(0) = q.v30.cast<float>();
@@ -60,7 +64,14 @@ void test_query_category(const fs::path &root, const std::string &name) {
     pos1.col(2) = q.v11.cast<float>();
     pos1.col(3) = q.v21.cast<float>();
 
-    silk::CCDConfig config{1.0f, 0.0f, 0.0f, h, tol, refine_iter, eps};
+    silk::CCDConfig config;
+    config.dt = 1.0f;
+    config.damping = 0.3f;
+    config.friction = 0.3f;
+    config.h = h;
+    config.tol = 0.05f;
+    config.bisect_it = 4;
+    config.eps = 1e-6f;
 
     CHECK(silk::point_triangle_ccd(pos0, pos1, Eigen::Vector4f(0, 1, 2, 3),
                                    config)
@@ -68,8 +79,10 @@ void test_query_category(const fs::path &root, const std::string &name) {
   }
 }
 
-TEST_CASE("ccd-tests", "[ccd]") {
+TEST_CASE("ccd-test", "[collision]") {
   fs::path root{SAMPLE_QUERY_ROOT};
+
+  // SECTION("fail") { test_query_category(root, "fail"); }
 
   SECTION("chain") { test_query_category(root, "chain"); }
   SECTION("cow-heads") { test_query_category(root, "cow-heads"); }
@@ -103,6 +116,4 @@ TEST_CASE("ccd-tests", "[ccd]") {
   // }
   // SECTION("erleben-wedges") { test_query_category(root, "erleben-wedges"); }
   // SECTION("unit-tests") { test_query_category(root, "unit-tests"); }
-  //
-  // SECTION("fail") { test_query_category(root, "fail"); }
 }
