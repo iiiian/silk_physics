@@ -10,12 +10,7 @@ set(DEMO_SOURCES
     src/widgets/statistic_widget.cpp
 )
 
-add_executable(
-    demo
-    ${DEMO_SOURCES}
-    # to force enable imgui stdlib
-    "${CMAKE_SOURCE_DIR}/extern/polyscope/deps/imgui/imgui/misc/cpp/imgui_stdlib.cpp"
-)
+add_executable(demo ${DEMO_SOURCES})
 
 # set debug flag
 target_compile_options(
