@@ -70,8 +70,9 @@ void test_query_category(const fs::path &root, const std::string &name) {
     config.bisect_it = 4;
     config.eps = 1e-6f;
 
-    auto colli =
-        silk::edge_edge_ccd(pos0, pos1, Eigen::Vector4f(0, 1, 2, 3), config);
+    Eigen::Vector4f weight = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    auto colli = silk::edge_edge_ccd(pos0, pos1, weight, config);
     if (colli) {
       print_collision(pos0, pos1, *colli);
     }
@@ -103,8 +104,9 @@ void test_query_category(const fs::path &root, const std::string &name) {
     config.bisect_it = 4;
     config.eps = 1e-6f;
 
-    auto colli = silk::point_triangle_ccd(pos0, pos1,
-                                          Eigen::Vector4f(0, 1, 2, 3), config);
+    Eigen::Vector4f weight = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    auto colli = silk::point_triangle_ccd(pos0, pos1, weight, config);
     if (colli) {
       print_collision(pos0, pos1, *colli);
     }

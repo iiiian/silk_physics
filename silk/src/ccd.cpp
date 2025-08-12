@@ -1,6 +1,7 @@
 #include "ccd.hpp"
 
 #include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <cmath>
 #include <optional>
 
@@ -115,7 +116,6 @@ std::optional<Collision> edge_edge_collision(
 
   float e10_para = 0;
   float e32_para = 0;
-  Eigen::Vector3f n;
 
   // find edge parameter of collision point
 
@@ -125,60 +125,53 @@ std::optional<Collision> edge_edge_collision(
     // test x0 against edge x2 x3
     if (float para = x32.dot(-x20) / x32dx32; para > 0.0f && para < 1.0f) {
       Eigen::Vector3f x0c = x2 + para * x32;
-      n = x0 - x0c;
-      float dist2 = n.squaredNorm();
+      float dist2 = (x0 - x0c).squaredNorm();
       if (dist2 > c.h * c.h) {
         return std::nullopt;
       }
 
       e10_para = 0.0f;
       e32_para = para;
-      n /= std::sqrt(dist2);
     }
     // test x1 against edge x2 x3
     else if (float para = x32.dot(x1 - x2) / x32dx32;
              para > 0.0f && para < 1.0f) {
       Eigen::Vector3f x1c = x2 + para * x32;
-      Eigen::Vector3f n = x1 - x1c;
-      float dist2 = n.squaredNorm();
+      float dist2 = (x1 - x1c).squaredNorm();
       if (dist2 > c.h * c.h) {
         return std::nullopt;
       }
 
       e10_para = 1.0f;
       e32_para = para;
-      n /= std::sqrt(dist2);
     }
     // test x2 against edge x0 x1
     else if (float para = x10.dot(x20) / x10dx10; para > 0.0f && para < 1.0f) {
       Eigen::Vector3f x2c = x0 + para * x10;
-      Eigen::Vector3f n = x2c - x2;
-      float dist2 = n.squaredNorm();
+      float dist2 = (x2 - x2c).squaredNorm();
       if (dist2 > c.h * c.h) {
         return std::nullopt;
       }
 
       e10_para = para;
       e32_para = 0.0f;
-      n /= std::sqrt(dist2);
     }
     // test x3 against edge x0 x1
     else if (float para = x10.dot(x3 - x0) / x10dx10;
              para > 0.0f && para < 1.0f) {
       Eigen::Vector3f x3c = x0 + para * x10;
-      Eigen::Vector3f n = x3c - x3;
-      float dist2 = n.squaredNorm();
+      float dist2 = (x3 - x3c).squaredNorm();
       if (dist2 > c.h * c.h) {
         return std::nullopt;
       }
 
       e10_para = para;
       e32_para = 1.0f;
-      n /= std::sqrt(dist2);
     }
-  } else {
-    // non-parallel edge, compute the closest point between two infinite line
-    // then clamp if necessary
+  }
+  // non-parallel edge, compute the closest point between two infinite line
+  // then clamp if necessary
+  else {
     e10_para = (x32dx32 * x10dx21 - x10dx32 * x32dx20) / det;
     bool is_e10_para_clamped = false;
     if (e10_para < 0.0f) {
@@ -211,22 +204,18 @@ std::optional<Collision> edge_edge_collision(
       float e10_para_b = std::clamp(x10.dot(e32c_b - x0) / x10dx10, 0.0f, 1.0f);
       Eigen::Vector3f e10c_b = x0 + e10_para_b * x10;
 
-      Eigen::Vector3f na = e10c_a - e32c_a;
-      Eigen::Vector3f nb = e10c_b - e32c_b;
-      float dist2a = na.squaredNorm();
-      float dist2b = nb.squaredNorm();
+      float dist2a = (e10c_a - e32c_a).squaredNorm();
+      float dist2b = (e10c_b - e32c_b).squaredNorm();
       if (dist2a < dist2b) {
         if (dist2a > c.h * c.h) {
           return std::nullopt;
         }
         e32_para = e32_para_a;
-        n = na / std::sqrt(dist2a);
       } else {
         if (dist2b > c.h * c.h) {
           return std::nullopt;
         }
         e10_para = e10_para_b;
-        n = nb / std::sqrt(dist2b);
       }
     }
     // parameter of edge x0 x1 is outside
@@ -234,37 +223,29 @@ std::optional<Collision> edge_edge_collision(
       Eigen::Vector3f e10c = x0 + e10_para * x10;
       e32_para = std::clamp(x32.dot(e10c - x2) / x32dx32, 0.0f, 1.0f);
       Eigen::Vector3f e32c = x2 + e32_para * x32;
-      n = e10c - e32c;
-      float dist2 = n.squaredNorm();
+      float dist2 = (e10c - e32c).squaredNorm();
       if (dist2 > c.h * c.h) {
         return std::nullopt;
       }
-
-      n /= std::sqrt(dist2);
     }
     // parameter of edge x2 x3 is outside
     else if (is_e32_para_clamped) {
       Eigen::Vector3f e32c = x2 + e32_para * x32;
       e10_para = std::clamp(x10.dot(e32c - x0) / x10dx10, 0.0f, 1.0f);
       Eigen::Vector3f e12c = x0 + e10_para * x10;
-      Eigen::Vector3f n = e12c - e32c;
-      float dist2 = n.squaredNorm();
+      float dist2 = (e12c - e32c).squaredNorm();
       if (dist2 > c.h * c.h) {
         return std::nullopt;
       }
-
-      n /= std::sqrt(dist2);
     }
     // both para are inside
     else {
       Eigen::Vector3f e10c = x0 + e10_para * x10;
       Eigen::Vector3f e32c = x2 + e32_para * x32;
-      Eigen::Vector3f n = e10c - e32c;
-      float dist2 = n.squaredNorm();
+      float dist2 = (e10c - e32c).squaredNorm();
       if (dist2 > c.h * c.h) {
         return std::nullopt;
       }
-      n /= std::sqrt(dist2);
     }
   }
 
@@ -273,16 +254,36 @@ std::optional<Collision> edge_edge_collision(
   Eigen::Vector3f v_e10c = e10_para * v.col(0) + (1.0f - e10_para) * v.col(1);
   Eigen::Vector3f v_e32c = e32_para * v.col(2) + (1.0f - e32_para) * v.col(3);
   Eigen::Vector3f v_relative = v_e10c - v_e32c;
+
+  // compute collision normal n
+  Eigen::Vector3f n;
+  // parallel edge
+  if (det < area2_eps) {
+    n = x10.cross(x10.cross(x20)).normalized();
+  }
+  // non parallel edge
+  else {
+    n = x10.cross(x32).normalized();
+  }
+
+  // compute velocity after reflection
   Eigen::Vector3f v_normal = n.dot(v_relative) * n;
   Eigen::Vector3f v_parallel = v_relative - v_normal;
+  float tmp0 = (weight(0) * e10_para + weight(1) * (1.0f - e10_para) +
+                weight(2) * e32_para + weight(3) * (1.0f - e32_para));
+  if (tmp0 == 0.0f) {
+    return std::nullopt;
+  }
 
-  // compute reflection
-  Eigen::Vector4f norm_weight = weight.array() / weight.sum();
-  norm_weight(0) *= -1.0f;
-  norm_weight(1) *= -1.0f;
-  Eigen::Vector3f v_diff =
-      (1.0f - c.damping) * v_normal + (1.0f - c.friction) * v_parallel;
-  v += v_diff * norm_weight.transpose();
+  // Eigen::Vector4f coeff = weight.array() / tmp0;
+  Eigen::Vector4f coeff = Eigen::Vector4f::Identity();
+  coeff(0) *= -1.0f;
+  coeff(1) *= -1.0f;
+  // Eigen::Vector3f v_diff =
+  //     (2.0f - c.damping) * v_normal + (1.0f - c.friction) * v_parallel;
+  Eigen::Vector3f v_diff = (2.0f - c.damping) * v_normal;
+
+  v += v_diff * coeff.transpose();
 
   Collision collision;
   collision.type = CollisionType::EdgeEdge;
