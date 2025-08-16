@@ -2,7 +2,7 @@
 # Library config
 # -------------------------------------------------
 
-file(GLOB SILK_SOURCES "src/*.cpp" "src/collision/*.cpp")
+file(GLOB SILK_SOURCES "src/*.cpp")
 
 add_library(silk ${SILK_SOURCES})
 add_library(silk::silk ALIAS silk)
@@ -37,13 +37,7 @@ target_link_libraries(
         igl::core
         arpack
         OpenMP::OpenMP_CXX
-        SuiteSparse::SuiteSparseConfig
-        SuiteSparse::AMD
-        SuiteSparse::CAMD
-        SuiteSparse::CCOLAMD
-        SuiteSparse::COLAMD
-        SuiteSparse::CHOLMOD
-        SuiteSparse::UMFPACK
+        tight_inclusion::tight_inclusion
 )
 
 # -------------------------------------------------

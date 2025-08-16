@@ -42,7 +42,7 @@ FetchContent_Declare(
 
 FetchContent_Declare(
     spdlog
-    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
     GIT_TAG
         6fa36017cfd5731d617e1a934f0e5ea9c4445b13 # release 1.15.3
     FIND_PACKAGE_ARGS 1.15
@@ -66,22 +66,6 @@ FetchContent_Declare(
     GIT_TAG c12ea8c9a727f5320a2b4570aee863bbede2a204
 )
 
-FetchContent_Declare(
-    tight-inclusion
-    GIT_REPOSITORY
-        https://github.com/Continuous-Collision-Detection/Tight-Inclusion.git
-    GIT_TAG
-        7377d78162f9fdb5fe44b54b6f9c01bc6ce0885a # release 1.0.6
-    # the original CMakeLists.txt does not provides proper relative include dir and lacks export target.
-    # patch the CMakeLists.txt file and add a simple tight_inclusionConfig.cmake.in to fix above.
-    PATCH_COMMAND
-        ${CMAKE_COMMAND} -E copy
-        ${CMAKE_SOURCE_DIR}/misc/hacks/tight_inclusion/CMakeLists.txt
-        <SOURCE_DIR>/CMakeLists.txt && ${CMAKE_COMMAND} -E copy
-        ${CMAKE_SOURCE_DIR}/misc/hacks/tight_inclusion/tight_inclusionConfig.cmake.in
-        <SOURCE_DIR>/cmake/tight_inclusionConfig.cmake.in
-)
-
 # base dependencies
 find_package(OpenMP REQUIRED)
 find_package(BLAS REQUIRED)
@@ -91,19 +75,19 @@ FetchContent_MakeAvailable(
     Libigl
     arpackng
     Catch2
-    tight-inclusion
+    spdlog
 )
+add_subdirectory(extern/tight-inclusion)
 
 add_subdirectory(silk)
 
 if(SILK_BUILD_DEMO)
-    FetchContent_MakeAvailable(polyscope portable-file-dialogs spdlog)
+    FetchContent_MakeAvailable(polyscope portable-file-dialogs)
     add_subdirectory(demo)
 endif()
 
 if(SILK_BUILD_TEST)
     find_package(Alembic REQUIRED)
-    FetchContent_MakeAvailable(spdlog)
     enable_testing()
     add_subdirectory(test)
 endif()
