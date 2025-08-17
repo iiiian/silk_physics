@@ -135,7 +135,7 @@ bool Solver::lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
       dH.coeffRef(c.offset(i) + 1, c.offset(i) + 1) = 1e10f;
       dH.coeffRef(c.offset(i) + 2, c.offset(i) + 2) = 1e10f;
 
-      b(Eigen::seqN(c.offset(i), 3)) = 1e10f * c.position.col(i);
+      b(Eigen::seqN(c.offset(i), 3)) = 1e10f * c.reflection.col(i);
     }
   }
 

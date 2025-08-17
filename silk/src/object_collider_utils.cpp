@@ -43,7 +43,7 @@ ObjectCollider make_physical_object_collider(const CollisionConfig& config,
     MeshCollider mc;
     mc.type = MeshColliderType::Point;
     mc.index(0) = i;
-    mc.weight(0) = is_pinned(i) ? 0.0f : mass(i);
+    mc.inv_mass(0) = is_pinned(i) ? 0.0f : mass(i);
     mc.position_t0.col(0) = m.V.row(i);
     mc.position_t1.col(1) = m.V.row(i);
     mc.bbox.min = m.V.row(i);
@@ -61,8 +61,8 @@ ObjectCollider make_physical_object_collider(const CollisionConfig& config,
     auto& p1 = mc.position_t1;
     mc.type = MeshColliderType::Edge;
     mc.index(Eigen::seqN(0, 2)) = m.E.row(i);
-    mc.weight(0) = is_pinned(mc.index(0)) ? 0.0f : mass(mc.index(0));
-    mc.weight(1) = is_pinned(mc.index(1)) ? 0.0f : mass(mc.index(1));
+    mc.inv_mass(0) = is_pinned(mc.index(0)) ? 0.0f : mass(mc.index(0));
+    mc.inv_mass(1) = is_pinned(mc.index(1)) ? 0.0f : mass(mc.index(1));
     p0.col(0) = m.V.row(mc.index(0));
     p0.col(1) = m.V.row(mc.index(1));
     p1.col(0) = m.V.row(mc.index(0));
@@ -83,9 +83,9 @@ ObjectCollider make_physical_object_collider(const CollisionConfig& config,
 
     mc.type = MeshColliderType::Triangle;
     mc.index = m.F.row(i);
-    mc.weight(0) = is_pinned(mc.index(0)) ? 0.0f : mass(mc.index(0));
-    mc.weight(1) = is_pinned(mc.index(1)) ? 0.0f : mass(mc.index(1));
-    mc.weight(2) = is_pinned(mc.index(2)) ? 0.0f : mass(mc.index(2));
+    mc.inv_mass(0) = is_pinned(mc.index(0)) ? 0.0f : mass(mc.index(0));
+    mc.inv_mass(1) = is_pinned(mc.index(1)) ? 0.0f : mass(mc.index(1));
+    mc.inv_mass(2) = is_pinned(mc.index(2)) ? 0.0f : mass(mc.index(2));
     p0.col(0) = m.V.row(mc.index(0));
     p0.col(1) = m.V.row(mc.index(1));
     p0.col(2) = m.V.row(mc.index(2));
@@ -131,7 +131,7 @@ ObjectCollider make_obstacle_object_collider(const CollisionConfig& config,
     MeshCollider mc;
     mc.type = MeshColliderType::Point;
     mc.index(0) = i;
-    mc.weight(0) = 0.0f;
+    mc.inv_mass(0) = 0.0f;
     mc.position_t0.col(0) = m.V.row(i);
     mc.position_t1.col(1) = m.V.row(i);
     mc.bbox.min = m.V.row(i);
@@ -150,8 +150,8 @@ ObjectCollider make_obstacle_object_collider(const CollisionConfig& config,
 
     mc.type = MeshColliderType::Edge;
     mc.index(Eigen::seqN(0, 2)) = m.E.row(i);
-    mc.weight(0) = 0.0f;
-    mc.weight(1) = 0.0f;
+    mc.inv_mass(0) = 0.0f;
+    mc.inv_mass(1) = 0.0f;
     p0.col(0) = m.V.row(mc.index(0));
     p0.col(1) = m.V.row(mc.index(1));
     p1.col(0) = m.V.row(mc.index(0));
@@ -172,9 +172,9 @@ ObjectCollider make_obstacle_object_collider(const CollisionConfig& config,
 
     mc.type = MeshColliderType::Triangle;
     mc.index = m.F.row(i);
-    mc.weight(0) = 0.0f;
-    mc.weight(1) = 0.0f;
-    mc.weight(2) = 0.0f;
+    mc.inv_mass(0) = 0.0f;
+    mc.inv_mass(1) = 0.0f;
+    mc.inv_mass(2) = 0.0f;
     p0.col(0) = m.V.row(mc.index(0));
     p0.col(1) = m.V.row(mc.index(1));
     p0.col(2) = m.V.row(mc.index(2));
