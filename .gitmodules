@@ -4,3 +4,6 @@
 [submodule "extern/tight-inclusion"]
 	path = extern/tight-inclusion
 	url = https://github.com/iiiian/Tight-Inclusion.git
+[submodule "extern/pdqsort"]
+	path = extern/pdqsort
+	url = https://github.com/orlp/pdqsort.git
