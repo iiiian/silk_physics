@@ -5,7 +5,6 @@
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 #include <Eigen/SparseCholesky>
-#include <Eigen/UmfPackSupport>
 #include <iostream>  // fix a bug in eigen arpack that miss this include
 #include <limits>
 #include <memory>
