@@ -68,7 +68,7 @@ bool mesh_self_collision_filter(const MeshCollider& a, const MeshCollider& b) {
 std::vector<Collision> CollisionPipeline::find_collision(
     std::vector<ObjectCollider>& object_colliders, float dt) const {
   // compute floating point err for ccd
-  Eigen::Vector3f abs_max = Eigen::Vector3d::Zero();
+  Eigen::Vector3f abs_max = Eigen::Vector3f::Zero();
   for (auto& o : object_colliders) {
     Eigen::Vector3f bbox_abs_min = o.bbox.min.cwiseAbs();
     Eigen::Vector3f bbox_abs_max = o.bbox.max.cwiseAbs();
