@@ -77,6 +77,8 @@ FetchContent_MakeAvailable(
     Catch2
     spdlog
 )
+
+set(TIGHT_INCLUSION_WITH_DOUBLE_PRECISION OFF)
 add_subdirectory(extern/tight-inclusion)
 
 add_subdirectory(silk)
