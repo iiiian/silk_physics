@@ -1,59 +1,26 @@
 set(SILK_DIR ${CMAKE_SOURCE_DIR}/silk/src)
 
-# ccd correctness test
-add_executable(
-    ccd_test
-    ccd_test.cpp
-    ccd_test_utils.cpp
-    ${SILK_DIR}/ccd.cpp
-    ${SILK_DIR}/ccd_poly.cpp
-)
-target_include_directories(ccd_test PRIVATE ${SILK_DIR})
-target_link_libraries(
-    ccd_test
-    PRIVATE Catch2::Catch2WithMain
-    PRIVATE Eigen3::Eigen
-)
-target_compile_definitions(
-    ccd_test
-    PRIVATE SAMPLE_QUERY_ROOT="${CMAKE_SOURCE_DIR}/misc/ccd-sample-queries"
-)
-
 # ccd reflection test
 add_executable(
     ccd_reflection
     ccd_reflection.cpp
     ccd_test_utils.cpp
-    ${SILK_DIR}/ccd.cpp
-    ${SILK_DIR}/ccd_poly.cpp
+    ${SILK_DIR}/collision_narrowphase.cpp
 )
-target_include_directories(ccd_reflection PRIVATE ${SILK_DIR})
+target_include_directories(
+    ccd_reflection
+    PRIVATE ${SILK_DIR} ${CMAKE_SOURCE_DIR}/extern/pdqsort
+)
 target_link_libraries(
     ccd_reflection
-    PRIVATE Eigen3::Eigen
-    PRIVATE spdlog::spdlog
+    PRIVATE
+        Eigen3::Eigen
+        spdlog::spdlog
+        tight_inclusion::tight_inclusion
+        OpenMP::OpenMP_CXX
 )
 target_compile_definitions(
     ccd_reflection
-    PRIVATE SAMPLE_QUERY_ROOT="${CMAKE_SOURCE_DIR}/misc/ccd-sample-queries"
-)
-
-# ccd performance test
-add_executable(
-    ccd_benchmark
-    ccd_benchmark.cpp
-    ccd_test_utils.cpp
-    ${SILK_DIR}/ccd.cpp
-    ${SILK_DIR}/ccd_poly.cpp
-)
-target_include_directories(ccd_benchmark PRIVATE ${SILK_DIR})
-target_link_libraries(
-    ccd_benchmark
-    PRIVATE Catch2::Catch2WithMain
-    PRIVATE Eigen3::Eigen
-)
-target_compile_definitions(
-    ccd_benchmark
     PRIVATE SAMPLE_QUERY_ROOT="${CMAKE_SOURCE_DIR}/misc/ccd-sample-queries"
 )
 
@@ -156,4 +123,4 @@ target_compile_definitions(
 
 include(CTest)
 include(Catch)
-catch_discover_tests(ccd_test ccd_benchmark sap_test sap_kd_tree_test sap_benchmark sap_kd_tree_benchmark ccd_poly)
+catch_discover_tests(sap_test sap_kd_tree_test sap_benchmark sap_kd_tree_benchmark ccd_poly)
