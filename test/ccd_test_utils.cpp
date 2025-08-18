@@ -117,25 +117,14 @@ std::vector<Query> parse_queries_from_csv(const fs::path &path,
       q.source = path;
       q.source_line = start_line;
 
-      if (type == QueryType::EdgeEdge) {
-        q.v00 = buf[0];
-        q.v10 = buf[1];
-        q.v20 = buf[2];
-        q.v30 = buf[3];
-        q.v01 = buf[4];
-        q.v11 = buf[5];
-        q.v21 = buf[6];
-        q.v31 = buf[7];
-      } else {
-        q.v30 = buf[0];
-        q.v00 = buf[1];
-        q.v10 = buf[2];
-        q.v20 = buf[3];
-        q.v31 = buf[4];
-        q.v01 = buf[5];
-        q.v11 = buf[6];
-        q.v21 = buf[7];
-      }
+      q.v00 = buf[0];
+      q.v10 = buf[1];
+      q.v20 = buf[2];
+      q.v30 = buf[3];
+      q.v01 = buf[4];
+      q.v11 = buf[5];
+      q.v21 = buf[6];
+      q.v31 = buf[7];
 
       out.push_back(q);
       row_in_group = 0;

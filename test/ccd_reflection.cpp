@@ -1,4 +1,5 @@
 #include <spdlog/fmt/fmt.h>
+#include <spdlog/spdlog.h>
 
 #include <Eigen/Core>
 #include <filesystem>
@@ -41,10 +42,10 @@ void print_collision(const Eigen::Vector3f& x00, const Eigen::Vector3f& x10,
   std::string x2r_str = vec2str(r.col(2));
   std::string x3r_str = vec2str(r.col(3));
 
-  std::cout << fmt::format("{};{};{};{};{};{};{};{};{};{};{};{};{};{}\n",
-                           type_str, toi, x00_str, x10_str, x20_str, x30_str,
-                           x01_str, x11_str, x21_str, x31_str, x0r_str, x1r_str,
-                           x2r_str, x3r_str);
+  // std::cout << fmt::format("{};{};{};{};{};{};{};{};{};{};{};{};{};{}\n",
+  //                          type_str, toi, x00_str, x10_str, x20_str, x30_str,
+  //                          x01_str, x11_str, x21_str, x31_str, x0r_str,
+  //                          x1r_str, x2r_str, x3r_str);
 }
 
 void test_query_category(const fs::path& root, const std::string& name) {
@@ -76,14 +77,18 @@ void test_query_category(const fs::path& root, const std::string& name) {
     mb.position_t1.col(2).setZero();
 
     // Bbox calculation
-    ma.bbox.min = (ma.position_t0.leftCols(2).rowwise().minCoeff())
-                      .cwiseMin(ma.position_t1.leftCols(2).rowwise().minCoeff());
-    ma.bbox.max = (ma.position_t0.leftCols(2).rowwise().maxCoeff())
-                      .cwiseMax(ma.position_t1.leftCols(2).rowwise().maxCoeff());
-    mb.bbox.min = (mb.position_t0.leftCols(2).rowwise().minCoeff())
-                      .cwiseMin(mb.position_t1.leftCols(2).rowwise().minCoeff());
-    mb.bbox.max = (mb.position_t0.leftCols(2).rowwise().maxCoeff())
-                      .cwiseMax(mb.position_t1.leftCols(2).rowwise().maxCoeff());
+    ma.bbox.min =
+        (ma.position_t0.leftCols(2).rowwise().minCoeff())
+            .cwiseMin(ma.position_t1.leftCols(2).rowwise().minCoeff());
+    ma.bbox.max =
+        (ma.position_t0.leftCols(2).rowwise().maxCoeff())
+            .cwiseMax(ma.position_t1.leftCols(2).rowwise().maxCoeff());
+    mb.bbox.min =
+        (mb.position_t0.leftCols(2).rowwise().minCoeff())
+            .cwiseMin(mb.position_t1.leftCols(2).rowwise().minCoeff());
+    mb.bbox.max =
+        (mb.position_t0.leftCols(2).rowwise().maxCoeff())
+            .cwiseMax(mb.position_t1.leftCols(2).rowwise().maxCoeff());
 
     silk::ObjectCollider oa, ob;
 
@@ -91,19 +96,20 @@ void test_query_category(const fs::path& root, const std::string& name) {
     ob.damping = 0.3f;
     oa.friction = 0.3f;
     ob.friction = 0.3f;
-    oa.bbox_padding = 0.05f * (ma.bbox.max - ma.bbox.min).norm();
-    ob.bbox_padding = 0.05f * (mb.bbox.max - mb.bbox.min).norm();
+    // oa.bbox_padding = 0.001f * (ma.bbox.max - ma.bbox.min).norm();
+    // ob.bbox_padding = 0.001f * (mb.bbox.max - mb.bbox.min).norm();
+    oa.bbox_padding = 0.0f;
+    ob.bbox_padding = 0.0f;
 
     auto colli =
         silk::narrow_phase(oa, ma, ob, mb, 1.0f, {-1, -1, -1}, {-1, -1, -1});
 
     if (colli) {
-      print_collision(q.v00.cast<float>(), q.v10.cast<float>(),
-                      q.v20.cast<float>(), q.v30.cast<float>(),
-                      q.v01.cast<float>(), q.v11.cast<float>(),
-                      q.v21.cast<float>(), q.v31.cast<float>(),
-                      colli->reflection, silk::CollisionType::EdgeEdge,
-                      colli->toi);
+      print_collision(
+          q.v00.cast<float>(), q.v10.cast<float>(), q.v20.cast<float>(),
+          q.v30.cast<float>(), q.v01.cast<float>(), q.v11.cast<float>(),
+          q.v21.cast<float>(), q.v31.cast<float>(), colli->reflection,
+          silk::CollisionType::EdgeEdge, colli->toi);
     }
   }
 
@@ -114,8 +120,8 @@ void test_query_category(const fs::path& root, const std::string& name) {
     ma.type = silk::MeshColliderType::Point;
     ma.index = {0, -1, -1};  // Only first index is used
     ma.inv_mass = {1.0f, 0.0f, 0.0f};
-    ma.position_t0.col(0) = q.v30.cast<float>();
-    ma.position_t1.col(0) = q.v31.cast<float>();
+    ma.position_t0.col(0) = q.v00.cast<float>();
+    ma.position_t1.col(0) = q.v01.cast<float>();
     ma.position_t0.col(1).setZero();
     ma.position_t0.col(2).setZero();
     ma.position_t1.col(1).setZero();
@@ -125,12 +131,12 @@ void test_query_category(const fs::path& root, const std::string& name) {
     mb.type = silk::MeshColliderType::Triangle;
     mb.index = {0, 1, 2};
     mb.inv_mass = {1.0f, 1.0f, 1.0f};
-    mb.position_t0.col(0) = q.v00.cast<float>();
-    mb.position_t0.col(1) = q.v10.cast<float>();
-    mb.position_t0.col(2) = q.v20.cast<float>();
-    mb.position_t1.col(0) = q.v01.cast<float>();
-    mb.position_t1.col(1) = q.v11.cast<float>();
-    mb.position_t1.col(2) = q.v21.cast<float>();
+    mb.position_t0.col(0) = q.v10.cast<float>();
+    mb.position_t0.col(1) = q.v20.cast<float>();
+    mb.position_t0.col(2) = q.v30.cast<float>();
+    mb.position_t1.col(0) = q.v11.cast<float>();
+    mb.position_t1.col(1) = q.v21.cast<float>();
+    mb.position_t1.col(2) = q.v31.cast<float>();
 
     // Bbox calculation
     ma.bbox.min = ma.position_t0.col(0).cwiseMin(ma.position_t1.col(0));
@@ -148,24 +154,27 @@ void test_query_category(const fs::path& root, const std::string& name) {
     ob.damping = 0.3f;
     oa.friction = 0.3f;
     ob.friction = 0.3f;
-    oa.bbox_padding = 0.05f * (ma.bbox.max - ma.bbox.min).norm();
-    ob.bbox_padding = 0.05f * (mb.bbox.max - mb.bbox.min).norm();
+    // oa.bbox_padding = 0.001f * (ma.bbox.max - ma.bbox.min).norm();
+    // ob.bbox_padding = 0.001f * (mb.bbox.max - mb.bbox.min).norm();
+    oa.bbox_padding = 0.0f;
+    ob.bbox_padding = 0.0f;
 
     auto colli =
         silk::narrow_phase(oa, ma, ob, mb, 1.0f, {-1, -1, -1}, {-1, -1, -1});
 
     if (colli) {
-      print_collision(q.v30.cast<float>(), q.v00.cast<float>(),
-                      q.v10.cast<float>(), q.v20.cast<float>(),
-                      q.v31.cast<float>(), q.v01.cast<float>(),
-                      q.v11.cast<float>(), q.v21.cast<float>(),
-                      colli->reflection, silk::CollisionType::PointTriangle,
-                      colli->toi);
+      print_collision(
+          q.v00.cast<float>(), q.v10.cast<float>(), q.v20.cast<float>(),
+          q.v30.cast<float>(), q.v01.cast<float>(), q.v11.cast<float>(),
+          q.v21.cast<float>(), q.v31.cast<float>(), colli->reflection,
+          silk::CollisionType::PointTriangle, colli->toi);
     }
   }
 }
 
 int main() {
+  spdlog::set_level(spdlog::level::debug);
+
   fs::path root{SAMPLE_QUERY_ROOT};
 
   print_header();

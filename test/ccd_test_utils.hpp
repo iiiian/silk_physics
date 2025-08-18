@@ -16,7 +16,7 @@ struct Query {
   // edge edge case
   //     edge 1 = v0 v1, edge 2 = v2 v3
   // point triangle case
-  //     triangle = v1 v2 v3, point = v4
+  //     point v0, triangle = v1 v2 v3
   // suffix 0 = at t0, suffix 1 = at t1
   Eigen::Vector3d v00, v10, v20, v30;
   Eigen::Vector3d v01, v11, v21, v31;
