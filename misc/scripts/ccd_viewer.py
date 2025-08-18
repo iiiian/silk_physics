@@ -23,29 +23,34 @@ def get_vertex_positions_at_t(d: pd.Series, t: float) -> list:
     assert "toi" in d and pd.notna(d["toi"])
     toi = d["toi"]
 
-    if t < toi:
-        p0 = interpolate(d["x00"], d["x01"], t)
-        p1 = interpolate(d["x10"], d["x11"], t)
-        p2 = interpolate(d["x20"], d["x21"], t)
-        p3 = interpolate(d["x30"], d["x31"], t)
-    else:
-        # Position at time of impact
-        p0_toi = interpolate(d["x00"], d["x01"], toi)
-        p1_toi = interpolate(d["x10"], d["x11"], toi)
-        p2_toi = interpolate(d["x20"], d["x21"], toi)
-        p3_toi = interpolate(d["x30"], d["x31"], toi)
+    p0 = interpolate(d["x00"], d["x01"], t)
+    p1 = interpolate(d["x10"], d["x11"], t)
+    p2 = interpolate(d["x20"], d["x21"], t)
+    p3 = interpolate(d["x30"], d["x31"], t)
 
-        # Calculate how far into the reflection we are
-        reflection_alpha = 0
-        if (1.0 - toi) > 1e-9:  # Avoid division by zero
-            reflection_alpha = (t - toi) / (1.0 - toi)
-        reflection_alpha = np.clip(reflection_alpha, 0, 1)
-
-        # Interpolate from TOI to reflected position
-        p0 = interpolate(p0_toi, d["x0r"], reflection_alpha)
-        p1 = interpolate(p1_toi, d["x1r"], reflection_alpha)
-        p2 = interpolate(p2_toi, d["x2r"], reflection_alpha)
-        p3 = interpolate(p3_toi, d["x3r"], reflection_alpha)
+    # if t < toi:
+    #     p0 = interpolate(d["x00"], d["x01"], t)
+    #     p1 = interpolate(d["x10"], d["x11"], t)
+    #     p2 = interpolate(d["x20"], d["x21"], t)
+    #     p3 = interpolate(d["x30"], d["x31"], t)
+    # else:
+    #     # Position at time of impact
+    #     p0_toi = interpolate(d["x00"], d["x01"], toi)
+    #     p1_toi = interpolate(d["x10"], d["x11"], toi)
+    #     p2_toi = interpolate(d["x20"], d["x21"], toi)
+    #     p3_toi = interpolate(d["x30"], d["x31"], toi)
+    #
+    #     # Calculate how far into the reflection we are
+    #     reflection_alpha = 0
+    #     if (1.0 - toi) > 1e-9:  # Avoid division by zero
+    #         reflection_alpha = (t - toi) / (1.0 - toi)
+    #     reflection_alpha = np.clip(reflection_alpha, 0, 1)
+    #
+    #     # Interpolate from TOI to reflected position
+    #     p0 = interpolate(p0_toi, d["x0r"], reflection_alpha)
+    #     p1 = interpolate(p1_toi, d["x1r"], reflection_alpha)
+    #     p2 = interpolate(p2_toi, d["x2r"], reflection_alpha)
+    #     p3 = interpolate(p3_toi, d["x3r"], reflection_alpha)
 
     return [p0, p1, p2, p3]
 
@@ -100,7 +105,13 @@ def get_trajectory_data(d: pd.Series, t: float) -> PolyData:
 # ==============================================================================
 
 
-def create_scene_geometries(d: pd.Series, t: float, point_size: float, edge_thickness: float, trajectory_thickness: float) -> list:
+def create_scene_geometries(
+    d: pd.Series,
+    t: float,
+    point_size: float,
+    edge_thickness: float,
+    trajectory_thickness: float,
+) -> list:
     """Create all the geometry representations for the scene."""
     vertices = get_vertex_positions_at_t(d, t)
     geometries = []
@@ -113,7 +124,11 @@ def create_scene_geometries(d: pd.Series, t: float, point_size: float, edge_thic
                 children=[point_polydata],
                 # representation 0 = point
                 # see https://github.com/Kitware/vtk-js/blob/master/Sources/Rendering/Core/Property/Constants.js#L7-L11
-                property={"color": [1, 0, 0], "pointSize": point_size, "representation": 0},
+                property={
+                    "color": [1, 0, 0],
+                    "pointSize": point_size,
+                    "representation": 0,
+                },
             )
         )
         # Triangle (blue)
@@ -125,7 +140,11 @@ def create_scene_geometries(d: pd.Series, t: float, point_size: float, edge_thic
         geometries.append(
             GeometryRepresentation(
                 children=[tri_polydata],
-                property={"color": [0, 0, 1], "lineWidth": edge_thickness, "representation": 2},
+                property={
+                    "color": [0, 0, 1],
+                    "lineWidth": edge_thickness,
+                    "representation": 2,
+                },
             )
         )
     elif d["type"] == "EdgeEdge":
@@ -138,7 +157,11 @@ def create_scene_geometries(d: pd.Series, t: float, point_size: float, edge_thic
         geometries.append(
             GeometryRepresentation(
                 children=[edge1_polydata],
-                property={"color": [1, 0, 0], "lineWidth": edge_thickness, "representation": 2},
+                property={
+                    "color": [1, 0, 0],
+                    "lineWidth": edge_thickness,
+                    "representation": 2,
+                },
             )
         )
         # Edge 2 (blue)
@@ -150,7 +173,11 @@ def create_scene_geometries(d: pd.Series, t: float, point_size: float, edge_thic
         geometries.append(
             GeometryRepresentation(
                 children=[edge2_polydata],
-                property={"color": [0, 0, 1], "lineWidth": edge_thickness, "representation": 2},
+                property={
+                    "color": [0, 0, 1],
+                    "lineWidth": edge_thickness,
+                    "representation": 2,
+                },
             )
         )
 
@@ -159,7 +186,11 @@ def create_scene_geometries(d: pd.Series, t: float, point_size: float, edge_thic
     geometries.append(
         GeometryRepresentation(
             children=[trajectory_polydata],
-            property={"color": [1, 1, 0], "lineWidth": trajectory_thickness, "representation": 2},
+            property={
+                "color": [1, 1, 0],
+                "lineWidth": trajectory_thickness,
+                "representation": 2,
+            },
         )
     )
 
@@ -190,6 +221,7 @@ def create_vertex_table_data(d: pd.Series, t: float) -> list[dict]:
 
 def parse_reflection_csv(path: Path) -> pd.DataFrame:
     """Parse the reflection CSV into a DataFrame."""
+
     def parse_coordinate(string):
         return np.fromiter(string.split(","), dtype=float)
 
@@ -220,13 +252,15 @@ def main():
     csv_path = Path(sys.argv[1])
     df = parse_reflection_csv(csv_path)
 
-    app = Dash(__name__, external_stylesheets=['https://codepen.io/chriddyp/pen/bWLwgP.css'])
+    app = Dash(
+        __name__, external_stylesheets=["https://codepen.io/chriddyp/pen/bWLwgP.css"]
+    )
 
     app.layout = html.Div(
         style={"display": "flex", "height": "100vh", "width": "100vw", "margin": "0"},
         children=[
             # current collision entry index
-            dcc.Store(id='collision-index', data=0),
+            dcc.Store(id="collision-index", data=0),
             # Left Control Panel
             html.Div(
                 style={
@@ -241,11 +275,25 @@ def main():
                 children=[
                     # Collision entry nagivation
                     html.H4("Collision Navigator"),
-                    html.Div(id='collision-counter', style={"display": "flex", "justify-content": "space-evenly", "align-items": "center"}),
-                    html.Div(style={"display": "flex", "justify-content": "space-evenly", "align-items": "center"}, children=[
-                        html.Button('Previous', id='prev-button', n_clicks=0),
-                        html.Button('Next', id='next-button', n_clicks=0),
-                    ]),
+                    html.Div(
+                        id="collision-counter",
+                        style={
+                            "display": "flex",
+                            "justify-content": "space-evenly",
+                            "align-items": "center",
+                        },
+                    ),
+                    html.Div(
+                        style={
+                            "display": "flex",
+                            "justify-content": "space-evenly",
+                            "align-items": "center",
+                        },
+                        children=[
+                            html.Button("Previous", id="prev-button", n_clicks=0),
+                            html.Button("Next", id="next-button", n_clicks=0),
+                        ],
+                    ),
                     # CCD viewer control
                     html.H4("Controls"),
                     # time slider
@@ -259,8 +307,18 @@ def main():
                         tooltip={"placement": "bottom", "always_visible": True},
                     ),
                     # time slider play/pause button
-                    html.Button('Play', id='play-pause-button', n_clicks=0, style={"width": "100%"}),
-                    dcc.Interval(id='interval-component', interval=100, n_intervals=0, disabled=True),
+                    html.Button(
+                        "Play",
+                        id="play-pause-button",
+                        n_clicks=0,
+                        style={"width": "100%"},
+                    ),
+                    dcc.Interval(
+                        id="interval-component",
+                        interval=100,
+                        n_intervals=0,
+                        disabled=True,
+                    ),
                     html.Label("Point Size"),
                     dcc.Slider(
                         id="point-size-slider",
@@ -304,10 +362,10 @@ def main():
                             {"name": "Y", "id": "Y"},
                             {"name": "Z", "id": "Z"},
                         ],
-                        style_cell={'textAlign': 'left'},
+                        style_cell={"textAlign": "left"},
                         style_header={
-                            'backgroundColor': 'rgb(230, 230, 230)',
-                            'fontWeight': 'bold'
+                            "backgroundColor": "rgb(230, 230, 230)",
+                            "fontWeight": "bold",
                         },
                     ),
                 ],
@@ -316,7 +374,11 @@ def main():
             html.Div(
                 style={"flex": "1", "overflow": "hidden"},
                 children=[
-                    View(id="view", style={"width": "100%", "height": "100%"}, background=[0.5, 0.5, 0.5]),
+                    View(
+                        id="view",
+                        style={"width": "100%", "height": "100%"},
+                        background=[0.5, 0.5, 0.5],
+                    ),
                 ],
             ),
         ],
@@ -333,17 +395,21 @@ def main():
         Input("trajectory-thickness-slider", "value"),
         Input("collision-index", "data"),
     )
-    def update_view(t, point_size, edge_thickness, trajectory_thickness, collision_index):
+    def update_view(
+        t, point_size, edge_thickness, trajectory_thickness, collision_index
+    ):
         d = df.iloc[collision_index]
         toi = d["toi"]
         time_slider_marks = {
             toi: {
                 "label": f"TOI={toi:.2f}",
-                "style": {"color": "#f50", "fontWeight": "bold"}
+                "style": {"color": "#f50", "fontWeight": "bold"},
             }
         }
 
-        geometries = create_scene_geometries(d, t, point_size, edge_thickness, trajectory_thickness)
+        geometries = create_scene_geometries(
+            d, t, point_size, edge_thickness, trajectory_thickness
+        )
         table_data = create_vertex_table_data(d, t)
         counter_text = f"At {collision_index + 1} / {len(df)} collisions"
         return geometries, table_data, time_slider_marks, counter_text
@@ -351,52 +417,50 @@ def main():
     @app.callback(
         Output("view", "triggerResetCamera"),
         Input("collision-index", "data"),
-        Input("view", "triggerResetCamera"),
+        State("view", "triggerResetCamera"),
+        prevent_initial_call=True,
     )
     def reset_camera(collision_index, current_trigger):
-        # triggerResetCamera is a number. camera will reset whenever this number changed
-        if current_trigger == 0:
-            return 1
-        else:
-            return 0
+        # toggle between 0 and 1 on each collision change
+        return 0 if (current_trigger or 0) == 1 else 1
 
     @app.callback(
-        Output('collision-index', 'data'),
-        Input('prev-button', 'n_clicks'),
-        Input('next-button', 'n_clicks'),
-        State('collision-index', 'data'),
+        Output("collision-index", "data"),
+        Input("prev-button", "n_clicks"),
+        Input("next-button", "n_clicks"),
+        State("collision-index", "data"),
     )
     def update_collision_index(prev_clicks, next_clicks, current_index):
         ctx = dash.callback_context
         if not ctx.triggered:
             return 0
-        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        button_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
         # update collision index, which will trigger view update and camera reset
-        if button_id == 'prev-button':
+        if button_id == "prev-button":
             return max(0, current_index - 1)
-        elif button_id == 'next-button':
+        elif button_id == "next-button":
             return min(len(df) - 1, current_index + 1)
         return current_index
 
     @app.callback(
-        Output('interval-component', 'disabled'),
-        Output('play-pause-button', 'children'),
-        Input('play-pause-button', 'n_clicks'),
-        State('interval-component', 'disabled'),
+        Output("interval-component", "disabled"),
+        Output("play-pause-button", "children"),
+        Input("play-pause-button", "n_clicks"),
+        State("interval-component", "disabled"),
     )
     def toggle_animation(n_clicks, is_disabled):
         if n_clicks:
             if is_disabled:
-                return False, 'Pause'
+                return False, "Pause"
             else:
-                return True, 'Play'
-        return True, 'Play'
+                return True, "Play"
+        return True, "Play"
 
     @app.callback(
-        Output('time-slider', 'value'),
-        Input('interval-component', 'n_intervals'),
-        State('time-slider', 'value'),
+        Output("time-slider", "value"),
+        Input("interval-component", "n_intervals"),
+        State("time-slider", "value"),
     )
     def update_slider(n, current_time):
         if current_time >= 1:
