@@ -15,6 +15,7 @@
 #include "collision_pipeline.hpp"
 #include "ecs.hpp"
 #include "eigen_utils.hpp"
+#include "logger.hpp"
 #include "object_collider_utils.hpp"
 #include "solver_constrain.hpp"
 #include "solver_data_utils.hpp"
@@ -128,13 +129,14 @@ bool Solver::lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
   // project barrier constrain
   // TODO: avoid hard-coded collision stiffness
   Eigen::SparseMatrix<float> dH(state_num_, state_num_);
+  float cw = 1e4f;
   for (auto& c : collisions_) {
     for (int i = 0; i < 4; ++i) {
-      dH.coeffRef(c.offset(i), c.offset(i)) = 1e10f;
-      dH.coeffRef(c.offset(i) + 1, c.offset(i) + 1) = 1e10f;
-      dH.coeffRef(c.offset(i) + 2, c.offset(i) + 2) = 1e10f;
+      dH.coeffRef(c.offset(i), c.offset(i)) = cw;
+      dH.coeffRef(c.offset(i) + 1, c.offset(i) + 1) = cw;
+      dH.coeffRef(c.offset(i) + 2, c.offset(i) + 2) = cw;
 
-      b(Eigen::seqN(c.offset(i), 3)) = 1e10f * c.reflection.col(i);
+      b(Eigen::seqN(c.offset(i), 3)) += cw * c.reflection.col(i);
     }
   }
 
@@ -221,7 +223,8 @@ bool Solver::step(Registry& registry,
 
   bool has_converge = false;
   float state_diff = 1e6f;
-  int iter_count = 0;
+  int inner_iter_count = 0;
+  int outer_iter_count = 0;
 
   while (!has_converge) {
     while (!has_converge) {
@@ -239,20 +242,19 @@ bool Solver::step(Registry& registry,
 
       curr_state_ = predict_state;
 
-      std::cout << "Iter " << iter_count << std::endl;
-      ++iter_count;
+      SPDLOG_DEBUG("Inner iter {}", inner_iter_count);
+      ++inner_iter_count;
     }
 
-    std::cout << "reach outer loop" << std::endl;
+    SPDLOG_DEBUG("Outer iter {}", outer_iter_count);
+    ++outer_iter_count;
 
     // update collision
     update_all_physical_object_collider(registry, predict_state, prev_state_);
 
-    std::cout << "outer loop obj collider update fin" << std::endl;
-
     collisions_ = collision_pipeline.find_collision(
         registry.get_all<ObjectCollider>(), dt);
-    std::cout << "get " << collisions_.size() << " collision" << std::endl;
+    SPDLOG_DEBUG("Find {} collisions", collisions_.size());
 
     // ccd line search
     if (!collisions_.empty()) {
@@ -266,7 +268,7 @@ bool Solver::step(Registry& registry,
       has_converge =
           ((predict_state - curr_state_).array().abs() < 1e-3f).all();
 
-      std::cout << ", toi " << toi << std::endl;
+      SPDLOG_DEBUG("rooback toi {}", toi);
     }
   }
 

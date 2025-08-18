@@ -109,7 +109,7 @@ std::vector<Collision> CollisionPipeline::find_collision(
         oa->mesh_collider_tree, ob->mesh_collider_tree, mesh_collision_filter,
         mesh_ccache);
 
-    // step 3. mesh collider narrow_phase using ccd
+    // step 3. mesh collider narrowphase using ccd
     for (auto& [ma, mb] : mesh_ccache) {
       auto collision =
           narrow_phase(*oa, *ma, *ob, *mb, dt, scene_ee_err, scene_vf_err);
@@ -131,7 +131,7 @@ std::vector<Collision> CollisionPipeline::find_collision(
 
     // step 1. mesh collider broadphase using kd tree
     mesh_ccache.clear();
-    o.mesh_collider_tree.test_self_collision(mesh_collision_filter,
+    o.mesh_collider_tree.test_self_collision(mesh_self_collision_filter,
                                              mesh_ccache);
 
     for (auto& [ma, mb] : mesh_ccache) {

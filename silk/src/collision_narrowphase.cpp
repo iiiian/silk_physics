@@ -1,5 +1,6 @@
 #include "collision_narrowphase.hpp"
 
+#include <Eigen/Geometry>
 #include <cassert>
 #include <tight_inclusion/ccd.hpp>
 #include <tight_inclusion/interval_root_finder.hpp>
@@ -61,9 +62,13 @@ std::optional<Collision> point_triangle_collision(
   Eigen::Vector3f v_pt = (1.0f - bary_a - bary_b) * v.col(1) +
                          bary_a * v.col(2) + bary_b * v.col(3);
 
-  Eigen::Vector3f n = (pt - p_colli.col(0)).normalized();
-  assert((n(0) != 0.0f || n(1) != 0.0f || n(2) != 0.0f) &&
-         "collision normal is zero");
+  Eigen::Vector3f n =
+      (p_colli.col(2) - p_colli.col(1)).cross(p_colli.col(3) - p_colli.col(1));
+  if (n(0) == 0 && n(1) == 0 && n(2) == 0) {
+    SPDLOG_WARN("degenerate triangle collision");
+    return std::nullopt;
+  }
+  n.normalize();
 
   Eigen::Vector3f v_relative = v.col(0) - v_pt;
   Eigen::Vector3f v_normal = n.dot(v_relative) * n;
@@ -88,6 +93,8 @@ std::optional<Collision> point_triangle_collision(
   Collision collision;
   collision.type = CollisionType::PointTriangle;
   collision.toi = toi;
+  collision.offset(0) = oa.solver_offset + 3 * ma.index(0);
+  collision.offset(Eigen::seq(1, 3)) = ob.solver_offset + 3 * mb.index.array();
   collision.reflection = p_colli + (1.0f - toi) * dt * v;
 
   SPDLOG_DEBUG("point at t0: {}", position_t0.col(0).transpose());
@@ -196,6 +203,10 @@ std::optional<Collision> edge_edge_collision(
   Collision collision;
   collision.type = CollisionType::EdgeEdge;
   collision.toi = toi;
+  collision.offset(Eigen::seqN(0, 2)) =
+      oa.solver_offset + 3 * ma.index(Eigen::seqN(0, 2)).array();
+  collision.offset(Eigen::seqN(2, 2)) =
+      ob.solver_offset + 3 * mb.index(Eigen::seqN(0, 2)).array();
   collision.reflection = p_colli + (1.0f - toi) * dt * v;
 
   SPDLOG_DEBUG("edge a v0 at t0: {}", position_t0.col(0).transpose());
