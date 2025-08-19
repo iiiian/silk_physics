@@ -41,7 +41,7 @@ std::optional<Collision> point_triangle_collision(
       1e-6f,  // ticcd solving precision. set to 1e-6f as recommended in README
       1.0f,   // max time, we use normalized time interval [0, 1]
       1024,   // max ticcd iteration, set as -1 to disable
-      false   // no toi refinement if toi = 0
+      true    // no toi refinement if toi = 0
   );
 
   if (!c) {
