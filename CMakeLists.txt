@@ -11,7 +11,8 @@ include(FetchContent)
 
 FetchContent_Declare(
     Eigen3
-    GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+    # prefer github mirror as the connection is more stable
+    GIT_REPOSITORY https://github.com/eigen-mirror/eigen.git
     GIT_TAG
         3147391d946bb4b6c68edd901f2add6ac1f31f8c # release 3.4.0
     FIND_PACKAGE_ARGS 3.4

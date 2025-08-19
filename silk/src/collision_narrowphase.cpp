@@ -40,7 +40,7 @@ std::optional<Collision> point_triangle_collision(
       h,                   // minimal seperation
       1e-6f,  // ticcd solving precision. set to 1e-6f as recommended in README
       1.0f,   // max time, we use normalized time interval [0, 1]
-      -1,     // max ticcd iteration, set as -1 to disable
+      1024,   // max ticcd iteration, set as -1 to disable
       false   // no toi refinement if toi = 0
   );
 
@@ -150,7 +150,7 @@ std::optional<Collision> edge_edge_collision(
       h,                   // minimal seperation
       1e-6f,  // ticcd solving precision. set to 1e-6f as recommended in README
       1.0f,   // max time, we use normalized time interval [0, 1]
-      -1,     // max ticcd iteration, set as -1 to disable
+      1024,   // max ticcd iteration, set as -1 to disable
       false   // no toi refinement if toi = 0
   );
 

@@ -5,6 +5,7 @@
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 #include <Eigen/SparseCholesky>
+#include <cmath>
 #include <iostream>  // fix a bug in eigen arpack that miss this include
 #include <limits>
 #include <memory>
@@ -191,14 +192,11 @@ bool Solver::step(Registry& registry,
   init_all_object_collider(registry);
   update_all_obstacle_object_collider(registry);
 
-  // prediction based on linear velocity
-  Eigen::VectorXf velocity = (curr_state_ - prev_state_) / dt;
   Eigen::VectorXf acceleration =
       const_acceleration.replicate(state_num_ / 3, 1);
-  Eigen::VectorXf init_rhs = (mass_ / (dt * dt)) * curr_state_ +
-                             (mass_ / dt) * velocity + mass_ * acceleration;
 
   // project position constrain from pin groups
+  Eigen::VectorXf pin_rhs = Eigen::VectorXf::Zero(state_num_);
   for (Entity& e : registry.get_all_entities()) {
     auto solver_data = registry.get<SolverData>(e);
     auto pin = registry.get<Pin>(e);
@@ -207,70 +205,96 @@ bool Solver::step(Registry& registry,
 
       int offset = solver_data->state_offset;
       for (int i = 0; i < p->index.size(); ++i) {
-        init_rhs(Eigen::seqN(offset + 3 * p->index(i), 3)) +=
+        pin_rhs(Eigen::seqN(offset + 3 * p->index(i), 3)) +=
             p->pin_stiffness * p->position(Eigen::seqN(3 * i, 3));
       }
     }
   }
 
+  Eigen::VectorXf velocity = (curr_state_ - prev_state_) / dt;
+  Eigen::VectorXf next_state;
+  float remaining_dt = dt;
   prev_state_ = curr_state_;
-  Eigen::VectorXf predict_state =
-      curr_state_ + dt * velocity + (dt * dt) * acceleration;
-  curr_state_ = predict_state;
-  // Eigen::VectorXf predict_state = curr_state_;
-
   collisions_.clear();
 
-  bool has_converge = false;
-  float state_diff = 1e6f;
-  int inner_iter_count = 0;
-  int outer_iter_count = 0;
+  for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
+    SPDLOG_DEBUG("Outer iter {}", outer_it);
 
-  while (!has_converge) {
-    while (!has_converge) {
-      lg_solve(registry, init_rhs, predict_state);
-      // float new_state_diff = (predict_state - curr_state_).cwiseAbs().sum();
-      // std::cout << "new state diff " << new_state_diff << " , state diff "
-      //           << state_diff << std::endl;
-      //
-      // has_converge = (new_state_diff < state_diff &&
-      //                 (state_diff - new_state_diff) < 0.1f * state_diff);
-      // state_diff = new_state_diff;
+    // prediction based on linear velocity
+    next_state = curr_state_ + dt * velocity + (dt * dt) * acceleration;
+    Eigen::VectorXf init_rhs = (mass_ / (dt * dt)) * curr_state_ +
+                               (mass_ / dt) * velocity + mass_ * acceleration +
+                               pin_rhs;
 
-      has_converge =
-          ((predict_state - curr_state_).array().abs() < 1e-3f).all();
+    Eigen::VectorXf prev_solution = next_state;
+    for (int inner_it = 0; inner_it < max_inner_iteration; ++inner_it) {
+      SPDLOG_DEBUG("Inner iter {}", inner_it);
 
-      curr_state_ = predict_state;
+      lg_solve(registry, init_rhs, next_state);
+      if (next_state.array().isNaN().any()) {
+        SPDLOG_ERROR("solver explodes");
+        exit(1);
+        return false;
+      }
 
-      SPDLOG_DEBUG("Inner iter {}", inner_iter_count);
-      ++inner_iter_count;
+      if (((next_state - prev_solution).array().abs() < 1e-3f).all()) {
+        break;
+      }
+      SPDLOG_DEBUG("lg loop max state diff {}",
+                   (next_state - prev_solution).cwiseAbs().maxCoeff());
+
+      prev_solution = next_state;
     }
 
-    SPDLOG_DEBUG("Outer iter {}", outer_iter_count);
-    ++outer_iter_count;
-
     // update collision
-    update_all_physical_object_collider(registry, predict_state, prev_state_);
-
+    update_all_physical_object_collider(registry, next_state, prev_state_);
     collisions_ = collision_pipeline.find_collision(
         registry.get_all<ObjectCollider>(), dt);
+
+    if (collisions_.empty()) {
+      SPDLOG_DEBUG("no collision, terminate outer loop.");
+      break;
+    }
+
     SPDLOG_DEBUG("Find {} collisions", collisions_.size());
 
     // ccd line search
-    if (!collisions_.empty()) {
-      float toi = std::numeric_limits<float>::infinity();
-      for (auto& c : collisions_) {
-        toi = std::min(toi, c.toi);
-      }
-
-      predict_state =
-          ccd_walkback * toi * (predict_state - prev_state_) + prev_state_;
-      has_converge =
-          ((predict_state - curr_state_).array().abs() < 1e-3f).all();
-
-      SPDLOG_DEBUG("rooback toi {}", toi);
+    float earliest_toi = 1.0f;
+    for (auto& c : collisions_) {
+      earliest_toi = std::min(earliest_toi, c.toi);
     }
+
+    // impossible
+    if (earliest_toi == 1.0f) {
+      SPDLOG_DEBUG("earliest toi = 1, terminate outer loop.");
+      break;
+    }
+
+    float true_dt = dt * earliest_toi;
+
+    if (true_dt >= remaining_dt) {
+      SPDLOG_DEBUG("true dt  {} > remaining dt {}. terminate outer loop.",
+                   true_dt, remaining_dt);
+      if (true_dt < eps) {
+        next_state = curr_state_;
+      } else {
+        next_state =
+            (remaining_dt / true_dt) * (next_state - curr_state_) + curr_state_;
+      }
+      break;
+    }
+
+    SPDLOG_DEBUG("CCD rollback to toi {}", earliest_toi);
+
+    next_state = earliest_toi * (next_state - curr_state_) + curr_state_;
+    if (true_dt > eps) {
+      velocity = (next_state - curr_state_) / true_dt;
+    }
+    curr_state_ = next_state;
+    remaining_dt -= true_dt;
   }
+
+  curr_state_ = next_state;
 
   return true;
 }

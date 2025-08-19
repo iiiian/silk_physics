@@ -14,11 +14,12 @@ namespace silk {
 class Solver {
  public:
   Eigen::Vector3f const_acceleration = {0.0f, 0.0f, -1.0f};
-  int max_iteration = 10;
+  int max_inner_iteration = 100;
+  int max_outer_iteration = 100;
   int thread_num = 4;
   int r = 30;
   float dt = 1.0f;
-  float ccd_walkback = 0.8f;
+  float eps = 1e-6f;
 
  private:
   int state_num_ = 0;

@@ -61,10 +61,9 @@ class World::WorldImpl {
     auto& c = config;
     solver_.const_acceleration = {c.acceleration_x, c.acceleration_y,
                                   c.acceleration_z};
-    solver_.max_iteration = c.max_iteration;
+    // solver_.max_inner_iteration = c.max_iteration;
     solver_.r = c.r;
     solver_.dt = c.dt;
-    solver_.ccd_walkback = c.ccd_walkback;
     collision_pipeline_.toi_tolerance = c.toi_tolerance;
     // collision_pipeline_.toi_refine_it = c.toi_refine_iteration;
     collision_pipeline_.eps = c.eps;
