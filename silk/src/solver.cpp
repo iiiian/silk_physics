@@ -130,12 +130,16 @@ bool Solver::lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
   // project barrier constrain
   // TODO: avoid hard-coded collision stiffness
   Eigen::SparseMatrix<float> dH(state_num_, state_num_);
-  float cw = 1e4f;
+  float cw = 1e8f;
   for (auto& c : collisions_) {
     for (int i = 0; i < 4; ++i) {
-      dH.coeffRef(c.offset(i), c.offset(i)) = cw;
-      dH.coeffRef(c.offset(i) + 1, c.offset(i) + 1) = cw;
-      dH.coeffRef(c.offset(i) + 2, c.offset(i) + 2) = cw;
+      if (c.inv_mass(0) == 0.0f) {
+        continue;
+      }
+
+      dH.coeffRef(c.offset(i), c.offset(i)) += cw;
+      dH.coeffRef(c.offset(i) + 1, c.offset(i) + 1) += cw;
+      dH.coeffRef(c.offset(i) + 2, c.offset(i) + 2) += cw;
 
       b(Eigen::seqN(c.offset(i), 3)) += cw * c.reflection.col(i);
     }
@@ -270,6 +274,11 @@ bool Solver::step(Registry& registry,
       break;
     }
 
+    if (earliest_toi == 0.0f) {
+      SPDLOG_DEBUG("earliest toi = 0, force 1e-3 time step.");
+      earliest_toi = 1e-3f;
+    }
+
     float true_dt = dt * earliest_toi;
 
     if (true_dt >= remaining_dt) {
@@ -287,9 +296,7 @@ bool Solver::step(Registry& registry,
     SPDLOG_DEBUG("CCD rollback to toi {}", earliest_toi);
 
     next_state = earliest_toi * (next_state - curr_state_) + curr_state_;
-    if (true_dt > eps) {
-      velocity = (next_state - curr_state_) / true_dt;
-    }
+    velocity = (next_state - curr_state_) / true_dt;
     curr_state_ = next_state;
     remaining_dt -= true_dt;
   }

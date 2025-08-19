@@ -93,6 +93,7 @@ std::optional<Collision> point_triangle_collision(
   Collision collision;
   collision.type = CollisionType::PointTriangle;
   collision.toi = toi;
+  collision.inv_mass = inv_mass;
   collision.offset(0) = oa.solver_offset + 3 * ma.index(0);
   collision.offset(Eigen::seq(1, 3)) = ob.solver_offset + 3 * mb.index.array();
   collision.reflection = p_colli + (1.0f - toi) * dt * v;
@@ -123,6 +124,8 @@ std::optional<Collision> point_triangle_collision(
 std::optional<Collision> edge_edge_collision(
     const ObjectCollider& oa, const MeshCollider& ma, const ObjectCollider& ob,
     const MeshCollider& mb, float dt, const Eigen::Array3f& scene_ee_err) {
+  return std::nullopt;
+
   // TODO: more damping and friction avg mode
   float damping = 0.5f * (oa.damping + ob.damping);
   float friction = 0.5f * (oa.friction + ob.friction);
