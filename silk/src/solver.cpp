@@ -28,20 +28,18 @@ const Eigen::VectorXf& Solver::get_solver_state() const { return curr_state_; }
 void Solver::clear() {
   init_state_ = {};
   curr_state_ = {};
-  prev_state_ = {};
+  state_velocity_ = {};
   mass_ = {};
   H_ = {};
   UHU_ = {};
   U_ = {};
   HX_ = {};
   constrains_.clear();
-  collisions_.clear();
 }
 
 void Solver::reset() {
   curr_state_ = init_state_;
-  prev_state_ = init_state_;
-  collisions_.clear();
+  state_velocity_ = Eigen::VectorXf::Zero(state_num_);
 }
 
 bool Solver::init(Registry& registry) {
@@ -59,7 +57,6 @@ bool Solver::init(Registry& registry) {
   // initialize state vector
   init_state_.resize(state_num_);
   curr_state_.resize(state_num_);
-  prev_state_.resize(state_num_);
   for (Entity& e : registry.get_all_entities()) {
     auto solver_data = registry.get<SolverData>(e);
     auto tri_mesh = registry.get<TriMesh>(e);
@@ -72,7 +69,8 @@ bool Solver::init(Registry& registry) {
     }
   }
   curr_state_ = init_state_;
-  prev_state_ = init_state_;
+
+  state_velocity_ = Eigen::VectorXf::Zero(state_num_);
 
   // collect solver data
   Eigen::VectorXf mass(state_num_);
@@ -123,27 +121,9 @@ bool Solver::init(Registry& registry) {
 }
 
 bool Solver::lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
+                      const Eigen::SparseMatrix<float> dH,
                       Eigen::VectorXf& state) {
-  // init rhs is momentum energy term + pin position constrain
   Eigen::VectorXf b = init_rhs;
-
-  // project barrier constrain
-  // TODO: avoid hard-coded collision stiffness
-  Eigen::SparseMatrix<float> dH(state_num_, state_num_);
-  float cw = 1e8f;
-  for (auto& c : collisions_) {
-    for (int i = 0; i < 4; ++i) {
-      if (c.inv_mass(0) == 0.0f) {
-        continue;
-      }
-
-      dH.coeffRef(c.offset(i), c.offset(i)) += cw;
-      dH.coeffRef(c.offset(i) + 1, c.offset(i) + 1) += cw;
-      dH.coeffRef(c.offset(i) + 2, c.offset(i) + 2) += cw;
-
-      b(Eigen::seqN(c.offset(i), 3)) += cw * c.reflection.col(i);
-    }
-  }
 
   // project physical constrains
   std::vector<Eigen::VectorXf> buffers(thread_num,
@@ -191,8 +171,10 @@ bool Solver::lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
   return true;
 }
 
-bool Solver::step(Registry& registry,
-                  const CollisionPipeline& collision_pipeline) {
+bool Solver::step(Registry& registry, CollisionPipeline& collision_pipeline) {
+  SPDLOG_DEBUG("solver step");
+
+  // TODO: obj collider sub dt update
   init_all_object_collider(registry);
   update_all_obstacle_object_collider(registry);
 
@@ -215,93 +197,126 @@ bool Solver::step(Registry& registry,
     }
   }
 
-  Eigen::VectorXf velocity = (curr_state_ - prev_state_) / dt;
   Eigen::VectorXf next_state;
-  float remaining_dt = dt;
-  prev_state_ = curr_state_;
-  collisions_.clear();
+  float remaining_step = 1.0f;
 
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
     SPDLOG_DEBUG("Outer iter {}", outer_it);
 
     // prediction based on linear velocity
-    next_state = curr_state_ + dt * velocity + (dt * dt) * acceleration;
+    next_state = curr_state_ + dt * state_velocity_ + (dt * dt) * acceleration;
     Eigen::VectorXf init_rhs = (mass_ / (dt * dt)) * curr_state_ +
-                               (mass_ / dt) * velocity + mass_ * acceleration +
-                               pin_rhs;
+                               (mass_ / dt) * state_velocity_ +
+                               mass_ * acceleration + pin_rhs;
 
-    Eigen::VectorXf prev_solution = next_state;
+    Eigen::VectorXf lg_solution = next_state;
     for (int inner_it = 0; inner_it < max_inner_iteration; ++inner_it) {
       SPDLOG_DEBUG("Inner iter {}", inner_it);
 
-      lg_solve(registry, init_rhs, next_state);
+      // barrier constrain and projection
+      Eigen::SparseMatrix<float> dH(state_num_, state_num_);
+      Eigen::VectorXf rhs = init_rhs;
+      for (auto& c : collisions_) {
+        if (c.stiffness == 0) {
+          continue;
+        }
+
+        for (int i = 0; i < 4; ++i) {
+          // SPDLOG_DEBUG("barrier constrain:");
+          if (c.inv_mass(i) == 0.0f) {
+            // SPDLOG_DEBUG("inv mass 0, pass");
+            continue;
+          }
+
+          int offset = c.offset(i);
+
+          // SPDLOG_DEBUG("offset {}, state num {}", offset, state_num_);
+          // SPDLOG_DEBUG("original H {} {} {}", H_.coeff(offset, offset),
+          //              H_.coeff(offset + 1, offset + 1),
+          //              H_.coeff(offset + 2, offset + 2));
+          // SPDLOG_DEBUG("init rhs {}",
+          //              init_rhs(Eigen::seqN(offset, 3)).transpose());
+          // SPDLOG_DEBUG("curr state {}",
+          //              curr_state_(Eigen::seqN(offset, 3)).transpose());
+          // SPDLOG_DEBUG("reflection state {}",
+          // c.reflection.col(i).transpose());
+
+          dH.coeffRef(offset, offset) += c.stiffness;
+          dH.coeffRef(offset + 1, offset + 1) += c.stiffness;
+          dH.coeffRef(offset + 2, offset + 2) += c.stiffness;
+
+          Eigen::Vector3f position_t0 = curr_state_(Eigen::seqN(offset, 3));
+          Eigen::Vector3f reflection =
+              position_t0 + c.toi * dt * c.velocity_t0.col(i) +
+              (1.0f - c.toi) * dt * c.velocity_t1.col(i);
+          rhs(Eigen::seqN(offset, 3)) += c.stiffness * reflection;
+
+          // SPDLOG_DEBUG("toi offset {}", earliest_toi);
+          // SPDLOG_DEBUG("reflection state {}", reflection.transpose());
+        }
+      }
+
+      lg_solve(registry, rhs, dH, next_state);
       if (next_state.array().isNaN().any()) {
         SPDLOG_ERROR("solver explodes");
         exit(1);
         return false;
       }
 
-      if (((next_state - prev_solution).array().abs() < 1e-3f).all()) {
+      if (((next_state - lg_solution).array().abs() < 1e-3f).all()) {
+        SPDLOG_DEBUG("lg loop terminate");
         break;
       }
       SPDLOG_DEBUG("lg loop max state diff {}",
-                   (next_state - prev_solution).cwiseAbs().maxCoeff());
+                   (next_state - lg_solution).cwiseAbs().maxCoeff());
 
-      prev_solution = next_state;
+      lg_solution = next_state;
+
+      // collision stiffness update using partial ccd
+      collision_pipeline.update_collision(next_state, curr_state_, collisions_);
     }
 
-    // update collision
-    update_all_physical_object_collider(registry, next_state, prev_state_);
+    // full collision update
+    update_all_physical_object_collider(registry, next_state, curr_state_);
     collisions_ = collision_pipeline.find_collision(
         registry.get_all<ObjectCollider>(), dt);
 
-    if (collisions_.empty()) {
-      SPDLOG_DEBUG("no collision, terminate outer loop.");
-      break;
-    }
-
-    SPDLOG_DEBUG("Find {} collisions", collisions_.size());
+    // if (collisions.empty()) {
+    //   SPDLOG_DEBUG("no collision, terminate outer loop.");
+    //   break;
+    // }
 
     // ccd line search
     float earliest_toi = 1.0f;
-    for (auto& c : collisions_) {
-      earliest_toi = std::min(earliest_toi, c.toi);
-    }
+    if (!collisions_.empty()) {
+      SPDLOG_DEBUG("find {} collisions", collisions_.size());
 
-    // impossible
-    if (earliest_toi == 1.0f) {
-      SPDLOG_DEBUG("earliest toi = 1, terminate outer loop.");
-      break;
-    }
-
-    if (earliest_toi == 0.0f) {
-      SPDLOG_DEBUG("earliest toi = 0, force 1e-3 time step.");
-      earliest_toi = 1e-3f;
-    }
-
-    float true_dt = dt * earliest_toi;
-
-    if (true_dt >= remaining_dt) {
-      SPDLOG_DEBUG("true dt  {} > remaining dt {}. terminate outer loop.",
-                   true_dt, remaining_dt);
-      if (true_dt < eps) {
-        next_state = curr_state_;
-      } else {
-        next_state =
-            (remaining_dt / true_dt) * (next_state - curr_state_) + curr_state_;
+      for (auto& c : collisions_) {
+        earliest_toi = std::min(earliest_toi, c.toi);
       }
+      earliest_toi *= 0.8f;
+
+      SPDLOG_DEBUG("earliest toi {}", earliest_toi);
+    }
+
+    state_velocity_ = (next_state - curr_state_) / dt;
+
+    if (earliest_toi >= remaining_step) {
+      SPDLOG_DEBUG(
+          "earliest toi  {} >= remaining step {}. terminate outer loop.",
+          earliest_toi, remaining_step);
+      for (auto& c : collisions_) {
+        c.toi -= remaining_step;
+      }
+      curr_state_ += remaining_step * (next_state - curr_state_);
       break;
     }
 
     SPDLOG_DEBUG("CCD rollback to toi {}", earliest_toi);
-
     next_state = earliest_toi * (next_state - curr_state_) + curr_state_;
-    velocity = (next_state - curr_state_) / true_dt;
     curr_state_ = next_state;
-    remaining_dt -= true_dt;
+    remaining_step -= earliest_toi;
   }
-
-  curr_state_ = next_state;
 
   return true;
 }

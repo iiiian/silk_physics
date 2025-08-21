@@ -66,7 +66,7 @@ bool mesh_self_collision_filter(const MeshCollider& a, const MeshCollider& b) {
 };
 
 std::vector<Collision> CollisionPipeline::find_collision(
-    std::vector<ObjectCollider>& object_colliders, float dt) const {
+    std::vector<ObjectCollider>& object_colliders, float dt) {
   // compute floating point err for ccd
   Eigen::Vector3f abs_max = Eigen::Vector3f::Zero();
   for (auto& o : object_colliders) {
@@ -75,9 +75,8 @@ std::vector<Collision> CollisionPipeline::find_collision(
     abs_max = (abs_max.cwiseMax(bbox_abs_min.cwiseMax(bbox_abs_max))).eval();
   }
 
-  Eigen::Array3f scene_ee_err =
-      ticcd::get_numerical_error(abs_max, false, true);
-  Eigen::Array3f scene_vf_err = ticcd::get_numerical_error(abs_max, true, true);
+  scene_ee_err_ = ticcd::get_numerical_error(abs_max, false, true);
+  scene_vf_err_ = ticcd::get_numerical_error(abs_max, true, true);
 
   std::vector<Collision> collisions;
   CollisionCache<MeshCollider> mesh_ccache;
@@ -111,8 +110,9 @@ std::vector<Collision> CollisionPipeline::find_collision(
 
     // step 3. mesh collider narrowphase using ccd
     for (auto& [ma, mb] : mesh_ccache) {
-      auto collision =
-          narrow_phase(*oa, *ma, *ob, *mb, dt, scene_ee_err, scene_vf_err);
+      auto collision = narrow_phase(*oa, *ma, *ob, *mb, dt,
+                                    collision_stiffness_base, ccd_tolerance,
+                                    ccd_max_iter, scene_ee_err_, scene_vf_err_);
       if (collision) {
         collisions.emplace_back(std::move(*collision));
       }
@@ -136,8 +136,9 @@ std::vector<Collision> CollisionPipeline::find_collision(
 
     for (auto& [ma, mb] : mesh_ccache) {
       // step 2. mesh collider narrowphase using ccd
-      auto collision =
-          narrow_phase(o, *ma, o, *mb, dt, scene_ee_err, scene_vf_err);
+      auto collision = narrow_phase(o, *ma, o, *mb, dt,
+                                    collision_stiffness_base, ccd_tolerance,
+                                    ccd_max_iter, scene_ee_err_, scene_vf_err_);
       if (collision) {
         collisions.emplace_back(std::move(*collision));
       }
@@ -145,6 +146,17 @@ std::vector<Collision> CollisionPipeline::find_collision(
   }
 
   return collisions;
+}
+
+void CollisionPipeline::update_collision(const Eigen::VectorXf& solver_state_t0,
+                                         const Eigen::VectorXf& solver_state_t1,
+                                         std::vector<Collision>& collisions) {
+  for (auto& c : collisions) {
+    partial_ccd_update(solver_state_t0, solver_state_t1, scene_ee_err_,
+                       scene_vf_err_, collision_stiffness_base,
+                       collision_stiffness_max, collision_stiffness_growth,
+                       ccd_tolerance, partial_ccd_max_iter, c);
+  }
 }
 
 }  // namespace silk

@@ -26,7 +26,7 @@ class Solver {
 
   Eigen::VectorXf init_state_;
   Eigen::VectorXf curr_state_;
-  Eigen::VectorXf prev_state_;
+  Eigen::VectorXf state_velocity_;
 
   Eigen::SparseMatrix<float> mass_;
   Eigen::SparseMatrix<float> H_;  // use row major format for iterative solver
@@ -42,11 +42,11 @@ class Solver {
   void clear();
   void reset();
   bool init(Registry& registry);
-  bool step(Registry& registry, const CollisionPipeline& collision_pipeline);
+  bool step(Registry& registry, CollisionPipeline& collision_pipeline);
 
  private:
   bool lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
-                Eigen::VectorXf& state);
+                const Eigen::SparseMatrix<float> dH, Eigen::VectorXf& state);
 };
 
 }  // namespace silk

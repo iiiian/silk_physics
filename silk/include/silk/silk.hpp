@@ -45,7 +45,7 @@ struct CollisionConfig {
 };
 
 struct ClothConfig {
-  float elastic_stiffness = 0.5f;
+  float elastic_stiffness = 100.0f;
   float bending_stiffness = 0.0f;
   float density = 0.1f;
 };
