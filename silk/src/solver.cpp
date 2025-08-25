@@ -35,14 +35,18 @@ void Solver::clear() {
   U_ = {};
   HX_ = {};
   constrains_.clear();
+  collisions_.clear();
 }
 
 void Solver::reset() {
   curr_state_ = init_state_;
   state_velocity_ = Eigen::VectorXf::Zero(state_num_);
+  collisions_.clear();
 }
 
 bool Solver::init(Registry& registry) {
+  clear();
+
   init_all_solver_data(registry);
 
   // count total state num
@@ -217,7 +221,7 @@ bool Solver::step(Registry& registry, CollisionPipeline& collision_pipeline) {
       Eigen::SparseMatrix<float> dH(state_num_, state_num_);
       Eigen::VectorXf rhs = init_rhs;
       for (auto& c : collisions_) {
-        if (c.stiffness == 0) {
+        if (c.stiffness == 0.0f) {
           continue;
         }
 
@@ -273,7 +277,8 @@ bool Solver::step(Registry& registry, CollisionPipeline& collision_pipeline) {
       lg_solution = next_state;
 
       // collision stiffness update using partial ccd
-      collision_pipeline.update_collision(next_state, curr_state_, collisions_);
+      // collision_pipeline.update_collision(next_state, curr_state_,
+      // collisions_);
     }
 
     // full collision update

@@ -19,7 +19,7 @@ class CollisionPipeline {
   int ccd_max_iter = 1024;
   int partial_ccd_max_iter = 32;
 
-  float collision_stiffness_base = 1e2f;
+  float collision_stiffness_base = 1e8f;
   float collision_stiffness_max = 1e8f;
   float collision_stiffness_growth = 16.0f;
 

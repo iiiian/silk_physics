@@ -41,7 +41,7 @@ std::optional<Collision> point_triangle_collision(
       tolerance,             // ticcd solving precision.
       1.0f,                  // max time, we use normalized time interval [0, 1]
       max_iter,              // max ticcd iteration, set as -1 to disable
-      false                  // no toi refinement if toi = 0
+      true                   // enable toi refinement if toi = 0
   );
 
   if (!ccd_result) {
@@ -80,42 +80,26 @@ std::optional<Collision> point_triangle_collision(
   // total velocity chabge after collision
   Eigen::Vector3f v_diff;
 
-  // if toi is zero, there are 3 possibilities:
-  // 1. primitives are approaching each other and collide shortly after t = 0.
-  // 2. primitives are leaving each other. they are just really close at t = 0.
-  // 3. primitives are relatively stationary to each other and are really close
-  // at t = 0.
-  //
-  // for case 1. v_diff is the same as non zero toi case.
-  // for case 2. there will be no collision.
-  // for case 3. we have no idea whether primitives collide or not, assumes they
-  // do collide and force a minimal separation velocity.
-  if (toi == 0.0f) {
-    float stationary_velocity = ms / dt;
-
-    // case 1
-    if (v_normal_norm > stationary_velocity) {
-      SPDLOG_DEBUG("zero toi and approaching, n velocity length {}",
-                   v_normal_norm);
-      v_diff = 2.0f * v_normal;
-    }
-    // case 2
-    else if (v_normal_norm < -stationary_velocity) {
-      SPDLOG_DEBUG("zero toi and leaving, n velocity lenght {}", v_normal_norm);
-      return std::nullopt;
-    }
-    // case 3
-    else {
-      SPDLOG_DEBUG("zero toi and stationary, n velocity length {}",
-                   v_normal_norm);
-      v_diff = 2.0f * stationary_velocity * n;
-    }
-  }
-  // non zero toi
-  else {
+  float stationary_velocity = ms / dt;
+  // if velocity along collision normal > stationary_velocity, that means 2
+  // primitive is approaching each other.
+  if (v_normal_norm > stationary_velocity) {
+    SPDLOG_DEBUG("approaching, n velocity length {}", v_normal_norm);
     // Eigen::Vector3f v_diff =
     //     (2.0f - damping) * v_normal + (1.0f - friction) * v_parallel;
     v_diff = 2.0f * v_normal;
+  }
+  // if velocity along collision < stationary_velocity but > 0, that means 2
+  // primitives is approaching each other very slowly. In this case, we gives an
+  // artificial velocity to ensure separation.
+  else if (v_normal_norm >= 0.0f) {
+    SPDLOG_DEBUG("slowly approaching, n velocity length {}", v_normal_norm);
+    v_diff = 2.0f * stationary_velocity * n;
+  }
+  // if velocity along collision < 0. That means 2 primitives are separating.
+  else {
+    SPDLOG_DEBUG("leaving, n velocity length {}", v_normal_norm);
+    return std::nullopt;
   }
 
   // compute impulse weight
@@ -139,6 +123,7 @@ std::optional<Collision> point_triangle_collision(
   c.offset(0) = oa.solver_offset + 3 * ma.index(0);
   c.offset(Eigen::seqN(1, 3)) = (ob.solver_offset + 3 * mb.index.array());
 
+  SPDLOG_DEBUG("pt collision: {}", c.offset.transpose());
   SPDLOG_DEBUG("point at t0: {}", c.position_t0.col(0).transpose());
   SPDLOG_DEBUG("triangle v1 at t0: {}", c.position_t0.col(1).transpose());
   SPDLOG_DEBUG("triangle v2 at t0: {}", c.position_t0.col(2).transpose());
@@ -191,7 +176,7 @@ std::optional<Collision> edge_edge_collision(
       tolerance,             // ticcd solving precision
       1.0f,                  // max time, we use normalized time interval [0, 1]
       max_iter,              // max ticcd iteration, set as -1 to disable
-      false                  // no toi refinement if toi = 0
+      true                   // no toi refinement if toi = 0
   );
 
   if (!ccd_result) {
@@ -218,19 +203,25 @@ std::optional<Collision> edge_edge_collision(
       (1.0f - para_b) * c.velocity_t0.col(2) + para_b * c.velocity_t0.col(3);
 
   // n is collision normal that points from edge a to b
-  Eigen::Vector3f n =
-      (p_colli.col(0) - p_colli.col(1)).cross(p_colli.col(2) - p_colli.col(3));
-  if (n.cwiseAbs().maxCoeff() < 1e-6f) {
-    SPDLOG_WARN("parallel edge edge collision");
+  // Eigen::Vector3f n =
+  //     (p_colli.col(0) - p_colli.col(1)).cross(p_colli.col(2) -
+  //     p_colli.col(3));
+  // if (n.cwiseAbs().maxCoeff() < ms * 1e-6f) {
+  //   SPDLOG_WARN("parallel edge edge collision");
+  //   exit(1);
+  // }
+  // Eigen::Vector3f dir = pb - pa;
+  // if (dir(0) == 0.0f && dir(1) == 0.0f && dir(2) == 0.0f) {
+  //   SPDLOG_ERROR("zero collision direction");
+  //   exit(1);
+  // }
+  // if (n.dot(dir) < 0.0f) {
+  //   n *= -1.0f;
+  // }
+  Eigen::Vector3f n = pb - pa;
+  if (n(0) == 0.0f && n(1) == 0.0f && n(2) == 0.0f) {
+    SPDLOG_ERROR("zero collision distance");
     exit(1);
-  }
-  Eigen::Vector3f dir = pb - pa;
-  if (dir(0) == 0 && dir(1) == 0 && dir(2) == 0) {
-    SPDLOG_ERROR("zero collision direction");
-    exit(1);
-  }
-  if (n.dot(dir) < 0.0f) {
-    n *= -1.0f;
   }
   n.normalize();
 
@@ -242,42 +233,26 @@ std::optional<Collision> edge_edge_collision(
   // total velocity chabge after collision
   Eigen::Vector3f v_diff;
 
-  // if toi is zero, there are 3 possibilities:
-  // 1. primitives are approaching each other and collide shortly after t = 0.
-  // 2. primitives are leaving each other. they are just really close at t = 0.
-  // 3. primitives are relatively stationary to each other and are really close
-  // at t = 0.
-  //
-  // for case 1. v_diff is the same as non zero toi case.
-  // for case 2. there will be no collision.
-  // for case 3. we have no idea whether primitives collide or not, assumes they
-  // do collide and force a minimal separation velocity.
-  if (toi == 0.0f) {
-    float stationary_velocity = ms / dt;
-
-    // case 1
-    if (v_normal_norm > stationary_velocity) {
-      SPDLOG_DEBUG("zero toi and approaching, n velocity length {}",
-                   v_normal_norm);
-      v_diff = 2.0f * v_normal;
-    }
-    // case 2
-    else if (v_normal_norm < -stationary_velocity) {
-      SPDLOG_DEBUG("zero toi and leaving, n velocity lenght {}", v_normal_norm);
-      return std::nullopt;
-    }
-    // case 3
-    else {
-      SPDLOG_DEBUG("zero toi and stationary, n velocity length {}",
-                   v_normal_norm);
-      v_diff = 2.0f * stationary_velocity * n;
-    }
-  }
-  // non zero toi
-  else {
+  float stationary_velocity = ms / dt;
+  // if velocity along collision normal > stationary_velocity, that means 2
+  // primitive is approaching each other.
+  if (v_normal_norm > stationary_velocity) {
+    SPDLOG_DEBUG("approaching, n velocity length {}", v_normal_norm);
     // Eigen::Vector3f v_diff =
     //     (2.0f - damping) * v_normal + (1.0f - friction) * v_parallel;
     v_diff = 2.0f * v_normal;
+  }
+  // if velocity along collision < stationary_velocity but > 0, that means 2
+  // primitives is approaching each other very slowly. In this case, we gives an
+  // artificial velocity to ensure separation.
+  else if (v_normal_norm >= 0.0f) {
+    SPDLOG_DEBUG("slowly approaching, n velocity length {}", v_normal_norm);
+    v_diff = 2.0f * stationary_velocity * n;
+  }
+  // if velocity along collision < 0. That means 2 primitives are separating.
+  else {
+    SPDLOG_DEBUG("leaving, n velocity lenght {}", v_normal_norm);
+    return std::nullopt;
   }
 
   // compute impulse weight
@@ -303,6 +278,7 @@ std::optional<Collision> edge_edge_collision(
   c.offset(Eigen::seqN(2, 2)) =
       ob.solver_offset + 3 * mb.index(Eigen::seqN(0, 2)).array();
 
+  SPDLOG_DEBUG("ee collision: {}", c.offset.transpose());
   SPDLOG_DEBUG("edge a v0 at t0: {}", c.position_t0.col(0).transpose());
   SPDLOG_DEBUG("edge a v1 at t0: {}", c.position_t0.col(1).transpose());
   SPDLOG_DEBUG("edge b v0 at t0: {}", c.position_t0.col(2).transpose());
@@ -320,7 +296,6 @@ std::optional<Collision> edge_edge_collision(
       "= {}",
       ccd_result->t(0), ccd_result->t(1), ccd_result->u(0), ccd_result->u(1),
       ccd_result->v(0), ccd_result->v(1), ccd_result->tolerance);
-  SPDLOG_DEBUG("index offset {}", c.offset.transpose());
 
   return c;
 }
