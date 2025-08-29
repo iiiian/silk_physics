@@ -161,9 +161,8 @@ cholmod_raii::CholmodFactor Solver::update_factor_and_rhs_for_collision(
       int offset = c.offset(i);
 
       Eigen::Vector3f position_t0 = curr_state_(Eigen::seqN(offset, 3));
-      Eigen::Vector3f reflection = position_t0 +
-                                   c.toi * dt * c.velocity_t0.col(i) +
-                                   (1.0f - c.toi) * dt * c.velocity_t1.col(i);
+      Eigen::Vector3f reflection = position_t0 + c.toi * c.velocity_t0.col(i) +
+                                   (1.0f - c.toi) * c.velocity_t1.col(i);
       rhs(Eigen::seqN(offset, 3)) += c.stiffness * reflection;
 
       C_triplets.emplace_back(offset, offset, c.stiffness);

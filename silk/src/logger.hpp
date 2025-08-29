@@ -1,7 +1,7 @@
 #pragma once
 
 // uncomment when debugging
-// #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_DEBUG
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_DEBUG
 
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>

@@ -20,8 +20,8 @@ struct Collision {
   // primitive position for ccd query
   Eigen::Matrix<float, 3, 4> position_t0;
   Eigen::Matrix<float, 3, 4> position_t1;
-  Eigen::Matrix<float, 3, 4> reflection;
   // primitive velocity before/after collision
+  // note that this velocity is normalized as if dt = 1
   Eigen::Matrix<float, 3, 4> velocity_t0;
   Eigen::Matrix<float, 3, 4> velocity_t1;
 };
