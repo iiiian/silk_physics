@@ -37,14 +37,14 @@ TEST_CASE("sap-test", "[collision]") {
     sphere_proxies[i] = sphere_colliders.data() + i;
   }
 
-  CollisionFilterCallback<SimpleCollider> self_collision_filter =
+  CollisionFilter<SimpleCollider> self_collision_filter =
       [](const SimpleCollider& a, const SimpleCollider& b) -> bool {
     return (a.v0 != b.v0 && a.v0 != b.v1 && a.v0 != b.v2 && a.v1 != b.v0 &&
             a.v1 != b.v1 && a.v1 != b.v2 && a.v2 != b.v0 && a.v2 != b.v1 &&
             a.v2 != b.v2);
   };
 
-  CollisionFilterCallback<SimpleCollider> inter_collision_filter =
+  CollisionFilter<SimpleCollider> inter_collision_filter =
       [](const SimpleCollider& a, const SimpleCollider& b) -> bool {
     return true;
   };
