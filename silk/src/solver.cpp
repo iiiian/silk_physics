@@ -6,12 +6,10 @@
 #include <Eigen/Sparse>
 #include <Eigen/SparseCholesky>
 #include <cmath>
-#include <iostream>  // fix a bug in eigen arpack that miss this include
-#include <limits>
 #include <memory>
-#include <unsupported/Eigen/ArpackSupport>
 #include <vector>
 
+#include "cholmod_utils.hpp"
 #include "collision.hpp"
 #include "collision_pipeline.hpp"
 #include "ecs.hpp"
@@ -29,11 +27,9 @@ void Solver::clear() {
   init_state_ = {};
   curr_state_ = {};
   state_velocity_ = {};
-  mass_ = {};
   H_ = {};
-  UHU_ = {};
-  U_ = {};
-  HX_ = {};
+  L_ = {};
+  mass_ = {};
   constrains_.clear();
   collisions_.clear();
 }
@@ -46,7 +42,6 @@ void Solver::reset() {
 
 bool Solver::init(Registry& registry) {
   clear();
-
   init_all_solver_data(registry);
 
   // count total state num
@@ -60,7 +55,6 @@ bool Solver::init(Registry& registry) {
 
   // initialize state vector
   init_state_.resize(state_num_);
-  curr_state_.resize(state_num_);
   for (Entity& e : registry.get_all_entities()) {
     auto solver_data = registry.get<SolverData>(e);
     auto tri_mesh = registry.get<TriMesh>(e);
@@ -73,12 +67,11 @@ bool Solver::init(Registry& registry) {
     }
   }
   curr_state_ = init_state_;
-
   state_velocity_ = Eigen::VectorXf::Zero(state_num_);
 
   // collect solver data
   Eigen::VectorXf mass(state_num_);
-  std::vector<Eigen::Triplet<float>> AA_triplets;
+  std::vector<Eigen::Triplet<float>> H_triplets;
   constrains_.clear();
   for (Entity& e : registry.get_all_entities()) {
     auto data = registry.get<SolverData>(e);
@@ -87,49 +80,54 @@ bool Solver::init(Registry& registry) {
     mass(Eigen::seqN(data->state_offset, data->state_num)) =
         data->mass.replicate(1, 3).reshaped<Eigen::RowMajor>();
 
-    sparse_to_triplets(data->weighted_AA, data->state_offset,
-                       data->state_offset, AA_triplets);
+    append_triplets_from_sparse(data->weighted_AA, data->state_offset,
+                                data->state_offset, H_triplets,
+                                SymmetricStatus::UpperTriangular);
+
     for (auto& constrain : data->constrains) {
       constrain->set_solver_state_offset(data->state_offset);
       constrains_.push_back(constrain.get());
     }
   }
 
-  // compute internal matrices
   mass_ = Eigen::SparseMatrix<float>(state_num_, state_num_);
   mass_ = mass.asDiagonal();
 
-  Eigen::SparseMatrix<float> AA(state_num_, state_num_);
-  AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
+  H_ = Eigen::SparseMatrix<float>{state_num_, state_num_};
+  H_.setFromTriplets(H_triplets.begin(), H_triplets.end());
+  H_ += mass_ / (dt * dt);
 
-  H_ = mass_ / (dt * dt) + AA;
+  // Eigen::SparseMatrix<double> tmp = H_.cast<double>();
+  cholmod_sparse H_view = cholmod_raii::make_cholmod_sparse_view(
+      H_, SymmetricStatus::UpperTriangular);
 
-  // TODO: replace arpack with modern solution.
-  Eigen::ArpackGeneralizedSelfAdjointEigenSolver<
-      Eigen::SparseMatrix<float>,
-      Eigen::SimplicialLLT<Eigen::SparseMatrix<float>>>
-      eigen_solver;
-  r = std::min(r, state_num_);
-  eigen_solver.compute(H_, r, "SM");
-  if (eigen_solver.info() != Eigen::Success) {
-    return false;
-  }
-
-  // columns are eigen vectors
-  // the dimension of U is nxr
-  U_ = eigen_solver.eigenvectors();
-  UHU_ = eigen_solver.eigenvalues();
-  HX_ = H_ * init_state_;
+  L_ = cholmod_analyze(&H_view, cholmod_raii::global_common);
+  assert(!L_.is_empty());
+  // cholmod_print_factor(L_, "L", cholmod_raii::global_common);
+  cholmod_factorize(&H_view, L_, cholmod_raii::global_common);
+  // cholmod_print_factor(L_, "L", cholmod_raii::global_common);
 
   return true;
 }
 
-bool Solver::lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
-                      const Eigen::SparseMatrix<float> dH,
-                      Eigen::VectorXf& state) {
-  Eigen::VectorXf b = init_rhs;
+void Solver::update_rhs_for_pin(Registry& registry, Eigen::VectorXf& rhs) {
+  for (Entity& e : registry.get_all_entities()) {
+    auto solver_data = registry.get<SolverData>(e);
+    auto pin = registry.get<Pin>(e);
+    if (solver_data && pin) {
+      auto p = pin;
 
-  // project physical constrains
+      int offset = solver_data->state_offset;
+      for (int i = 0; i < p->index.size(); ++i) {
+        rhs(Eigen::seqN(offset + 3 * p->index(i), 3)) +=
+            p->pin_stiffness * p->position(Eigen::seqN(3 * i, 3));
+      }
+    }
+  }
+}
+
+void Solver::update_rhs_for_physics(const Eigen::VectorXf& state,
+                                    Eigen::VectorXf& rhs) {
   std::vector<Eigen::VectorXf> buffers(thread_num,
                                        Eigen::VectorXf::Zero(state_num_));
 #pragma omp parallel for num_threads(thread_num)
@@ -139,38 +137,66 @@ bool Solver::lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
   }
   // merge thread local b back to global b
   for (Eigen::VectorXf& buffer : buffers) {
-    b += buffer;
+    rhs += buffer;
+  }
+}
+
+cholmod_raii::CholmodFactor Solver::update_factor_and_rhs_for_collision(
+    Eigen::VectorXf& rhs) {
+  if (collisions_.empty()) {
+    return nullptr;
   }
 
-  // subspace solve
-  // Eigen::VectorXf subspace_b = U_.transpose() * (b - HX_ - dH * init_state_);
-  // Eigen::VectorXf subspace_dx =
-  //     (UHU_ + U_.transpose() * dH * U_).householderQr().solve(subspace_b);
-  // Eigen::VectorXf subspace_x = init_state_ + U_ * subspace_dx;
+  std::vector<Eigen::Triplet<float>> C_triplets;
+  for (auto& c : collisions_) {
+    if (c.stiffness == 0.0f) {
+      continue;
+    }
 
-  // // iterative global solve
-  // Eigen::BiCGSTAB<Eigen::SparseMatrix<float>> iterative_solver;
-  // iterative_solver.setMaxIterations(max_iteration);
-  // iterative_solver.compute(H_ + dH);
-  // state = iterative_solver.solveWithGuess(b, state);
-  //
-  // // we do not care if iterative solver converges or not because looping
-  // // lg_solve is more effective
-  // if (iterative_solver.info() != Eigen::Success &&
-  //     iterative_solver.info() != Eigen::NoConvergence) {
-  //   return false;
-  // }
-  //
-  // std::cout << "iterative solver iter " << iterative_solver.iterations()
-  //           << std::endl;
+    for (int i = 0; i < 4; ++i) {
+      if (c.inv_mass(i) == 0.0f) {
+        continue;
+      }
 
-  Eigen::SimplicialLDLT<Eigen::SparseMatrix<float>> ldlt_solver;
-  ldlt_solver.compute(H_ + dH);
-  state = ldlt_solver.solve(b);
+      int offset = c.offset(i);
 
-  if (ldlt_solver.info() != Eigen::Success) {
-    return false;
+      Eigen::Vector3f position_t0 = curr_state_(Eigen::seqN(offset, 3));
+      Eigen::Vector3f reflection = position_t0 +
+                                   c.toi * dt * c.velocity_t0.col(i) +
+                                   (1.0f - c.toi) * dt * c.velocity_t1.col(i);
+      rhs(Eigen::seqN(offset, 3)) += c.stiffness * reflection;
+
+      C_triplets.emplace_back(offset, offset, c.stiffness);
+      C_triplets.emplace_back(offset + 1, offset + 1, c.stiffness);
+      C_triplets.emplace_back(offset + 2, offset + 2, c.stiffness);
+    }
   }
+
+  Eigen::SparseMatrix<float> C{state_num_, state_num_};
+  C.setFromTriplets(C_triplets.begin(), C_triplets.end());
+  C = C.cwiseSqrt();
+
+  cholmod_sparse C_view = cholmod_raii::make_cholmod_sparse_view(C);
+
+  int32_t* rset = static_cast<int32_t*>(L_.raw()->Perm);
+  int64_t rset_num = static_cast<int64_t>(L_.raw()->n);
+  cholmod_raii::CholmodSparse C_perm = cholmod_submatrix(
+      &C_view, rset, rset_num, nullptr, -1, 1, 1, cholmod_raii::global_common);
+
+  cholmod_raii::CholmodFactor LC = L_;
+  cholmod_updown(1, C_perm, LC, cholmod_raii::global_common);
+
+  return LC;
+}
+
+bool Solver::global_solve(Eigen::VectorXf& rhs, cholmod_raii::CholmodFactor& L,
+                          Eigen::VectorXf& out) {
+  cholmod_dense rhs_view = cholmod_raii::make_cholmod_dense_vector_view(rhs);
+  cholmod_raii::CholmodDense sol =
+      cholmod_solve(CHOLMOD_A, L, &rhs_view, cholmod_raii::global_common);
+  assert(!sol.is_empty());
+
+  out = cholmod_raii::make_eigen_dense_vector_view(sol);
 
   return true;
 }
@@ -185,21 +211,8 @@ bool Solver::step(Registry& registry, CollisionPipeline& collision_pipeline) {
   Eigen::VectorXf acceleration =
       const_acceleration.replicate(state_num_ / 3, 1);
 
-  // project position constrain from pin groups
   Eigen::VectorXf pin_rhs = Eigen::VectorXf::Zero(state_num_);
-  for (Entity& e : registry.get_all_entities()) {
-    auto solver_data = registry.get<SolverData>(e);
-    auto pin = registry.get<Pin>(e);
-    if (solver_data && pin) {
-      auto p = pin;
-
-      int offset = solver_data->state_offset;
-      for (int i = 0; i < p->index.size(); ++i) {
-        pin_rhs(Eigen::seqN(offset + 3 * p->index(i), 3)) +=
-            p->pin_stiffness * p->position(Eigen::seqN(3 * i, 3));
-      }
-    }
-  }
+  update_rhs_for_pin(registry, pin_rhs);
 
   Eigen::VectorXf next_state;
   float remaining_step = 1.0f;
@@ -207,60 +220,28 @@ bool Solver::step(Registry& registry, CollisionPipeline& collision_pipeline) {
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
     SPDLOG_DEBUG("Outer iter {}", outer_it);
 
+    Eigen::VectorXf outer_rhs = (mass_ / (dt * dt)) * curr_state_ +
+                                (mass_ / dt) * state_velocity_ +
+                                mass_ * acceleration + pin_rhs;
+    cholmod_raii::CholmodFactor LC =
+        update_factor_and_rhs_for_collision(outer_rhs);
+
     // prediction based on linear velocity
     next_state = curr_state_ + dt * state_velocity_ + (dt * dt) * acceleration;
-    Eigen::VectorXf init_rhs = (mass_ / (dt * dt)) * curr_state_ +
-                               (mass_ / dt) * state_velocity_ +
-                               mass_ * acceleration + pin_rhs;
 
     Eigen::VectorXf lg_solution = next_state;
     for (int inner_it = 0; inner_it < max_inner_iteration; ++inner_it) {
       SPDLOG_DEBUG("Inner iter {}", inner_it);
 
-      // barrier constrain and projection
-      Eigen::SparseMatrix<float> dH(state_num_, state_num_);
-      Eigen::VectorXf rhs = init_rhs;
-      for (auto& c : collisions_) {
-        if (c.stiffness == 0.0f) {
-          continue;
-        }
+      Eigen::VectorXf inner_rhs = outer_rhs;
+      update_rhs_for_physics(next_state, inner_rhs);
 
-        for (int i = 0; i < 4; ++i) {
-          // SPDLOG_DEBUG("barrier constrain:");
-          if (c.inv_mass(i) == 0.0f) {
-            // SPDLOG_DEBUG("inv mass 0, pass");
-            continue;
-          }
-
-          int offset = c.offset(i);
-
-          // SPDLOG_DEBUG("offset {}, state num {}", offset, state_num_);
-          // SPDLOG_DEBUG("original H {} {} {}", H_.coeff(offset, offset),
-          //              H_.coeff(offset + 1, offset + 1),
-          //              H_.coeff(offset + 2, offset + 2));
-          // SPDLOG_DEBUG("init rhs {}",
-          //              init_rhs(Eigen::seqN(offset, 3)).transpose());
-          // SPDLOG_DEBUG("curr state {}",
-          //              curr_state_(Eigen::seqN(offset, 3)).transpose());
-          // SPDLOG_DEBUG("reflection state {}",
-          // c.reflection.col(i).transpose());
-
-          dH.coeffRef(offset, offset) += c.stiffness;
-          dH.coeffRef(offset + 1, offset + 1) += c.stiffness;
-          dH.coeffRef(offset + 2, offset + 2) += c.stiffness;
-
-          Eigen::Vector3f position_t0 = curr_state_(Eigen::seqN(offset, 3));
-          Eigen::Vector3f reflection =
-              position_t0 + c.toi * dt * c.velocity_t0.col(i) +
-              (1.0f - c.toi) * dt * c.velocity_t1.col(i);
-          rhs(Eigen::seqN(offset, 3)) += c.stiffness * reflection;
-
-          // SPDLOG_DEBUG("toi offset {}", earliest_toi);
-          // SPDLOG_DEBUG("reflection state {}", reflection.transpose());
-        }
+      if (collisions_.empty()) {
+        global_solve(inner_rhs, L_, next_state);
+      } else {
+        global_solve(inner_rhs, LC, next_state);
       }
 
-      lg_solve(registry, rhs, dH, next_state);
       if (next_state.array().isNaN().any()) {
         SPDLOG_ERROR("solver explodes");
         exit(1);
@@ -271,25 +252,17 @@ bool Solver::step(Registry& registry, CollisionPipeline& collision_pipeline) {
         SPDLOG_DEBUG("lg loop terminate");
         break;
       }
-      SPDLOG_DEBUG("lg loop max state diff {}",
-                   (next_state - lg_solution).cwiseAbs().maxCoeff());
 
       lg_solution = next_state;
 
       // collision stiffness update using partial ccd
-      // collision_pipeline.update_collision(next_state, curr_state_,
-      // collisions_);
+      collision_pipeline.update_collision(next_state, curr_state_, collisions_);
     }
 
     // full collision update
     update_all_physical_object_collider(registry, next_state, curr_state_);
     collisions_ = collision_pipeline.find_collision(
         registry.get_all<ObjectCollider>(), dt);
-
-    // if (collisions.empty()) {
-    //   SPDLOG_DEBUG("no collision, terminate outer loop.");
-    //   break;
-    // }
 
     // ccd line search
     float earliest_toi = 1.0f;
@@ -321,6 +294,9 @@ bool Solver::step(Registry& registry, CollisionPipeline& collision_pipeline) {
     next_state = earliest_toi * (next_state - curr_state_) + curr_state_;
     curr_state_ = next_state;
     remaining_step -= earliest_toi;
+    for (auto& c : collisions_) {
+      c.toi -= earliest_toi;
+    }
   }
 
   return true;

@@ -78,7 +78,8 @@ std::vector<Collision> CollisionPipeline::find_collision(
   scene_ee_err_ = ticcd::get_numerical_error(abs_max, false, true);
   scene_vf_err_ = ticcd::get_numerical_error(abs_max, true, true);
 
-  std::vector<Collision> collisions;
+  std::vector<std::vector<Collision>> thread_local_collisions(
+      omp_get_max_threads());
   CollisionCache<MeshCollider> mesh_ccache;
 
   // find collisions between object colliders.
@@ -108,13 +109,15 @@ std::vector<Collision> CollisionPipeline::find_collision(
         oa->mesh_collider_tree, ob->mesh_collider_tree, mesh_collision_filter,
         mesh_ccache);
 
-    // step 3. mesh collider narrowphase using ccd
+// step 3. mesh collider narrowphase using ccd
+#pragma omp parallel for
     for (auto& [ma, mb] : mesh_ccache) {
       auto collision = narrow_phase(*oa, *ma, *ob, *mb, dt,
                                     collision_stiffness_base, ccd_tolerance,
                                     ccd_max_iter, scene_ee_err_, scene_vf_err_);
+      auto& out = thread_local_collisions[omp_get_thread_num()];
       if (collision) {
-        collisions.emplace_back(std::move(*collision));
+        out.emplace_back(std::move(*collision));
       }
     }
   }
@@ -134,18 +137,25 @@ std::vector<Collision> CollisionPipeline::find_collision(
     o.mesh_collider_tree.test_self_collision(mesh_self_collision_filter,
                                              mesh_ccache);
 
+#pragma omp parallel for
     for (auto& [ma, mb] : mesh_ccache) {
       // step 2. mesh collider narrowphase using ccd
       auto collision = narrow_phase(o, *ma, o, *mb, dt,
                                     collision_stiffness_base, ccd_tolerance,
                                     ccd_max_iter, scene_ee_err_, scene_vf_err_);
+      auto& out = thread_local_collisions[omp_get_thread_num()];
       if (collision) {
-        collisions.emplace_back(std::move(*collision));
+        out.emplace_back(std::move(*collision));
       }
     }
   }
 
-  return collisions;
+  auto& thread0_collisions = thread_local_collisions[0];
+  for (int i = 1; i < omp_get_max_threads(); ++i) {
+    auto& c = thread_local_collisions[i];
+    thread0_collisions.insert(thread0_collisions.end(), c.begin(), c.end());
+  }
+  return thread0_collisions;
 }
 
 void CollisionPipeline::update_collision(const Eigen::VectorXf& solver_state_t0,

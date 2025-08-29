@@ -1,7 +1,7 @@
 #pragma once
 
 // uncomment when debugging
-#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_DEBUG
+// #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_DEBUG
 
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
@@ -13,7 +13,7 @@
 // eigen formatter support
 template <typename T>
 struct fmt::formatter<
-    T, std::enable_if_t<std::is_base_of_v<Eigen::DenseBase<T>, T>, char>> {
+    T, std::enable_if_t<std::is_base_of_v<Eigen::EigenBase<T>, T>, char>> {
   constexpr auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
     return ctx.begin();
   }

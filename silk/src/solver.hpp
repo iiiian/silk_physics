@@ -4,6 +4,7 @@
 #include <Eigen/Sparse>
 #include <vector>
 
+#include "cholmod_utils.hpp"
 #include "collision.hpp"
 #include "collision_pipeline.hpp"
 #include "ecs.hpp"
@@ -28,11 +29,12 @@ class Solver {
   Eigen::VectorXf curr_state_;
   Eigen::VectorXf state_velocity_;
 
+  Eigen::SparseMatrix<float> H_;
+  cholmod_raii::CholmodFactor L_;
+
   Eigen::SparseMatrix<float> mass_;
-  Eigen::SparseMatrix<float> H_;  // use row major format for iterative solver
-  Eigen::MatrixXf UHU_;
-  Eigen::MatrixXf U_;
-  Eigen::VectorXf HX_;
+  // Eigen::SparseMatrix<float> H_;  // use row major format for iterative
+  // solver
 
   std::vector<ISolverConstrain*> constrains_;
   std::vector<Collision> collisions_;
@@ -45,8 +47,14 @@ class Solver {
   bool step(Registry& registry, CollisionPipeline& collision_pipeline);
 
  private:
-  bool lg_solve(Registry& registry, const Eigen::VectorXf& init_rhs,
-                const Eigen::SparseMatrix<float> dH, Eigen::VectorXf& state);
+  void update_rhs_for_pin(Registry& registry, Eigen::VectorXf& rhs);
+  cholmod_raii::CholmodFactor update_factor_and_rhs_for_collision(
+      Eigen::VectorXf& rhs);
+  void update_rhs_for_physics(const Eigen::VectorXf& state,
+                              Eigen::VectorXf& rhs);
+
+  bool global_solve(Eigen::VectorXf& rhs, cholmod_raii::CholmodFactor& L,
+                    Eigen::VectorXf& out);
 };
 
 }  // namespace silk

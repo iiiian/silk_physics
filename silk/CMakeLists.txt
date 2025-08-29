@@ -35,9 +35,15 @@ target_link_libraries(
     PRIVATE
         Eigen3::Eigen
         igl::core
-        arpack
         OpenMP::OpenMP_CXX
         tight_inclusion::tight_inclusion
+        # dependencies for SuiteSparse cholmod
+        SuiteSparse::SuiteSparseConfig
+        SuiteSparse::AMD
+        SuiteSparse::CAMD
+        SuiteSparse::COLAMD
+        SuiteSparse::CCOLAMD
+        SuiteSparse::CHOLMOD
 )
 
 # -------------------------------------------------
