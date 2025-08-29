@@ -176,7 +176,7 @@ std::optional<Collision> edge_edge_collision(
       tolerance,             // ticcd solving precision
       1.0f,                  // max time, we use normalized time interval [0, 1]
       max_iter,              // max ticcd iteration, set as -1 to disable
-      true                   // no toi refinement if toi = 0
+      true                   // enable toi refinement if toi = 0
   );
 
   if (!ccd_result) {
