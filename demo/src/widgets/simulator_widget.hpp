@@ -10,6 +10,7 @@ class SimulatorWidget : public IWidget {
   Context& ctx_;
 
   std::chrono::steady_clock::time_point prev_update_time_;
+  float sim_fps_ = 0.0f;
 
   // For drag selection
   Object* selected_obj = nullptr;

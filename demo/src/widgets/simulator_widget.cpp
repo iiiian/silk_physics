@@ -241,6 +241,8 @@ SimulatorWidget::SimulatorWidget(Context& context) : ctx_(context) {}
 
 void SimulatorWidget::draw() {
   if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Text("Simulation FPS: %f", sim_fps_);
+
     ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal &&
                          ctx_.ui_mode != UIMode::Sim);
     if (ImGui::Button(ctx_.ui_mode == UIMode::Sim ? "Stop Simulation"
@@ -258,14 +260,23 @@ void SimulatorWidget::draw() {
     handle_drag_selection();
     prev_mouse_pos_ = ImGui::GetMousePos();
 
-    auto now = std::chrono::steady_clock::now();
+    auto t0 = std::chrono::steady_clock::now();
     int elaspes_ms = std::chrono::duration_cast<std::chrono::microseconds>(
-                         now - prev_update_time_)
+                         t0 - prev_update_time_)
                          .count();
     int substep = elaspes_ms / (1e6f * ctx_.global_config.dt);
-    if (substep > 0) {
+    for (int i = 0; i < substep; ++i) {
       solver_step(substep);
     }
-    prev_update_time_ = std::chrono::steady_clock::now();
+
+    auto t1 = std::chrono::steady_clock::now();
+    prev_update_time_ = t1;
+    if (substep > 0) {
+      int sim_ms =
+          std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0)
+              .count();
+      spdlog::info("sim step {}, ms {}", substep, sim_ms);
+      sim_fps_ = 1e6f / sim_ms * substep;
+    }
   }
 }
