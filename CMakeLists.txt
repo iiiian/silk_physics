@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(silk VERSION 0.1.0 LANGUAGES CXX Fortran)
+project(silk VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -27,10 +27,11 @@ FetchContent_Declare(
 )
 
 FetchContent_Declare(
-    arpackng
-    GIT_REPOSITORY https://github.com/opencollab/arpack-ng.git
+    SuiteSparse
+    GIT_REPOSITORY https://github.com/DrTimothyAldenDavis/SuiteSparse.git
     GIT_TAG
-        40329031ae8deb7c1e26baf8353fa384fc37c251 # release 3.9.1
+        b35a1f9318f4bd42085f4b5ea56f29c89d342d4d # release 7.11.0
+    FIND_PACKAGE_ARGS 7.11
 )
 
 FetchContent_Declare(
@@ -71,10 +72,15 @@ FetchContent_Declare(
 find_package(OpenMP REQUIRED)
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
+
+set(SUITESPARSE_ENABLE_PROJECTS
+    "suitesparse_config;amd;camd;colamd;ccolamd;cholmod;"
+)
+
 FetchContent_MakeAvailable(
     Eigen3
     Libigl
-    arpackng
+    SuiteSparse
     Catch2
     spdlog
 )
