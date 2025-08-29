@@ -5,6 +5,7 @@
 #include <igl/massmatrix.h>
 
 #include <Eigen/Core>
+#include <Eigen/SparseCholesky>
 #include <Eigen/SparseCore>
 #include <cassert>
 #include <memory>
@@ -13,6 +14,7 @@
 
 #include "ecs.hpp"
 #include "eigen_utils.hpp"
+#include "logger.hpp"
 #include "solver_constrain.hpp"
 
 namespace silk {
@@ -147,7 +149,7 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   // this is the weighted AA for bending energy.
   // assume initial curvature is 0 so there is no solver constrain for bending
   Eigen::SparseMatrix<float> CWC = c.bending_stiffness * C.transpose() * W * C;
-  vectorize_sparse_to_triplets(CWC, 0, 0, AA_triplets);
+  append_triplets_from_vectorized_sparse(CWC, 0, 0, AA_triplets);
 
   // triangle area
   Eigen::VectorXf area;
@@ -175,7 +177,7 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
         for (int i = 0; i < 3; ++i) {
           for (int j = 0; j < 3; ++j) {
             float val = weight * local_AA(3 * vi + i, 3 * vj + j);
-            // TODO: avoid hardcoded zero zero threshold
+            // TODO: avoid hardcoded zero threshold
             if (std::abs(val) == 0.0f) {
               continue;
             }
@@ -200,7 +202,7 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   }
 
   SolverData data;
-  data.state_num = 3 * m.V.rows();
+  data.state_num = 3 * vert_num;
   data.state_offset = state_offset;
   data.mass.resize(vert_num);
   for (int i = 0; i < vert_num; ++i) {

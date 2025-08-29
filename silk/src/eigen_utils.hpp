@@ -1,17 +1,33 @@
 #pragma once
 
+#include <Eigen/Core>
 #include <Eigen/SparseCore>
 #include <vector>
+
+#include "symmetric_status.hpp"
 
 namespace silk {
 
 template <typename Scalar>
-void sparse_to_triplets(const Eigen::SparseMatrix<Scalar>& m, int row_offset,
-                        int col_offset,
-                        std::vector<Eigen::Triplet<Scalar>>& triplets) {
+void append_triplets_from_sparse(
+    const Eigen::SparseMatrix<Scalar>& m, int row_offset, int col_offset,
+    std::vector<Eigen::Triplet<Scalar>>& triplets,
+    SymmetricStatus sym_stat = SymmetricStatus::NotSymmetric) {
+  assert((m.rows() == m.cols()));
+
   using Iter = typename Eigen::SparseMatrix<Scalar>::InnerIterator;
   for (int i = 0; i < m.outerSize(); ++i) {
     for (Iter it(m, i); it; ++it) {  // it++ doesn't work
+      if (sym_stat == SymmetricStatus::LowerTriangular) {
+        if (it.row() < it.col()) {
+          continue;
+        }
+      } else if (sym_stat == SymmetricStatus::UpperTriangular) {
+        if (it.row() > it.col()) {
+          continue;
+        }
+      }
+
       triplets.emplace_back(row_offset + it.row(), col_offset + it.col(),
                             it.value());
     }
@@ -19,7 +35,7 @@ void sparse_to_triplets(const Eigen::SparseMatrix<Scalar>& m, int row_offset,
 }
 
 template <typename Scalar>
-void vectorize_sparse_to_triplets(
+void append_triplets_from_vectorized_sparse(
     const Eigen::SparseMatrix<Scalar>& m, int row_offset, int col_offset,
     std::vector<Eigen::Triplet<Scalar>>& triplets) {
   using Iter = typename Eigen::SparseMatrix<Scalar>::InnerIterator;
