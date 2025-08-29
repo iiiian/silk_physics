@@ -19,7 +19,7 @@ template <typename C>
 using CollisionCache = std::vector<std::pair<C*, C*>>;
 
 template <typename C>
-using CollisionFilterCallback = std::function<bool(const C&, const C&)>;
+using CollisionFilter = std::function<bool(const C&, const C&)>;
 
 template <typename C>
 std::pair<Eigen::Vector3f, Eigen::Vector3f> proxy_mean_variance(
@@ -80,8 +80,7 @@ void sap_sort_proxies(C** proxies, int proxy_num, int axis) {
 
 template <typename C>
 void sap_sorted_collision(C* p1, C* const* proxies, int proxy_num, int axis,
-                          CollisionFilterCallback<C> filter,
-                          CollisionCache<C>& cache) {
+                          CollisionFilter<C> filter, CollisionCache<C>& cache) {
   assert((proxy_num != 0));
 
   for (int i = 0; i < proxy_num; ++i) {
@@ -105,7 +104,7 @@ void sap_sorted_collision(C* p1, C* const* proxies, int proxy_num, int axis,
 
 template <typename C>
 void sap_sorted_group_self_collision(C* const* proxies, int proxy_num, int axis,
-                                     CollisionFilterCallback<C> filter,
+                                     CollisionFilter<C> filter,
                                      CollisionCache<C>& cache) {
   assert((proxy_num > 0));
 
@@ -118,8 +117,7 @@ void sap_sorted_group_self_collision(C* const* proxies, int proxy_num, int axis,
 template <typename C>
 void sap_sorted_group_group_collision(C* const* proxies_a, int proxy_num_a,
                                       C* const* proxies_b, int proxy_num_b,
-                                      int axis,
-                                      CollisionFilterCallback<C> filter,
+                                      int axis, CollisionFilter<C> filter,
                                       CollisionCache<C>& cache) {
   assert((proxy_num_a > 0));
   assert((proxy_num_b > 0));
@@ -257,7 +255,7 @@ class KDTree {
     optimize_structure();
   }
 
-  void test_self_collision(CollisionFilterCallback<C> filter,
+  void test_self_collision(CollisionFilter<C> filter,
                            CollisionCache<C>& cache) {
     assert(root_);
 
@@ -300,7 +298,7 @@ class KDTree {
   }
 
   static void test_tree_collision(KDTree& ta, KDTree& tb,
-                                  CollisionFilterCallback<C> filter,
+                                  CollisionFilter<C> filter,
                                   CollisionCache<C>& cache) {
     assert(ta.root_ && tb.root_);
 
@@ -942,7 +940,7 @@ class KDTree {
     }
   }
 
-  void test_node_collision(KDNode* n, CollisionFilterCallback<C> filter) {
+  void test_node_collision(KDNode* n, CollisionFilter<C> filter) {
     C** proxy_start = proxies_.data() + n->proxy_start;
     int proxy_num = n->proxy_num();
     if (proxy_num == 0) {
