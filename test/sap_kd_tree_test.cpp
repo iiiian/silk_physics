@@ -35,14 +35,14 @@ TEST_CASE("sap-kd-tree-test", "[collision]") {
   KDTree<SimpleCollider> sphere_tree;
   sphere_tree.init(sphere_colliders.data(), sphere_fnum);
 
-  CollisionFilterCallback<SimpleCollider> self_collision_filter =
+  CollisionFilter<SimpleCollider> self_collision_filter =
       [](const SimpleCollider& a, const SimpleCollider& b) -> bool {
     return (a.v0 != b.v0 && a.v0 != b.v1 && a.v0 != b.v2 && a.v1 != b.v0 &&
             a.v1 != b.v1 && a.v1 != b.v2 && a.v2 != b.v0 && a.v2 != b.v1 &&
             a.v2 != b.v2);
   };
 
-  CollisionFilterCallback<SimpleCollider> inter_collision_filter =
+  CollisionFilter<SimpleCollider> inter_collision_filter =
       [](const SimpleCollider& a, const SimpleCollider& b) -> bool {
     return true;
   };

@@ -43,7 +43,7 @@ void update_colliders(std::vector<SimpleCollider>& colliders,
 
 void brute_force_self_collision(
     std::vector<SimpleCollider>& colliders,
-    silk::CollisionFilterCallback<SimpleCollider> filter_callback,
+    silk::CollisionFilter<SimpleCollider> filter_callback,
     silk::CollisionCache<SimpleCollider>& cache) {
   std::vector<silk::CollisionCache<SimpleCollider>> thread_local_caches(
       omp_get_max_threads());
@@ -67,7 +67,7 @@ void brute_force_self_collision(
 void brute_force_group_group_collision(
     std::vector<SimpleCollider>& colliders_a,
     std::vector<SimpleCollider>& colliders_b,
-    silk::CollisionFilterCallback<SimpleCollider> filter_callback,
+    silk::CollisionFilter<SimpleCollider> filter_callback,
     silk::CollisionCache<SimpleCollider>& cache) {
   std::vector<silk::CollisionCache<SimpleCollider>> thread_local_caches(
       omp_get_max_threads());
