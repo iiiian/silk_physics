@@ -1,116 +1,79 @@
 """
-edge_edge_cli_interactive.py
+ee_cli.py
 
-Interactive 3D visualizer for Edge–Edge narrowphase debug logs.
-Now includes UI toggles to show/hide the geometry at t0, TOI, and reflected (if present).
-
-Parses:
-  - edge a|b v0|v1 at t0/t1
-  - optional: edge a|b v0|v1 reflected
-  - EE: toi = [t0, t1], edge a para = [u0, u1], edge b para = [v0, v1], tol = ...
-
-Builds a single Plotly overlay:
-  - Edges A and B at t0 (solid), at TOI (dashed), and reflected (long-dashed, if present)
-  - Mid-parameter points on each edge (using mean of parameter intervals)
-  - Separation segments between the midpoints for each pose
-  - Motion segments from t0 to TOI (vertices and midpoints)
-  - Three updatemenus to toggle visibility of t0 / TOI / Reflected groups
-  - Cube aspect, draggable/zoomable view
+Interactive 3D visualizer for Edge-Edge narrowphase debug logs.
 
 Usage:
-  cat ee_debug.log | edge_edge_cli_interactive.py --prefix out/edge_edge --toi mid --open
-  edge_edge_cli_interactive.py ee_debug.log --prefix edge_edge --toi max
-  edge_edge_cli_interactive.py ee_debug.log --embed-js   # fully offline HTML
+  cat ee_debug.log | ee_cli.py
 
 Requires: plotly  (pip install plotly)
 """
 import sys
 import re
-import argparse
-import io
-import textwrap
-import webbrowser
-import os
-from typing import Dict, Optional, List
+from typing import Dict, List
 import numpy as np
 
-try:
-    import plotly.graph_objects as go
-except Exception:
-    sys.stderr.write("Plotly is required. Install with: pip install plotly\n")
-    raise
+import plotly.graph_objects as go
 
 # ---------- Parsing ----------
 
-EDGE_RE = re.compile(
-    r'''edge\s+(?P<edge>[abAB])\s+v(?P<v>[01])\s+at\s+(?P<time>t0|t1)\s*:\s*
-        (?P<x>[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+
-        (?P<y>[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+
-        (?P<z>[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)''',
-    re.VERBOSE
-)
 
-REFL_RE = re.compile(
-    r'''edge\s+(?P<edge>[abAB])\s+v(?P<v>[01])\s+reflected\s*:\s*
-        (?P<x>[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+
-        (?P<y>[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+
-        (?P<z>[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)''',
-    re.VERBOSE
-)
+def make_regex_pattern(name: str, array_len: int) -> re.Pattern:
+    SPDLOG_PREFIX = r"\[.+\]\s*"
+    NUM = r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?"
+    NUM_IN_ARRAY = rf"({NUM})\s*,*\s*"
 
-TOI_RE = re.compile(
-    r'''EE:\s*toi\s*=\s*\[\s*
-        (?P<toi0>[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*,\s*
-        (?P<toi1>[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*\]\s*,\s*
-        edge\s+a\s+para\s*=\s*\[\s*
-        (?P<a0>[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*,\s*
-        (?P<a1>[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*\]\s*,\s*
-        edge\s+b\s+para\s*=\s*\[\s*
-        (?P<b0>[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*,\s*
-        (?P<b1>[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*\]\s*,\s*
-        tol\s*=\s*(?P<tol>[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)''',
-    re.VERBOSE
-)
+    header = rf"{SPDLOG_PREFIX}{name}:\s*"
+    for i in range(array_len):
+        header += NUM_IN_ARRAY
+
+    return re.compile(header)
 
 
 def parse_log(text: str) -> Dict[str, np.ndarray]:
-    data: Dict[str, np.ndarray] = {}
-    for m in EDGE_RE.finditer(text):
-        edge = m.group("edge").lower()
-        v = int(m.group("v"))
-        time = m.group("time")
-        key = f"{edge}_v{v}_{time}"
-        data[key] = np.array([float(m.group("x")), float(m.group("y")), float(m.group("z"))], dtype=float)
-    for m in REFL_RE.finditer(text):
-        edge = m.group("edge").lower()
-        v = int(m.group("v"))
-        key = f"{edge}_v{v}_ref"
-        data[key] = np.array([float(m.group("x")), float(m.group("y")), float(m.group("z"))], dtype=float)
-    # EE line
-    toi_match = None
-    for m in TOI_RE.finditer(text):
-        toi_match = m  # last match wins
-    if toi_match is not None:
-        data["toi"] = np.array([float(toi_match.group("toi0")), float(toi_match.group("toi1"))], dtype=float)
-        data["a_para"] = np.array([float(toi_match.group("a0")), float(toi_match.group("a1"))], dtype=float)
-        data["b_para"] = np.array([float(toi_match.group("b0")), float(toi_match.group("b1"))], dtype=float)
-        data["tol"] = float(toi_match.group("tol"))
-    return data
+    pd = {
+        "ee_header": make_regex_pattern("ee collision", 4),
+        "tuv": make_regex_pattern("tuv", 3),
+        "a_v0_t0": make_regex_pattern("position x0 t0", 3),
+        "a_v1_t0": make_regex_pattern("position x1 t0", 3),
+        "b_v0_t0": make_regex_pattern("position x2 t0", 3),
+        "b_v1_t0": make_regex_pattern("position x3 t0", 3),
+        "a_v0_t1": make_regex_pattern("position x0 t1", 3),
+        "a_v1_t1": make_regex_pattern("position x1 t1", 3),
+        "b_v0_t1": make_regex_pattern("position x2 t1", 3),
+        "b_v1_t1": make_regex_pattern("position x3 t1", 3),
+        "v_a_v0_t0": make_regex_pattern("velocity x0 t0", 3),
+        "v_a_v1_t0": make_regex_pattern("velocity x1 t0", 3),
+        "v_b_v0_t0": make_regex_pattern("velocity x2 t0", 3),
+        "v_b_v1_t0": make_regex_pattern("velocity x3 t0", 3),
+        "v_a_v0_t1": make_regex_pattern("velocity x0 t1", 3),
+        "v_a_v1_t1": make_regex_pattern("velocity x1 t1", 3),
+        "v_b_v0_t1": make_regex_pattern("velocity x2 t1", 3),
+        "v_b_v1_t1": make_regex_pattern("velocity x3 t1", 3),
+    }
+    d: Dict[str, np.ndarray] = {}
+    for line in text.splitlines():
+        for name, pattern in pd.items():
+            m = pattern.match(line)
+            if m:
+                d[name] = np.array([float(x) for x in m.groups() if x is not None])
+                break
+    return d
 
 # ---------- Math utils ----------
 
 
-def pseg(p0: np.ndarray, p1: np.ndarray, t: float) -> np.ndarray:
+def interp(p0: np.ndarray, p1: np.ndarray, t: float) -> np.ndarray:
     return p0 + t * (p1 - p0)
 
 
-def separation(A0, A1, B0, B1, ta, tb) -> float:
-    pa = pseg(A0, A1, ta)
-    pb = pseg(B0, B1, tb)
+def separation(A0, A1, B0, B1, u, v) -> float:
+    pa = interp(A0, A1, u)
+    pb = interp(B0, B1, v)
     return float(np.linalg.norm(pb - pa))
 
 
-def cube_aspect_from_points(pts: np.ndarray):
+def cube_aspect_bounds(pts: np.ndarray):
     mins = pts.min(axis=0)
     maxs = pts.max(axis=0)
     centers = (mins + maxs) / 2.0
@@ -126,9 +89,8 @@ SUPPORTED_SYMBOLS = {'circle', 'circle-open', 'cross', 'diamond', 'diamond-open'
 
 def overlay_figure(A_v0_t0, A_v1_t0, B_v0_t0, B_v1_t0,
                    A_v0_toi, A_v1_toi, B_v0_toi, B_v1_toi,
-                   ta, tb, toi_mode, toi, sep_t0, sep_toi,
-                   A_v0_ref=None, A_v1_ref=None, B_v0_ref=None, B_v1_ref=None,
-                   sep_ref: Optional[float] = None):
+                   A_v0_ref, A_v1_ref, B_v0_ref, B_v1_ref,
+                   u, v, toi, sep_t0, sep_toi, sep_ref):
     traces = []
     idx_t0: List[int] = []
     idx_toi: List[int] = []
@@ -164,19 +126,19 @@ def overlay_figure(A_v0_t0, A_v1_t0, B_v0_t0, B_v1_t0,
     # t0
     add_trace(line_trace(A_v0_t0, A_v1_t0, "A t0"), 't0')
     add_trace(line_trace(B_v0_t0, B_v1_t0, "B t0"), 't0')
-    pa0 = pseg(A_v0_t0, A_v1_t0, ta)
-    pb0 = pseg(B_v0_t0, B_v1_t0, tb)
-    add_trace(point_trace(pa0, "A@t(mid) t0", symbol="circle"), 't0')
-    add_trace(point_trace(pb0, "B@t(mid) t0", symbol="square"), 't0')
+    pa0 = interp(A_v0_t0, A_v1_t0, u)
+    pb0 = interp(B_v0_t0, B_v1_t0, v)
+    add_trace(point_trace(pa0, "A@uv t0", symbol="circle"), 't0')
+    add_trace(point_trace(pb0, "B@uv t0", symbol="square"), 't0')
     add_trace(line_trace(pa0, pb0, f"sep t0 ≈ {sep_t0:.6e}", dash="dot", width=2), 't0')
 
     # TOI
-    add_trace(line_trace(A_v0_toi, A_v1_toi, f"A TOI({toi_mode})", dash="dash"), 'toi')
-    add_trace(line_trace(B_v0_toi, B_v1_toi, f"B TOI({toi_mode})", dash="dash"), 'toi')
-    pa1 = pseg(A_v0_toi, A_v1_toi, ta)
-    pb1 = pseg(B_v0_toi, B_v1_toi, tb)
-    add_trace(point_trace(pa1, "A@t(mid) TOI", symbol="circle-open"), 'toi')
-    add_trace(point_trace(pb1, "B@t(mid) TOI", symbol="square-open"), 'toi')
+    add_trace(line_trace(A_v0_toi, A_v1_toi, "A TOI", dash="dash"), 'toi')
+    add_trace(line_trace(B_v0_toi, B_v1_toi, "B TOI", dash="dash"), 'toi')
+    pa1 = interp(A_v0_toi, A_v1_toi, u)
+    pb1 = interp(B_v0_toi, B_v1_toi, v)
+    add_trace(point_trace(pa1, "A@uv TOI", symbol="circle-open"), 'toi')
+    add_trace(point_trace(pb1, "B@uv TOI", symbol="square-open"), 'toi')
     add_trace(line_trace(pa1, pb1, f"sep TOI ≈ {sep_toi:.6e}", dash="dot", width=2), 'toi')
     # Motion lines (grouped under TOI)
     for p0, p1, name in [
@@ -184,37 +146,29 @@ def overlay_figure(A_v0_t0, A_v1_t0, B_v0_t0, B_v1_t0,
         (A_v1_t0, A_v1_toi, "A v1 motion"),
         (B_v0_t0, B_v0_toi, "B v0 motion"),
         (B_v1_t0, B_v1_toi, "B v1 motion"),
-        (pa0, pa1, "A@t(mid) motion"),
-        (pb0, pb1, "B@t(mid) motion"),
+        (pa0, pa1, "A@uv motion"),
+        (pb0, pb1, "B@uv motion"),
     ]:
         add_trace(line_trace(p0, p1, name, dash="dashdot", width=2), 'toi')
 
-    # Reflected (optional)
-    have_ref = all(x is not None for x in [A_v0_ref, A_v1_ref, B_v0_ref, B_v1_ref])
-    pa2 = pb2 = None
-    if have_ref:
-        add_trace(line_trace(A_v0_ref, A_v1_ref, "A reflected", dash="longdash"), 'ref')
-        add_trace(line_trace(B_v0_ref, B_v1_ref, "B reflected", dash="longdash"), 'ref')
-        pa2 = pseg(A_v0_ref, A_v1_ref, ta)
-        pb2 = pseg(B_v0_ref, B_v1_ref, tb)
-        if sep_ref is None:
-            sep_ref = float(np.linalg.norm(pb2 - pa2))
-        add_trace(point_trace(pa2, "A@t(mid) reflected", symbol="diamond"), 'ref')
-        add_trace(point_trace(pb2, "B@t(mid) reflected", symbol="x"), 'ref')
-        add_trace(line_trace(pa2, pb2, f"sep reflected ≈ {sep_ref:.6e}", dash="dot", width=2), 'ref')
+    # Reflected
+    add_trace(line_trace(A_v0_ref, A_v1_ref, "A reflected", dash="longdash"), 'ref')
+    add_trace(line_trace(B_v0_ref, B_v1_ref, "B reflected", dash="longdash"), 'ref')
+    pa2 = interp(A_v0_ref, A_v1_ref, u)
+    pb2 = interp(B_v0_ref, B_v1_ref, v)
+    add_trace(point_trace(pa2, "A@uv reflected", symbol="diamond"), 'ref')
+    add_trace(point_trace(pb2, "B@uv reflected", symbol="x"), 'ref')
+    add_trace(line_trace(pa2, pb2, f"sep reflected ≈ {sep_ref:.6e}", dash="dot", width=2), 'ref')
 
     # Aspect + title
     all_pts = [A_v0_t0, A_v1_t0, B_v0_t0, B_v1_t0,
                A_v0_toi, A_v1_toi, B_v0_toi, B_v1_toi,
-               pa0, pb0, pa1, pb1]
-    if have_ref:
-        all_pts += [A_v0_ref, A_v1_ref, B_v0_ref, B_v1_ref, pa2, pb2]
+               A_v0_ref, A_v1_ref, B_v0_ref, B_v1_ref,
+               pa0, pb0, pa1, pb1, pa2, pb2]
     all_pts = np.vstack(all_pts)
-    lo, hi = cube_aspect_from_points(all_pts)
+    lo, hi = cube_aspect_bounds(all_pts)
 
-    title = f"Edge–Edge Overlay: t0 vs TOI({toi_mode}={toi:.8f})  sep_t0={sep_t0:.6e}  sep_TOI={sep_toi:.6e}"
-    if have_ref:
-        title += f"  sep_reflected={sep_ref:.6e}"
+    title = f"Edge–Edge Overlay: t0 vs TOI({toi:.8f})  sep_t0={sep_t0:.6e}  sep_TOI={sep_toi:.6e}  sep_reflected={sep_ref:.6e}"
 
     layout = go.Layout(
         title=title,
@@ -225,11 +179,11 @@ def overlay_figure(A_v0_t0, A_v1_t0, B_v0_t0, B_v1_t0,
             aspectmode="cube",
         ),
         legend=dict(orientation="h"),
-        margin=dict(l=0, r=0, t=90, b=0),
+        margin=dict(l=0, r=0, t=120, b=0),
         showlegend=True,
         updatemenus=[
             dict(
-                type="buttons", direction="left", x=0.0, y=1.12, showactive=True,
+                type="buttons", direction="left", x=0.0, y=1.20, xanchor="left", yanchor="bottom", showactive=True,
                 buttons=[
                     dict(label="t0: Show", method="restyle",
                          args=[{"visible": [True] * len(idx_t0)}, idx_t0]),
@@ -238,7 +192,7 @@ def overlay_figure(A_v0_t0, A_v1_t0, B_v0_t0, B_v1_t0,
                 ],
             ),
             dict(
-                type="buttons", direction="left", x=0.45, y=1.12, showactive=True,
+                type="buttons", direction="left", x=0.45, y=1.20, xanchor="left", yanchor="bottom", showactive=True,
                 buttons=[
                     dict(label="TOI: Show", method="restyle",
                          args=[{"visible": [True] * len(idx_toi)}, idx_toi]),
@@ -246,9 +200,8 @@ def overlay_figure(A_v0_t0, A_v1_t0, B_v0_t0, B_v1_t0,
                          args=[{"visible": [False] * len(idx_toi)}, idx_toi]),
                 ],
             ),
-        ] + ([
             dict(
-                type="buttons", direction="left", x=0.8, y=1.12, showactive=True,
+                type="buttons", direction="left", x=0.8, y=1.20, xanchor="left", yanchor="bottom", showactive=True,
                 buttons=[
                     dict(label="Ref: Show", method="restyle",
                          args=[{"visible": [True] * len(idx_ref)}, idx_ref]),
@@ -256,7 +209,7 @@ def overlay_figure(A_v0_t0, A_v1_t0, B_v0_t0, B_v1_t0,
                          args=[{"visible": [False] * len(idx_ref)}, idx_ref]),
                 ],
             )
-        ] if len(idx_ref) > 0 else []),
+        ],
     )
     fig = go.Figure(data=traces, layout=layout)
     return fig
@@ -265,86 +218,59 @@ def overlay_figure(A_v0_t0, A_v1_t0, B_v0_t0, B_v1_t0,
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description="Interactive overlay (t0 vs TOI, optional reflected) for Edge–Edge logs.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=textwrap.dedent('''
-          Examples:
-            cat ee_debug.log | edge_edge_cli_interactive.py --prefix out/edge_edge --toi mid --open
-            edge_edge_cli_interactive.py ee_debug.log --prefix edge_edge --toi max
-        '''),
-    )
-    ap.add_argument("path", nargs="?", help="Optional path to a log file. If omitted, read stdin.")
-    ap.add_argument("--prefix", default="edge_edge", help="Output file prefix (default: edge_edge)")
-    ap.add_argument("--toi", choices=["mid", "min", "max"], default="mid", help="Which TOI to use from the interval (default: mid)")
-    ap.add_argument("--open", action="store_true", help="Open the resulting HTML in your default browser")
-    ap.add_argument("--embed-js", action="store_true", help="Embed Plotly.js (works fully offline) instead of using the CDN")
-    args = ap.parse_args()
-
-    # Read input
-    if args.path:
-        with open(args.path, "r", encoding="utf-8") as f:
-            text = f.read()
-    else:
-        if sys.stdin.isatty():
-            print("Reading from stdin; press Ctrl-D (Unix) or Ctrl-Z (Windows) when done.", file=sys.stderr)
-        text = sys.stdin.read()
+    text = sys.stdin.read()
 
     if not text.strip():
         raise SystemExit("No input provided. Pipe the log text in or pass a file path.")
 
     data = parse_log(text)
-    required = ["a_v0_t0", "a_v1_t0", "b_v0_t0", "b_v1_t0", "a_v0_t1", "a_v1_t1", "b_v0_t1", "b_v1_t1", "toi", "a_para", "b_para"]
+    required = [
+        "tuv",
+        "a_v0_t0", "a_v1_t0", "b_v0_t0", "b_v1_t0",
+        "a_v0_t1", "a_v1_t1", "b_v0_t1", "b_v1_t1",
+        "v_a_v0_t0", "v_a_v1_t0", "v_b_v0_t0", "v_b_v1_t0",
+        "v_a_v0_t1", "v_a_v1_t1", "v_b_v0_t1", "v_b_v1_t1",
+    ]
     missing = [k for k in required if k not in data]
     if missing:
         raise SystemExit(f"Missing required fields: {', '.join(missing)}")
+
+    toi, u, v = data["tuv"]
 
     A_v0_t0, A_v1_t0 = data["a_v0_t0"], data["a_v1_t0"]
     B_v0_t0, B_v1_t0 = data["b_v0_t0"], data["b_v1_t0"]
     A_v0_t1, A_v1_t1 = data["a_v0_t1"], data["a_v1_t1"]
     B_v0_t1, B_v1_t1 = data["b_v0_t1"], data["b_v1_t1"]
-    toi0, toi1 = map(float, data["toi"])
-    if args.toi == "mid":
-        toi = (toi0 + toi1) / 2.0
-    elif args.toi == "min":
-        toi = toi0
-    else:
-        toi = toi1
 
-    ta = float(data["a_para"].mean())
-    tb = float(data["b_para"].mean())
+    v_A_v0_t0, v_A_v1_t0 = data["v_a_v0_t0"], data["v_a_v1_t0"]
+    v_B_v0_t0, v_B_v1_t0 = data["v_b_v0_t0"], data["v_b_v1_t0"]
+    v_A_v0_t1, v_A_v1_t1 = data["v_a_v0_t1"], data["v_a_v1_t1"]
+    v_B_v0_t1, v_B_v1_t1 = data["v_b_v0_t1"], data["v_b_v1_t1"]
 
     # Interpolate TOI vertices
-    A_v0_toi = pseg(A_v0_t0, A_v0_t1, toi)
-    A_v1_toi = pseg(A_v1_t0, A_v1_t1, toi)
-    B_v0_toi = pseg(B_v0_t0, B_v0_t1, toi)
-    B_v1_toi = pseg(B_v1_t0, B_v1_t1, toi)
+    A_v0_toi = interp(A_v0_t0, A_v0_t1, toi)
+    A_v1_toi = interp(A_v1_t0, A_v1_t1, toi)
+    B_v0_toi = interp(B_v0_t0, B_v0_t1, toi)
+    B_v1_toi = interp(B_v1_t0, B_v1_t1, toi)
 
-    sep_t0 = separation(A_v0_t0, A_v1_t0, B_v0_t0, B_v1_t0, ta, tb)
-    sep_toi = separation(A_v0_toi, A_v1_toi, B_v0_toi, B_v1_toi, ta, tb)
+    # Calculate reflected vertices
+    A_v0_ref = A_v0_t0 + toi * v_A_v0_t0 + (1 - toi) * v_A_v0_t1
+    A_v1_ref = A_v1_t0 + toi * v_A_v1_t0 + (1 - toi) * v_A_v1_t1
+    B_v0_ref = B_v0_t0 + toi * v_B_v0_t0 + (1 - toi) * v_B_v0_t1
+    B_v1_ref = B_v1_t0 + toi * v_B_v1_t0 + (1 - toi) * v_B_v1_t1
 
-    # Optional reflected pose
-    A_v0_ref = data.get("a_v0_ref")
-    A_v1_ref = data.get("a_v1_ref")
-    B_v0_ref = data.get("b_v0_ref")
-    B_v1_ref = data.get("b_v1_ref")
-    sep_ref = None
-    if all(x is not None for x in [A_v0_ref, A_v1_ref, B_v0_ref, B_v1_ref]):
-        sep_ref = separation(A_v0_ref, A_v1_ref, B_v0_ref, B_v1_ref, ta, tb)
+    sep_t0 = separation(A_v0_t0, A_v1_t0, B_v0_t0, B_v1_t0, u, v)
+    sep_toi = separation(A_v0_toi, A_v1_toi, B_v0_toi, B_v1_toi, u, v)
+    sep_ref = separation(A_v0_ref, A_v1_ref, B_v0_ref, B_v1_ref, u, v)
 
     fig = overlay_figure(A_v0_t0, A_v1_t0, B_v0_t0, B_v1_t0,
                          A_v0_toi, A_v1_toi, B_v0_toi, B_v1_toi,
-                         ta, tb, args.toi, toi, sep_t0, sep_toi,
-                         A_v0_ref, A_v1_ref, B_v0_ref, B_v1_ref, sep_ref)
+                         A_v0_ref, A_v1_ref, B_v0_ref, B_v1_ref,
+                         u, v, toi, sep_t0, sep_toi, sep_ref)
 
-    out_html = f"{args.prefix}_overlay_{args.toi}.html"
-    fig.write_html(out_html, include_plotlyjs=('cdn' if not args.embed_js else True), full_html=True)
-    print(out_html)
-    if args.open:
-        try:
-            webbrowser.open('file://' + os.path.realpath(out_html))
-        except Exception:
-            pass
+    out_html = "ee_overlay.html"
+    fig.write_html(out_html, include_plotlyjs=True, full_html=True)
+    print(f"Print result to: {out_html}")
 
 
 if __name__ == "__main__":
