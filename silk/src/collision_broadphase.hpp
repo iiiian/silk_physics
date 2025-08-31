@@ -5,15 +5,15 @@
 #include <Eigen/Core>
 #include <algorithm>
 #include <cassert>
-#include <cstdint>
 #include <cstring>
 #include <functional>
-#include <limits>
 #include <vector>
 
 #include "bbox.hpp"
 
 namespace silk {
+
+// C stands for collider. A collider should have member bbox of type Bbox.
 
 template <typename C>
 using CollisionCache = std::vector<std::pair<C*, C*>>;
@@ -23,13 +23,14 @@ using CollisionFilter = std::function<bool(const C&, const C&)>;
 
 template <typename C>
 std::pair<Eigen::Vector3f, Eigen::Vector3f> proxy_mean_variance(
-    C* const* proxies, int proxy_num) {
+    const std::vector<C>& colliders, const int* proxies, int proxy_num) {
   assert((proxy_num > 0));
 
   Eigen::Vector3f mean = Eigen::Vector3f::Zero();
   Eigen::Vector3f variance = Eigen::Vector3f::Zero();
   for (int i = 0; i < proxy_num; ++i) {
-    Eigen::Vector3f center = proxies[i]->bbox.center();
+    int p = proxies[i];
+    Eigen::Vector3f center = colliders[p].bbox.center();
     mean += center;
     variance += center.cwiseAbs2();
   }
@@ -40,23 +41,27 @@ std::pair<Eigen::Vector3f, Eigen::Vector3f> proxy_mean_variance(
 }
 
 template <typename C>
-int sap_optimal_axis(C* const* proxies, int proxy_num) {
+int sap_optimal_axis(const std::vector<C>& colliders, const int* proxies,
+                     int proxy_num) {
   assert((proxy_num > 0));
 
-  auto [mean, var] = proxy_mean_variance(proxies, proxy_num);
+  auto [mean, var] = proxy_mean_variance(colliders, proxies, proxy_num);
   int axis;
   var.maxCoeff(&axis);
   return axis;
 }
 
 template <typename C>
-int sap_optimal_axis(C* const* proxies_a, int proxy_num_a, C* const* proxies_b,
-                     int proxy_num_b) {
+int sap_optimal_axis(const std::vector<C>& colliders_a, const int* proxies_a,
+                     int proxy_num_a, const std::vector<C>& colliders_b,
+                     const int* proxies_b, int proxy_num_b) {
   assert((proxy_num_a > 0));
   assert((proxy_num_b > 0));
 
-  auto [mean_a, var_a] = proxy_mean_variance(proxies_a, proxy_num_a);
-  auto [mean_b, var_b] = proxy_mean_variance(proxies_b, proxy_num_b);
+  auto [mean_a, var_a] =
+      proxy_mean_variance(colliders_a, proxies_a, proxy_num_a);
+  auto [mean_b, var_b] =
+      proxy_mean_variance(colliders_b, proxies_b, proxy_num_b);
   Eigen::Vector3f mean = (proxy_num_a * mean_a + proxy_num_b * mean_b) /
                          (proxy_num_a + proxy_num_b);
   Eigen::Vector3f tmp_a = (mean_a - mean).array().square();
@@ -69,54 +74,61 @@ int sap_optimal_axis(C* const* proxies_a, int proxy_num_a, C* const* proxies_b,
 }
 
 template <typename C>
-void sap_sort_proxies(C** proxies, int proxy_num, int axis) {
+void sap_sort_proxies(const std::vector<C>& colliders, int* proxies,
+                      int proxy_num, int axis) {
   assert((proxy_num != 0));
 
-  auto comp = [axis](C* a, C* b) -> bool {
-    return (a->bbox.min(axis) < b->bbox.min(axis));
+  auto comp = [axis, &colliders](int a, int b) -> bool {
+    return (colliders[a].bbox.min(axis) < colliders[b].bbox.min(axis));
   };
   pdqsort_branchless(proxies, proxies + proxy_num, comp);
 }
 
 template <typename C>
-void sap_sorted_collision(C* p1, C* const* proxies, int proxy_num, int axis,
+void sap_sorted_collision(C& ca, std::vector<C>& colliders_b,
+                          const int* proxies_b, int proxy_num_b, int axis,
                           CollisionFilter<C> filter, CollisionCache<C>& cache) {
-  assert((proxy_num != 0));
+  assert((proxy_num_b != 0));
 
-  for (int i = 0; i < proxy_num; ++i) {
-    C* p2 = proxies[i];
+  for (int i = 0; i < proxy_num_b; ++i) {
+    int p2 = proxies_b[i];
+    C& cb = colliders_b[p2];
 
     // axis test
-    if (p1->bbox.max(axis) < p2->bbox.min(axis)) {
+    if (ca.bbox.max(axis) < cb.bbox.min(axis)) {
       break;
     }
 
     // user provided collision filter
-    if (!filter(*p1, *p2)) {
+    if (!filter(ca, cb)) {
       continue;
     }
 
-    if (Bbox::is_colliding(p1->bbox, p2->bbox)) {
-      cache.emplace_back(p1, p2);
+    if (Bbox::is_colliding(ca.bbox, cb.bbox)) {
+      cache.emplace_back(&ca, &cb);
     }
   }
 }
 
 template <typename C>
-void sap_sorted_group_self_collision(C* const* proxies, int proxy_num, int axis,
-                                     CollisionFilter<C> filter,
+void sap_sorted_group_self_collision(std::vector<C>& colliders,
+                                     const int* proxies, int proxy_num,
+                                     int axis, CollisionFilter<C> filter,
                                      CollisionCache<C>& cache) {
   assert((proxy_num > 0));
 
   for (int i = 0; i < proxy_num - 1; ++i) {
-    sap_sorted_collision(proxies[i], proxies + i + 1, proxy_num - i - 1, axis,
-                         filter, cache);
+    int p = proxies[i];
+    sap_sorted_collision(colliders[p], colliders, proxies + i + 1,
+                         proxy_num - i - 1, axis, filter, cache);
   }
 }
 
 template <typename C>
-void sap_sorted_group_group_collision(C* const* proxies_a, int proxy_num_a,
-                                      C* const* proxies_b, int proxy_num_b,
+void sap_sorted_group_group_collision(std::vector<C>& colliders_a,
+                                      const int* proxies_a, int proxy_num_a,
+                                      std::vector<C>& colliders_b,
+                                      const int* proxies_b, int proxy_num_b,
                                       int axis, CollisionFilter<C> filter,
                                       CollisionCache<C>& cache) {
   assert((proxy_num_a > 0));
@@ -125,16 +137,16 @@ void sap_sorted_group_group_collision(C* const* proxies_a, int proxy_num_a,
   int a = 0;
   int b = 0;
   while (a < proxy_num_a && b < proxy_num_b) {
-    C* pa = proxies_a[a];
-    C* pb = proxies_b[b];
+    int pa = proxies_a[a];
+    int pb = proxies_b[b];
 
-    if (pa->bbox.min(axis) < pb->bbox.min(axis)) {
-      sap_sorted_collision(pa, proxies_b + b, proxy_num_b - b, axis, filter,
-                           cache);
+    if (colliders_a[pa].bbox.min(axis) < colliders_b[pb].bbox.min(axis)) {
+      sap_sorted_collision(colliders_a[pa], colliders_b, proxies_b + b,
+                           proxy_num_b - b, axis, filter, cache);
       a++;
     } else {
-      sap_sorted_collision(pb, proxies_a + a, proxy_num_a - a, axis, filter,
-                           cache);
+      sap_sorted_collision(colliders_b[pb], colliders_a, proxies_a + a,
+                           proxy_num_a - a, axis, filter, cache);
       b++;
     }
   }
@@ -188,12 +200,12 @@ class KDTree {
   static constexpr int NODE_PROXY_NUM_THRESHOLD = 1024;
 
   int collider_num_ = 0;
-  C* colliders_ = nullptr;
+  std::vector<C> colliders_;
 
   KDNode* root_ = nullptr;
   std::vector<KDNode*> stack_;  // for tree traversal
-  std::vector<C*> proxies_;     // in-order layout proxy array
-  std::vector<C*> buffer_;      // for both proxies and external colliders
+  std::vector<int> proxies_;    // in-order layout proxy array
+  std::vector<int> buffer_;     // for both proxies and external colliders
   std::vector<CollisionCache<C>> local_cache_;  // thread local collision cache
 
  public:
@@ -203,7 +215,7 @@ class KDTree {
 
   KDTree(KDTree&& tree) noexcept {
     collider_num_ = tree.collider_num_;
-    colliders_ = tree.colliders_;
+    colliders_ = std::move(tree.colliders_);
     root_ = tree.root_;
     stack_ = std::move(tree.stack_);
     proxies_ = std::move(tree.proxies_);
@@ -211,7 +223,6 @@ class KDTree {
     local_cache_ = std::move(tree.local_cache_);
 
     tree.collider_num_ = 0;
-    tree.colliders_ = nullptr;
     tree.root_ = nullptr;
   }
 
@@ -221,7 +232,7 @@ class KDTree {
 
   KDTree& operator=(KDTree&& tree) noexcept {
     collider_num_ = tree.collider_num_;
-    colliders_ = tree.colliders_;
+    colliders_ = std::move(tree.colliders_);
     root_ = tree.root_;
     stack_ = std::move(tree.stack_);
     proxies_ = std::move(tree.proxies_);
@@ -229,30 +240,32 @@ class KDTree {
     local_cache_ = std::move(tree.local_cache_);
 
     tree.collider_num_ = 0;
-    tree.colliders_ = nullptr;
     tree.root_ = nullptr;
 
     return *this;
   }
 
-  void init(C* colliders, int collider_num) {
-    assert(colliders);
-    assert((collider_num > 0));
+  void init(std::vector<C> colliders) {
+    assert(!colliders.empty());
 
     delete_subtree(root_);
-    collider_num_ = collider_num;
+    collider_num_ = colliders.size();
     colliders_ = colliders;
-    proxies_.resize(collider_num);
-    buffer_.resize(collider_num);
+    proxies_.resize(collider_num_);
     for (int i = 0; i < collider_num_; ++i) {
-      proxies_[i] = colliders + i;
+      proxies_[i] = i;
     }
+    buffer_.resize(collider_num_);
     root_ = new KDNode{};
     root_->proxy_start = 0;
-    root_->proxy_end = collider_num;
-    root_->population = collider_num;
+    root_->proxy_end = collider_num_;
+    root_->population = collider_num_;
     local_cache_.resize(omp_get_max_threads());
   }
+
+  std::vector<C>& get_colliders() { return colliders_; }
+
+  const std::vector<C>& get_colliders() const { return colliders_; }
 
   void update(const Bbox& root_bbox) {
     assert(root_);
@@ -328,15 +341,17 @@ class KDTree {
         Bbox& ba = na->is_leaf() ? na->bbox : na->plane_bbox;
         Bbox& bb = nb->is_leaf() ? nb->bbox : nb->plane_bbox;
         if (Bbox::is_colliding(ba, bb)) {
-          C** start_a = ta.proxies_.data() + na->proxy_start;
+          int* start_a = ta.proxies_.data() + na->proxy_start;
           int num_a = na->proxy_num();
-          C** start_b = tb.proxies_.data() + nb->proxy_start;
+          int* start_b = tb.proxies_.data() + nb->proxy_start;
           int num_b = nb->proxy_num();
 
-          int axis = sap_optimal_axis(start_a, num_a, start_b, num_b);
-          sap_sort_proxies(start_a, num_a, axis);
-          sap_sort_proxies(start_b, num_b, axis);
-          sap_sorted_group_group_collision(start_a, num_a, start_b, num_b, axis,
+          int axis = sap_optimal_axis(ta.colliders_, start_a, num_a,
+                                      tb.colliders_, start_b, num_b);
+          sap_sort_proxies(ta.colliders_, start_a, num_a, axis);
+          sap_sort_proxies(tb.colliders_, start_b, num_b, axis);
+          sap_sorted_group_group_collision(ta.colliders_, start_a, num_a,
+                                           tb.colliders_, start_b, num_b, axis,
                                            filter, cache);
         }
 
@@ -417,30 +432,32 @@ class KDTree {
   void find_optimal_plane(KDNode* n) const {
     assert((n->proxy_num() > 0));
 
-    auto [mean, var] =
-        proxy_mean_variance(proxies_.data() + n->proxy_start, n->proxy_num());
+    auto [mean, var] = proxy_mean_variance(
+        colliders_, proxies_.data() + n->proxy_start, n->proxy_num());
     var.maxCoeff(&n->axis);
     n->position = mean(n->axis);
   }
 
   int partition_unfit_proxy_left(const KDNode* n) {
-    auto is_outside = [n](C* p) -> bool {
-      return !(n->bbox.is_inside(p->bbox));
+    auto is_outside = [n, &c = colliders_](int p) -> bool {
+      return !(n->bbox.is_inside(c[p].bbox));
     };
 
-    C** start = proxies_.data() + n->proxy_start;
-    C** end = proxies_.data() + n->proxy_end;
-    C** new_start = std::partition(start, end, is_outside);
+    int* start = proxies_.data() + n->proxy_start;
+    int* end = proxies_.data() + n->proxy_end;
+    int* new_start = std::partition(start, end, is_outside);
 
     return new_start - start;
   }
 
   int partition_unfit_proxy_right(const KDNode* n) {
-    auto is_inside = [n](C* p) -> bool { return n->bbox.is_inside(p->bbox); };
+    auto is_inside = [n, &c = colliders_](int p) -> bool {
+      return n->bbox.is_inside(c[p].bbox);
+    };
 
-    C** start = proxies_.data() + n->proxy_start;
-    C** end = proxies_.data() + n->proxy_end;
-    C** new_end = std::partition(start, end, is_inside);
+    int* start = proxies_.data() + n->proxy_start;
+    int* end = proxies_.data() + n->proxy_end;
+    int* new_end = std::partition(start, end, is_inside);
 
     return end - new_end;
   }
@@ -450,10 +467,10 @@ class KDTree {
       return;
     }
 
-    size_t copy_size = proxy_num * sizeof(C*);
-    size_t shift_size = shift_num * sizeof(C*);
-    C** left = proxies_.data() + proxy_start - shift_num;
-    C** right = proxies_.data() + proxy_start;
+    size_t copy_size = proxy_num * sizeof(int);
+    size_t shift_size = shift_num * sizeof(int);
+    int* left = proxies_.data() + proxy_start - shift_num;
+    int* right = proxies_.data() + proxy_start;
     ensure_buffer_size(proxy_num);
 
     // copy right chunk to temp buffer
@@ -469,10 +486,10 @@ class KDTree {
       return;
     }
 
-    size_t copy_size = proxy_num * sizeof(C*);
-    size_t shift_size = shift_num * sizeof(C*);
-    C** left = proxies_.data() + proxy_start;
-    C** right = proxies_.data() + proxy_start + proxy_num;
+    size_t copy_size = proxy_num * sizeof(int);
+    size_t shift_size = shift_num * sizeof(int);
+    int* left = proxies_.data() + proxy_start;
+    int* right = proxies_.data() + proxy_start + proxy_num;
     ensure_buffer_size(proxy_num);
 
     // copy left chunk to temp buffer
@@ -566,16 +583,16 @@ class KDTree {
     int middle_end = n->proxy_end;
     int i = n->proxy_start;
     while (i != middle_end) {
-      C* p = proxies_[i];
+      int p = proxies_[i];
 
       // strictly left
-      if (p->bbox.max(n->axis) < n->position) {
+      if (colliders_[p].bbox.max(n->axis) < n->position) {
         std::swap(proxies_[left_end], proxies_[i]);
         ++left_end;
         ++i;
       }
       // strictly right
-      else if (p->bbox.min(n->axis) > n->position) {
+      else if (colliders_[p].bbox.min(n->axis) > n->position) {
         std::swap(proxies_[middle_end - 1], proxies_[i]);
         --middle_end;
       }
@@ -676,13 +693,13 @@ class KDTree {
     // on the plane   -> middle partition
     // strictly right -> right partition
     for (int i = n->proxy_start; i < n->proxy_end; ++i) {
-      C* p = proxies_[i];
+      int p = proxies_[i];
       // strictly left
-      if (p->bbox.max(n->axis) < n->position) {
+      if (colliders_[p].bbox.max(n->axis) < n->position) {
         left_num++;
       }
       // strictly right
-      else if (p->bbox.min(n->axis) > n->position) {
+      else if (colliders_[p].bbox.min(n->axis) > n->position) {
         right_num++;
       }
       // on the plane
@@ -691,19 +708,19 @@ class KDTree {
       }
     }
 
-    left_num += n->left->population;
-    right_num += n->right->population;
-
+    // combinatory (x/2)
     auto c2 = [](float x) { return 0.5f * x * (x - 1); };
 
-    float sum = float(n->population);
-    float t_min = 0.5f * c2(0.5f * sum);
-    float t_max = c2(sum);
-    float t = c2(middle_num) + c2(left_num) + c2(right_num) +
-              middle_num * (left_num + right_num);
+    float pop = float(n->population);
+    float pl = float(left_num + n->left->population);
+    float pr = float(right_num + n->right->population);
+    float pm = float(middle_num);
+
+    float t_min = 2.0f * c2(0.5f * pop);
+    float t_max = c2(pop);
+    float t = c2(pm) + c2(pl) + c2(pr) + pm * (pl + pr);
     float cost = (t - t_min) / (t_max - t_min);
-    float balance = float(std::min(left_num, right_num)) /
-                    float((middle_num + std::max(left_num, right_num)));
+    float balance = std::min(pl, pr) / (pm + std::max(pl, pr));
     return (cost <= balance);
   }
 
@@ -761,7 +778,8 @@ class KDTree {
 
     Eigen::Vector3f mean = Eigen::Vector3f::Zero();
     for (int i = n->proxy_start; i < n->proxy_end; ++i) {
-      mean += proxies_[i]->bbox.center();
+      int p = proxies_[i];
+      mean += colliders_[p].bbox.center();
     }
 
     mean /= float(n->proxy_num());
@@ -803,9 +821,12 @@ class KDTree {
     if (n->proxy_num() == 0) {
       return;
     }
-    n->plane_bbox = proxies_[n->proxy_start]->bbox;
+
+    int p = proxies_[n->proxy_start];
+    n->plane_bbox = colliders_[p].bbox;
     for (int i = n->proxy_start + 1; i < n->proxy_end; ++i) {
-      n->plane_bbox.merge_inplace(proxies_[i]->bbox);
+      p = proxies_[i];
+      n->plane_bbox.merge_inplace(colliders_[p].bbox);
     }
   }
 
@@ -872,7 +893,7 @@ class KDTree {
         continue;
       }
 
-      // translated plane is still not optimal, erase the node
+      // translated plane is still not optimal, collapse the node
       collapse(n);
       stack_.push_back(n);
       // erase(n, (left_num > right_num));
@@ -895,15 +916,15 @@ class KDTree {
 
     // check parent's external colliders
     for (int i = n->parent->ext_start; i < n->parent->ext_end; ++i) {
-      C* p = buffer_[i];
+      int p = buffer_[i];
 
       if (n->is_left()) {
-        if (p->bbox.min(axis) < position) {
+        if (colliders_[p].bbox.min(axis) < position) {
           buffer_[n->ext_end] = p;
           ++n->ext_end;
         }
       } else {
-        if (p->bbox.max(axis) > position) {
+        if (colliders_[p].bbox.max(axis) > position) {
           buffer_[n->ext_end] = p;
           ++n->ext_end;
         }
@@ -912,15 +933,15 @@ class KDTree {
 
     // check parent node colliders
     for (int i = n->parent->proxy_start; i < n->parent->proxy_end; ++i) {
-      C* p = proxies_[i];
+      int p = proxies_[i];
 
       if (n->is_left()) {
-        if (p->bbox.min(axis) < position) {
+        if (colliders_[p].bbox.min(axis) < position) {
           buffer_[n->ext_end] = p;
           ++n->ext_end;
         }
       } else {
-        if (p->bbox.max(axis) > position) {
+        if (colliders_[p].bbox.max(axis) > position) {
           buffer_[n->ext_end] = p;
           ++n->ext_end;
         }
@@ -929,7 +950,7 @@ class KDTree {
   }
 
   void test_node_collision(KDNode* n, CollisionFilter<C> filter) {
-    C** proxy_start = proxies_.data() + n->proxy_start;
+    int* proxy_start = proxies_.data() + n->proxy_start;
     int proxy_num = n->proxy_num();
     if (proxy_num == 0) {
       return;
@@ -937,37 +958,37 @@ class KDTree {
 
     if (n->ext_num() == 0) {
       // node-node test
-      int axis = sap_optimal_axis(proxy_start, proxy_num);
-      sap_sort_proxies(proxy_start, proxy_num, axis);
+      int axis = sap_optimal_axis(colliders_, proxy_start, proxy_num);
+      sap_sort_proxies(colliders_, proxy_start, proxy_num, axis);
 
 #pragma omp task firstprivate(proxy_start, proxy_num, axis)
       {
         auto& cache = local_cache_[omp_get_thread_num()];
-        sap_sorted_group_self_collision(proxy_start, proxy_num, axis, filter,
-                                        cache);
+        sap_sorted_group_self_collision(colliders_, proxy_start, proxy_num,
+                                        axis, filter, cache);
       }
 
     } else {
       // node-node and node-external test
-      C** ext_start = buffer_.data() + n->ext_start;
+      int* ext_start = buffer_.data() + n->ext_start;
       int ext_num = n->ext_num();
       // most collider resides on leaf, so no need to test external collider
-      int axis = sap_optimal_axis(proxy_start, proxy_num);
-      sap_sort_proxies(proxy_start, proxy_num, axis);
-      sap_sort_proxies(ext_start, ext_num, axis);
+      int axis = sap_optimal_axis(colliders_, proxy_start, proxy_num);
+      sap_sort_proxies(colliders_, proxy_start, proxy_num, axis);
+      sap_sort_proxies(colliders_, ext_start, ext_num, axis);
 
       // buffer will be overwrited once main thread traverse to another branch.
       // hence external collider buffer needs to be copied.
-      std::vector<C*> ext_copy(ext_start, ext_start + ext_num);
+      std::vector<int> ext_copy(ext_start, ext_start + ext_num);
 
 #pragma omp task firstprivate(proxy_start, proxy_num, axis, ext_copy)
       {
         auto& cache = local_cache_[omp_get_thread_num()];
-        sap_sorted_group_self_collision(proxy_start, proxy_num, axis, filter,
-                                        cache);
-        sap_sorted_group_group_collision(proxy_start, proxy_num,
-                                         ext_copy.data(), ext_num, axis, filter,
-                                         cache);
+        sap_sorted_group_self_collision(colliders_, proxy_start, proxy_num,
+                                        axis, filter, cache);
+        sap_sorted_group_group_collision(colliders_, proxy_start, proxy_num,
+                                         colliders_, ext_copy.data(), ext_num,
+                                         axis, filter, cache);
       }
     }
   }

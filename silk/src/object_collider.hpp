@@ -18,7 +18,7 @@ struct ObjectCollider {
   float bbox_padding;
   float damping;
   float friction;
-  std::vector<MeshCollider> mesh_colliders;
+
   KDTree<MeshCollider> mesh_collider_tree;
 };
 

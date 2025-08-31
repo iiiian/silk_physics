@@ -90,16 +90,16 @@ std::vector<Collision> CollisionPipeline::find_collision(
 
   // step 1. object collider broadphase using sweep and prune
   CollisionCache<ObjectCollider> object_ccache;
-  std::vector<ObjectCollider*> object_proxies(object_colliders.size());
+  std::vector<int> object_proxies(object_colliders.size());
   for (int i = 0; i < object_colliders.size(); ++i) {
-    object_proxies[i] = object_colliders.data() + i;
+    object_proxies[i] = i;
   }
-  int axis = sap_optimal_axis<ObjectCollider>(object_proxies.data(),
-                                              object_proxies.size());
-  sap_sort_proxies<ObjectCollider>(object_proxies.data(), object_proxies.size(),
-                                   axis);
+  int axis = sap_optimal_axis<ObjectCollider>(
+      object_colliders, object_proxies.data(), object_proxies.size());
+  sap_sort_proxies<ObjectCollider>(object_colliders, object_proxies.data(),
+                                   object_proxies.size(), axis);
   sap_sorted_group_self_collision<ObjectCollider>(
-      object_proxies.data(), object_proxies.size(), axis,
+      object_colliders, object_proxies.data(), object_proxies.size(), axis,
       object_collision_filter, object_ccache);
 
   for (auto& [oa, ob] : object_ccache) {

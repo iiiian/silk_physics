@@ -38,6 +38,8 @@ ObjectCollider make_physical_object_collider(const CollisionConfig& config,
   int edge_num = m.E.rows();
   int face_num = m.F.rows();
 
+  std::vector<MeshCollider> mesh_colliders;
+
   // create mesh collider for every vertex
   for (int i = 0; i < vert_num; ++i) {
     MeshCollider mc;
@@ -51,7 +53,7 @@ ObjectCollider make_physical_object_collider(const CollisionConfig& config,
     mc.bbox.pad_inplace(o.bbox_padding);
 
     o.bbox.merge_inplace(mc.bbox);
-    o.mesh_colliders.emplace_back(std::move(mc));
+    mesh_colliders.emplace_back(std::move(mc));
   }
 
   // create mesh collider for every edge
@@ -72,7 +74,7 @@ ObjectCollider make_physical_object_collider(const CollisionConfig& config,
     mc.bbox.pad_inplace(o.bbox_padding);
 
     o.bbox.merge_inplace(mc.bbox);
-    o.mesh_colliders.emplace_back(std::move(mc));
+    mesh_colliders.emplace_back(std::move(mc));
   }
 
   // create mesh collider for every face
@@ -97,10 +99,10 @@ ObjectCollider make_physical_object_collider(const CollisionConfig& config,
     mc.bbox.pad_inplace(o.bbox_padding);
 
     o.bbox.merge_inplace(mc.bbox);
-    o.mesh_colliders.emplace_back(std::move(mc));
+    mesh_colliders.emplace_back(std::move(mc));
   }
 
-  o.mesh_collider_tree.init(o.mesh_colliders.data(), o.mesh_colliders.size());
+  o.mesh_collider_tree.init(std::move(mesh_colliders));
 
   return o;
 }
@@ -126,6 +128,8 @@ ObjectCollider make_obstacle_object_collider(const CollisionConfig& config,
   int edge_num = m.E.rows();
   int face_num = m.F.rows();
 
+  std::vector<MeshCollider> mesh_colliders;
+
   // create mesh collider for every vertex
   for (int i = 0; i < vert_num; ++i) {
     MeshCollider mc;
@@ -139,7 +143,7 @@ ObjectCollider make_obstacle_object_collider(const CollisionConfig& config,
     mc.bbox.pad_inplace(o.bbox_padding);
 
     o.bbox.merge_inplace(mc.bbox);
-    o.mesh_colliders.emplace_back(std::move(mc));
+    mesh_colliders.emplace_back(std::move(mc));
   }
 
   // create mesh collider for every edge
@@ -161,7 +165,7 @@ ObjectCollider make_obstacle_object_collider(const CollisionConfig& config,
     mc.bbox.pad_inplace(o.bbox_padding);
 
     o.bbox.merge_inplace(mc.bbox);
-    o.mesh_colliders.emplace_back(std::move(mc));
+    mesh_colliders.emplace_back(std::move(mc));
   }
 
   // create mesh collider for every face
@@ -186,10 +190,10 @@ ObjectCollider make_obstacle_object_collider(const CollisionConfig& config,
     mc.bbox.pad_inplace(o.bbox_padding);
 
     o.bbox.merge_inplace(mc.bbox);
-    o.mesh_colliders.emplace_back(std::move(mc));
+    mesh_colliders.emplace_back(std::move(mc));
   }
 
-  o.mesh_collider_tree.init(o.mesh_colliders.data(), o.mesh_colliders.size());
+  o.mesh_collider_tree.init(std::move(mesh_colliders));
 
   return o;
 }
@@ -229,7 +233,10 @@ void update_physical_object_collider(const CollisionConfig& config,
   ObjectCollider& o = object_collider;
   const CollisionConfig& c = config;
 
-  o.bbox = Bbox{Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero()};
+  // init bbox to the position of the first vertex
+  o.bbox.min = solver_state(Eigen::seqN(solver_data.state_offset, 3));
+  o.bbox.max = solver_state(Eigen::seqN(solver_data.state_offset, 3));
+
   o.group = (c.is_collision_on) ? c.group : -1;
   o.solver_offset = solver_data.state_offset;
   o.is_self_collision_on = c.is_self_collision_on;
@@ -243,7 +250,7 @@ void update_physical_object_collider(const CollisionConfig& config,
     return vec(Eigen::seqN(offset, 3));
   };
 
-  for (MeshCollider& mc : o.mesh_colliders) {
+  for (MeshCollider& mc : o.mesh_collider_tree.get_colliders()) {
     auto& p0 = mc.position_t0;
     auto& p1 = mc.position_t1;
 
@@ -338,7 +345,7 @@ void update_obstacle_object_collider(const CollisionConfig& config,
     return vec(Eigen::seqN(offset, 3));
   };
 
-  for (MeshCollider& mc : o.mesh_colliders) {
+  for (MeshCollider& mc : o.mesh_collider_tree.get_colliders()) {
     auto& p0 = mc.position_t0;
     auto& p1 = mc.position_t1;
 

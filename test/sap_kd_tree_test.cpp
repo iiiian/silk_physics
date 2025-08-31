@@ -29,13 +29,10 @@ TEST_CASE("sap-kd-tree-test", "[collision]") {
   int cloth_fnum = cloth.F.rows();
   int sphere_fnum = sphere.F.rows();
 
-  std::vector<SimpleCollider> cloth_colliders(cloth_fnum);
-  std::vector<SimpleCollider> sphere_colliders(sphere_fnum);
-
   KDTree<SimpleCollider> cloth_tree;
-  cloth_tree.init(cloth_colliders.data(), cloth_fnum);
+  cloth_tree.init(std::vector<SimpleCollider>(cloth_fnum));
   KDTree<SimpleCollider> sphere_tree;
-  sphere_tree.init(sphere_colliders.data(), sphere_fnum);
+  sphere_tree.init(std::vector<SimpleCollider>(sphere_fnum));
 
   CollisionFilter<SimpleCollider> self_collision_filter =
       [](const SimpleCollider& a, const SimpleCollider& b) -> bool {
@@ -49,6 +46,10 @@ TEST_CASE("sap-kd-tree-test", "[collision]") {
     return true;
   };
 
+  auto& sphere_colliders = sphere_tree.get_colliders();
+  auto& cloth_colliders = cloth_tree.get_colliders();
+
+  // sphere is static, only update once.
   update_colliders(sphere_colliders, sphere, 1, sphere.series[0]);
   silk::Bbox bbox = sphere_colliders[0].bbox;
   for (int i = 0; i < sphere_colliders.size(); ++i) {
