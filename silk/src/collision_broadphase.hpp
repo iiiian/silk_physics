@@ -147,15 +147,14 @@ struct KDNode {
 
   Bbox bbox = {};
   Bbox plane_bbox = {};
-  int axis = 0;             // split plane axis
-  float position = 0.0f;    // split plane position
-  int proxy_start = 0;      // proxies array start
-  int proxy_end = 0;        // proxies array end
-  int population = 0;       // subtree proxy num
-  int delay_offset = 0;     // delayed update to proxy start/end
-  int ext_start = 0;        // external collider buffer start
-  int ext_end = 0;          // external collider buffer end
-  uint32_t generation = 0;  // for tree-tree collision
+  int axis = 0;           // split plane axis
+  float position = 0.0f;  // split plane position
+  int proxy_start = 0;    // proxies array start
+  int proxy_end = 0;      // proxies array end
+  int population = 0;     // subtree proxy num
+  int delay_offset = 0;   // delayed update to proxy start/end
+  int ext_start = 0;      // external collider buffer start
+  int ext_end = 0;        // external collider buffer end
 
   int proxy_num() const {
     assert((proxy_end >= proxy_start));
@@ -173,6 +172,14 @@ struct KDNode {
   }
 
   bool is_left() const { return (parent && this == parent->left); }
+};
+
+// for tree tree collision test
+struct TTPair {
+  KDNode* na = nullptr;
+  bool exclude_na_children = false;
+  KDNode* nb = nullptr;
+  bool exclude_nb_children = false;
 };
 
 template <typename C>
@@ -302,87 +309,70 @@ class KDTree {
                                   CollisionCache<C>& cache) {
     assert(ta.root_ && tb.root_);
 
-    // this should never happen in normal scenario
-    if (ta.root_->generation == std::numeric_limits<uint32_t>::max()) {
-      ta.reset_generation();
-    }
-    if (tb.root_->generation == std::numeric_limits<uint32_t>::max()) {
-      tb.reset_generation();
-    }
+    std::vector<TTPair> tt_stack_;
+    tt_stack_.push_back(TTPair{ta.root_, false, tb.root_, false});
 
-    // since root is guaranteed to be visited during tree-tree collision test,
-    // the generation of root node is the last generation of tree. The current
-    // generation is last generation plus one
-    uint32_t gen_a = ta.root_->generation + 1;
-    uint32_t gen_b = tb.root_->generation + 1;
+    for (int i = 0; i < tt_stack_.size(); ++i) {
+      auto [na, exclude_na_children, nb, exclude_nb_children] = tt_stack_[i];
 
-    std::vector<std::pair<KDNode*, KDNode*>> pair_stack_;
-    pair_stack_.emplace_back(ta.root_, tb.root_);
-
-    for (int i = 0; i < pair_stack_.size(); ++i) {
-      auto [na, nb] = pair_stack_[i];
-      // pair_stack_.pop_back();
-
-      if (!na || !nb) {
+      if (na == nullptr || nb == nullptr) {
         continue;
       }
 
-      // the node has never been visited if generation doesn't match
-      bool is_na_new = na->generation != gen_a;
-      bool is_nb_new = nb->generation != gen_b;
-      na->generation = gen_a;
-      nb->generation = gen_b;
+      // test colliders on node itself only
+      if (exclude_na_children && exclude_nb_children) {
+        if (na->proxy_num() == 0 || nb->proxy_num() == 0) {
+          continue;
+        }
 
-      if (is_na_new && is_nb_new) {
-        if (Bbox::is_colliding(na->bbox, nb->bbox)) {
-          pair_stack_.emplace_back(na->left, nb->left);
-          pair_stack_.emplace_back(na->left, nb->right);
-          pair_stack_.emplace_back(na->right, nb->left);
-          pair_stack_.emplace_back(na->right, nb->right);
-          pair_stack_.emplace_back(na, nb->left);
-          pair_stack_.emplace_back(na, nb->right);
-          pair_stack_.emplace_back(na->left, nb);
-          pair_stack_.emplace_back(na->right, nb);
-          pair_stack_.emplace_back(na, nb);
+        Bbox& ba = na->is_leaf() ? na->bbox : na->plane_bbox;
+        Bbox& bb = nb->is_leaf() ? nb->bbox : nb->plane_bbox;
+        if (Bbox::is_colliding(ba, bb)) {
+          C** start_a = ta.proxies_.data() + na->proxy_start;
+          int num_a = na->proxy_num();
+          C** start_b = tb.proxies_.data() + nb->proxy_start;
+          int num_b = nb->proxy_num();
+
+          int axis = sap_optimal_axis(start_a, num_a, start_b, num_b);
+          sap_sort_proxies(start_a, num_a, axis);
+          sap_sort_proxies(start_b, num_b, axis);
+          sap_sorted_group_group_collision(start_a, num_a, start_b, num_b, axis,
+                                           filter, cache);
+        }
+
+        continue;
+      }
+
+      if (exclude_na_children) {
+        Bbox& ba = na->is_leaf() ? na->bbox : na->plane_bbox;
+        if (Bbox::is_colliding(ba, nb->bbox)) {
+          tt_stack_.push_back(TTPair{na, true, nb, true});
+          tt_stack_.push_back(TTPair{na, true, nb->left, false});
+          tt_stack_.push_back(TTPair{na, true, nb->right, false});
         }
         continue;
       }
 
-      if (is_na_new) {
-        if (Bbox::is_colliding(na->bbox, nb->plane_bbox)) {
-          pair_stack_.emplace_back(na->left, nb);
-          pair_stack_.emplace_back(na->right, nb);
-          pair_stack_.emplace_back(na, nb);
+      if (exclude_nb_children) {
+        Bbox& bb = nb->is_leaf() ? nb->bbox : nb->plane_bbox;
+        if (Bbox::is_colliding(na->bbox, bb)) {
+          tt_stack_.push_back(TTPair{na, true, nb, true});
+          tt_stack_.push_back(TTPair{na->left, false, nb, true});
+          tt_stack_.push_back(TTPair{na->right, false, nb, true});
         }
         continue;
       }
 
-      if (is_nb_new) {
-        if (Bbox::is_colliding(na->plane_bbox, nb->bbox)) {
-          pair_stack_.emplace_back(na, nb->left);
-          pair_stack_.emplace_back(na, nb->right);
-          pair_stack_.emplace_back(na, nb);
-        }
-        continue;
-      }
-
-      // both node a and node b is old, test on plane proxy only
-      if (na->proxy_num() == 0 || nb->proxy_num() == 0) {
-        continue;
-      }
-      Bbox& ba = (na->is_leaf()) ? na->bbox : na->plane_bbox;
-      Bbox& bb = (nb->is_leaf()) ? nb->bbox : nb->plane_bbox;
-      if (Bbox::is_colliding(ba, bb)) {
-        C** start_a = ta.proxies_.data() + na->proxy_start;
-        int num_a = na->proxy_num();
-        C** start_b = tb.proxies_.data() + nb->proxy_start;
-        int num_b = nb->proxy_num();
-
-        int axis = sap_optimal_axis(start_a, num_a, start_b, num_b);
-        sap_sort_proxies(start_a, num_a, axis);
-        sap_sort_proxies(start_b, num_b, axis);
-        sap_sorted_group_group_collision(start_a, num_a, start_b, num_b, axis,
-                                         filter, cache);
+      if (Bbox::is_colliding(na->bbox, nb->bbox)) {
+        tt_stack_.push_back(TTPair{na, true, nb, true});
+        tt_stack_.push_back(TTPair{na, true, nb->left, false});
+        tt_stack_.push_back(TTPair{na, true, nb->right, false});
+        tt_stack_.push_back(TTPair{na->left, false, nb, true});
+        tt_stack_.push_back(TTPair{na->right, false, nb, true});
+        tt_stack_.push_back(TTPair{na->left, false, nb->left, false});
+        tt_stack_.push_back(TTPair{na->left, false, nb->right, false});
+        tt_stack_.push_back(TTPair{na->right, false, nb->left, false});
+        tt_stack_.push_back(TTPair{na->right, false, nb->right, false});
       }
     }
   }
@@ -391,7 +381,7 @@ class KDTree {
     stack_ = {};
     buffer_ = {};
     for (auto& cache : local_cache_) {
-      local_cache_ = {};
+      cache = {};
     }
   }
 
@@ -537,7 +527,7 @@ class KDTree {
                             n->right->population);
 
           n->proxy_end -= unfit_num;
-          assert((n->proxy_end < collider_num_));
+          assert((n->proxy_end <= collider_num_));
           n->parent->proxy_start -= unfit_num;
           assert((n->parent->proxy_start >= 0));
           n->population =
@@ -704,12 +694,13 @@ class KDTree {
     left_num += n->left->population;
     right_num += n->right->population;
 
-    int num = n->proxy_num();
-    float t_min = 0.5f * float(num) * (0.5f * float(num) - 1.0f);
-    float t_max = 0.5f * float(num) * (float(num) - 1.0f);
-    float t = 0.5f * float((left_num * left_num + middle_num * middle_num +
-                            right_num * right_num - num) +
-                           middle_num * (left_num + right_num));
+    auto c2 = [](float x) { return 0.5f * x * (x - 1); };
+
+    float sum = float(n->population);
+    float t_min = 0.5f * c2(0.5f * sum);
+    float t_max = c2(sum);
+    float t = c2(middle_num) + c2(left_num) + c2(right_num) +
+              middle_num * (left_num + right_num);
     float cost = (t - t_min) / (t_max - t_min);
     float balance = float(std::min(left_num, right_num)) /
                     float((middle_num + std::max(left_num, right_num)));
@@ -847,7 +838,6 @@ class KDTree {
           stack_.push_back(n->right);
           stack_.push_back(n->left);
         }
-        n->generation = 0;
         continue;
       }
 
@@ -863,7 +853,6 @@ class KDTree {
         filter(n);
         set_children_bbox(n);
         set_plane_bbox(n);
-        n->generation = 0;
         stack_.push_back(n->right);
         stack_.push_back(n->left);
         continue;
@@ -878,7 +867,6 @@ class KDTree {
         filter(n);
         set_children_bbox(n);
         set_plane_bbox(n);
-        n->generation = 0;
         stack_.push_back(n->right);
         stack_.push_back(n->left);
         continue;
@@ -980,24 +968,6 @@ class KDTree {
         sap_sorted_group_group_collision(proxy_start, proxy_num,
                                          ext_copy.data(), ext_num, axis, filter,
                                          cache);
-      }
-    }
-  }
-
-  void reset_generation() {
-    stack_.clear();
-
-    stack_.push_back(root_);
-    while (!stack_.empty()) {
-      KDNode* n = stack_.back();
-      stack_.pop_back();
-
-      n->generation = 0;
-
-      // recurse into subtree
-      if (!n->is_leaf()) {
-        stack_.push_back(n->right);
-        stack_.push_back(n->left);
       }
     }
   }

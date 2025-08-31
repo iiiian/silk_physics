@@ -16,6 +16,8 @@ const fs::path root{PHYSICS_SCENE_ROOT};
 const fs::path cloth_sphere_abc = root / "cloth_sphere_collision.abc";
 
 TEST_CASE("sap-kd-tree-test", "[collision]") {
+  spdlog::set_level(spdlog::level::debug);
+
   // object 0 is the cloth
   // object 1 is a icosphere
   // the cloth will fall onto the icosphere
