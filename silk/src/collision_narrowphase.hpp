@@ -10,8 +10,8 @@ namespace silk {
 
 std::optional<Collision> narrow_phase(
     const ObjectCollider& oa, const MeshCollider& ma, const ObjectCollider& ob,
-    const MeshCollider& mb, float dt, float base_stiffness, float tolerance,
-    int max_iter, const Eigen::Array3f& scene_ee_err,
+    const MeshCollider& mb, float dt, float base_stiffness, float min_toi,
+    float tolerance, int max_iter, const Eigen::Array3f& scene_ee_err,
     const Eigen::Array3f& scene_vf_err);
 
 void partial_ccd_update(const Eigen::VectorXf& solver_state_t0,

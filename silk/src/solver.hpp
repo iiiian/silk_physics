@@ -4,6 +4,7 @@
 #include <Eigen/Sparse>
 #include <vector>
 
+#include "bbox.hpp"
 #include "cholmod_utils.hpp"
 #include "collision.hpp"
 #include "collision_pipeline.hpp"
@@ -24,20 +25,16 @@ class Solver {
 
  private:
   int state_num_ = 0;
-
   Eigen::VectorXf init_state_;
   Eigen::VectorXf curr_state_;
   Eigen::VectorXf state_velocity_;
-
+  Bbox scene_bbox_;
   Eigen::SparseMatrix<float> H_;
   cholmod_raii::CholmodFactor L_;
-
   Eigen::SparseMatrix<float> mass_;
-  // Eigen::SparseMatrix<float> H_;  // use row major format for iterative
-  // solver
-
   std::vector<IPhysicalConstrain*> constrains_;
   std::vector<Collision> collisions_;
+  Eigen::VectorXf barrier_target_state_;
 
  public:
   const Eigen::VectorXf& get_solver_state() const;
@@ -47,11 +44,13 @@ class Solver {
   bool step(Registry& registry, CollisionPipeline& collision_pipeline);
 
  private:
-  void update_rhs_for_pin(Registry& registry, Eigen::VectorXf& rhs);
-  cholmod_raii::CholmodFactor update_factor_and_rhs_for_collision(
-      Eigen::VectorXf& rhs);
-  void update_rhs_for_physics(const Eigen::VectorXf& state,
-                              Eigen::VectorXf& rhs);
+  void compute_pin_constrain(Registry& registry, Eigen::VectorXf& rhs);
+  void compute_barrier_constrain(Eigen::VectorXf& rhs,
+                                 cholmod_raii::CholmodFactor& LC);
+  void compute_physical_constrain(const Eigen::VectorXf& state,
+                                  Eigen::VectorXf& rhs);
+
+  void enforce_barrier_constrain(Eigen::VectorXf& state);
 
   bool global_solve(Eigen::VectorXf& rhs, cholmod_raii::CholmodFactor& L,
                     Eigen::VectorXf& out);

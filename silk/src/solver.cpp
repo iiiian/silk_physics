@@ -6,6 +6,7 @@
 #include <Eigen/Sparse>
 #include <Eigen/SparseCholesky>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -32,12 +33,14 @@ void Solver::clear() {
   mass_ = {};
   constrains_.clear();
   collisions_.clear();
+  barrier_target_state_ = {};
 }
 
 void Solver::reset() {
   curr_state_ = init_state_;
   state_velocity_ = Eigen::VectorXf::Zero(state_num_);
   collisions_.clear();
+  barrier_target_state_ = {};
 }
 
 bool Solver::init(Registry& registry) {
@@ -97,20 +100,17 @@ bool Solver::init(Registry& registry) {
   H_.setFromTriplets(H_triplets.begin(), H_triplets.end());
   H_ += mass_ / (dt * dt);
 
-  // Eigen::SparseMatrix<double> tmp = H_.cast<double>();
   cholmod_sparse H_view = cholmod_raii::make_cholmod_sparse_view(
       H_, SymmetricStatus::UpperTriangular);
 
   L_ = cholmod_analyze(&H_view, cholmod_raii::global_common);
   assert(!L_.is_empty());
-  // cholmod_print_factor(L_, "L", cholmod_raii::global_common);
   cholmod_factorize(&H_view, L_, cholmod_raii::global_common);
-  // cholmod_print_factor(L_, "L", cholmod_raii::global_common);
 
   return true;
 }
 
-void Solver::update_rhs_for_pin(Registry& registry, Eigen::VectorXf& rhs) {
+void Solver::compute_pin_constrain(Registry& registry, Eigen::VectorXf& rhs) {
   for (Entity& e : registry.get_all_entities()) {
     auto solver_data = registry.get<SolverData>(e);
     auto pin = registry.get<Pin>(e);
@@ -126,8 +126,8 @@ void Solver::update_rhs_for_pin(Registry& registry, Eigen::VectorXf& rhs) {
   }
 }
 
-void Solver::update_rhs_for_physics(const Eigen::VectorXf& state,
-                                    Eigen::VectorXf& rhs) {
+void Solver::compute_physical_constrain(const Eigen::VectorXf& state,
+                                        Eigen::VectorXf& rhs) {
   std::vector<Eigen::VectorXf> buffers(thread_num,
                                        Eigen::VectorXf::Zero(state_num_));
 #pragma omp parallel for num_threads(thread_num)
@@ -141,13 +141,13 @@ void Solver::update_rhs_for_physics(const Eigen::VectorXf& state,
   }
 }
 
-cholmod_raii::CholmodFactor Solver::update_factor_and_rhs_for_collision(
-    Eigen::VectorXf& rhs) {
-  if (collisions_.empty()) {
-    return nullptr;
-  }
+void Solver::compute_barrier_constrain(Eigen::VectorXf& rhs,
+                                       cholmod_raii::CholmodFactor& LC) {
+  assert(!collisions_.empty());
 
-  std::vector<Eigen::Triplet<float>> C_triplets;
+  Eigen::VectorXf stiffness_sum = Eigen::VectorXf::Zero(state_num_);
+  // target state is used as a temp buffer for rhs change
+  barrier_target_state_ = Eigen::VectorXf::Zero(state_num_);
   for (auto& c : collisions_) {
     if (c.stiffness == 0.0f) {
       continue;
@@ -161,19 +161,34 @@ cholmod_raii::CholmodFactor Solver::update_factor_and_rhs_for_collision(
       int offset = c.offset(i);
 
       Eigen::Vector3f position_t0 = curr_state_(Eigen::seqN(offset, 3));
-      Eigen::Vector3f reflection = position_t0 +
-                                   c.toi * dt * c.velocity_t0.col(i) +
-                                   (1.0f - c.toi) * dt * c.velocity_t1.col(i);
-      rhs(Eigen::seqN(offset, 3)) += c.stiffness * reflection;
+      Eigen::Vector3f reflection;
+      if (c.use_small_ms) {
+        reflection = position_t0 + c.velocity_t1.col(i);
+      } else {
+        reflection = position_t0 + c.toi * c.velocity_t0.col(i) +
+                     (1.0f - c.toi) * c.velocity_t1.col(i);
+      }
+      barrier_target_state_(Eigen::seqN(offset, 3)) += c.stiffness * reflection;
 
-      C_triplets.emplace_back(offset, offset, c.stiffness);
-      C_triplets.emplace_back(offset + 1, offset + 1, c.stiffness);
-      C_triplets.emplace_back(offset + 2, offset + 2, c.stiffness);
+      stiffness_sum(offset) += c.stiffness;
+      stiffness_sum(offset + 1) += c.stiffness;
+      stiffness_sum(offset + 2) += c.stiffness;
     }
   }
 
+  rhs += barrier_target_state_;
+
   Eigen::SparseMatrix<float> C{state_num_, state_num_};
-  C.setFromTriplets(C_triplets.begin(), C_triplets.end());
+  for (int i = 0; i < state_num_; ++i) {
+    if (barrier_target_state_(i) == 0.0f) {
+      // indicating there's no barrier constrain for state(i)
+      barrier_target_state_(i) = std::numeric_limits<float>::max();
+      continue;
+    }
+    barrier_target_state_(i) /= stiffness_sum(i);
+    C.coeffRef(i, i) = stiffness_sum(i);
+  }
+  // we do sqrt for cholmod updown.
   C = C.cwiseSqrt();
 
   cholmod_sparse C_view = cholmod_raii::make_cholmod_sparse_view(C);
@@ -183,10 +198,30 @@ cholmod_raii::CholmodFactor Solver::update_factor_and_rhs_for_collision(
   cholmod_raii::CholmodSparse C_perm = cholmod_submatrix(
       &C_view, rset, rset_num, nullptr, -1, 1, 1, cholmod_raii::global_common);
 
-  cholmod_raii::CholmodFactor LC = L_;
+  LC = L_;
   cholmod_updown(1, C_perm, LC, cholmod_raii::global_common);
+}
 
-  return LC;
+void Solver::enforce_barrier_constrain(Eigen::VectorXf& state) {
+  assert(!collisions_.empty());
+
+  float scene_scale = (scene_bbox_.max - scene_bbox_.min).norm();
+  float threshold = 1e-5f * scene_scale;
+
+  for (int i = 0; i < state_num_; ++i) {
+    if (barrier_target_state_(i) == std::numeric_limits<float>::max()) {
+      continue;
+    }
+
+    float target = barrier_target_state_(i);
+    float abs_diff = std::abs(target - state(i));
+    if (abs_diff > threshold) {
+      SPDLOG_DEBUG("barrier constrain fails. abs diff {} > {}", abs_diff,
+                   threshold);
+    }
+
+    state(i) = target;
+  }
 }
 
 bool Solver::global_solve(Eigen::VectorXf& rhs, cholmod_raii::CholmodFactor& L,
@@ -208,11 +243,16 @@ bool Solver::step(Registry& registry, CollisionPipeline& collision_pipeline) {
   init_all_object_collider(registry);
   update_all_obstacle_object_collider(registry);
 
+  scene_bbox_.min =
+      curr_state_.reshaped(3, state_num_ / 3).rowwise().minCoeff();
+  scene_bbox_.max =
+      curr_state_.reshaped(3, state_num_ / 3).rowwise().maxCoeff();
+
   Eigen::VectorXf acceleration =
       const_acceleration.replicate(state_num_ / 3, 1);
 
   Eigen::VectorXf pin_rhs = Eigen::VectorXf::Zero(state_num_);
-  update_rhs_for_pin(registry, pin_rhs);
+  compute_pin_constrain(registry, pin_rhs);
 
   Eigen::VectorXf next_state;
   float remaining_step = 1.0f;
@@ -223,46 +263,49 @@ bool Solver::step(Registry& registry, CollisionPipeline& collision_pipeline) {
     Eigen::VectorXf outer_rhs = (mass_ / (dt * dt)) * curr_state_ +
                                 (mass_ / dt) * state_velocity_ +
                                 mass_ * acceleration + pin_rhs;
-    cholmod_raii::CholmodFactor LC =
-        update_factor_and_rhs_for_collision(outer_rhs);
+
+    cholmod_raii::CholmodFactor LC;
+    compute_barrier_constrain(outer_rhs, LC);
 
     // prediction based on linear velocity
     next_state = curr_state_ + dt * state_velocity_ + (dt * dt) * acceleration;
 
-    Eigen::VectorXf lg_solution = next_state;
     for (int inner_it = 0; inner_it < max_inner_iteration; ++inner_it) {
       SPDLOG_DEBUG("Inner iter {}", inner_it);
 
       Eigen::VectorXf inner_rhs = outer_rhs;
-      update_rhs_for_physics(next_state, inner_rhs);
+      compute_physical_constrain(next_state, inner_rhs);
 
+      Eigen::VectorXf solution;
       if (collisions_.empty()) {
-        global_solve(inner_rhs, L_, next_state);
+        global_solve(inner_rhs, L_, solution);
       } else {
-        global_solve(inner_rhs, LC, next_state);
+        global_solve(inner_rhs, LC, solution);
       }
 
-      if (next_state.array().isNaN().any()) {
+      if (solution.array().isNaN().any()) {
         SPDLOG_ERROR("solver explodes");
-        exit(1);
         return false;
       }
 
-      if (((next_state - lg_solution).array().abs() < 1e-3f).all()) {
-        SPDLOG_DEBUG("lg loop terminate");
+      float scene_scale = (scene_bbox_.max - scene_bbox_.min).norm();
+      float threshold = 0.05f * scene_scale;
+      if ((solution - next_state).norm() <= threshold) {
+        SPDLOG_DEBUG("||dx|| < {}, lg loop terminate", threshold);
+
+        next_state = solution;
         break;
       }
 
-      lg_solution = next_state;
-
-      // collision stiffness update using partial ccd
-      collision_pipeline.update_collision(next_state, curr_state_, collisions_);
+      next_state = solution;
     }
+
+    enforce_barrier_constrain(next_state);
 
     // full collision update
     update_all_physical_object_collider(registry, next_state, curr_state_);
     collisions_ = collision_pipeline.find_collision(
-        registry.get_all<ObjectCollider>(), dt);
+        registry.get_all<ObjectCollider>(), scene_bbox_, dt);
 
     // ccd line search
     float earliest_toi = 1.0f;

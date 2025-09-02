@@ -66,15 +66,11 @@ bool mesh_self_collision_filter(const MeshCollider& a, const MeshCollider& b) {
 };
 
 std::vector<Collision> CollisionPipeline::find_collision(
-    std::vector<ObjectCollider>& object_colliders, float dt) {
+    std::vector<ObjectCollider>& object_colliders, const Bbox& scene_bbox,
+    float dt) {
   // compute floating point err for ccd
-  Eigen::Vector3f abs_max = Eigen::Vector3f::Zero();
-  for (auto& o : object_colliders) {
-    Eigen::Vector3f bbox_abs_min = o.bbox.min.cwiseAbs();
-    Eigen::Vector3f bbox_abs_max = o.bbox.max.cwiseAbs();
-    abs_max = (abs_max.cwiseMax(bbox_abs_min.cwiseMax(bbox_abs_max))).eval();
-  }
-
+  Eigen::Vector3f abs_max =
+      scene_bbox.min.cwiseAbs().cwiseMax(scene_bbox.max.cwiseAbs());
   scene_ee_err_ = ticcd::get_numerical_error(abs_max, false, true);
   scene_vf_err_ = ticcd::get_numerical_error(abs_max, true, true);
 
@@ -112,9 +108,9 @@ std::vector<Collision> CollisionPipeline::find_collision(
 // step 3. mesh collider narrowphase using ccd
 #pragma omp parallel for
     for (auto& [ma, mb] : mesh_ccache) {
-      auto collision = narrow_phase(*oa, *ma, *ob, *mb, dt,
-                                    collision_stiffness_base, ccd_tolerance,
-                                    ccd_max_iter, scene_ee_err_, scene_vf_err_);
+      auto collision = narrow_phase(
+          *oa, *ma, *ob, *mb, dt, collision_stiffness_base, min_toi,
+          ccd_tolerance, ccd_max_iter, scene_ee_err_, scene_vf_err_);
       auto& out = thread_local_collisions[omp_get_thread_num()];
       if (collision) {
         out.emplace_back(std::move(*collision));
@@ -140,12 +136,12 @@ std::vector<Collision> CollisionPipeline::find_collision(
 #pragma omp parallel for
     for (auto& [ma, mb] : mesh_ccache) {
       // step 2. mesh collider narrowphase using ccd
-      auto collision = narrow_phase(o, *ma, o, *mb, dt,
-                                    collision_stiffness_base, ccd_tolerance,
-                                    ccd_max_iter, scene_ee_err_, scene_vf_err_);
+      auto collision = narrow_phase(
+          o, *ma, o, *mb, dt, collision_stiffness_base, min_toi, ccd_tolerance,
+          ccd_max_iter, scene_ee_err_, scene_vf_err_);
       auto& out = thread_local_collisions[omp_get_thread_num()];
       if (collision) {
-        out.emplace_back(std::move(*collision));
+        out.push_back(std::move(*collision));
       }
     }
   }
