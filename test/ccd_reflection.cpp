@@ -92,8 +92,8 @@ void test_query_category(const fs::path& root, const std::string& name) {
 
     silk::ObjectCollider oa, ob;
 
-    oa.damping = 0.3f;
-    ob.damping = 0.3f;
+    oa.collision_restitution = 0.3f;
+    ob.collision_restitution = 0.3f;
     oa.friction = 0.3f;
     ob.friction = 0.3f;
     // oa.bbox_padding = 0.001f * (ma.bbox.max - ma.bbox.min).norm();
@@ -150,8 +150,8 @@ void test_query_category(const fs::path& root, const std::string& name) {
     // ObjectColliders
     silk::ObjectCollider oa, ob;
 
-    oa.damping = 0.3f;
-    ob.damping = 0.3f;
+    oa.collision_restitution = 0.3f;
+    ob.collision_restitution = 0.3f;
     oa.friction = 0.3f;
     ob.friction = 0.3f;
     // oa.bbox_padding = 0.001f * (ma.bbox.max - ma.bbox.min).norm();

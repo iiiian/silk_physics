@@ -220,7 +220,7 @@ void ObjectSettingWidget::draw_collision_setting() {
     obj.collision_config_changed = true;
   }
 
-  if (ImGui::InputFloat("Damping", &c.damping)) {
+  if (ImGui::InputFloat("Restitution", &c.restitution)) {
     obj.collision_config_changed = true;
   }
 

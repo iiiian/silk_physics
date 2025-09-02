@@ -31,7 +31,7 @@ ObjectCollider make_physical_object_collider(const CollisionConfig& config,
   o.solver_offset = solver_data.state_offset;
   o.is_self_collision_on = c.is_self_collision_on;
   o.bbox_padding = 0.05f * m.avg_edge_length;
-  o.damping = config.damping;
+  o.restitution = config.restitution;
   o.friction = config.friction;
 
   int vert_num = m.V.rows();
@@ -121,7 +121,7 @@ ObjectCollider make_obstacle_object_collider(const CollisionConfig& config,
   o.is_self_collision_on = c.is_self_collision_on;
   // o.bbox_padding = 0.05f * m.avg_edge_length;
   o.bbox_padding = 1e-6f;
-  o.damping = config.damping;
+  o.restitution = config.restitution;
   o.friction = config.friction;
 
   int vert_num = m.V.rows();
@@ -240,7 +240,7 @@ void update_physical_object_collider(const CollisionConfig& config,
   o.group = (c.is_collision_on) ? c.group : -1;
   o.solver_offset = solver_data.state_offset;
   o.is_self_collision_on = c.is_self_collision_on;
-  o.damping = config.damping;
+  o.restitution = config.restitution;
   o.friction = config.friction;
 
   // always update mesh colliders for dynamic entity

@@ -16,7 +16,7 @@ struct ObjectCollider {
   bool is_static;
   bool is_self_collision_on;
   float bbox_padding;
-  float damping;
+  float restitution;  // collision restitution, in range [0, 1]
   float friction;
 
   KDTree<MeshCollider> mesh_collider_tree;

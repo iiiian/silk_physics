@@ -9,13 +9,50 @@
 
 namespace silk {
 
+// compute velocity diff after collision. if primitives are leaving, return
+// nullopt. else compute velocity diff based on restitution and a simplified
+// friction mode where the kinetic friction is the same as the maximum static
+// friction.
+std::optional<Eigen::Vector3f> velocity_diff(const Eigen::Vector3f& v_relative,
+                                             const Eigen::Vector3f& n, float ms,
+                                             float restitution,
+                                             float friction) {
+  float v_normal_norm = v_relative.dot(n);
+  Eigen::Vector3f v_normal = v_normal_norm * n;
+  Eigen::Vector3f v_parallel = v_relative - v_normal;
+
+  if (v_normal_norm < 0.0f) {
+    SPDLOG_DEBUG("leaving, n velocity norm {}", v_normal_norm);
+    return std::nullopt;
+  }
+
+  float v_diff_norm_norm;
+  // two primitives are approaching each other normally.
+  if (v_normal_norm > ms) {
+    v_diff_norm_norm = (1.0f + restitution) * v_normal_norm;
+  }
+  // two primitives are approaching each other very slowly. In this case, we
+  // give an artificial velocity to ensure separation.
+  else {
+    v_diff_norm_norm = ms;
+  }
+
+  // static
+  float v_parallel_norm = v_parallel.norm();
+  float static_v_parallel_norm = friction * v_diff_norm_norm;
+  if (v_parallel_norm < static_v_parallel_norm) {
+    return v_diff_norm_norm * n + v_parallel;
+  }
+
+  // kinetic
+  return v_diff_norm_norm * n +
+         (static_v_parallel_norm / v_parallel_norm) * v_parallel;
+}
+
 std::optional<Collision> point_triangle_collision(
     const ObjectCollider& oa, const MeshCollider& ma, const ObjectCollider& ob,
     const MeshCollider& mb, float dt, float base_stiffness, float min_toi,
     float tolerance, int max_iter, const Eigen::Array3f& scene_vf_err) {
-  // TODO: more damping and friction avg mode
-  float damping = 0.5f * (oa.damping + ob.damping);
-  float friction = 0.5f * (oa.friction + ob.friction);
   // minimal separation
   float ms = std::min(oa.bbox_padding, ob.bbox_padding);
 
@@ -78,31 +115,13 @@ std::optional<Collision> point_triangle_collision(
   n.normalize();
 
   Eigen::Vector3f v_relative = c.velocity_t0.col(0) - v_pt;
-  float v_normal_norm = v_relative.dot(n);
-  Eigen::Vector3f v_normal = v_normal_norm * n;
-  Eigen::Vector3f v_parallel = v_relative - v_normal;
+  // TODO: more restitution and friction avg mode
+  float restitution = 0.5f * (oa.restitution + ob.restitution);
+  float friction = 0.5f * (oa.friction + ob.friction);
 
   // total velocity change after collision
-  Eigen::Vector3f v_diff;
-
-  // if velocity along collision normal > ms, that means two
-  // primitives are approaching each other.
-  if (v_normal_norm > ms) {
-    SPDLOG_DEBUG("approaching, n velocity norm {}", v_normal_norm);
-    // Eigen::Vector3f v_diff =
-    //     (2.0f - damping) * v_normal + (1.0f - friction) * v_parallel;
-    v_diff = 2.0f * v_normal;
-  }
-  // if velocity along collision < ms but > 0, that means two
-  // primitives are approaching each other very slowly. In this case, we give an
-  // artificial velocity to ensure separation.
-  else if (v_normal_norm > -ms) {
-    SPDLOG_DEBUG("slowly approaching, n velocity norm {}", v_normal_norm);
-    v_diff = 2.0f * ms * n;
-  }
-  // if velocity along collision < 0. That means 2 primitives are separating.
-  else {
-    SPDLOG_DEBUG("leaving, n velocity norm {}", v_normal_norm);
+  auto v_diff = velocity_diff(v_relative, n, ms, restitution, friction);
+  if (!v_diff) {
     return std::nullopt;
   }
 
@@ -116,7 +135,7 @@ std::optional<Collision> point_triangle_collision(
   weight(0) *= -1.0f;
 
   // compute reflection velocity
-  c.velocity_t1 = c.velocity_t0 + v_diff * weight.transpose();
+  c.velocity_t1 = c.velocity_t0 + v_diff.value() * weight.transpose();
 
   // if use_small_ms is true, that means at t = 0 two primitives are very close
   // or is within the minimal separation already. However, to avoid the solver
@@ -165,9 +184,6 @@ std::optional<Collision> edge_edge_collision(
     const ObjectCollider& oa, const MeshCollider& ma, const ObjectCollider& ob,
     const MeshCollider& mb, float dt, float base_stiffness, float min_toi,
     float tolerance, int max_iter, const Eigen::Array3f& scene_ee_err) {
-  // TODO: more damping and friction avg mode
-  float damping = 0.5f * (oa.damping + ob.damping);
-  float friction = 0.5f * (oa.friction + ob.friction);
   // minimal separation
   float ms = std::min(oa.bbox_padding, ob.bbox_padding);
 
@@ -232,31 +248,13 @@ std::optional<Collision> edge_edge_collision(
   n.normalize();
 
   Eigen::Vector3f v_relative = va - vb;
-  float v_normal_norm = n.dot(v_relative);
-  Eigen::Vector3f v_normal = v_normal_norm * n;
-  Eigen::Vector3f v_parallel = v_relative - v_normal;
+  // TODO: more restitution and friction avg mode
+  float restitution = 0.5f * (oa.restitution + ob.restitution);
+  float friction = 0.5f * (oa.friction + ob.friction);
 
   // total velocity change after collision
-  Eigen::Vector3f v_diff;
-
-  // if velocity along collision normal > ms, that means 2
-  // primitive is approaching each other.
-  if (v_normal_norm > ms) {
-    SPDLOG_DEBUG("approaching, n velocity norm {}", v_normal_norm);
-    // Eigen::Vector3f v_diff =
-    //     (2.0f - damping) * v_normal + (1.0f - friction) * v_parallel;
-    v_diff = 2.0f * v_normal;
-  }
-  // if velocity along collision < ms but > 0, that means 2
-  // primitives is approaching each other very slowly. In this case, we give an
-  // artificial velocity to ensure separation.
-  else if (v_normal_norm >= 0.0f) {
-    SPDLOG_DEBUG("slowly approaching, n velocity norm {}", v_normal_norm);
-    v_diff = 2.0f * ms * n;
-  }
-  // if velocity along collision < 0. That means 2 primitives are separating.
-  else {
-    SPDLOG_DEBUG("leaving, n velocity norm {}", v_normal_norm);
+  auto v_diff = velocity_diff(v_relative, n, ms, restitution, friction);
+  if (!v_diff) {
     return std::nullopt;
   }
 
@@ -270,7 +268,7 @@ std::optional<Collision> edge_edge_collision(
   weight(0) *= -1.0f;
   weight(1) *= -1.0f;
 
-  c.velocity_t1 = c.velocity_t0 + v_diff * weight.transpose();
+  c.velocity_t1 = c.velocity_t0 + v_diff.value() * weight.transpose();
 
   // if use_small_ms is true, that means at t = 0 two primitives are very close
   // or is within the minimal separation already. However, to avoid the solver

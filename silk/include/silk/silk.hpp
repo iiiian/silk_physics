@@ -40,7 +40,7 @@ struct CollisionConfig {
   bool is_collision_on = true;
   bool is_self_collision_on = true;
   int group = 0;
-  float damping = 0.3f;
+  float restitution = 0.3f;
   float friction = 0.3f;
 };
 
