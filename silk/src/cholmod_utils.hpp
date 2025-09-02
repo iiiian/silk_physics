@@ -117,7 +117,9 @@ template <typename Scalar>
 cholmod_sparse make_cholmod_sparse_view(
     Eigen::SparseMatrix<Scalar, Eigen::ColMajor, int>& m,
     SymmetricStatus sym_stat = SymmetricStatus::NotSymmetric) {
-  assert(m.rows() == m.cols());
+  static_assert(
+      std::is_same_v<Scalar, float> || std::is_same_v<Scalar, double>,
+      "cholmod sparse view only accepts float/double (real) matrices");
 
   if (!m.isCompressed()) {
     m.makeCompressed();
@@ -146,6 +148,33 @@ cholmod_sparse make_cholmod_sparse_view(
   s.packed = 1;
 
   return s;
+}
+
+template <typename Derived>
+cholmod_dense make_cholmod_dense_view(Eigen::DenseBase<Derived>& M) {
+  static_assert(!Derived::IsRowMajor, "cholmod expect col major matrices");
+
+  using Scalar = typename Derived::Scalar;
+  static_assert(std::is_same_v<Scalar, float> || std::is_same_v<Scalar, double>,
+                "cholmod dense view only accepts float/double (real) matrices");
+
+  int dtype;
+  if constexpr (std::is_same_v<Scalar, float>) {
+    dtype = CHOLMOD_SINGLE;
+  } else
+    dtype = CHOLMOD_DOUBLE;
+
+  cholmod_dense d;
+  d.nrow = M.rows();
+  d.ncol = M.cols();
+  d.d = M.outerStride();
+  d.nzmax = d.d * d.ncol;
+  d.x = static_cast<void*>(M.data());
+  d.z = nullptr;
+  d.xtype = CHOLMOD_REAL;
+  d.dtype = dtype;
+
+  return d;
 }
 
 template <typename Scalar>
