@@ -110,6 +110,13 @@ bool Solver::init(Registry& registry) {
   return true;
 }
 
+void Solver::damp_state_velocity(Registry& registry) {
+  for (const auto& d : registry.get_all<SolverData>()) {
+    float decay = 1.0f - d.damping;
+    state_velocity_(Eigen::seqN(d.state_offset, d.state_num)) *= decay;
+  }
+}
+
 void Solver::compute_pin_constrain(Registry& registry, Eigen::VectorXf& rhs) {
   for (Entity& e : registry.get_all_entities()) {
     auto solver_data = registry.get<SolverData>(e);
@@ -270,6 +277,7 @@ bool Solver::step(Registry& registry, CollisionPipeline& collision_pipeline) {
     }
 
     // prediction based on linear velocity
+    damp_state_velocity(registry);
     next_state = curr_state_ + dt * state_velocity_ + (dt * dt) * acceleration;
 
     for (int inner_it = 0; inner_it < max_inner_iteration; ++inner_it) {

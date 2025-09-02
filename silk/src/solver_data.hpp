@@ -11,6 +11,9 @@ namespace silk {
 struct SolverData {
   int state_offset;
   int state_num;
+
+  float damping;
+
   Eigen::VectorXf mass;
   Eigen::SparseMatrix<float> weighted_AA;
   std::vector<std::unique_ptr<IPhysicalConstrain>> constrains;

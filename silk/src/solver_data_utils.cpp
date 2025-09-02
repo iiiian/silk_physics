@@ -204,6 +204,7 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   SolverData data;
   data.state_num = 3 * vert_num;
   data.state_offset = state_offset;
+  data.damping = c.damping;
   data.mass.resize(vert_num);
   for (int i = 0; i < vert_num; ++i) {
     data.mass(i) = config.density * voroni_mass.coeff(i, i);

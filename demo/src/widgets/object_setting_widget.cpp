@@ -200,6 +200,10 @@ void ObjectSettingWidget::draw_cloth_setting() {
   if (ImGui::InputFloat("Density", &c.density)) {
     obj.physical_config_changed = true;
   }
+
+  if (ImGui::InputFloat("Damping", &c.damping)) {
+    obj.physical_config_changed = true;
+  }
 }
 
 void ObjectSettingWidget::draw_collision_setting() {

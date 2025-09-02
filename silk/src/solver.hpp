@@ -44,6 +44,7 @@ class Solver {
   bool step(Registry& registry, CollisionPipeline& collision_pipeline);
 
  private:
+  void damp_state_velocity(Registry& registry);
   void compute_pin_constrain(Registry& registry, Eigen::VectorXf& rhs);
   void compute_barrier_constrain(Eigen::VectorXf& rhs,
                                  cholmod_raii::CholmodFactor& LC);
