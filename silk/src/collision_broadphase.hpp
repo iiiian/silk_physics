@@ -13,15 +13,57 @@
 
 namespace silk {
 
+/**
+ * Broad-phase collision detection using a KD-tree + Sweep-and-Prune (SAP).
+ *
+ * Overview
+ * - Data structure: a variable-depth KD-tree whose internal nodes store a split
+ *   plane (axis, position), and whose leaves store ranges of object proxies into
+ *   a single in-order proxy array. Each object C must expose a member `bbox` of
+ *   type `Bbox` representing its current AABB.
+ * - Update: the tree is updated in-place from the previous frame using a set of
+ *   lightweight operators inspired by Serpa & Rodrigues 2019 (KD-tree + SAP):
+ *   lift/refit, split, collapse, translate-plane, and a heuristic evaluate step
+ *   (Cost vs Balance) to decide whether to keep or rework a node. This favors
+ *   temporal coherence and avoids full rebuilds.
+ * - Query: candidate pairs are generated per node using SAP along the axis with
+ *   the largest variance of collider centers. Node–node and node–external pairs
+ *   are handled; work is parallelized with OpenMP tasks and accumulated in per-
+ *   thread caches before merging.
+ *
+ * Key invariants
+ * - `proxies_` holds all collider indices in a single array; each KDNode keeps
+ *   a half-open range [proxy_start, proxy_end) into this array. A node’s
+ *   `population` is the total number of proxies in its subtree.
+ * - Internal nodes have valid `axis` and `position` (split plane). Leaves do
+ *   not get evaluated for plane quality and are split only when their proxy
+ *   count exceeds NODE_PROXY_NUM_THRESHOLD.
+ * - `delay_offset` defers edits to child proxy ranges when lifting or moving
+ *   proxies so parent edits can be applied lazily during pre-order traversal.
+ *
+ * Notes
+ * - The evaluate() heuristic mirrors the Cost/Balance criteria from Serpa &
+ *   Rodrigues, CGF 2019, normalizing the expected number of tests under ideal
+ *   and worst splits to decide whether to keep the current plane.
+ * - `CollisionFilter` lets callers prune domain-knowledge pairs (e.g. static-
+ *   static) before AABB checks without modifying the broad-phase logic.
+ * - Callers must update each collider's `bbox` before `update()`.
+ */
+
 // C stands for collider. A collider should have member bbox of type Bbox.
 
 template <typename C>
-using CollisionCache = std::vector<std::pair<C*, C*>>;
+using CollisionCache = std::vector<std::pair<C*, C*>>;  // vector of colliding pairs
 
 template <typename C>
-using CollisionFilter = std::function<bool(const C&, const C&)>;
+using CollisionFilter = std::function<bool(const C&, const C&)>;  // return false to skip testing the pair
 
 template <typename C>
+/**
+ * Compute mean and variance of collider centers for a proxy subset.
+ * Returns pair(mean, variance) across x/y/z. Used to pick SAP axis and to
+ * translate planes toward the current distribution.
+ */
 std::pair<Eigen::Vector3f, Eigen::Vector3f> proxy_mean_variance(
     const std::vector<C>& colliders, const int* proxies, int proxy_num) {
   assert((proxy_num > 0));
@@ -41,6 +83,7 @@ std::pair<Eigen::Vector3f, Eigen::Vector3f> proxy_mean_variance(
 }
 
 template <typename C>
+/** Select SAP axis as the one with maximal center variance for the group. */
 int sap_optimal_axis(const std::vector<C>& colliders, const int* proxies,
                      int proxy_num) {
   assert((proxy_num > 0));
@@ -52,6 +95,7 @@ int sap_optimal_axis(const std::vector<C>& colliders, const int* proxies,
 }
 
 template <typename C>
+/** Select SAP axis considering two groups (bipartite), pooling variance. */
 int sap_optimal_axis(const std::vector<C>& colliders_a, const int* proxies_a,
                      int proxy_num_a, const std::vector<C>& colliders_b,
                      const int* proxies_b, int proxy_num_b) {
@@ -74,6 +118,7 @@ int sap_optimal_axis(const std::vector<C>& colliders_a, const int* proxies_a,
 }
 
 template <typename C>
+/** Sort proxies in-place by AABB min on `axis` for SAP. */
 void sap_sort_proxies(const std::vector<C>& colliders, int* proxies,
                       int proxy_num, int axis) {
   assert((proxy_num != 0));
@@ -85,6 +130,11 @@ void sap_sort_proxies(const std::vector<C>& colliders, int* proxies,
 }
 
 template <typename C>
+/**
+ * Sweep one object against a sorted list on `axis`.
+ * Early exits when intervals separate; defers narrow-phase by returning pairs
+ * of pointers to colliders; caller may run additional checks.
+ */
 void sap_sorted_collision(C& ca, std::vector<C>& colliders_b,
                           const int* proxies_b, int proxy_num_b, int axis,
                           CollisionFilter<C> filter, CollisionCache<C>& cache) {
@@ -111,6 +161,7 @@ void sap_sorted_collision(C& ca, std::vector<C>& colliders_b,
 }
 
 template <typename C>
+/** SAP within one sorted group; each pair passes through `filter`. */
 void sap_sorted_group_self_collision(std::vector<C>& colliders,
                                      const int* proxies, int proxy_num,
                                      int axis, CollisionFilter<C> filter,
@@ -125,6 +176,7 @@ void sap_sorted_group_self_collision(std::vector<C>& colliders,
 }
 
 template <typename C>
+/** Bipartite SAP between two sorted groups. */
 void sap_sorted_group_group_collision(std::vector<C>& colliders_a,
                                       const int* proxies_a, int proxy_num_a,
                                       std::vector<C>& colliders_b,
@@ -152,21 +204,25 @@ void sap_sorted_group_group_collision(std::vector<C>& colliders_a,
   }
 }
 
+/** Node of the broad-phase KD-tree. */
 struct KDNode {
+  // Tree topology pointers; tree is kept strictly binary.
   KDNode* parent = nullptr;
   KDNode* left = nullptr;
   KDNode* right = nullptr;
 
+  // Spatial bounds. `bbox` encloses the node region; `plane_bbox` encloses
+  // only the proxies attached to this node (useful when the node isn’t a leaf).
   Bbox bbox = {};
   Bbox plane_bbox = {};
   int axis = 0;           // split plane axis
-  float position = 0.0f;  // split plane position
-  int proxy_start = 0;    // proxies array start
-  int proxy_end = 0;      // proxies array end
-  int population = 0;     // subtree proxy num
-  int delay_offset = 0;   // delayed update to proxy start/end
-  int ext_start = 0;      // external collider buffer start
-  int ext_end = 0;        // external collider buffer end
+  float position = 0.0f;  // split plane position on `axis`
+  int proxy_start = 0;    // [start,end) into the global proxies_ array
+  int proxy_end = 0;      // [start,end) into the global proxies_ array
+  int population = 0;     // subtree proxy count (inclusive of descendants)
+  int delay_offset = 0;   // lazily applied delta to start/end while traversing
+  int ext_start = 0;      // external collider buffer start (buffer_ indices)
+  int ext_end = 0;        // external collider buffer end (buffer_ indices)
 
   int proxy_num() const {
     assert((proxy_end >= proxy_start));
@@ -195,6 +251,17 @@ struct TTPair {
 };
 
 template <typename C>
+/**
+ * KDTree broad-phase accelerator for colliders of type `C`.
+ *
+ * Usage
+ * - Construct, `init(colliders)`, then each frame update colliders' AABBs and
+ *   call `update(world_bbox)` followed by `test_self_collision(...)` or
+ *   `test_tree_collision(...)`.
+ * - The tree maintains an in-order proxy array to avoid per-object relocation;
+ *   internal operations work by shifting window boundaries and using delayed
+ *   offsets to propagate edits efficiently.
+ */
 class KDTree {
  private:
   static constexpr int NODE_PROXY_NUM_THRESHOLD = 1024;
@@ -263,10 +330,20 @@ class KDTree {
     local_cache_.resize(omp_get_max_threads());
   }
 
+  /** Mutable access to stored colliders (ownership kept by the tree). */
   std::vector<C>& get_colliders() { return colliders_; }
 
+  /** Read-only access to stored colliders. */
   const std::vector<C>& get_colliders() const { return colliders_; }
 
+  /**
+   * Update KD-tree structure for the current frame.
+   * - Precondition: `colliders_` AABBs are up-to-date; `root_bbox` bounds the
+   *   entire scene.
+   * - Effect: lifts out-of-bounds proxies up, then applies split/collapse/
+   *   evaluate/translate to approach an arrangement close to ideal without
+   *   rebuilding from scratch.
+   */
   void update(const Bbox& root_bbox) {
     assert(root_);
 
@@ -275,6 +352,13 @@ class KDTree {
     optimize_structure();
   }
 
+  /**
+   * Enumerate potentially colliding pairs within this tree.
+   * - Uses SAP per node on the axis of largest variance; schedules node work as
+   *   OpenMP tasks and merges per-thread caches into `cache`.
+   * - `filter` is applied before AABB checks and can skip domain-excluded
+   *   pairs (e.g. static-static in incremental mode).
+   */
   void test_self_collision(CollisionFilter<C> filter,
                            CollisionCache<C>& cache) {
     assert(root_);
@@ -317,6 +401,11 @@ class KDTree {
     }
   }
 
+  /**
+   * Enumerate potentially colliding pairs between two KD-trees.
+   * Traverses pairs of nodes and applies bipartite SAP when their bounds
+   * intersect; honors `filter` identically to `test_self_collision`.
+   */
   static void test_tree_collision(KDTree& ta, KDTree& tb,
                                   CollisionFilter<C> filter,
                                   CollisionCache<C>& cache) {
@@ -392,6 +481,7 @@ class KDTree {
     }
   }
 
+  /** Clear scratch buffers and per-thread caches (structure remains intact). */
   void delete_cache() {
     stack_ = {};
     buffer_ = {};
@@ -401,12 +491,16 @@ class KDTree {
   }
 
  private:
+  // Ensure `buffer_` can hold at least `num` integers; avoids repeated
+  // reallocations during traversal when building external collider lists.
   void ensure_buffer_size(int num) {
     if (buffer_.size() < num) {
       buffer_.resize(num);
     }
   }
 
+  // Iteratively delete a subtree (avoids recursion depth issues); uses
+  // `stack_` as scratch.
   void delete_subtree(KDNode* n) {
     if (!n) {
       return;
@@ -427,8 +521,7 @@ class KDTree {
   }
 
   // find optimal split plane based on mean and variance of bbox center.
-  // plane axis should have the max variance and the plane position is the
-  // mean.
+  // Plane axis is argmax variance of centers; position is mean on that axis.
   void find_optimal_plane(KDNode* n) const {
     assert((n->proxy_num() > 0));
 
@@ -438,6 +531,8 @@ class KDTree {
     n->position = mean(n->axis);
   }
 
+  // Partition `[proxy_start, proxy_end)` so colliders outside `n->bbox` are
+  // moved to the left; returns count moved. Used when pushing unfit proxies up.
   int partition_unfit_proxy_left(const KDNode* n) {
     auto is_outside = [n, &c = colliders_](int p) -> bool {
       return !(n->bbox.is_inside(c[p].bbox));
@@ -450,6 +545,8 @@ class KDTree {
     return new_start - start;
   }
 
+  // Partition so colliders inside `n->bbox` are moved to the left; returns the
+  // count of outside proxies (now placed at the right).
   int partition_unfit_proxy_right(const KDNode* n) {
     auto is_inside = [n, &c = colliders_](int p) -> bool {
       return n->bbox.is_inside(c[p].bbox);
@@ -462,6 +559,8 @@ class KDTree {
     return end - new_end;
   }
 
+  // Shift a proxy block left by `shift_num`, preserving relative order by
+  // staging into `buffer_`. Used when lowering left partition into a child.
   void shift_proxy_left(int proxy_start, int proxy_num, int shift_num) {
     if (proxy_num == 0 || shift_num == 0) {
       return;
@@ -481,6 +580,7 @@ class KDTree {
     std::memcpy(left, buffer_.data(), copy_size);
   }
 
+  // Shift a proxy block right by `shift_num`, preserving relative order.
   void shift_proxy_right(int proxy_start, int proxy_num, int shift_num) {
     if (proxy_num == 0 || shift_num == 0) {
       return;
@@ -500,6 +600,9 @@ class KDTree {
     std::memcpy(left + shift_num, buffer_.data(), copy_size);
   }
 
+  // Bottom-up pass: ensure each node’s proxies fit its `bbox`. Proxies that no
+  // longer fit are lifted to the parent by adjusting ranges and, when needed,
+  // shifting neighbor blocks once per node rather than per object.
   void lift_unfit_up() {
     stack_.clear();
 
@@ -571,6 +674,9 @@ class KDTree {
     }
   }
 
+  // Distribute current node proxies across left/middle/right partitions
+  // according to the split plane, updating children ranges/populations and
+  // applying delayed offsets so subtree ranges remain consistent.
   void filter(KDNode* n) {
     assert((n->left && n->right));
     assert((n->delay_offset == 0));
@@ -629,6 +735,7 @@ class KDTree {
     assert((n->proxy_end <= collider_num_));
   }
 
+  // Update children `bbox` slabs from parent `bbox` and split plane.
   static void set_children_bbox(KDNode* n) {
     assert((n->left && n->right));
 
@@ -639,6 +746,8 @@ class KDTree {
   }
 
   // find optimal split plane then split the leaf
+  // Split an oversized leaf: choose plane via mean/variance, create children,
+  // distribute proxies (filter), and set child/plane bounds.
   void split_leaf(KDNode* n) {
     assert(!(n->left || n->right));
     assert((n->proxy_num() > NODE_PROXY_NUM_THRESHOLD));
@@ -666,6 +775,8 @@ class KDTree {
   }
 
   // collapse subtree into leaf
+  // Collapse an internal subtree back into a leaf by lifting child
+  // populations and deleting the subtrees
   void collapse(KDNode* n) {
     assert((n->left && n->right));
 
@@ -681,6 +792,9 @@ class KDTree {
     n->right = nullptr;
   }
 
+  // Heuristic from Serpa & Rodrigues 2019: compare normalized expected test
+  // count (Cost) against subtree balance. Favor planes that reduce pair count
+  // while keeping reasonable balance; otherwise consider translating/collapsing.
   bool evaluate(const KDNode* n) const {
     assert((n->left && n->right));
 
@@ -724,6 +838,8 @@ class KDTree {
     return (cost <= balance);
   }
 
+  // Prepare for plane translation: temporarily pull all proxies up to `n` by
+  // editing ranges only; descendants get zero populations and reset ranges.
   void lift_subtree(KDNode* n) {
     assert((n->left && n->right));
 
@@ -773,6 +889,8 @@ class KDTree {
     }
   }
 
+  // Move split plane toward the current mean on its axis. Safer than picking a
+  // new axis; reuses existing topology and favors coherence.
   void translate(KDNode* n) {
     assert((n->proxy_num() != 0));
 
@@ -786,37 +904,7 @@ class KDTree {
     n->position = mean(n->axis);
   }
 
-  void erase(KDNode* n, bool keep_left) {
-    assert((n->left && n->right));
-    // erase only happens after translate, which will lift all proxies up to n
-    assert((n->left->population == 0));
-    assert((n->right->population == 0));
-
-    KDNode* main;
-    KDNode* other;
-    if (keep_left) {
-      main = n->left;
-      other = n->right;
-    } else {
-      main = n->right;
-      other = n->left;
-    }
-
-    main->left->delay_offset = -n->proxy_num();
-    n->left = main->left;
-    n->right = main->right;
-    n->axis = main->axis;
-    n->position = main->position;
-
-    if (!main->is_leaf()) {
-      main->left->parent = n;
-      main->right->parent = n;
-    }
-
-    delete_subtree(other);
-    delete main;
-  }
-
+  // Build `plane_bbox` by merging proxies that remain at this node.
   void set_plane_bbox(KDNode* n) {
     if (n->proxy_num() == 0) {
       return;
@@ -830,6 +918,9 @@ class KDTree {
     }
   }
 
+  // Pre-order pass that applies delayed offsets, splits oversized leaves,
+  // collapses undersized subtrees, evaluates planes, and if needed translates
+  // them. This is the idempotent structure optimization phase per frame.
   void optimize_structure() {
     stack_.clear();
 
@@ -901,6 +992,9 @@ class KDTree {
     }
   }
 
+  // Propagate parent externals and parent node proxies into the child’s
+  // external list using the parent plane. Buffer grows monotonically along the
+  // traversal; child lists reference disjoint slices of `buffer_`.
   void update_ext_collider(KDNode* n) {
     assert(n->parent);
 
@@ -949,6 +1043,8 @@ class KDTree {
     }
   }
 
+  // Run SAP at a node. If no externals, do intra-node only; otherwise also do
+  // bipartite with externals. Work is spawned as an OpenMP task.
   void test_node_collision(KDNode* n, CollisionFilter<C> filter) {
     int* proxy_start = proxies_.data() + n->proxy_start;
     int proxy_num = n->proxy_num();
