@@ -265,7 +265,9 @@ bool Solver::step(Registry& registry, CollisionPipeline& collision_pipeline) {
                                 mass_ * acceleration + pin_rhs;
 
     cholmod_raii::CholmodFactor LC;
-    compute_barrier_constrain(outer_rhs, LC);
+    if (!collisions_.empty()) {
+      compute_barrier_constrain(outer_rhs, LC);
+    }
 
     // prediction based on linear velocity
     next_state = curr_state_ + dt * state_velocity_ + (dt * dt) * acceleration;
@@ -300,7 +302,9 @@ bool Solver::step(Registry& registry, CollisionPipeline& collision_pipeline) {
       next_state = solution;
     }
 
-    enforce_barrier_constrain(next_state);
+    if (!collisions_.empty()) {
+      enforce_barrier_constrain(next_state);
+    }
 
     // full collision update
     update_all_physical_object_collider(registry, next_state, curr_state_);
