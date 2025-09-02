@@ -13,7 +13,7 @@ struct SolverData {
   int state_num;
   Eigen::VectorXf mass;
   Eigen::SparseMatrix<float> weighted_AA;
-  std::vector<std::unique_ptr<ISolverConstrain>> constrains;
+  std::vector<std::unique_ptr<IPhysicalConstrain>> constrains;
 
   // Since by default copy ctor is available and Eigen::SparseMatrix lacks
   // noexcept move ctor, we have to explicitly delete copy ctor to avoid error

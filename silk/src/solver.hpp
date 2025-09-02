@@ -36,7 +36,7 @@ class Solver {
   // Eigen::SparseMatrix<float> H_;  // use row major format for iterative
   // solver
 
-  std::vector<ISolverConstrain*> constrains_;
+  std::vector<IPhysicalConstrain*> constrains_;
   std::vector<Collision> collisions_;
 
  public:

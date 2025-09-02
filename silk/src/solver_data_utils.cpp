@@ -19,7 +19,7 @@
 
 namespace silk {
 
-class ClothElasticConstrain : public ISolverConstrain {
+class ClothElasticConstrain : public IPhysicalConstrain {
  private:
   Eigen::Matrix<float, 6, 9> jacobian_op_;
   Eigen::Vector3i index_;  // vertex indexes
@@ -126,7 +126,7 @@ SolverData make_cloth_solver_data(const ClothConfig& config,
   const ClothConfig& c = config;
   const TriMesh& m = tri_mesh;
 
-  std::vector<std::unique_ptr<ISolverConstrain>> constrains;
+  std::vector<std::unique_ptr<IPhysicalConstrain>> constrains;
   std::vector<Eigen::Triplet<float>> AA_triplets;
 
   int vert_num = m.V.rows();
