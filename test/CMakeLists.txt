@@ -1,29 +1,5 @@
 set(SILK_DIR ${CMAKE_SOURCE_DIR}/silk/src)
 
-# ccd reflection test
-add_executable(
-    ccd_reflection
-    ccd_reflection.cpp
-    ccd_test_utils.cpp
-    ${SILK_DIR}/collision_narrowphase.cpp
-)
-target_include_directories(
-    ccd_reflection
-    PRIVATE ${SILK_DIR} ${CMAKE_SOURCE_DIR}/extern/pdqsort
-)
-target_link_libraries(
-    ccd_reflection
-    PRIVATE
-        Eigen3::Eigen
-        spdlog::spdlog
-        tight_inclusion::tight_inclusion
-        OpenMP::OpenMP_CXX
-)
-target_compile_definitions(
-    ccd_reflection
-    PRIVATE SAMPLE_QUERY_ROOT="${CMAKE_SOURCE_DIR}/misc/ccd-sample-queries"
-)
-
 # sap kd tree test
 add_executable(
     sap_test
