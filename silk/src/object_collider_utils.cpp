@@ -1,5 +1,7 @@
 #include "object_collider_utils.hpp"
 
+#include <omp.h>
+
 #include <Eigen/Core>
 #include <unordered_set>
 
@@ -250,9 +252,14 @@ void update_physical_object_collider(const CollisionConfig& config,
     return vec(Eigen::seqN(offset, 3));
   };
 
+  std::vector<Bbox> thread_local_bboxes(omp_get_max_threads(), o.bbox);
+
+#pragma omp parallel for
   for (MeshCollider& mc : o.mesh_collider_tree.get_colliders()) {
     auto& p0 = mc.position_t0;
     auto& p1 = mc.position_t1;
+
+    Bbox& bbox = thread_local_bboxes[omp_get_thread_num()];
 
     switch (mc.type) {
       case MeshColliderType::Point: {
@@ -262,7 +269,7 @@ void update_physical_object_collider(const CollisionConfig& config,
         mc.bbox.min = p0.col(0).cwiseMin(p1.col(0));
         mc.bbox.max = p0.col(0).cwiseMax(p1.col(0));
         mc.bbox.pad_inplace(o.bbox_padding);
-        o.bbox.merge_inplace(mc.bbox);
+        bbox.merge_inplace(mc.bbox);
         break;
       }
       case MeshColliderType::Edge: {
@@ -279,7 +286,7 @@ void update_physical_object_collider(const CollisionConfig& config,
             p0.col(0).cwiseMax(p0.col(1)).cwiseMax(p1.col(0)).cwiseMax(
                 p1.col(1));
         mc.bbox.pad_inplace(o.bbox_padding);
-        o.bbox.merge_inplace(mc.bbox);
+        bbox.merge_inplace(mc.bbox);
         break;
       }
       case MeshColliderType::Triangle: {
@@ -295,10 +302,14 @@ void update_physical_object_collider(const CollisionConfig& config,
         mc.bbox.min = p0.rowwise().minCoeff().cwiseMin(p1.rowwise().minCoeff());
         mc.bbox.max = p0.rowwise().maxCoeff().cwiseMax(p1.rowwise().maxCoeff());
         mc.bbox.pad_inplace(o.bbox_padding);
-        o.bbox.merge_inplace(mc.bbox);
+        bbox.merge_inplace(mc.bbox);
         break;
       }
     }
+  }
+
+  for (auto& bbox : thread_local_bboxes) {
+    o.bbox.merge_inplace(bbox);
   }
 
   o.mesh_collider_tree.update(o.bbox);
