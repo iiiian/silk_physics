@@ -2,6 +2,7 @@
 
 #include <Eigen/Core>
 
+#include "cloth_solver_data.hpp"
 #include "handle.hpp"
 #include "manager.hpp"
 #include "mesh.hpp"
@@ -9,7 +10,6 @@
 #include "obstacle_position.hpp"
 #include "pin.hpp"
 #include "silk/silk.hpp"
-#include "solver_data.hpp"
 
 namespace silk {
 
@@ -21,10 +21,11 @@ inline constexpr bool always_false_v = false;
 struct Entity {
   Handle self;
   Handle cloth_config;
+  Handle cloth_static_solver_data;
+  Handle cloth_dynamic_solver_data;
   Handle collision_config;
   Handle tri_mesh;
   Handle pin;
-  Handle solver_data;
   Handle obstacle_position;
   Handle object_collider;
 };
@@ -46,7 +47,8 @@ class Registry {
   Manager<CollisionConfig> collision_config;
   Manager<TriMesh> tri_mesh;
   Manager<Pin> pin;
-  Manager<SolverData> solver_data;
+  Manager<ClothStaticSolverData> cloth_static_solver_data;
+  Manager<ClothDynamicSolverData> cloth_dynamic_solver_data;
   Manager<ObstaclePosition> obstacle_position;
   Manager<ObjectCollider> object_collider;
 
@@ -166,7 +168,8 @@ class Registry {
     remove<CollisionConfig>(entity);
     remove<TriMesh>(entity);
     remove<Pin>(entity);
-    remove<SolverData>(entity);
+    remove<ClothStaticSolverData>(entity);
+    remove<ClothDynamicSolverData>(entity);
     remove<ObstaclePosition>(entity);
     remove<ObjectCollider>(entity);
     this->entity.remove(entity_handle);
@@ -189,7 +192,8 @@ class Registry {
     collision_config.clear();
     tri_mesh.clear();
     pin.clear();
-    solver_data.clear();
+    cloth_static_solver_data.clear();
+    cloth_dynamic_solver_data.clear();
     obstacle_position.clear();
     object_collider.clear();
   }
@@ -206,7 +210,9 @@ ECS_SPECIALIZE_COMPONENT_TRAIT(ClothConfig, cloth_config)
 ECS_SPECIALIZE_COMPONENT_TRAIT(CollisionConfig, collision_config)
 ECS_SPECIALIZE_COMPONENT_TRAIT(TriMesh, tri_mesh)
 ECS_SPECIALIZE_COMPONENT_TRAIT(Pin, pin)
-ECS_SPECIALIZE_COMPONENT_TRAIT(SolverData, solver_data)
+ECS_SPECIALIZE_COMPONENT_TRAIT(ClothStaticSolverData, cloth_static_solver_data)
+ECS_SPECIALIZE_COMPONENT_TRAIT(ClothDynamicSolverData,
+                               cloth_dynamic_solver_data)
 ECS_SPECIALIZE_COMPONENT_TRAIT(ObstaclePosition, obstacle_position)
 ECS_SPECIALIZE_COMPONENT_TRAIT(ObjectCollider, object_collider)
 

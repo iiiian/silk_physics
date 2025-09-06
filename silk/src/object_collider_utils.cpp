@@ -5,20 +5,19 @@
 #include <Eigen/Core>
 #include <unordered_set>
 
+#include "cloth_solver_data.hpp"
+#include "handle.hpp"
 #include "mesh.hpp"
 #include "pin.hpp"
 #include "silk/silk.hpp"
-#include "solver_data.hpp"
 
 namespace silk {
 
-ObjectCollider make_physical_object_collider(const CollisionConfig& config,
-                                             const TriMesh& tri_mesh,
-                                             const Pin& pin,
-                                             const SolverData& solver_data) {
+ObjectCollider make_physical_object_collider(
+    Handle entity, const CollisionConfig& config, const TriMesh& mesh,
+    const Pin& pin, const Eigen::VectorXf& mass, int solver_offset) {
   const CollisionConfig& c = config;
-  const TriMesh& m = tri_mesh;
-  const Eigen::VectorXf& mass = solver_data.mass;
+  const TriMesh& m = mesh;
 
   std::unordered_set<int> pin_set(pin.index.begin(), pin.index.end());
   auto is_pinned = [&pin_set](int index) -> bool {
@@ -26,11 +25,13 @@ ObjectCollider make_physical_object_collider(const CollisionConfig& config,
   };
 
   ObjectCollider o;
+  o.entity = entity;
+  o.solver_offset = solver_offset;
   o.bbox = Bbox{Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero()};
   // group -1 means collision is disabled
   o.group = (c.is_collision_on) ? c.group : -1;
   o.is_static = false;
-  o.solver_offset = solver_data.state_offset;
+  o.is_obstacle = false;
   o.is_self_collision_on = c.is_self_collision_on;
   o.bbox_padding = 0.05f * m.avg_edge_length;
   o.restitution = config.restitution;
@@ -109,17 +110,20 @@ ObjectCollider make_physical_object_collider(const CollisionConfig& config,
   return o;
 }
 
-ObjectCollider make_obstacle_object_collider(const CollisionConfig& config,
-                                             const TriMesh& tri_mesh) {
+ObjectCollider make_obstacle_object_collider(Handle entity,
+                                             const CollisionConfig& config,
+                                             const TriMesh& mesh) {
   const CollisionConfig& c = config;
-  const TriMesh& m = tri_mesh;
+  const TriMesh& m = mesh;
 
   ObjectCollider o;
+  o.entity = entity;
+  o.solver_offset = -1;
   o.bbox = Bbox{Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero()};
   // group -1 means collision is disabled
   o.group = (c.is_collision_on) ? c.group : -1;
   o.is_static = false;
-  o.solver_offset = -1;
+  o.is_obstacle = true;
   o.is_self_collision_on = c.is_self_collision_on;
   // o.bbox_padding = 0.05f * m.avg_edge_length;
   o.bbox_padding = 1e-6f;
@@ -205,42 +209,45 @@ void init_all_object_collider(Registry& registry) {
     auto collision_config = registry.get<CollisionConfig>(e);
     auto tri_mesh = registry.get<TriMesh>(e);
     auto pin = registry.get<Pin>(e);
-    auto solver_data = registry.get<SolverData>(e);
+    auto cloth_static_solver_data = registry.get<ClothStaticSolverData>(e);
+    auto cloth_dynamic_solver_data = registry.get<ClothDynamicSolverData>(e);
     auto object_collider = registry.get<ObjectCollider>(e);
 
     if (object_collider) {
       continue;
     }
 
-    if (collision_config && tri_mesh && pin && solver_data) {
+    if (collision_config && tri_mesh && pin && cloth_static_solver_data) {
       registry.set<ObjectCollider>(
-          e, make_physical_object_collider(*collision_config, *tri_mesh, *pin,
-                                           *solver_data));
+          e, make_physical_object_collider(
+                 e.self, *collision_config, *tri_mesh, *pin,
+                 cloth_static_solver_data->mass,
+                 cloth_dynamic_solver_data->state_offset));
       continue;
     };
 
     if (collision_config && tri_mesh) {
       registry.set<ObjectCollider>(
-          e, make_obstacle_object_collider(*collision_config, *tri_mesh));
+          e,
+          make_obstacle_object_collider(e.self, *collision_config, *tri_mesh));
       continue;
     }
   }
 }
 
 void update_physical_object_collider(const CollisionConfig& config,
-                                     const SolverData& solver_data,
                                      const Eigen::VectorXf& solver_state,
                                      const Eigen::VectorXf& prev_solver_state,
+                                     int solver_offset,
                                      ObjectCollider& object_collider) {
-  ObjectCollider& o = object_collider;
-  const CollisionConfig& c = config;
+  auto& o = object_collider;
+  auto& c = config;
 
   // init bbox to the position of the first vertex
-  o.bbox.min = solver_state(Eigen::seqN(solver_data.state_offset, 3));
-  o.bbox.max = solver_state(Eigen::seqN(solver_data.state_offset, 3));
+  o.bbox.min = solver_state(Eigen::seqN(solver_offset, 3));
+  o.bbox.max = solver_state(Eigen::seqN(solver_offset, 3));
 
   o.group = (c.is_collision_on) ? c.group : -1;
-  o.solver_offset = solver_data.state_offset;
   o.is_self_collision_on = c.is_self_collision_on;
   o.restitution = config.restitution;
   o.friction = config.friction;
@@ -263,7 +270,7 @@ void update_physical_object_collider(const CollisionConfig& config,
 
     switch (mc.type) {
       case MeshColliderType::Point: {
-        int o0 = solver_data.state_offset + 3 * mc.index(0);
+        int o0 = solver_offset + 3 * mc.index(0);
         p0.col(0) = get_vertex(prev_solver_state, o0);
         p1.col(0) = get_vertex(solver_state, o0);
         mc.bbox.min = p0.col(0).cwiseMin(p1.col(0));
@@ -273,8 +280,8 @@ void update_physical_object_collider(const CollisionConfig& config,
         break;
       }
       case MeshColliderType::Edge: {
-        int o0 = solver_data.state_offset + 3 * mc.index(0);
-        int o1 = solver_data.state_offset + 3 * mc.index(1);
+        int o0 = solver_offset + 3 * mc.index(0);
+        int o1 = solver_offset + 3 * mc.index(1);
         p0.col(0) = get_vertex(prev_solver_state, o0);
         p0.col(1) = get_vertex(prev_solver_state, o1);
         p1.col(0) = get_vertex(solver_state, o0);
@@ -290,9 +297,9 @@ void update_physical_object_collider(const CollisionConfig& config,
         break;
       }
       case MeshColliderType::Triangle: {
-        int o0 = solver_data.state_offset + 3 * mc.index(0);
-        int o1 = solver_data.state_offset + 3 * mc.index(1);
-        int o2 = solver_data.state_offset + 3 * mc.index(2);
+        int o0 = solver_offset + 3 * mc.index(0);
+        int o1 = solver_offset + 3 * mc.index(1);
+        int o2 = solver_offset + 3 * mc.index(2);
         p0.col(0) = get_vertex(prev_solver_state, o0);
         p0.col(1) = get_vertex(prev_solver_state, o1);
         p0.col(2) = get_vertex(prev_solver_state, o2);
@@ -322,13 +329,14 @@ void update_all_physical_object_collider(
     auto collision_config = registry.get<CollisionConfig>(e);
     auto tri_mesh = registry.get<TriMesh>(e);
     auto pin = registry.get<Pin>(e);
-    auto solver_data = registry.get<SolverData>(e);
+    auto cloth_dynamic_solver_data = registry.get<ClothDynamicSolverData>(e);
     auto object_collider = registry.get<ObjectCollider>(e);
 
-    if (collision_config && tri_mesh && pin && solver_data && object_collider) {
-      update_physical_object_collider(*collision_config, *solver_data,
-                                      solver_state, prev_solver_state,
-                                      *object_collider);
+    if (collision_config && tri_mesh && pin && cloth_dynamic_solver_data &&
+        object_collider) {
+      update_physical_object_collider(
+          *collision_config, solver_state, prev_solver_state,
+          cloth_dynamic_solver_data->state_offset, *object_collider);
       continue;
     };
   }

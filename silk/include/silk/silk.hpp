@@ -56,7 +56,6 @@ struct GlobalConfig {
   float acceleration_y = 0.0f;
   float acceleration_z = -10.0f;
   int max_iteration = 5;
-  int r = 30;
   float dt = 1.0f / 60.0f;
   float ccd_walkback = 0.8f;
   float toi_tolerance = 0.1f;

@@ -3,6 +3,8 @@
 # -------------------------------------------------
 
 file(GLOB SILK_SOURCES "src/*.cpp")
+file(GLOB SILK_SOURCES_ALT "src/solver/*.cpp")
+list(APPEND SILK_SOURCES ${SILK_SOURCES_ALT})
 
 add_library(silk ${SILK_SOURCES})
 add_library(silk::silk ALIAS silk)

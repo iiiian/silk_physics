@@ -17,8 +17,6 @@ void SimSettingWidget::draw() {
 
     ImGui::InputInt("Max Solver Iterations", &ctx_.global_config.max_iteration);
 
-    ImGui::InputInt("Low Freqency Mode Num", &ctx_.global_config.r);
-
     ImGui::InputFloat("CCD Walkback", &ctx_.global_config.ccd_walkback);
 
     ImGui::InputFloat("TOI Tolerance", &ctx_.global_config.toi_tolerance);

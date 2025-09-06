@@ -4,32 +4,32 @@
 #include <Eigen/SparseCore>
 #include <vector>
 
-#include "symmetric_status.hpp"
+#include "symmetry.hpp"
 
 namespace silk {
 
 template <typename Scalar>
-void append_triplets_from_sparse(
-    const Eigen::SparseMatrix<Scalar>& m, int row_offset, int col_offset,
-    std::vector<Eigen::Triplet<Scalar>>& triplets,
-    SymmetricStatus sym_stat = SymmetricStatus::NotSymmetric) {
+void append_triplets_from_sparse(const Eigen::SparseMatrix<Scalar>& m,
+                                 int row_offset, int col_offset, Scalar scaling,
+                                 std::vector<Eigen::Triplet<Scalar>>& triplets,
+                                 Symmetry sym_stat = Symmetry::NotSymmetric) {
   assert((m.rows() == m.cols()));
 
   using Iter = typename Eigen::SparseMatrix<Scalar>::InnerIterator;
   for (int i = 0; i < m.outerSize(); ++i) {
     for (Iter it(m, i); it; ++it) {  // it++ doesn't work
-      if (sym_stat == SymmetricStatus::LowerTriangular) {
+      if (sym_stat == Symmetry::Lower) {
         if (it.row() < it.col()) {
           continue;
         }
-      } else if (sym_stat == SymmetricStatus::UpperTriangular) {
+      } else if (sym_stat == Symmetry::Upper) {
         if (it.row() > it.col()) {
           continue;
         }
       }
 
       triplets.emplace_back(row_offset + it.row(), col_offset + it.col(),
-                            it.value());
+                            scaling * it.value());
     }
   }
 }
@@ -37,15 +37,27 @@ void append_triplets_from_sparse(
 template <typename Scalar>
 void append_triplets_from_vectorized_sparse(
     const Eigen::SparseMatrix<Scalar>& m, int row_offset, int col_offset,
-    std::vector<Eigen::Triplet<Scalar>>& triplets) {
+    Scalar scaling, std::vector<Eigen::Triplet<Scalar>>& triplets,
+    Symmetry sym_stat = Symmetry::NotSymmetric) {
   using Iter = typename Eigen::SparseMatrix<Scalar>::InnerIterator;
   for (int i = 0; i < m.outerSize(); ++i) {
     for (Iter it(m, i); it; ++it) {
+      if (sym_stat == Symmetry::Lower) {
+        if (it.row() < it.col()) {
+          continue;
+        }
+      } else if (sym_stat == Symmetry::Upper) {
+        if (it.row() > it.col()) {
+          continue;
+        }
+      }
+
       int base_row = row_offset + 3 * it.row();
       int base_col = col_offset + 3 * it.col();
-      triplets.emplace_back(base_row, base_col, it.value());
-      triplets.emplace_back(base_row + 1, base_col + 1, it.value());
-      triplets.emplace_back(base_row + 2, base_col + 2, it.value());
+      Scalar val = scaling * it.value();
+      triplets.emplace_back(base_row, base_col, val);
+      triplets.emplace_back(base_row + 1, base_col + 1, val);
+      triplets.emplace_back(base_row + 2, base_col + 2, val);
     }
   }
 }

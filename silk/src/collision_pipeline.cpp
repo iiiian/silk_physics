@@ -98,7 +98,11 @@ std::vector<Collision> CollisionPipeline::find_collision(
       object_colliders, object_proxies.data(), object_proxies.size(), axis,
       object_collision_filter, object_ccache);
 
-  for (auto& [oa, ob] : object_ccache) {
+  for (auto& ccache : object_ccache) {
+    // manually unpack ccache because openMP capture structral binding
+    auto& oa = ccache.first;
+    auto& ob = ccache.second;
+
     // step 2. mesh collider broadphase using kd tree
     mesh_ccache.clear();
     KDTree<MeshCollider>::test_tree_collision(

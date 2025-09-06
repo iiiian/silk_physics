@@ -2,12 +2,16 @@
 
 #include <Eigen/Core>
 
+#include "handle.hpp"
+
 namespace silk {
 
 enum class CollisionType { PointTriangle, EdgeEdge };
 
 struct Collision {
   CollisionType type;
+  Handle entity_a;
+  Handle entity_b;
   float toi;
   float minimal_separation;
   // collision constrain stiffness
