@@ -18,9 +18,9 @@ namespace silk {
  *
  * Overview
  * - Data structure: a variable-depth KD-tree whose internal nodes store a split
- *   plane (axis, position), and whose leaves store ranges of object proxies into
- *   a single in-order proxy array. Each object C must expose a member `bbox` of
- *   type `Bbox` representing its current AABB.
+ *   plane (axis, position), and whose leaves store ranges of object proxies
+ * into a single in-order proxy array. Each object C must expose a member `bbox`
+ * of type `Bbox` representing its current AABB.
  * - Update: the tree is updated in-place from the previous frame using a set of
  *   lightweight operators inspired by Serpa & Rodrigues 2019 (KD-tree + SAP):
  *   lift/refit, split, collapse, translate-plane, and a heuristic evaluate step
@@ -53,10 +53,12 @@ namespace silk {
 // C stands for collider. A collider should have member bbox of type Bbox.
 
 template <typename C>
-using CollisionCache = std::vector<std::pair<C*, C*>>;  // vector of colliding pairs
+using CollisionCache =
+    std::vector<std::pair<C*, C*>>;  // vector of colliding pairs
 
 template <typename C>
-using CollisionFilter = std::function<bool(const C&, const C&)>;  // return false to skip testing the pair
+using CollisionFilter = std::function<bool(
+    const C&, const C&)>;  // return false to skip testing the pair
 
 template <typename C>
 /**
@@ -794,7 +796,8 @@ class KDTree {
 
   // Heuristic from Serpa & Rodrigues 2019: compare normalized expected test
   // count (Cost) against subtree balance. Favor planes that reduce pair count
-  // while keeping reasonable balance; otherwise consider translating/collapsing.
+  // while keeping reasonable balance; otherwise consider
+  // translating/collapsing.
   bool evaluate(const KDNode* n) const {
     assert((n->left && n->right));
 
