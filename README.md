@@ -7,12 +7,17 @@ WIP C++17 physics engine with
 
 ## Quick start
 
-### Prerequisite
+### Prerequisites
 
-- a c++17 compiler (gcc >= 9.1, clang >= 7.0, or msvc >= VS 2019)
-- `cmake` and a generator like `make` or `ninja`
-- `git`
-- BLAS and LAPCK. I recommend [OpenBlas](https://github.com/OpenMathLib/OpenBLAS) for ease of install.
+- C++17 compiler and OpenMP
+  - GCC >= 9 (Linux/MinGW)
+  - Clang/AppleClang >= 10 (AppleClang >= 12 on macOS)
+  - Windows: one of
+    - MSVC (Visual Studio 2022) 17.2+ / MSVC 19.32+ with `/openmp:llvm`
+    - or clang-cl >= 12 with LLVM OpenMP runtime
+- CMake >= 3.24 and a build tool (e.g., Ninja or Make)
+- Git
+- BLAS and LAPACK (OpenBLAS recommended for simplicity)
 
 ### Installing BLAS and LAPACK
 
@@ -33,7 +38,12 @@ brew install openblas
 
 #### Windows
 
-WIP
+- Recommended: clang-cl + LLVM OpenMP
+  - Install LLVM (adds clang-cl and libomp).
+  - Configure with: `cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl`
+- MSVC backend (OpenMP 3.1 features, incl. tasks):
+  - Requires Visual Studio 2022 17.2+.
+  - Project enables `/openmp:llvm` automatically; no extra flags needed.
 
 ### Build and run the demo
 

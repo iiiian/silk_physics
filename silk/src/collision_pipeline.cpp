@@ -111,7 +111,11 @@ std::vector<Collision> CollisionPipeline::find_collision(
 
 // step 3. mesh collider narrowphase using ccd
 #pragma omp parallel for
-    for (auto& [ma, mb] : mesh_ccache) {
+    for (int i = 0; i < mesh_ccache.size(); ++i) {
+      auto& pair = mesh_ccache[i];
+      auto* ma = pair.first;
+      auto* mb = pair.second;
+
       auto collision = narrow_phase(
           *oa, *ma, *ob, *mb, dt, collision_stiffness_base, min_toi,
           ccd_tolerance, ccd_max_iter, scene_ee_err_, scene_vf_err_);
@@ -138,7 +142,11 @@ std::vector<Collision> CollisionPipeline::find_collision(
                                              mesh_ccache);
 
 #pragma omp parallel for
-    for (auto& [ma, mb] : mesh_ccache) {
+    for (int i = 0; i < mesh_ccache.size(); ++i) {
+      auto& pair = mesh_ccache[i];
+      auto* ma = pair.first;
+      auto* mb = pair.second;
+
       // step 2. mesh collider narrowphase using ccd
       auto collision = narrow_phase(
           o, *ma, o, *mb, dt, collision_stiffness_base, min_toi, ccd_tolerance,

@@ -214,8 +214,10 @@ void update_physical_object_collider(
   o.bbox = Bbox{curr_state(Eigen::seqN(0, 3)), curr_state(Eigen::seqN(0, 3))};
   std::vector<Bbox> thread_local_bboxes(omp_get_max_threads(), o.bbox);
 
+  auto& colliders = o.mesh_collider_tree.get_colliders();
 #pragma omp parallel for
-  for (MeshCollider& mc : o.mesh_collider_tree.get_colliders()) {
+  for (int i = 0; i < colliders.size(); ++i) {
+    MeshCollider& mc = colliders[i];
     auto& p0 = mc.position_t0;
     auto& p1 = mc.position_t1;
 
@@ -312,8 +314,11 @@ void update_obstacle_object_collider(const CollisionConfig& config,
   o.bbox = Bbox{p.position(Eigen::seqN(0, 3)), p.position(Eigen::seqN(0, 3))};
   std::vector<Bbox> thread_local_bboxes(omp_get_max_threads(), o.bbox);
 
+  auto& colliders = o.mesh_collider_tree.get_colliders();
+
 #pragma omp parallel for
-  for (MeshCollider& mc : o.mesh_collider_tree.get_colliders()) {
+  for (int i = 0; i < colliders.size(); ++i) {
+    MeshCollider& mc = colliders[i];
     auto& p0 = mc.position_t0;
     auto& p1 = mc.position_t1;
 
