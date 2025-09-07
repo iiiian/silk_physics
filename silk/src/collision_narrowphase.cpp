@@ -143,7 +143,7 @@ std::optional<Collision> point_triangle_collision(
   // min_toi. Likewise, even if ccd does not use small ms, we will make sure toi
   // is larger than min_toi.
   if (ccd_result->use_small_ms || toi < min_toi) {
-    c.toi = 0.05f;
+    c.toi = min_toi;
     c.use_small_ms = true;
   } else {
     c.toi = toi;
@@ -275,8 +275,8 @@ std::optional<Collision> edge_edge_collision(
   // stucking infinitively because of zero toi, we enfore a very small toi
   // min_toi. Likewise, even if ccd does not use small ms, we will make sure toi
   // is larger than min_toi.
-  if (ccd_result->use_small_ms || toi < 0.05f) {
-    c.toi = 0.05f;
+  if (ccd_result->use_small_ms || toi < min_toi) {
+    c.toi = min_toi;
     c.use_small_ms = true;
   } else {
     c.toi = toi;
