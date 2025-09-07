@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.28)
 project(silk CXX Fortran)
 set(CMAKE_CXX_STANDARD 17)
 
-find_package(OpenMP REQUIRED)
+find_package(OpenMP REQUIRED 5.0)
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
 

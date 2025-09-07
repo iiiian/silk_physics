@@ -22,7 +22,7 @@ bool object_collision_filter(const ObjectCollider& a, const ObjectCollider& b) {
   // if groups are different, a and b does not collide.
   // if both a and b are pure obstacle, collision is meaningless.
   return (a.group != -1 && b.group != -1 && a.group == b.group &&
-          !(a.solver_offset == -1 && b.solver_offset == -1));
+          !(a.state_offset == -1 && b.state_offset == -1));
 };
 
 // for mesh collision between objects.
@@ -98,7 +98,11 @@ std::vector<Collision> CollisionPipeline::find_collision(
       object_colliders, object_proxies.data(), object_proxies.size(), axis,
       object_collision_filter, object_ccache);
 
-  for (auto& [oa, ob] : object_ccache) {
+  for (auto& ccache : object_ccache) {
+    // manually unpack ccache because openMP capture structral binding
+    auto& oa = ccache.first;
+    auto& ob = ccache.second;
+
     // step 2. mesh collider broadphase using kd tree
     mesh_ccache.clear();
     KDTree<MeshCollider>::test_tree_collision(
@@ -124,7 +128,7 @@ std::vector<Collision> CollisionPipeline::find_collision(
   // 2. mesh collider narrowphase using ccd
   for (auto& o : object_colliders) {
     // skip if object is pure obstacle or self collision is off
-    if (o.solver_offset == -1 || !o.is_self_collision_on) {
+    if (o.state_offset == -1 || !o.is_self_collision_on) {
       continue;
     }
 

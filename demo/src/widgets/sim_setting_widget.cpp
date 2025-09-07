@@ -15,18 +15,10 @@ void SimSettingWidget::draw() {
     ImGui::InputFloat("Acceleration (Y)", &ctx_.global_config.acceleration_y);
     ImGui::InputFloat("Acceleration (Z)", &ctx_.global_config.acceleration_z);
 
-    ImGui::InputInt("Max Solver Iterations", &ctx_.global_config.max_iteration);
-
-    ImGui::InputInt("Low Freqency Mode Num", &ctx_.global_config.r);
-
-    ImGui::InputFloat("CCD Walkback", &ctx_.global_config.ccd_walkback);
-
-    ImGui::InputFloat("TOI Tolerance", &ctx_.global_config.toi_tolerance);
-
-    ImGui::InputInt("TOI Refine Iterations",
-                    &ctx_.global_config.toi_refine_iteration);
-
-    ImGui::InputFloat("Eps", &ctx_.global_config.eps);
+    ImGui::InputInt("Max Solver Outer Iterations",
+                    &ctx_.global_config.max_outer_iteration);
+    ImGui::InputInt("Max Solver Inner Iterations",
+                    &ctx_.global_config.max_inner_iteration);
   }
 
   ImGui::EndDisabled();

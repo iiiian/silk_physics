@@ -4,9 +4,11 @@
 #include <cassert>
 #include <cstring>
 
+#include "cloth_solver_data.hpp"
 #include "collision_pipeline.hpp"
 #include "ecs.hpp"
-#include "solver.hpp"
+#include "solver/solver_pipeline.hpp"
+#include "solver_state.hpp"
 
 namespace silk {
 
@@ -24,15 +26,14 @@ std::string to_string(Result result) {
     case Result::InvalidHandle: {
       return "InvalidHandle";
     }
-
     case Result::IncorrectPinNum: {
       return "IncorrectPinNum";
     }
     case Result::IncorrectPositionNum: {
       return "IncorrectPositionNum";
     }
-    case Result::EigenDecompositionFail: {
-      return "EigenDecompositionFail";
+    case Result::CholeskyDecompositionFail: {
+      return "CholeskyDecompositionFail";
     }
     case Result::NeedInitSolverFirst: {
       return "NeedInitSolverFirst";
@@ -50,7 +51,7 @@ class World::WorldImpl {
  private:
   bool is_solver_init = false;
   Registry registry_;
-  Solver solver_;
+  SolverPipeline solver_pipeline_;
   CollisionPipeline collision_pipeline_;
 
  public:
@@ -59,28 +60,26 @@ class World::WorldImpl {
     is_solver_init = false;
 
     auto& c = config;
-    solver_.const_acceleration = {c.acceleration_x, c.acceleration_y,
-                                  c.acceleration_z};
+    solver_pipeline_.const_acceleration = {c.acceleration_x, c.acceleration_y,
+                                           c.acceleration_z};
     // solver_.max_inner_iteration = c.max_iteration;
-    solver_.r = c.r;
-    solver_.dt = c.dt;
-    collision_pipeline_.toi_tolerance = c.toi_tolerance;
-    // collision_pipeline_.toi_refine_it = c.toi_refine_iteration;
-    collision_pipeline_.eps = c.eps;
+    solver_pipeline_.dt = c.dt;
+    solver_pipeline_.max_outer_iteration = c.max_outer_iteration;
+    solver_pipeline_.max_inner_iteration = c.max_inner_iteration;
 
     return Result::Success;
   }
 
   void clear() {
     is_solver_init = false;
-    solver_.clear();
+    solver_pipeline_.clear(registry_);
     registry_.clear();
   }
 
   // Solver API
   Result solver_init() {
-    if (!solver_.init(registry_)) {
-      return Result::EigenDecompositionFail;
+    if (!solver_pipeline_.init(registry_)) {
+      return Result::CholeskyDecompositionFail;
     }
     is_solver_init = true;
     return Result::Success;
@@ -91,12 +90,17 @@ class World::WorldImpl {
       return Result::NeedInitSolverFirst;
     }
 
-    solver_.step(registry_, collision_pipeline_);
+    solver_pipeline_.step(registry_, collision_pipeline_);
 
     for (Entity& e : registry_.get_all_entities()) {
       auto obstacle_position = registry_.get<ObstaclePosition>(e);
-      if (obstacle_position) {
-        obstacle_position->prev_position = {};
+      if (!obstacle_position) {
+        continue;
+      }
+
+      if (obstacle_position->position.size() != 0) {
+        std::swap(obstacle_position->position,
+                  obstacle_position->prev_position);
         obstacle_position->is_static = true;
       }
     }
@@ -108,7 +112,7 @@ class World::WorldImpl {
     if (!is_solver_init) {
       return Result::NeedInitSolverFirst;
     }
-    solver_.reset();
+    solver_pipeline_.reset(registry_);
     return Result::Success;
   }
 
@@ -118,11 +122,11 @@ class World::WorldImpl {
                    uint32_t& handle) {
     // make tri mesh
     TriMesh m;
-    m.V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
-                                      mesh_config.verts.num / 3, 3);
+    m.V = Eigen::Map<const RMatrixX3f>(mesh_config.verts.data,
+                                       mesh_config.verts.num / 3, 3);
     assert((mesh_config.faces.num != 0));
-    m.F = Eigen::Map<const RMatrix3i>(mesh_config.faces.data,
-                                      mesh_config.faces.num / 3, 3);
+    m.F = Eigen::Map<const RMatrixX3i>(mesh_config.faces.data,
+                                       mesh_config.faces.num / 3, 3);
     igl::edges(m.F, m.E);
     m.avg_edge_length = 0.0f;
     for (int i = 0; i < m.E.rows(); ++i) {
@@ -179,38 +183,29 @@ class World::WorldImpl {
       return Result::InvalidHandle;
     }
 
-    auto cloth_config = registry_.get<ClothConfig>(*e);
-    if (!cloth_config) {
-      return Result::InvalidHandle;
-    }
-
-    if (is_solver_init) {
-      auto solver_data = registry_.get<SolverData>(*e);
-      assert(solver_data);
-
-      if (position.num < solver_data->state_num) {
+    auto solver_state = registry_.get<SolverState>(e);
+    if (solver_state) {
+      if (position.num < solver_state->state_num) {
         return Result::IncorrectPositionNum;
       }
 
-      auto solver_state = solver_.get_solver_state();
-      assert((solver_state.size() >=
-              solver_data->state_offset + solver_data->state_num));
-
-      memcpy(position.data, solver_state.data() + solver_data->state_offset,
-             solver_data->state_num * sizeof(float));
+      memcpy(position.data, solver_state->curr_state.data(),
+             solver_state->state_num * sizeof(float));
       return Result::Success;
-    } else {
-      auto mesh = registry_.get<TriMesh>(*e);
-      assert(mesh);
+    }
 
-      if (position.num < 3 * mesh->V.rows()) {
+    auto mesh = registry_.get<TriMesh>(e);
+    if (mesh) {
+      int state_num = 3 * mesh->V.rows();
+      if (position.num != state_num) {
         return Result::IncorrectPositionNum;
       }
 
-      memcpy(position.data, mesh->V.data(), 3 * mesh->V.rows() * sizeof(float));
+      memcpy(position.data, mesh->V.data(), state_num * sizeof(float));
+      return Result::Success;
     }
 
-    return Result::Success;
+    return Result::InvalidHandle;
   }
 
   Result set_cloth_config(uint32_t handle, ClothConfig config) {
@@ -228,7 +223,7 @@ class World::WorldImpl {
     *cloth_config = config;
 
     // remove outdated components
-    registry_.remove<SolverData>(*e);
+    registry_.remove<ClothDynamicSolverData>(*e);
     registry_.remove<ObjectCollider>(*e);
 
     return Result::Success;
@@ -249,52 +244,6 @@ class World::WorldImpl {
     assert(collision_config);
 
     *collision_config = config;
-    return Result::Success;
-  }
-
-  Result set_cloth_mesh_config(uint32_t handle, MeshConfig mesh_config,
-                               ConstSpan<int> pin_index) {
-    Entity* e = registry_.get_entity(handle);
-    if (!e) {
-      return Result::InvalidHandle;
-    }
-
-    auto cloth_config = registry_.get<ClothConfig>(*e);
-    if (!cloth_config) {
-      return Result::InvalidHandle;
-    }
-
-    auto m = registry_.get<TriMesh>(*e);
-    auto p = registry_.get<Pin>(*e);
-    assert(m);
-    assert(p);
-
-    // make tri mesh
-    m->V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
-                                       mesh_config.verts.num / 3, 3);
-    m->F = Eigen::Map<const RMatrix3i>(mesh_config.faces.data,
-                                       mesh_config.faces.num / 3, 3);
-    igl::edges(m->F, m->E);
-    m->avg_edge_length = 0.0f;
-    for (int i = 0; i < m->E.rows(); ++i) {
-      m->avg_edge_length +=
-          (m->V.row(m->E(i, 0)) - m->V.row(m->E(i, 1))).norm();
-    }
-    m->avg_edge_length /= m->E.rows();
-
-    // make pin
-    if (pin_index.data != nullptr && pin_index.num != 0) {
-      p->index =
-          Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.num);
-      p->position.resize(3 * p->index.size());
-      for (int i = 0; i < p->index.size(); ++i) {
-        p->position(Eigen::seqN(3 * i, 3)) = m->V.row(p->index(i));
-      }
-    } else {
-      p = {};
-    }
-
-    is_solver_init = false;
     return Result::Success;
   }
 
@@ -330,7 +279,7 @@ class World::WorldImpl {
     }
 
     // remove outdated components
-    registry_.remove<SolverData>(*e);
+    registry_.remove<ClothDynamicSolverData>(*e);
     registry_.remove<ObjectCollider>(*e);
 
     return Result::Success;
@@ -365,10 +314,10 @@ class World::WorldImpl {
                       uint32_t& handle) {
     // make tri mesh
     TriMesh m;
-    m.V = Eigen::Map<const RMatrix3f>(mesh_config.verts.data,
-                                      mesh_config.verts.num / 3, 3);
-    m.F = Eigen::Map<const RMatrix3i>(mesh_config.faces.data,
-                                      mesh_config.faces.num / 3, 3);
+    m.V = Eigen::Map<const RMatrixX3f>(mesh_config.verts.data,
+                                       mesh_config.verts.num / 3, 3);
+    m.F = Eigen::Map<const RMatrixX3i>(mesh_config.faces.data,
+                                       mesh_config.faces.num / 3, 3);
     igl::edges(m.F, m.E);
     m.avg_edge_length = 0.0f;
     for (int i = 0; i < m.E.rows(); ++i) {
@@ -442,10 +391,10 @@ class World::WorldImpl {
     auto m = registry_.get<TriMesh>(*e);
     assert(m);
 
-    m->V =
-        Eigen::Map<const RMatrix3f>(config.verts.data, config.verts.num / 3, 3);
-    m->F =
-        Eigen::Map<const RMatrix3i>(config.faces.data, config.faces.num / 3, 3);
+    m->V = Eigen::Map<const RMatrixX3f>(config.verts.data, config.verts.num / 3,
+                                        3);
+    m->F = Eigen::Map<const RMatrixX3i>(config.faces.data, config.faces.num / 3,
+                                        3);
     igl::edges(m->F, m->E);
     m->avg_edge_length = 0.0f;
     for (int i = 0; i < m->E.rows(); ++i) {
@@ -516,11 +465,6 @@ Result World::set_cloth_config(uint32_t handle, ClothConfig config) {
 Result World::set_cloth_collision_config(uint32_t handle,
                                          CollisionConfig config) {
   return impl_->set_cloth_collision_config(handle, config);
-}
-
-Result World::set_cloth_mesh_config(uint32_t handle, MeshConfig mesh_config,
-                                    ConstSpan<int> pin_index) {
-  return impl_->set_cloth_mesh_config(handle, mesh_config, pin_index);
 }
 Result World::set_cloth_pin_index(uint32_t handle, ConstSpan<int> pin_index) {
   return impl_->set_cloth_pin_index(handle, pin_index);

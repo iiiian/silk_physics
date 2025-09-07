@@ -3,18 +3,15 @@
 #include <Eigen/Core>
 #include <optional>
 
+#include "eigen_alias.hpp"
 #include "silk/silk.hpp"
 
 namespace silk {
 
-using RMatrix3f = Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor>;
-using RMatrix3i = Eigen::Matrix<int, Eigen::Dynamic, 3, Eigen::RowMajor>;
-using RMatrix2i = Eigen::Matrix<int, Eigen::Dynamic, 2, Eigen::RowMajor>;
-
 struct TriMesh {
-  RMatrix3f V;
-  RMatrix2i E;
-  RMatrix3i F;
+  RMatrixX3f V;
+  RMatrixX2i E;
+  RMatrixX3i F;
   float avg_edge_length;
 };
 

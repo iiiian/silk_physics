@@ -154,8 +154,8 @@ std::optional<Collision> point_triangle_collision(
   c.minimal_separation = ms;
   c.stiffness = base_stiffness;
   c.inv_mass = inv_mass;
-  c.offset(0) = oa.solver_offset + 3 * ma.index(0);
-  c.offset(Eigen::seqN(1, 3)) = (ob.solver_offset + 3 * mb.index.array());
+  c.offset(0) = oa.state_offset + 3 * ma.index(0);
+  c.offset(Eigen::seqN(1, 3)) = (ob.state_offset + 3 * mb.index.array());
 
   SPDLOG_DEBUG("pt collision: {}", c.offset.transpose());
   SPDLOG_DEBUG("tuv: {} {} {}", toi, bary_a, bary_b);
@@ -288,9 +288,9 @@ std::optional<Collision> edge_edge_collision(
   c.stiffness = base_stiffness;
   c.inv_mass = inv_mass;
   c.offset(Eigen::seqN(0, 2)) =
-      oa.solver_offset + 3 * ma.index(Eigen::seqN(0, 2)).array();
+      oa.state_offset + 3 * ma.index(Eigen::seqN(0, 2)).array();
   c.offset(Eigen::seqN(2, 2)) =
-      ob.solver_offset + 3 * mb.index(Eigen::seqN(0, 2)).array();
+      ob.state_offset + 3 * mb.index(Eigen::seqN(0, 2)).array();
 
   SPDLOG_DEBUG("ee collision: {}", c.offset.transpose());
   SPDLOG_DEBUG("tuv: {} {} {}", toi, para_a, para_b);

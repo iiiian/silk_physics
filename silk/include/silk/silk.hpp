@@ -13,7 +13,7 @@ enum class Result {
   InvalidHandle,
   IncorrectPinNum,
   IncorrectPositionNum,
-  EigenDecompositionFail,
+  CholeskyDecompositionFail,
   NeedInitSolverFirst,
   IterativeSolveFail
 };
@@ -46,22 +46,18 @@ struct CollisionConfig {
 
 struct ClothConfig {
   float elastic_stiffness = 100.0f;
-  float bending_stiffness = 0.0f;
+  float bending_stiffness = 0.0001f;
   float density = 0.1f;
-  float damping = 0.0f;
+  float damping = 0.01f;
 };
 
 struct GlobalConfig {
   float acceleration_x = 0.0f;
   float acceleration_y = 0.0f;
   float acceleration_z = -10.0f;
-  int max_iteration = 5;
-  int r = 30;
+  int max_outer_iteration = 100;
+  int max_inner_iteration = 100;
   float dt = 1.0f / 60.0f;
-  float ccd_walkback = 0.8f;
-  float toi_tolerance = 0.1f;
-  int toi_refine_iteration = 5;
-  float eps = 1e-6f;
 };
 
 std::string to_string(Result result);
@@ -98,9 +94,6 @@ class World {
   [[nodiscard]] Result set_cloth_config(uint32_t handle, ClothConfig config);
   [[nodiscard]] Result set_cloth_collision_config(uint32_t handle,
                                                   CollisionConfig config);
-  [[nodiscard]] Result set_cloth_mesh_config(uint32_t handle,
-                                             MeshConfig mesh_config,
-                                             ConstSpan<int> pin_index);
   [[nodiscard]] Result set_cloth_pin_index(uint32_t handle,
                                            ConstSpan<int> pin_index);
   [[nodiscard]] Result set_cloth_pin_position(uint32_t handle,

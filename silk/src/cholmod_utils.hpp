@@ -6,7 +6,7 @@
 #include <Eigen/SparseCore>
 #include <cassert>
 
-#include "symmetric_status.hpp"
+#include "symmetry.hpp"
 
 namespace silk::cholmod_raii {
 
@@ -30,7 +30,7 @@ class CholmodCommon {
 };
 
 // all cholmod function call in this codebase should use this common
-extern CholmodCommon global_common;
+extern CholmodCommon common;
 
 template <typename T>
 using CholmodFreeFunc = int (*)(T**, cholmod_common*);
@@ -52,8 +52,7 @@ class RAIIWrapper {
 
   RAIIWrapper(const RAIIWrapper& other) {
     if (other.handle_) {
-      this->handle_ =
-          cholmod_copy(const_cast<T*>(other.handle_), global_common);
+      this->handle_ = cholmod_copy(const_cast<T*>(other.handle_), common);
     } else {
       this->handle_ = nullptr;
     }
@@ -73,7 +72,7 @@ class RAIIWrapper {
 
     clear();
     if (other.handle_) {
-      handle_ = cholmod_copy(const_cast<T*>(other.handle_), global_common);
+      handle_ = cholmod_copy(const_cast<T*>(other.handle_), common);
     }
 
     return *this;
@@ -96,12 +95,12 @@ class RAIIWrapper {
       return;
     }
 
-    cholmod_free(&handle_, global_common);
+    cholmod_free(&handle_, common);
   }
 
-  operator T*() { return handle_; }
+  operator T*() const { return handle_; }
 
-  T* raw() { return handle_; }
+  T* raw() const { return handle_; }
 
   bool is_empty() const { return (handle_ == nullptr); }
 };
@@ -116,7 +115,7 @@ using CholmodFactor =
 template <typename Scalar>
 cholmod_sparse make_cholmod_sparse_view(
     Eigen::SparseMatrix<Scalar, Eigen::ColMajor, int>& m,
-    SymmetricStatus sym_stat = SymmetricStatus::NotSymmetric) {
+    Symmetry sym_stat = Symmetry::NotSymmetric) {
   static_assert(
       std::is_same_v<Scalar, float> || std::is_same_v<Scalar, double>,
       "cholmod sparse view only accepts float/double (real) matrices");
