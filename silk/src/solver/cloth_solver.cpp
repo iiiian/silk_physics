@@ -276,7 +276,7 @@ bool init_all_cloth_for_solver(Registry& registry, float dt) {
   return true;
 }
 
-void compute_cloth_init_rhs(const ClothDynamicSolverData dynamic_data,
+void compute_cloth_init_rhs(const ClothDynamicSolverData& dynamic_data,
                             const Pin& pin,
                             Eigen::Ref<Eigen::VectorXf> init_rhs) {
   init_rhs.setZero();
