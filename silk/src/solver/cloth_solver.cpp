@@ -42,8 +42,11 @@ Eigen::Matrix<float, 6, 9> triangle_jacobian_operator(
 
   Eigen::Vector3f e0xe1 = e0.cross(e1);
   // We assume no degenerate triangle exists.
-  assert(e0.squaredNorm() > 1e-12f && "Degenerate triangle: zero-length edge");
-  assert(e0xe1.squaredNorm() > 1e-12f && "Degenerate triangle: zero area");
+  float area2_eps =
+      std::pow(1e-6f * std::max(e0.squaredNorm(), e1.squaredNorm()), 2);
+  if (e0xe1.squaredNorm() < area2_eps) {
+    SPDLOG_DEBUG("degenreate triangle in cloth mesh");
+  }
   // Define 2D basis x and y.
   Eigen::Vector3f bx = e0.normalized();
   Eigen::Vector3f by = e0xe1.cross(e0).normalized();
