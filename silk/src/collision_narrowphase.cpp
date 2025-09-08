@@ -98,7 +98,9 @@ std::optional<std::pair<float, float>> exact_edge_edge_uv(
       return std::make_pair(para, 1.0f);
     }
 
-    assert(false && "unreachable");
+    SPDLOG_DEBUG(
+        "Ignore potential collision. Reason: no colliding parallel edges");
+    return std::nullopt;
   }
 
   // Non-parallel edges. Compute the closest points between the two infinite
