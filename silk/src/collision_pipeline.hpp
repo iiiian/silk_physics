@@ -10,11 +10,6 @@ namespace silk {
 
 class CollisionPipeline {
  public:
-  // deprecated
-  float toi_tolerance = 0.05;
-  int toi_bisect_it = 4;
-  float eps = 1e-6;
-
   float ccd_tolerance = 1e-6f;
   int ccd_max_iter = 1024;
   int partial_ccd_max_iter = 32;
