@@ -381,7 +381,7 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
                               const ClothStaticSolverData& static_data,
                               const ClothDynamicSolverData& dynamic_data,
                               Eigen::Ref<const Eigen::VectorXf> state,
-                              Eigen::Ref<const Eigen::VectorXf> init_rhs,
+                              Eigen::Ref<const Eigen::VectorXf> outer_rhs,
                               Eigen::Ref<Eigen::VectorXf> solution) {
   auto& s = static_data;
   auto& d = dynamic_data;
@@ -427,7 +427,7 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
     local_rhs(Eigen::seqN(offset(2), 3)) += buffer(Eigen::seqN(6, 3));
   }
 
-  Eigen::VectorXf rhs = init_rhs;
+  Eigen::VectorXf rhs = outer_rhs;
   for (auto& local_rhs : thread_local_rhs) {
     rhs += local_rhs;
   }
@@ -449,7 +449,7 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
 
 bool compute_all_cloth_inner_loop(Registry& registry,
                                   const Eigen::VectorXf& global_state,
-                                  const Eigen::VectorXf& init_rhs,
+                                  const Eigen::VectorXf& outer_rhs,
                                   Eigen::VectorXf& out) {
   for (Entity& e : registry.get_all_entities()) {
     auto config = registry.get<ClothConfig>(e);
@@ -464,7 +464,8 @@ bool compute_all_cloth_inner_loop(Registry& registry,
 
     auto seq = Eigen::seqN(solver_state->state_offset, solver_state->state_num);
     if (!compute_cloth_inner_loop(*config, mesh->F, *static_data, *dynamic_data,
-                                  global_state(seq), init_rhs(seq), out(seq))) {
+                                  global_state(seq), outer_rhs(seq),
+                                  out(seq))) {
       return false;
     }
   }

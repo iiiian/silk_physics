@@ -50,12 +50,12 @@ bool compute_all_cloth_outer_loop(
  *
  *  @param registry ECS storage.
  *  @param global_state Vectorized current positions for all dofs.
- *  @param init_rhs Right‑hand side assembled by the outer loop.
+ *  @param outer_rhs Right‑hand side assembled by the outer loop.
  *  @param solution Output solution vector; same layout/size as `global_state`.
  *  @return false if the linear solve fails, true otherwise.
  */
 bool compute_all_cloth_inner_loop(Registry& registry,
                                   const Eigen::VectorXf& global_state,
-                                  const Eigen::VectorXf& init_rhs,
+                                  const Eigen::VectorXf& outer_rhs,
                                   Eigen::VectorXf& solution);
 }  // namespace silk
