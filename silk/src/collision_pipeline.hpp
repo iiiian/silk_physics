@@ -26,7 +26,7 @@ class CollisionPipeline {
 
   void update_collision(const Eigen::VectorXf& solver_state_t0,
                         const Eigen::VectorXf& solver_state_t1,
-                        std::vector<Collision>& collisions);
+                        std::vector<Collision>& collisions) const;
 
  private:
   Eigen::Array3f scene_ee_err_;

@@ -58,7 +58,7 @@ class RAIIWrapper {
     }
   }
 
-  RAIIWrapper(RAIIWrapper&& other) {
+  RAIIWrapper(RAIIWrapper&& other) noexcept {
     this->handle_ = other.handle_;
     other.handle_ = nullptr;
   }

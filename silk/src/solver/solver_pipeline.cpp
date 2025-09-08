@@ -31,7 +31,7 @@ bool SolverPipeline::init(Registry& registry) {
   if (!init_all_cloth_for_solver(registry, dt)) {
     return false;
   }
-
+  collisions_.clear();
   return true;
 }
 
@@ -272,7 +272,8 @@ BarrierConstrain SolverPipeline::compute_barrier_constrain(
 
 void SolverPipeline::enforce_barrier_constrain(
     const BarrierConstrain& barrier_constrain, const Bbox& scene_bbox,
-    Eigen::VectorXf& state) {
+    Eigen::VectorXf& state) const
+{
   if (collisions_.empty()) {
     return;
   }

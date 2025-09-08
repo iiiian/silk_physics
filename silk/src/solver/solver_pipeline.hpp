@@ -84,7 +84,7 @@ class SolverPipeline {
    */
   void enforce_barrier_constrain(const BarrierConstrain& barrier_constrain,
                                  const Bbox& scene_bbox,
-                                 Eigen::VectorXf& state);
+                                 Eigen::VectorXf& state) const;
 };
 
 }  // namespace silk

@@ -97,7 +97,9 @@ bool check_indexing(const RMatrixX3i& F, int vnum) {
 
   // Check for degenerate triangles with repeated vertex indices.
   for (int f = 0; f < F.rows(); ++f) {
-    int a = F(f, 0), b = F(f, 1), c = F(f, 2);
+    int a = F(f, 0);
+    int b = F(f, 1);
+    int c = F(f, 2);
     if (a == b || b == c || c == a) {
       SPDLOG_WARN(
           "Invalid mesh: triangle {} has repeated vertex indices ({}, {}, {}).",

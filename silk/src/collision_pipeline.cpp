@@ -168,7 +168,8 @@ std::vector<Collision> CollisionPipeline::find_collision(
 
 void CollisionPipeline::update_collision(const Eigen::VectorXf& solver_state_t0,
                                          const Eigen::VectorXf& solver_state_t1,
-                                         std::vector<Collision>& collisions) {
+                                         std::vector<Collision>& collisions) const
+{
   for (auto& c : collisions) {
     partial_ccd_update(solver_state_t0, solver_state_t1, scene_ee_err_,
                        scene_vf_err_, collision_stiffness_base,

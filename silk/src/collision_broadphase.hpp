@@ -828,10 +828,10 @@ class KDTree {
     // combinatory (x/2)
     auto c2 = [](float x) { return 0.5f * x * (x - 1); };
 
-    float pop = float(n->population);
-    float pl = float(left_num + n->left->population);
-    float pr = float(right_num + n->right->population);
-    float pm = float(middle_num);
+    float pop = static_cast<float>(n->population);
+    float pl = static_cast<float>(left_num + n->left->population);
+    float pr = static_cast<float>(right_num + n->right->population);
+    float pm = static_cast<float>(middle_num);
 
     float t_min = 2.0f * c2(0.5f * pop);
     float t_max = c2(pop);
