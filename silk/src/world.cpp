@@ -7,6 +7,7 @@
 #include "cloth_solver_data.hpp"
 #include "collision_pipeline.hpp"
 #include "ecs.hpp"
+#include "mesh_utils.hpp"
 #include "solver/solver_pipeline.hpp"
 #include "solver_state.hpp"
 
@@ -25,6 +26,9 @@ std::string to_string(Result result) {
     }
     case Result::InvalidHandle: {
       return "InvalidHandle";
+    }
+    case Result::InvalidMesh: {
+      return "InvalidMesh";
     }
     case Result::IncorrectPinNum: {
       return "IncorrectPinNum";
@@ -121,18 +125,10 @@ class World::WorldImpl {
                    MeshConfig mesh_config, ConstSpan<int> pin_index,
                    uint32_t& handle) {
     // make tri mesh
-    TriMesh m;
-    m.V = Eigen::Map<const RMatrixX3f>(mesh_config.verts.data,
-                                       mesh_config.verts.num / 3, 3);
-    assert((mesh_config.faces.num != 0));
-    m.F = Eigen::Map<const RMatrixX3i>(mesh_config.faces.data,
-                                       mesh_config.faces.num / 3, 3);
-    igl::edges(m.F, m.E);
-    m.avg_edge_length = 0.0f;
-    for (int i = 0; i < m.E.rows(); ++i) {
-      m.avg_edge_length += (m.V.row(m.E(i, 0)) - m.V.row(m.E(i, 1))).norm();
+    auto tri_mesh = try_make_cloth_mesh(mesh_config);
+    if (!tri_mesh) {
+      return Result::InvalidMesh;
     }
-    m.avg_edge_length /= m.E.rows();
 
     // make pin
     Pin p;
@@ -141,7 +137,7 @@ class World::WorldImpl {
           Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.num);
       p.position.resize(3 * p.index.size());
       for (int i = 0; i < p.index.size(); ++i) {
-        p.position(Eigen::seqN(3 * i, 3)) = m.V.row(p.index(i));
+        p.position(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(p.index(i));
       }
     }
 
@@ -152,7 +148,7 @@ class World::WorldImpl {
     assert(e);
     registry_.set<ClothConfig>(*e, std::move(cloth_config));
     registry_.set<CollisionConfig>(*e, std::move(collision_config));
-    registry_.set<TriMesh>(*e, std::move(m));
+    registry_.set<TriMesh>(*e, std::move(*tri_mesh));
     registry_.set<Pin>(*e, std::move(p));
 
     handle = h.value;
@@ -313,22 +309,15 @@ class World::WorldImpl {
   Result add_obstacle(CollisionConfig collision_config, MeshConfig mesh_config,
                       uint32_t& handle) {
     // make tri mesh
-    TriMesh m;
-    m.V = Eigen::Map<const RMatrixX3f>(mesh_config.verts.data,
-                                       mesh_config.verts.num / 3, 3);
-    m.F = Eigen::Map<const RMatrixX3i>(mesh_config.faces.data,
-                                       mesh_config.faces.num / 3, 3);
-    igl::edges(m.F, m.E);
-    m.avg_edge_length = 0.0f;
-    for (int i = 0; i < m.E.rows(); ++i) {
-      m.avg_edge_length += (m.V.row(m.E(i, 0)) - m.V.row(m.E(i, 1))).norm();
+    auto tri_mesh = try_make_obstacle_mesh(mesh_config);
+    if (!tri_mesh) {
+      return Result::InvalidMesh;
     }
-    m.avg_edge_length /= m.E.rows();
 
     // make obstacle position
     ObstaclePosition p;
     p.is_static = true;
-    p.position = m.V.reshaped<Eigen::RowMajor>();
+    p.position = tri_mesh->V.reshaped<Eigen::RowMajor>();
 
     auto [h, e] = registry_.add_entity();
     if (h.is_empty()) {
@@ -336,7 +325,7 @@ class World::WorldImpl {
     }
     assert(e);
     registry_.set<CollisionConfig>(*e, std::move(collision_config));
-    registry_.set<TriMesh>(*e, std::move(m));
+    registry_.set<TriMesh>(*e, std::move(*tri_mesh));
     registry_.set<ObstaclePosition>(*e, std::move(p));
 
     handle = h.value;
@@ -374,39 +363,6 @@ class World::WorldImpl {
     assert(collision_config);
 
     *collision_config = config;
-    return Result::Success;
-  }
-
-  Result set_obstacle_mesh_config(uint32_t handle, MeshConfig config) {
-    Entity* e = registry_.get_entity(handle);
-    if (!e) {
-      return Result::InvalidHandle;
-    }
-
-    auto obstacle_position = registry_.get<ObstaclePosition>(*e);
-    if (!obstacle_position) {
-      return Result::InvalidHandle;
-    }
-
-    auto m = registry_.get<TriMesh>(*e);
-    assert(m);
-
-    m->V = Eigen::Map<const RMatrixX3f>(config.verts.data, config.verts.num / 3,
-                                        3);
-    m->F = Eigen::Map<const RMatrixX3i>(config.faces.data, config.faces.num / 3,
-                                        3);
-    igl::edges(m->F, m->E);
-    m->avg_edge_length = 0.0f;
-    for (int i = 0; i < m->E.rows(); ++i) {
-      m->avg_edge_length +=
-          (m->V.row(m->E(i, 0)) - m->V.row(m->E(i, 1))).norm();
-    }
-    m->avg_edge_length /= m->E.rows();
-
-    // make obstacle position
-    obstacle_position->is_static = true;
-    obstacle_position->position = m->V.reshaped<Eigen::RowMajor>();
-
     return Result::Success;
   }
 
@@ -483,9 +439,6 @@ Result World::remove_obstacle(uint32_t handle) {
 Result World::set_obstacle_collision_config(uint32_t handle,
                                             CollisionConfig config) {
   return impl_->set_obstacle_collision_config(handle, config);
-}
-Result World::set_obstacle_mesh_config(uint32_t handle, MeshConfig config) {
-  return impl_->set_obstacle_mesh_config(handle, config);
 }
 Result World::set_obstacle_position(uint32_t handle,
                                     ConstSpan<float> position) {

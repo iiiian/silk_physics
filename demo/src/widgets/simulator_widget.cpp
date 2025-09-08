@@ -11,14 +11,18 @@
 
 namespace py = polyscope;
 
-void SimulatorWidget::init_cloth(Object& obj) {
+bool SimulatorWidget::init_cloth(Object& obj) {
   bool is_changed = obj.physical_config_changed ||
                     obj.collision_config_changed || obj.pinned_changed;
 
   if (is_changed && obj.silk_handle != 0) {
     auto res = ctx_.silk_world.remove_cloth(obj.silk_handle);
+    if (res != silk::Result::Success) {
+      SPDLOG_ERROR("remove cloth '{}' failed, reason: {}", obj.name,
+                   silk::to_string(res));
+      return false;
+    }
     obj.silk_handle = 0;
-    assert((res == silk::Result::Success));
   }
 
   if (obj.silk_handle == 0) {
@@ -50,17 +54,27 @@ void SimulatorWidget::init_cloth(Object& obj) {
     auto res =
         ctx_.silk_world.add_cloth(obj.cloth_config, obj.collision_config,
                                   mesh_config, pinnd_span, obj.silk_handle);
-    assert((res == silk::Result::Success));
+    if (res != silk::Result::Success) {
+      SPDLOG_ERROR("add cloth '{}' failed, reason: {}", obj.name,
+                   silk::to_string(res));
+      return false;
+    }
   }
+  return true;
 }
 
-void SimulatorWidget::init_obstacle(Object& obj) {
+bool SimulatorWidget::init_obstacle(Object& obj) {
   bool is_changed = obj.physical_config_changed ||
                     obj.collision_config_changed || obj.pinned_changed;
 
-  if (is_changed) {
+  if (is_changed && obj.silk_handle != 0) {
     auto res = ctx_.silk_world.remove_obstacle(obj.silk_handle);
-    assert((res == silk::Result::Success));
+    if (res != silk::Result::Success) {
+      SPDLOG_ERROR("remove obstacle '{}' failed, reason: {}", obj.name,
+                   silk::to_string(res));
+      return false;
+    }
+    obj.silk_handle = 0;
   }
 
   if (obj.silk_handle == 0) {
@@ -77,8 +91,13 @@ void SimulatorWidget::init_obstacle(Object& obj) {
 
     auto res = ctx_.silk_world.add_obstacle(obj.collision_config, mesh_config,
                                             obj.silk_handle);
-    assert((res == silk::Result::Success));
+    if (res != silk::Result::Success) {
+      SPDLOG_ERROR("add obstacle '{}' failed, reason: {}", obj.name,
+                   silk::to_string(res));
+      return false;
+    }
   }
+  return true;
 }
 
 void SimulatorWidget::enter_sim_mode() {
@@ -87,16 +106,27 @@ void SimulatorWidget::enter_sim_mode() {
       case SilkObjectType::None:
         break;
       case SilkObjectType::Cloth:
-        init_cloth(obj);
+        if (!init_cloth(obj)) {
+          SPDLOG_ERROR("init cloth '{}' failed; abort entering sim mode",
+                       obj.name);
+          return;
+        }
         break;
       case SilkObjectType::Obstacle:
-        init_obstacle(obj);
+        if (!init_obstacle(obj)) {
+          SPDLOG_ERROR("init obstacle '{}' failed; abort entering sim mode",
+                       obj.name);
+          return;
+        }
         break;
     }
   }
 
   auto res = ctx_.silk_world.set_global_config(ctx_.global_config);
-  assert(res == silk::Result::Success);
+  if (res != silk::Result::Success) {
+    SPDLOG_ERROR("set_global_config failed, reason: {}", silk::to_string(res));
+    return;
+  }
   res = ctx_.silk_world.solver_init();
   if (res != silk::Result::Success) {
     SPDLOG_ERROR("solver init fail, reason: {}", silk::to_string(res));

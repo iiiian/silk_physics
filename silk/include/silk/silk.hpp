@@ -11,6 +11,7 @@ enum class Result {
   InvalidConfig,
   TooManyBody,
   InvalidHandle,
+  InvalidMesh,
   IncorrectPinNum,
   IncorrectPositionNum,
   CholeskyDecompositionFail,
@@ -105,8 +106,6 @@ class World {
   [[nodiscard]] Result remove_obstacle(uint32_t handle);
   [[nodiscard]] Result set_obstacle_collision_config(uint32_t handle,
                                                      CollisionConfig config);
-  [[nodiscard]] Result set_obstacle_mesh_config(uint32_t handle,
-                                                MeshConfig config);
   [[nodiscard]] Result set_obstacle_position(uint32_t handle,
                                              ConstSpan<float> position);
 };

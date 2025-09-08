@@ -17,8 +17,8 @@ class SimulatorWidget : public IWidget {
   bool is_first_click = false;
   ImVec2 prev_mouse_pos_ = {-1.0f, -1.0f};
 
-  void init_cloth(Object& obj);
-  void init_obstacle(Object& obj);
+  bool init_cloth(Object& obj);
+  bool init_obstacle(Object& obj);
   void enter_sim_mode();
   void leave_sim_mode();
   void update_pin(const Object& obj);
