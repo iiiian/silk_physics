@@ -59,15 +59,19 @@ bool SolverPipeline::step(Registry& registry,
   // Clean up collisions involving removed entities.
   cleanup_collisions(registry);
 
+  // compute init rhs for all physical entities
+  Eigen::VectorXf init_rhs;
+  init_rhs.resize(state_num);
+  compute_all_cloth_init_rhs(registry, init_rhs);
+
   // Expand per-vertex acceleration (XYZ per vertex) to the packed state vector.
   Eigen::VectorXf acceleration = const_acceleration.replicate(state_num / 3, 1);
-  Eigen::VectorXf pin_rhs = compute_pin_constrain(registry, state_num);
   float remaining_step = 1.0f;
 
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
     SPDLOG_DEBUG("Outer iter {}", outer_it);
 
-    Eigen::VectorXf outer_rhs = pin_rhs;
+    Eigen::VectorXf outer_rhs = init_rhs;
     BarrierConstrain barrier_constrain = compute_barrier_constrain(curr_state);
     // Prediction based on linear velocity.
     Eigen::VectorXf next_state =
@@ -218,25 +222,6 @@ void SolverPipeline::cleanup_collisions(Registry& registry) {
     collisions_[i] = collisions_.back();
     collisions_.pop_back();
   }
-}
-
-Eigen::VectorXf SolverPipeline::compute_pin_constrain(Registry& registry,
-                                                      int state_num) {
-  Eigen::VectorXf rhs = Eigen::VectorXf::Zero(state_num);
-
-  for (Entity& e : registry.get_all_entities()) {
-    auto state = registry.get<SolverState>(e);
-    auto pin = registry.get<Pin>(e);
-    if (state && pin) {
-      for (int i = 0; i < pin->index.size(); ++i) {
-        int offset = state->state_offset + 3 * pin->index(i);
-        rhs(Eigen::seqN(offset, 3)) +=
-            pin->pin_stiffness * pin->position(Eigen::seqN(3 * i, 3));
-      }
-    }
-  }
-
-  return rhs;
 }
 
 BarrierConstrain SolverPipeline::compute_barrier_constrain(

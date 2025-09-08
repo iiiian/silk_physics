@@ -9,27 +9,32 @@
 
 namespace silk {
 
+/**
+ * Static, mesh-dependent quantities used by the cloth solver.
+ *
+ * Built once from mesh and material data, and reused across time steps.
+ *
+ * Notation:
+ * vnum = number of vertices.
+ * fnum = number of faces.
+ * state_num = 3 * vnum.
+ */
 struct ClothStaticSolverData {
-  // vnum means vertex num
-  // fnum means face num
-
-  // vertex mass. dimension vnum x vnum
+  // Per-vertex mass vector of length vnum.
   Eigen::VectorXf mass;
-  // face area. dimension fnum x 1
+  // Per-face area vector of length fnum.
   Eigen::VectorXf area;
-  // inv mass weighted cotangent matrix for bending energy.
-  // dimension vnum x vnum.
+  // Inverse-mass-weighted cotangent matrix for bending energy (vnum x vnum).
   Eigen::SparseMatrix<float> CWC;
-  // face area weighted jabobian matrix for in-plane elastic energy.
-  // dimension state_num x state_num.
+  // Area-weighted in-plane elastic matrix (state_num x state_num).
   Eigen::SparseMatrix<float> JWJ;
-  // jacobian operator of triangle faces for in-plane elastic energy.
-  // the order is the same as the face order of TriMesh F matrix.
+  // Per-face 6x9 Jacobian operators for in-plane elasticity; order matches
+  // TriMesh::F.
   std::vector<Eigen::Matrix<float, 6, 9>> jacobian_ops;
-  // rest curvature. dimension  vnum x 3
+  // Rest curvature per vertex (vnum x 3).
   RMatrixX3f C0;
 
-  // Since Eigen::SparseMatrix lacks noexcept move ctor, we have to explicitly
+  // Since Eigen::SparseMatrix lacks noexcept move ctor, explicitly
   // delete copy ctor to avoid error when used in containers like std::vector.
   ClothStaticSolverData() = default;
   ClothStaticSolverData(ClothStaticSolverData&) = delete;
@@ -38,20 +43,31 @@ struct ClothStaticSolverData {
   ClothStaticSolverData& operator=(ClothStaticSolverData&&) = default;
 };
 
+/**
+ * Dynamic, time step or config dependent quantities used by the cloth solver.
+ *
+ * Built once at solver pipeline initialization.
+ *
+ * Notation:
+ * state_num = 3 * vertex num.
+ */
 struct ClothDynamicSolverData {
+  // Time step in seconds.
   float dt;
+  // Whether barrier constraints are currently active.
   bool has_barrier_constrain;
 
-  // Lhs of linear system Hx = b. Contains momentum energy, bending energy,
-  // in-plane elastic energy and pin energy.
+  // Left-hand side H of Hx = b, combining momentum, bending, in-plane, and pin
+  // energies.
   Eigen::SparseMatrix<float> H;
 
-  // cholesky factorization of H, which is the lhs of final system equation
-  // Hx = b. assembled from momentum energy, in-plane elastic energy, bending
-  // energy, and pin.
+  // Cholesky factorization of H produced via CHOLMOD.
   cholmod_raii::CholmodFactor L;
-  // updated L to account for barrier constrains
+  // Updated factorization to account for barrier constraints.
   cholmod_raii::CholmodFactor LB;
+
+  // Weighted rest-curvature vector (state_num x 1).
+  Eigen::VectorXf C0;
 };
 
 }  // namespace silk

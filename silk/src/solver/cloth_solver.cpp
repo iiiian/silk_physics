@@ -151,13 +151,8 @@ ClothStaticSolverData make_cloth_static_solver_data(const ClothConfig& config,
   return d;
 }
 
-/** Build dynamic, time‑step‑dependent solver data for a cloth.
- *  Assembles the SPD system matrix H from:
- *   - momentum (mass / dt^2),
- *   - in‑plane elastic (JWJ),
- *   - bending (CWC), and
- *   - pin constraints (large diagonal weights),
- *  then computes its Cholesky factorization with CHOLMOD.
+/** Build dynamic, time‑step‑dependent or config-dependent solver data for a
+ * cloth.
  *
  *  Returns std::nullopt if analysis/factorization fails.
  */
@@ -213,6 +208,7 @@ std::optional<ClothDynamicSolverData> make_cloth_dynamic_solver_data(
   d.H = std::move(H);
   d.L = std::move(L);
   d.LB = {};
+  d.C0 = (c.bending_stiffness * s.C0).reshaped<Eigen::RowMajor>();
 
   return d;
 }
@@ -278,6 +274,35 @@ bool init_all_cloth_for_solver(Registry& registry, float dt) {
   }
 
   return true;
+}
+
+void compute_cloth_init_rhs(const ClothDynamicSolverData dynamic_data,
+                            const Pin& pin,
+                            Eigen::Ref<Eigen::VectorXf> init_rhs) {
+  init_rhs.setZero();
+
+  // set pin rhs
+  for (int i = 0; i < pin.index.size(); ++i) {
+    init_rhs(Eigen::seqN(3 * pin.index(i), 3)) =
+        pin.pin_stiffness * pin.position(Eigen::seqN(3 * i, 3));
+  }
+
+  // set rest curvature rhs
+  init_rhs += dynamic_data.C0;
+}
+
+void compute_all_cloth_init_rhs(Registry& registry, Eigen::VectorXf& init_rhs) {
+  for (Entity& e : registry.get_all_entities()) {
+    auto solver_state = registry.get<SolverState>(e);
+    auto dynamic_data = registry.get<ClothDynamicSolverData>(e);
+    auto pin = registry.get<Pin>(e);
+
+    if (solver_state && dynamic_data && pin) {
+      auto seq =
+          Eigen::seqN(solver_state->state_offset, solver_state->state_num);
+      compute_cloth_init_rhs(*dynamic_data, *pin, init_rhs(seq));
+    }
+  }
 }
 
 /** Outer loop: Accumulate global RHS terms and, if needed, update the

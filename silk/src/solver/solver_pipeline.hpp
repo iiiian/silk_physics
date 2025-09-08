@@ -70,13 +70,6 @@ class SolverPipeline {
   void cleanup_collisions(Registry& registry);
 
   /**
-   * @brief Assemble RHS contributions for pin constraints across entities.
-   * @param state_num Size of the global state vector.
-   * @returns A `state_num`-length vector with per-DOF pin contributions.
-   */
-  Eigen::VectorXf compute_pin_constrain(Registry& registry, int state_num);
-
-  /**
    * @brief Build diagonal LHS weights and RHS targets from current collisions.
    * @details For each active DOF that participates in a collision,
    *          collision stiffness is accumulated into `lhs`, and a reflected

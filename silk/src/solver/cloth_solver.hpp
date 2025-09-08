@@ -25,6 +25,20 @@ void reset_all_cloth_for_solver(Registry& registry);
  */
 bool init_all_cloth_for_solver(Registry& registry, float dt);
 
+/**
+ * Assemble step-invariant initial RHS for all cloth entities.
+ *
+ * Writes each object's contribution into its state slice
+ * [state_offset, state_offset + state_num).
+ *
+ * @param registry Registry containing entities and components.
+ * @param init_rhs Global RHS vector sized to the sum of state_num across
+ * entities.
+ * @pre init_rhs is sized to the sum of state_num across entities.
+ * @post Overwrites corresponding segments of init_rhs.
+ */
+void compute_all_cloth_init_rhs(Registry& registry, Eigen::VectorXf& init_rhs);
+
 /** Prepare all cloths for current solver outer loop.
  *  Adds momentum and (optionally) barrier‑constraint terms into `rhs` and
  *  updates the cached factorization to account for active barrier weights.
