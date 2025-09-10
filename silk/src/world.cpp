@@ -3,6 +3,8 @@
 #include <Eigen/Core>
 #include <cassert>
 #include <cstring>
+#include <silk/result.hpp>
+#include <silk/silk.hpp>
 
 #include "cloth_solver_data.hpp"
 #include "collision_pipeline.hpp"
@@ -12,44 +14,6 @@
 #include "solver_state.hpp"
 
 namespace silk {
-
-std::string to_string(Result result) {
-  switch (result) {
-    case Result::Success: {
-      return "Success";
-    }
-    case Result::InvalidConfig: {
-      return "InvalidConfig";
-    }
-    case Result::TooManyBody: {
-      return "TooManyBody";
-    }
-    case Result::InvalidHandle: {
-      return "InvalidHandle";
-    }
-    case Result::InvalidMesh: {
-      return "InvalidMesh";
-    }
-    case Result::IncorrectPinNum: {
-      return "IncorrectPinNum";
-    }
-    case Result::IncorrectPositionNum: {
-      return "IncorrectPositionNum";
-    }
-    case Result::CholeskyDecompositionFail: {
-      return "CholeskyDecompositionFail";
-    }
-    case Result::NeedInitSolverFirst: {
-      return "NeedInitSolverFirst";
-    }
-    case Result::IterativeSolveFail: {
-      return "IterativeSolveFail";
-    }
-    default:
-      assert(false && "unknown result");
-      return "Unknown";
-  }
-}
 
 class World::WorldImpl {
  private:
@@ -71,7 +35,7 @@ class World::WorldImpl {
     solver_pipeline_.max_outer_iteration = c.max_outer_iteration;
     solver_pipeline_.max_inner_iteration = c.max_inner_iteration;
 
-    return Result::Success;
+    return Result::ok();
   }
 
   void clear() {
@@ -83,18 +47,16 @@ class World::WorldImpl {
   // Solver API
   Result solver_init() {
     if (!solver_pipeline_.init(registry_)) {
-      return Result::CholeskyDecompositionFail;
+      return Result::error(ErrorCode::CholeskyDecompositionFail);
     }
     is_solver_init = true;
-    return Result::Success;
+    return Result::ok();
   }
 
   Result solver_step() {
-    if (!is_solver_init) {
-      return Result::NeedInitSolverFirst;
+    if (!solver_pipeline_.step(registry_, collision_pipeline_)) {
+      return Result::error(ErrorCode::CholeskyDecompositionFail);
     }
-
-    solver_pipeline_.step(registry_, collision_pipeline_);
 
     for (Entity& e : registry_.get_all_entities()) {
       auto obstacle_position = registry_.get<ObstaclePosition>(e);
@@ -109,15 +71,15 @@ class World::WorldImpl {
       }
     }
 
-    return Result::Success;
+    return Result::ok();
   }
 
   Result solver_reset() {
     if (!is_solver_init) {
-      return Result::NeedInitSolverFirst;
+      return Result::error(ErrorCode::NeedInitSolverFirst);
     }
     solver_pipeline_.reset(registry_);
-    return Result::Success;
+    return Result::ok();
   }
 
   // cloth API
@@ -127,14 +89,14 @@ class World::WorldImpl {
     // make tri mesh
     auto tri_mesh = try_make_cloth_mesh(mesh_config);
     if (!tri_mesh) {
-      return Result::InvalidMesh;
+      return Result::error(ErrorCode::InvalidMesh);
     }
 
     // make pin
     Pin p;
-    if (pin_index.data != nullptr && pin_index.num != 0) {
+    if (pin_index.data != nullptr && pin_index.size != 0) {
       p.index =
-          Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.num);
+          Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.size);
       p.position.resize(3 * p.index.size());
       for (int i = 0; i < p.index.size(); ++i) {
         p.position(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(p.index(i));
@@ -143,7 +105,7 @@ class World::WorldImpl {
 
     auto [h, e] = registry_.add_entity();
     if (h.is_empty()) {
-      return Result::TooManyBody;
+      return Result::error(ErrorCode::TooManyBody);
     }
     assert(e);
     registry_.set<ClothConfig>(*e, std::move(cloth_config));
@@ -153,66 +115,66 @@ class World::WorldImpl {
 
     handle = h.value;
     is_solver_init = false;
-    return Result::Success;
+    return Result::ok();
   }
 
   Result remove_cloth(uint32_t handle) {
     auto entity = registry_.get_entity(handle);
     if (!entity) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     auto cloth_config = registry_.get<ClothConfig>(*entity);
     if (!cloth_config) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     is_solver_init = false;
     registry_.remove_entity(handle);
 
-    return Result::Success;
+    return Result::ok();
   }
 
   Result get_cloth_position(uint32_t handle, Span<float> position) const {
     const Entity* e = registry_.get_entity(handle);
     if (!e) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     auto solver_state = registry_.get<SolverState>(e);
     if (solver_state) {
-      if (position.num < solver_state->state_num) {
-        return Result::IncorrectPositionNum;
+      if (position.size < solver_state->state_num) {
+        return Result::error(ErrorCode::IncorrectPositionNum);
       }
 
       memcpy(position.data, solver_state->curr_state.data(),
              solver_state->state_num * sizeof(float));
-      return Result::Success;
+      return Result::ok();
     }
 
     auto mesh = registry_.get<TriMesh>(e);
     if (mesh) {
       int state_num = 3 * mesh->V.rows();
-      if (position.num != state_num) {
-        return Result::IncorrectPositionNum;
+      if (position.size != state_num) {
+        return Result::error(ErrorCode::IncorrectPositionNum);
       }
 
       memcpy(position.data, mesh->V.data(), state_num * sizeof(float));
-      return Result::Success;
+      return Result::ok();
     }
 
-    return Result::InvalidHandle;
+    return Result::error(ErrorCode::InvalidHandle);
   }
 
   Result set_cloth_config(uint32_t handle, ClothConfig config) {
     Entity* e = registry_.get_entity(handle);
     if (!e) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     auto cloth_config = registry_.get<ClothConfig>(*e);
     if (!cloth_config) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     is_solver_init = false;
@@ -222,36 +184,36 @@ class World::WorldImpl {
     registry_.remove<ClothDynamicSolverData>(*e);
     registry_.remove<ObjectCollider>(*e);
 
-    return Result::Success;
+    return Result::ok();
   }
 
   Result set_cloth_collision_config(uint32_t handle, CollisionConfig config) {
     Entity* e = registry_.get_entity(handle);
     if (!e) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     auto cloth_config = registry_.get<ClothConfig>(*e);
     if (!cloth_config) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     auto collision_config = registry_.get<CollisionConfig>(*e);
     assert(collision_config);
 
     *collision_config = config;
-    return Result::Success;
+    return Result::ok();
   }
 
   Result set_cloth_pin_index(uint32_t handle, ConstSpan<int> pin_index) {
     Entity* e = registry_.get_entity(handle);
     if (!e) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     auto cloth_config = registry_.get<ClothConfig>(*e);
     if (!cloth_config) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     is_solver_init = false;
@@ -263,9 +225,9 @@ class World::WorldImpl {
     // make pin
     auto pin = registry_.get<Pin>(*e);
     assert(pin);
-    if (pin_index.data != nullptr && pin_index.num != 0) {
+    if (pin_index.data != nullptr && pin_index.size != 0) {
       pin->index =
-          Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.num);
+          Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.size);
       pin->position.resize(3 * pin->index.size());
       for (int i = 0; i < pin->index.size(); ++i) {
         pin->position(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(pin->index(i));
@@ -278,31 +240,31 @@ class World::WorldImpl {
     registry_.remove<ClothDynamicSolverData>(*e);
     registry_.remove<ObjectCollider>(*e);
 
-    return Result::Success;
+    return Result::ok();
   }
 
   Result set_cloth_pin_position(uint32_t handle, ConstSpan<float> position) {
     Entity* e = registry_.get_entity(handle);
     if (!e) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     auto cloth_config = registry_.get<ClothConfig>(*e);
     if (!cloth_config) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     auto pin = registry_.get<Pin>(*e);
     assert(pin);
 
-    if (3 * pin->index.size() != position.num) {
-      return Result::IncorrectPinNum;
+    if (3 * pin->index.size() != position.size) {
+      return Result::error(ErrorCode::IncorrectPinNum);
     }
 
     pin->position =
-        Eigen::Map<const Eigen::VectorXf>(position.data, position.num);
+        Eigen::Map<const Eigen::VectorXf>(position.data, position.size);
 
-    return Result::Success;
+    return Result::ok();
   }
 
   // Obstacle API
@@ -311,7 +273,7 @@ class World::WorldImpl {
     // make tri mesh
     auto tri_mesh = try_make_obstacle_mesh(mesh_config);
     if (!tri_mesh) {
-      return Result::InvalidMesh;
+      return Result::error(ErrorCode::InvalidMesh);
     }
 
     // make obstacle position
@@ -321,7 +283,7 @@ class World::WorldImpl {
 
     auto [h, e] = registry_.add_entity();
     if (h.is_empty()) {
-      return Result::TooManyBody;
+      return Result::error(ErrorCode::TooManyBody);
     }
     assert(e);
     registry_.set<CollisionConfig>(*e, std::move(collision_config));
@@ -329,64 +291,64 @@ class World::WorldImpl {
     registry_.set<ObstaclePosition>(*e, std::move(p));
 
     handle = h.value;
-    return Result::Success;
+    return Result::ok();
   }
 
   Result remove_obstacle(uint32_t handle) {
     auto entity = registry_.get_entity(handle);
     if (!entity) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     auto obstacle_position = registry_.get<ObstaclePosition>(*entity);
     if (!obstacle_position) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     registry_.remove_entity(handle);
-    return Result::Success;
+    return Result::ok();
   }
 
   Result set_obstacle_collision_config(uint32_t handle,
                                        CollisionConfig config) {
     Entity* e = registry_.get_entity(handle);
     if (!e) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     auto obstacle_position = registry_.get<ObstaclePosition>(*e);
     if (!obstacle_position) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     auto collision_config = registry_.get<CollisionConfig>(*e);
     assert(collision_config);
 
     *collision_config = config;
-    return Result::Success;
+    return Result::ok();
   }
 
   Result set_obstacle_position(uint32_t handle, ConstSpan<float> position) {
     Entity* e = registry_.get_entity(handle);
     if (!e) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
     auto pos = registry_.get<ObstaclePosition>(*e);
     if (!pos) {
-      return Result::InvalidHandle;
+      return Result::error(ErrorCode::InvalidHandle);
     }
 
-    if (pos->position.size() != position.num) {
-      return Result::IncorrectPinNum;
+    if (pos->position.size() != position.size) {
+      return Result::error(ErrorCode::IncorrectPinNum);
     }
 
     pos->is_static = false;
     std::swap(pos->position, pos->prev_position);
     pos->position =
-        Eigen::Map<const Eigen::VectorXf>(position.data, position.num);
+        Eigen::Map<const Eigen::VectorXf>(position.data, position.size);
 
-    return Result::Success;
+    return Result::ok();
   }
 };
 

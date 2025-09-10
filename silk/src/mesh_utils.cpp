@@ -36,16 +36,16 @@ bool check_schema(const MeshConfig& mc, int min_vnum, int min_fnum) {
 
   // Vertex data is packed as [x0,y0,z0,x1,y1,z1,...], faces as
   // [i0,j0,k0,i1,j1,k1,...].
-  if (mc.verts.num % 3 != 0 || mc.faces.num % 3 != 0) {
+  if (mc.verts.size % 3 != 0 || mc.faces.size % 3 != 0) {
     SPDLOG_WARN(
         "Invalid mesh: verts.num ({}) and faces.num ({}) must be multiples of "
         "3.",
-        mc.verts.num, mc.faces.num);
+        mc.verts.size, mc.faces.size);
     return false;
   }
 
-  int vnum = mc.verts.num / 3;
-  int fnum = mc.faces.num / 3;
+  int vnum = mc.verts.size / 3;
+  int fnum = mc.faces.size / 3;
   if (vnum < min_vnum) {
     SPDLOG_WARN("Invalid mesh: need at least {} vertices, got {}.", min_vnum,
                 vnum);
@@ -196,8 +196,8 @@ std::optional<TriMesh> try_make_cloth_mesh(MeshConfig mesh_config) {
   if (!check_schema(mesh_config, 3, 1)) {
     return std::nullopt;
   }
-  int vnum = mesh_config.verts.num / 3;
-  int fnum = mesh_config.faces.num / 3;
+  int vnum = mesh_config.verts.size / 3;
+  int fnum = mesh_config.faces.size / 3;
 
   RMatrixX3f V = Eigen::Map<const RMatrixX3f>(mesh_config.verts.data, vnum, 3);
   RMatrixX3i F = Eigen::Map<const RMatrixX3i>(mesh_config.faces.data, fnum, 3);
@@ -241,8 +241,8 @@ std::optional<TriMesh> try_make_obstacle_mesh(MeshConfig mesh_config) {
   if (!check_schema(mesh_config, 1, 0)) {
     return std::nullopt;
   }
-  int vnum = mesh_config.verts.num / 3;
-  int fnum = mesh_config.faces.num / 3;
+  int vnum = mesh_config.verts.size / 3;
+  int fnum = mesh_config.faces.size / 3;
 
   RMatrixX3f V = Eigen::Map<const RMatrixX3f>(mesh_config.verts.data, vnum, 3);
   RMatrixX3i F = Eigen::Map<const RMatrixX3i>(mesh_config.faces.data, fnum, 3);

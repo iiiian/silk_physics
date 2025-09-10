@@ -2,33 +2,33 @@
 
 #include <cstdint>
 #include <memory>
-#include <string>
+#include <silk/result.hpp>
+#include <vector>
 
 namespace silk {
 
-enum class Result {
-  Success,
-  InvalidConfig,
-  TooManyBody,
-  InvalidHandle,
-  InvalidMesh,
-  IncorrectPinNum,
-  IncorrectPositionNum,
-  CholeskyDecompositionFail,
-  NeedInitSolverFirst,
-  IterativeSolveFail
-};
-
 template <typename T>
-struct Span {
+class Span {
+ public:
   T* data = nullptr;
-  int num = 0;
+  int size = 0;
+
+ public:
+  Span() = default;
+  Span(T* ptr, int size) : data(ptr), size(size) {}
+  Span(std::vector<T>& vec) : data(vec.data()), size(vec.size()) {}
 };
 
 template <typename T>
-struct ConstSpan {
+class ConstSpan {
+ public:
   const T* data = nullptr;
-  int num = 0;
+  int size = 0;
+
+ public:
+  ConstSpan() = default;
+  ConstSpan(const T* ptr, int size) : data(ptr), size(size) {}
+  ConstSpan(const std::vector<T>& vec) : data(vec.data()), size(vec.size()) {}
 };
 
 struct MeshConfig {
