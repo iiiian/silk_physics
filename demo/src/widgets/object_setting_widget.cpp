@@ -8,8 +8,8 @@
 #include <cassert>
 #include <glm/glm.hpp>
 
-#include "../gui_helper.hpp"
-#include "../object_interface.hpp"
+#include "../gui_utils.hpp"
+#include "../object.hpp"
 
 namespace py = polyscope;
 

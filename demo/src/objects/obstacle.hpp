@@ -3,8 +3,8 @@
 #include <Eigen/Core>
 #include <optional>
 
-#include "../gui_helper.hpp"
-#include "../object_interface.hpp"
+#include "../gui_utils.hpp"
+#include "../object.hpp"
 #include "silk/silk.hpp"
 
 // to codex:
@@ -73,6 +73,5 @@ class Obstacle : public IObject {
  private:
   Obstacle() = default;
 
-  void draw_collision_config();
   bool update_silk_obstacle();
 };

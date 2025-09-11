@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "../polyscope_silk_interop.hpp"
+#include "draw_utils.hpp"
 
 namespace py = polyscope;
 
@@ -99,7 +100,9 @@ ObjectStat Obstacle::get_stat() const {
   return {static_cast<int>(V.rows()), static_cast<int>(F.rows())};
 }
 
-void Obstacle::draw() { draw_collision_config(); }
+void Obstacle::draw() {
+  draw_collision_config(collision_config, collision_config_changed);
+}
 
 bool Obstacle::init_sim() {
   if (silk_handle == 0) {
@@ -129,25 +132,6 @@ bool Obstacle::exit_sim() { return true; }
 
 void Obstacle::handle_pick(const polyscope::PickResult&, bool, int) {
   // Obstacles ignore picking
-}
-
-void Obstacle::draw_collision_config() {
-  ImGui::SeparatorText("Collision Setting");
-
-  silk::CollisionConfig& c = this->collision_config;
-
-  if (ImGui::Checkbox("Is Collision On", &c.is_collision_on)) {
-    collision_config_changed = true;
-  }
-  if (ImGui::InputInt("Collision Group", &c.group)) {
-    collision_config_changed = true;
-  }
-  if (ImGui::InputFloat("Restitution", &c.restitution)) {
-    collision_config_changed = true;
-  }
-  if (ImGui::InputFloat("Friction", &c.friction)) {
-    collision_config_changed = true;
-  }
 }
 
 bool Obstacle::update_silk_obstacle() {

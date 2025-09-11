@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "../gui_helper.hpp"
+#include "../gui_utils.hpp"
 
 class SceneWidget : public IWidget {
   Context& ctx_;

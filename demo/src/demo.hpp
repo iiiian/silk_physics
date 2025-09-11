@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gui_helper.hpp"
+#include "gui_utils.hpp"
 #include "widgets/help_bar_widget.hpp"
 #include "widgets/object_setting_widget.hpp"
 #include "widgets/scene_widget.hpp"

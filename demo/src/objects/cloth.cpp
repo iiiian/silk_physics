@@ -10,6 +10,7 @@
 #include <queue>
 
 #include "../polyscope_silk_interop.hpp"
+#include "draw_utils.hpp"
 
 namespace py = polyscope;
 
@@ -120,8 +121,8 @@ ObjectStat Cloth::get_stat() const {
 }
 
 void Cloth::draw() {
-  draw_cloth_config();
-  draw_collision_config();
+  draw_cloth_config(cloth_config, cloth_config_changed);
+  draw_collision_config(collision_config, collision_config_changed);
 }
 
 bool Cloth::init_sim() {
@@ -240,47 +241,6 @@ void Cloth::handle_pick(const polyscope::PickResult& pick,
   if (!pin_group.empty()) {
     auto* q = mesh->addVertexColorQuantity("pin_highlight", colors);
     q->setEnabled(true);
-  }
-}
-
-void Cloth::draw_cloth_config() {
-  ImGui::SeparatorText("Cloth Setting");
-
-  silk::ClothConfig& c = this->cloth_config;
-
-  if (ImGui::InputFloat("Elastic Stiffness", &c.elastic_stiffness)) {
-    cloth_config_changed = true;
-  }
-  if (ImGui::InputFloat("Bending Stiffness", &c.bending_stiffness)) {
-    cloth_config_changed = true;
-  }
-  if (ImGui::InputFloat("Density", &c.density)) {
-    cloth_config_changed = true;
-  }
-  if (ImGui::InputFloat("Damping", &c.damping)) {
-    cloth_config_changed = true;
-  }
-}
-
-void Cloth::draw_collision_config() {
-  ImGui::SeparatorText("Collision Setting");
-
-  silk::CollisionConfig& c = this->collision_config;
-
-  if (ImGui::Checkbox("Is Collision On", &c.is_collision_on)) {
-    collision_config_changed = true;
-  }
-  if (ImGui::Checkbox("Is Self Collision On", &c.is_self_collision_on)) {
-    collision_config_changed = true;
-  }
-  if (ImGui::InputInt("Collision Group", &c.group)) {
-    collision_config_changed = true;
-  }
-  if (ImGui::InputFloat("Restitution", &c.restitution)) {
-    collision_config_changed = true;
-  }
-  if (ImGui::InputFloat("Friction", &c.friction)) {
-    collision_config_changed = true;
   }
 }
 

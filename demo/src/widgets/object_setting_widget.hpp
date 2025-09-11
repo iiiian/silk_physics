@@ -5,7 +5,7 @@
 #include <Eigen/Core>
 #include <glm/glm.hpp>
 
-#include "../gui_helper.hpp"
+#include "../gui_utils.hpp"
 
 class ObjectSettingWidget : public IWidget {
  private:

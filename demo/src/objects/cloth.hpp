@@ -5,8 +5,8 @@
 #include <optional>
 #include <vector>
 
-#include "../gui_helper.hpp"
-#include "../object_interface.hpp"
+#include "../gui_utils.hpp"
+#include "../object.hpp"
 #include "silk/silk.hpp"
 
 class Cloth : public IObject {
@@ -74,9 +74,6 @@ class Cloth : public IObject {
 
  private:
   Cloth() = default;
-
-  void draw_cloth_config();
-  void draw_collision_config();
 
   void update_pin_index();
   std::vector<float> gather_pin_position() const;

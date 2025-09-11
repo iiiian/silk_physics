@@ -5,7 +5,7 @@
 #include <glm/glm.hpp>
 #include <silk/silk.hpp>
 
-#include "../gui_helper.hpp"
+#include "../gui_utils.hpp"
 
 class SimulatorWidget : public IWidget {
  private:

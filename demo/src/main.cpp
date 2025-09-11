@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
   if (argc > 1) {
     std::string initial_model_path = argv[1];
     spdlog::info("Attempting to load model from command line argument: {}",
-                initial_model_path);
+                 initial_model_path);
     if (!demo_app.load_model_from_path(initial_model_path)) {
       spdlog::warn(
           "Could not load initial model specified via command line: {}. "

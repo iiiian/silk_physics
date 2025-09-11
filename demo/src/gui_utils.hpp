@@ -7,7 +7,7 @@
 #include <silk/silk.hpp>
 #include <vector>
 
-#include "object_interface.hpp"
+#include "object.hpp"
 
 enum class SilkObjectType : int { Cloth = 1, Obstacle = 2 };
 enum class UIMode { Normal, Paint, Sim };
