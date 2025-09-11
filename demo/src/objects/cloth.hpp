@@ -5,33 +5,39 @@
 #include <optional>
 #include <vector>
 
-#include "../gui_helper.hpp"
-#include "../object_interface.hpp"
+#include "../gui_utils.hpp"
+#include "../object.hpp"
 #include "silk/silk.hpp"
 
 class Cloth : public IObject {
  private:
   // polyscope
-  std::string name;
-  polyscope::SurfaceMesh* mesh;
+  std::string name_;
+  polyscope::SurfaceMesh* mesh_;
 
   // mesh
-  Vert V;
-  Face F;
-  std::vector<std::vector<int>> adj;
-  float scale;
+  Vert V_;
+  Face F_;
+  std::vector<std::vector<int>> adjacency_list_;
+  float mesh_scale_;
 
   // silk
-  silk::World* world;
-  uint32_t silk_handle;
-  silk::ClothConfig cloth_config;
-  silk::CollisionConfig collision_config;
-  std::unordered_set<int> pin_group;
-  std::vector<int> pin_index;
+  silk::World* world_;
+  uint32_t silk_handle_;
+  silk::ClothConfig cloth_config_;
+  silk::CollisionConfig collision_config_;
+  std::unordered_set<int> pin_group_;
+  std::vector<int> pin_index_;
 
-  bool pin_index_changed;
-  bool cloth_config_changed;
-  bool collision_config_changed;
+  // transform
+  glm::vec3 position_;
+  glm::vec3 rotation_;
+  float scale_;
+
+  bool pin_index_changed_;
+  bool cloth_config_changed_;
+  bool collision_config_changed_;
+  bool transform_changed_;
 
  public:
   static std::optional<Cloth> try_make_cloth(silk::World* world,
@@ -65,17 +71,13 @@ class Cloth : public IObject {
   bool sim_step_post() override;
   bool exit_sim() override;
 
-  // picking/selection hook: widget forwards raw pick + add/remove intent
   void handle_pick(const polyscope::PickResult& pick, bool add_to_selection,
                    int pick_radius) override;
+  void handle_drag(const glm::vec3& shift) override;
 
  private:
   Cloth() = default;
 
-  void draw_cloth_config();
-  void draw_collision_config();
-
   void update_pin_index();
   std::vector<float> gather_pin_position() const;
-  bool update_silk_cloth();
 };

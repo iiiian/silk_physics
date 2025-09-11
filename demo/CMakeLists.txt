@@ -4,6 +4,7 @@ set(DEMO_SOURCES
     src/polyscope_silk_interop.cpp
     src/objects/cloth.cpp
     src/objects/obstacle.cpp
+    src/objects/draw_utils.cpp
     src/widgets/help_bar_widget.cpp
     src/widgets/object_setting_widget.cpp
     src/widgets/scene_widget.cpp

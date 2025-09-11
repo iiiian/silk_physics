@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../gui_helper.hpp"
+#include "../gui_utils.hpp"
 
 class SimSettingWidget : public IWidget {
  private:

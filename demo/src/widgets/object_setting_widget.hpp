@@ -5,7 +5,7 @@
 #include <Eigen/Core>
 #include <glm/glm.hpp>
 
-#include "../gui_helper.hpp"
+#include "../gui_utils.hpp"
 
 class ObjectSettingWidget : public IWidget {
  private:
@@ -20,7 +20,7 @@ class ObjectSettingWidget : public IWidget {
   ImVec2 prev_mouse_pos_ = {-1.0f, -1.0f};
   bool is_mouse_on_surface_ = false;
 
-  int pick_radius = 1;
+  int pick_radius_ = 1;
 
  public:
   explicit ObjectSettingWidget(Context& context);

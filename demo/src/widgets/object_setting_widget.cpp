@@ -8,8 +8,8 @@
 #include <cassert>
 #include <glm/glm.hpp>
 
-#include "../gui_helper.hpp"
-#include "../object_interface.hpp"
+#include "../gui_utils.hpp"
+#include "../object.hpp"
 
 namespace py = polyscope;
 
@@ -84,9 +84,9 @@ void ObjectSettingWidget::handle_paint_input() {
 
   // pass pick result so object can update pin selection
   if (left_mouse_down) {
-    object->handle_pick(pick, true, pick_radius);
+    object->handle_pick(pick, true, pick_radius_);
   } else if (right_mouse_down) {
-    object->handle_pick(pick, false, pick_radius);
+    object->handle_pick(pick, false, pick_radius_);
   }
 }
 
@@ -100,17 +100,17 @@ void ObjectSettingWidget::draw() {
     if (ctx_.selection != -1) {
       auto& obj = ctx_.objects[ctx_.selection];
 
-      // object specific settings like elastic stiffness etc.
+      // Object specific settings like elastic stiffness etc.
       ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal);
       obj->draw();
       ImGui::EndDisabled();
 
-      ImGui::Separator();
+      ImGui::SeparatorText("Paint");
 
+      // Paint mode controls.
       ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal &&
                            ctx_.ui_mode != UIMode::Paint);
       bool is_painting = (ctx_.ui_mode == UIMode::Paint);
-
       // painting mode button
       if (ImGui::Button(is_painting ? "Stop Painting" : "Start Painting")) {
         if (is_painting) {
@@ -119,14 +119,14 @@ void ObjectSettingWidget::draw() {
           enter_paint_mode();
         }
       }
+      is_painting = (ctx_.ui_mode == UIMode::Paint);
 
       // painting mode pick radius
-      ImGui::SliderInt("Paint Radius", &pick_radius, 0, 30);
+      ImGui::SliderInt("Paint Radius", &pick_radius_, 0, 30);
       if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
             "Breadth-first depth in mesh adjacency. 0 = single vertex.");
       }
-
       ImGui::EndDisabled();
 
       if (is_painting) {
