@@ -35,7 +35,6 @@ void SimulatorWidget::enter_sim_mode() {
     return;
   }
 
-  py::state::doDefaultMouseInteraction = false;
   prev_update_time_ = std::chrono::steady_clock::now();
   ctx_.ui_mode = UIMode::Sim;
   spdlog::info("Enter sim mode");
@@ -164,7 +163,7 @@ void SimulatorWidget::handle_pin_dragging() {
 
   bool is_moving = (std::abs(mouse_dx) > 1 || std::abs(mouse_dy) > 1);
 
-  // On drag: apply shift to drag object
+  // On drag: apply crtl to drag object
   if (drag_object_ && is_left_down && is_ctrl && is_moving) {
     // Hijack mouse interaction
     py::state::doDefaultMouseInteraction = false;
@@ -192,12 +191,13 @@ void SimulatorWidget::handle_pin_dragging() {
 
     // Apply shift directly as glm::vec3
     drag_object_->handle_drag(delta);
+
+    py::state::doDefaultMouseInteraction = true;
   }
 
   // On release: clear drag object
   if (!is_left_down && drag_object_) {
     spdlog::info("Stopped dragging object: {}", drag_object_->get_name());
     drag_object_ = nullptr;
-    py::state::doDefaultMouseInteraction = true;
   }
 }
