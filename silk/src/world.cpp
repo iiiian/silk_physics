@@ -214,7 +214,8 @@ class World::WorldImpl {
         pin->position(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(pin->index(i));
       }
     } else {
-      pin = {};
+      pin->index = {};
+      pin->position = {};
     }
 
     // remove outdated components
