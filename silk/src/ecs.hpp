@@ -189,6 +189,7 @@ class Registry {
       return std::make_pair(h, nullptr);
     }
     Entity* entity = this->entity.get(h);
+    entity->self = h;
     return std::make_pair(h, entity);
   }
 
