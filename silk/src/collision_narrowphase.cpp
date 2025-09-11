@@ -311,6 +311,8 @@ std::optional<Collision> point_triangle_collision(
   }
 
   c.type = CollisionType::PointTriangle;
+  c.entity_handle_a = oa.entity_handle;
+  c.entity_handle_b = ob.entity_handle;
   c.minimal_separation = ms;
   c.stiffness = base_stiffness;
   c.inv_mass = inv_mass;
@@ -449,6 +451,8 @@ std::optional<Collision> edge_edge_collision(
   }
 
   c.type = CollisionType::EdgeEdge;
+  c.entity_handle_a = oa.entity_handle;
+  c.entity_handle_b = ob.entity_handle;
   c.minimal_separation = ms;
   c.stiffness = base_stiffness;
   c.inv_mass = inv_mass;
