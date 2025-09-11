@@ -1,0 +1,40 @@
+#pragma once
+
+#include <polyscope/pick.h>
+#include <polyscope/surface_mesh.h>
+
+#include <cstdint>
+#include <memory>
+#include <string>
+
+struct ObjectStat {
+  int vert_num = 0;
+  int face_num = 0;
+};
+
+class IObject {
+ public:
+  virtual ~IObject() = default;
+
+  // getters
+  virtual std::string get_name() const = 0;
+  virtual const polyscope::SurfaceMesh* get_mesh() const = 0;
+  virtual float get_object_scale() const = 0;
+  virtual uint32_t get_silk_handle() const = 0;
+  virtual ObjectStat get_stat() const = 0;
+
+  // draw per-object imgui controls
+  virtual void draw() = 0;
+
+  // simulation hooks
+  virtual bool init_sim() = 0;
+  virtual bool sim_step_pre() = 0;
+  virtual bool sim_step_post() = 0;
+  virtual bool exit_sim() = 0;
+
+  // picking/selection hook: widget forwards raw pick + add/remove intent
+  virtual void handle_pick(const polyscope::PickResult& pick,
+                           bool add_to_selection, int pick_radius) = 0;
+};
+
+using pIObject = std::unique_ptr<IObject>;

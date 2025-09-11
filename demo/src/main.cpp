@@ -20,16 +20,16 @@ int main(int argc, char** argv) {
 
   if (argc > 1) {
     std::string initial_model_path = argv[1];
-    SPDLOG_INFO("Attempting to load model from command line argument: {}",
+    spdlog::info("Attempting to load model from command line argument: {}",
                 initial_model_path);
     if (!demo_app.load_model_from_path(initial_model_path)) {
-      SPDLOG_WARN(
+      spdlog::warn(
           "Could not load initial model specified via command line: {}. "
           "Application will continue without it.",
           initial_model_path);
     }
   } else {
-    SPDLOG_INFO(
+    spdlog::info(
         "No initial model path provided via command line arguments. "
         "Load a model using the GUI.");
   }

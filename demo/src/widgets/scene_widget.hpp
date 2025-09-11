@@ -9,6 +9,8 @@ class SceneWidget : public IWidget {
 
  public:
   SceneWidget(Context& context);
-  bool load_object_from_path(const std::string& path);
+
+  bool load_object_from_path(const std::string& path, SilkObjectType type);
+  bool load_object(SilkObjectType type);
   void draw() override;
 };

@@ -39,12 +39,12 @@ void Demo::draw() {
 void Demo::run() { py::show(); }
 
 bool Demo::load_model_from_path(const std::string& path) {
-  bool success = scene_widget_.load_object_from_path(path);
-
-  if (success) {
-    SPDLOG_INFO("Initial model loaded successfully from: {}", path);
-  } else {
-    SPDLOG_ERROR("Failed to load initial model from: {}", path);
+  // Default initial load as a cloth object
+  if (scene_widget_.load_object_from_path(path, SilkObjectType::Cloth)) {
+    spdlog::info("Initial model loaded successfully from: {}", path);
+    return true;
   }
-  return success;
+
+  spdlog::error("Failed to load initial model from: {}", path);
+  return false;
 }

@@ -12,20 +12,26 @@
 #include <Eigen/Core>
 #include <filesystem>
 #include <fstream>
+#include <string>
+#include <vector>
+
+#include "../objects/cloth.hpp"
+#include "../objects/obstacle.hpp"
 
 namespace py = polyscope;
 
 SceneWidget::SceneWidget(Context& context) : ctx_(context) {}
 
-bool SceneWidget::load_object_from_path(const std::string& path) {
-  SPDLOG_INFO("Loading model from: {}", path);
+// Read mesh from path into V,F; returns true on success
+bool SceneWidget::load_object_from_path(const std::string& path,
+                                        SilkObjectType type) {
+  spdlog::info("Loading model from: {}", path);
 
   std::filesystem::path p{path};
 
   bool success = false;
-  Eigen::MatrixXf V;
-  Eigen::MatrixXi F;
-  Eigen::MatrixX3f N;
+  Vert V;
+  Face F;
   if (p.extension() == ".off") {
     success = igl::readOFF(path, V, F);
   } else if (p.extension() == ".obj") {
@@ -35,98 +41,98 @@ bool SceneWidget::load_object_from_path(const std::string& path) {
   } else if (p.extension() == ".stl") {
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) {
-      SPDLOG_ERROR("Failed to open STL file: {}", path);
+      spdlog::error("Failed to open STL file: {}", path);
     } else {
+      Eigen::MatrixX3f N;
       success = igl::readSTL(file, V, F, N);
       file.close();
     }
   }
 
   if (!success || V.rows() == 0 || F.rows() == 0) {
-    SPDLOG_ERROR("Failed to load model or empty mesh from: {}", path);
+    spdlog::error("Failed to load model or empty mesh from: {}", path);
     return false;
   }
 
-  SPDLOG_INFO("Loaded model with {} vertices and {} faces", V.rows(), F.rows());
+  spdlog::info("Loaded model with {} vertices and {} faces", V.rows(),
+               F.rows());
 
-  Eigen::MatrixXi E;
-  igl::edges(F, E);
+  bool created = false;
+  switch (type) {
+    case SilkObjectType::Cloth: {
+      auto cloth =
+          Cloth::try_make_cloth(&ctx_.silk_world, p.stem().string(), V, F);
+      if (cloth) {
+        ctx_.objects.push_back(std::make_unique<Cloth>(std::move(*cloth)));
+        created = true;
+      } else {
+        spdlog::error("Failed to create Cloth form {}", path);
+      }
+      break;
+    }
+    case SilkObjectType::Obstacle: {
+      auto obstacle = Obstacle::try_make_obstacle(&ctx_.silk_world,
+                                                  p.stem().string(), V, F);
+      if (obstacle) {
+        ctx_.objects.push_back(
+            std::make_unique<Obstacle>(std::move(*obstacle)));
+        created = true;
+      } else {
+        spdlog::error("Failed to create Obstacle form {}", path);
+      }
+      break;
+    }
+  }
 
-  // Register new mesh
-  Object obj;
-  obj.name = p.stem();
-  obj.mesh = py::registerSurfaceMesh(p.stem(), V, F);
-  obj.V = std::move(V);
-  obj.F = std::move(F);
-  obj.vert_num = V.rows();
-  obj.edge_num = E.rows();
-  obj.face_num = F.rows();
+  if (created) {
+    ctx_.selection = ctx_.objects.size() - 1;
+    py::view::resetCameraToHomeView();
+  }
 
-  ctx_.objects.push_back(std::move(obj));
-  ctx_.selection = ctx_.objects.size() - 1;
-  py::view::resetCameraToHomeView();
+  return created;
+}
 
-  return true;
+bool SceneWidget::load_object(SilkObjectType type) {
+  std::vector<std::string> filters = {"All Supported Formats",
+                                      "*.obj *.off *.ply *.stl",
+                                      "Wavefront OBJ",
+                                      "*.obj",
+                                      "OFF Files",
+                                      "*.off",
+                                      "Stanford PLY",
+                                      "*.ply",
+                                      "STL Files",
+                                      "*.stl",
+                                      "All Files",
+                                      "*"};
+
+  std::vector<std::string> paths =
+      pfd::open_file("Select Cloth Mesh", ".", filters, pfd::opt::none)
+          .result();
+
+  if (paths.empty()) {
+    return false;
+  }
+
+  return load_object_from_path(paths[0], type);
 }
 
 void SceneWidget::draw() {
   ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal);
   if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen)) {
-    // add object botton
-    if (ImGui::Button("Load Object")) {
-      // Configure file dialog
-      std::vector<std::string> filters = {"All Supported Formats",
-                                          "*.obj *.off *.ply *.stl",
-                                          "Wavefront OBJ",
-                                          "*.obj",
-                                          "OFF Files",
-                                          "*.off",
-                                          "Stanford PLY",
-                                          "*.ply",
-                                          "STL Files",
-                                          "*.stl",
-                                          "All Files",
-                                          "*"};
-
-      // Create and show file dialog
-      auto file_names =
-          pfd::open_file("Select 3D Model", ".", filters, pfd::opt::none)
-              .result();
-
-      if (!file_names.empty()) {
-        load_object_from_path(file_names[0]);
-      }
+    // load object buttons
+    if (ImGui::Button("Load Cloth")) {
+      load_object(SilkObjectType::Cloth);
     }
 
     ImGui::SameLine();
+    if (ImGui::Button("Load Obstacle")) {
+      load_object(SilkObjectType::Obstacle);
+    }
 
     ImGui::BeginDisabled((ctx_.selection == -1));
     if (ImGui::Button("Remove Object")) {
       if (ctx_.selection != -1) {
-        Object& obj = ctx_.objects[ctx_.selection];
-
-        // remove from polyscope
-        py::removeStructure(obj.mesh);
-
-        // remove from silk
-        if (obj.silk_handle != 0) {
-          switch (obj.type) {
-            case SilkObjectType::None:
-              assert(false && "has none type but silk handle isn't empty");
-              break;
-            case SilkObjectType::Cloth: {
-              auto res = ctx_.silk_world.remove_cloth(obj.silk_handle);
-              assert((res == silk::Result::Success));
-              break;
-            }
-            case SilkObjectType::Obstacle: {
-              auto res = ctx_.silk_world.remove_obstacle(obj.silk_handle);
-              assert((res == silk::Result::Success));
-              break;
-            }
-          }
-        }
-
         // remove from context
         ctx_.objects.erase(ctx_.objects.begin() + ctx_.selection);
         ctx_.selection = -1;
@@ -134,14 +140,21 @@ void SceneWidget::draw() {
     }
     ImGui::EndDisabled();
 
-    std::vector<const char*> names;
+    std::vector<std::string> names;
     names.reserve(ctx_.objects.size());
     for (const auto& obj : ctx_.objects) {
-      names.push_back(obj.name.c_str());
+      names.push_back(obj->get_name());
     }
 
+    auto get_name = [](void* data, int idx, const char** out_text) -> bool {
+      auto* vec = static_cast<std::vector<std::string>*>(data);
+      *out_text = vec->at(idx).c_str();
+      return true;
+    };
+
     ImGui::SetNextItemWidth(-1);
-    ImGui::ListBox("##Objects", &ctx_.selection, names.data(), names.size(), 5);
+    ImGui::ListBox("##Objects", &ctx_.selection, get_name, &names,
+                   static_cast<int>(names.size()), 5);
   }
 
   ImGui::EndDisabled();

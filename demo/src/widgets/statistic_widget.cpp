@@ -9,10 +9,11 @@ void StatisticWidget::draw() {
     ImGui::Text("FPS %f", ImGui::GetIO().Framerate);
     ImGui::Separator();
     if (ctx_.selection != -1) {
-      Object& obj = ctx_.objects[ctx_.selection];
+      auto& obj = ctx_.objects[ctx_.selection];
+      ObjectStat stat = obj->get_stat();
 
-      ImGui::Text("Object Vertex Num: %d", int(obj.V.rows()));
-      ImGui::Text("Object Face Num: %d", int(obj.F.rows()));
+      ImGui::Text("Object Vertex Num: %d", stat.vert_num);
+      ImGui::Text("Object Face Num: %d", stat.face_num);
     }
   }
 }
