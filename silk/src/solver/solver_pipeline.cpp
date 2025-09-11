@@ -17,6 +17,7 @@ void SolverPipeline::clear(Registry& registry) {
     registry.remove<ClothStaticSolverData>(e);
     registry.remove<ClothDynamicSolverData>(e);
     registry.remove<SolverState>(e);
+    registry.remove<ObjectCollider>(e);
   }
 
   collisions_.clear();
@@ -27,17 +28,13 @@ void SolverPipeline::reset(Registry& registry) {
   collisions_.clear();
 }
 
-bool SolverPipeline::init(Registry& registry) {
-  if (!init_all_cloth_for_solver(registry, dt)) {
-    return false;
-  }
-  collisions_.clear();
-  return true;
-}
-
 bool SolverPipeline::step(Registry& registry,
                           CollisionPipeline& collision_pipeline) {
   SPDLOG_DEBUG("solver step");
+
+  if (!init_all_cloth_for_solver(registry, dt)) {
+    return false;
+  }
 
   // Collect state and state velocity of all physical entities into one global
   // state and velocity.
@@ -272,8 +269,7 @@ BarrierConstrain SolverPipeline::compute_barrier_constrain(
 
 void SolverPipeline::enforce_barrier_constrain(
     const BarrierConstrain& barrier_constrain, const Bbox& scene_bbox,
-    Eigen::VectorXf& state) const
-{
+    Eigen::VectorXf& state) const {
   if (collisions_.empty()) {
     return;
   }

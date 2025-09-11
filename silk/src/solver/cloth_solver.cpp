@@ -83,7 +83,6 @@ Eigen::Matrix<float, 6, 9> triangle_jacobian_operator(
  */
 ClothStaticSolverData make_cloth_static_solver_data(const ClothConfig& config,
                                                     const TriMesh& mesh) {
-  const ClothConfig& c = config;
   const TriMesh& m = mesh;
 
   int vert_num = m.V.rows();
@@ -141,7 +140,7 @@ ClothStaticSolverData make_cloth_static_solver_data(const ClothConfig& config,
   JWJ.setFromTriplets(JWJ_triplets.begin(), JWJ_triplets.end());
 
   ClothStaticSolverData d;
-  d.mass = c.density * voroni_mass.diagonal();
+  d.mass = voroni_mass.diagonal();
   d.area = std::move(area);
   d.CWC = std::move(CWC);
   d.JWJ = std::move(JWJ);
@@ -166,7 +165,7 @@ std::optional<ClothDynamicSolverData> make_cloth_dynamic_solver_data(
   std::vector<Eigen::Triplet<float>> H_triplets;
 
   // Assemble momentum term.
-  Eigen::VectorXf M = 1.0f / (dt * dt) * s.mass;
+  Eigen::VectorXf M = 1.0f / (dt * dt) * c.density * s.mass;
   for (int i = 0; i < M.size(); ++i) {
     H_triplets.emplace_back(3 * i, 3 * i, M(i));
     H_triplets.emplace_back(3 * i + 1, 3 * i + 1, M(i));
@@ -202,9 +201,18 @@ std::optional<ClothDynamicSolverData> make_cloth_dynamic_solver_data(
     return std::nullopt;
   }
 
+  Eigen::VectorXf vec_mass(state_num);
+  for (int i = 0; i < s.mass.size(); ++i) {
+    float val = c.density * s.mass(i);
+    vec_mass(3 * i) = val;
+    vec_mass(3 * i + 1) = val;
+    vec_mass(3 * i + 2) = val;
+  }
+
   ClothDynamicSolverData d;
   d.dt = dt;
   d.has_barrier_constrain = false;
+  d.mass = std::move(vec_mass);
   d.H = std::move(H);
   d.L = std::move(L);
   d.LB = {};
@@ -250,18 +258,18 @@ bool init_all_cloth_for_solver(Registry& registry, float dt) {
           Eigen::VectorXf::Zero(new_solver_state.state_num);
       solver_state = registry.set(e, std::move(new_solver_state));
     }
+    assert(solver_state != nullptr);
 
     auto static_data = registry.get<ClothStaticSolverData>(e);
     if (!static_data) {
       static_data =
           registry.set(e, make_cloth_static_solver_data(*config, *mesh));
     }
-    assert((static_data != nullptr));
+    assert(static_data != nullptr);
 
     auto dynamic_data = registry.get<ClothDynamicSolverData>(e);
-    if (dynamic_data) {
+    if (dynamic_data && dynamic_data->dt == dt) {
       dynamic_data->has_barrier_constrain = false;
-      dynamic_data->LB = {};
     } else {
       auto new_dynamic_data =
           make_cloth_dynamic_solver_data(*config, *static_data, *pin, dt);
@@ -319,16 +327,13 @@ bool compute_cloth_outer_loop(
     Eigen::Ref<const Eigen::VectorXf> state_acceleration,
     Eigen::Ref<const Eigen::VectorXf> barrier_lhs,
     Eigen::Ref<const Eigen::VectorXf> barrier_rhs,
-    const ClothStaticSolverData& static_data,
     ClothDynamicSolverData& dynamic_data, Eigen::Ref<Eigen::VectorXf> rhs) {
-  auto& s = static_data;
   auto& d = dynamic_data;
 
   // Momentum contribution to RHS (implicit Euler style aggregation).
-  auto vectorized_mass = s.mass.replicate(1, 3).reshaped<Eigen::RowMajor>();
-  rhs.noalias() += (vectorized_mass / (d.dt * d.dt)).asDiagonal() * state +
-                   (vectorized_mass / d.dt).asDiagonal() * state_velocity +
-                   vectorized_mass.asDiagonal() * state_acceleration;
+  rhs.noalias() += (d.mass / (d.dt * d.dt)).asDiagonal() * state +
+                   (d.mass / d.dt).asDiagonal() * state_velocity +
+                   d.mass.asDiagonal() * state_acceleration;
 
   int state_num = state.size();
 
@@ -380,17 +385,15 @@ bool compute_all_cloth_outer_loop(
     const BarrierConstrain& barrier_constrain, Eigen::VectorXf& rhs) {
   for (Entity& e : registry.get_all_entities()) {
     auto solver_state = registry.get<SolverState>(e);
-    auto static_data = registry.get<ClothStaticSolverData>(e);
     auto dynamic_data = registry.get<ClothDynamicSolverData>(e);
 
-    if (solver_state && static_data && dynamic_data) {
+    if (solver_state && dynamic_data) {
       auto seq =
           Eigen::seqN(solver_state->state_offset, solver_state->state_num);
       if (!compute_cloth_outer_loop(
               global_state(seq), global_state_velocity(seq),
               global_state_acceleration(seq), barrier_constrain.lhs(seq),
-              barrier_constrain.rhs(seq), *static_data, *dynamic_data,
-              rhs(seq))) {
+              barrier_constrain.rhs(seq), *dynamic_data, rhs(seq))) {
         return false;
       }
     }

@@ -17,7 +17,6 @@ namespace silk {
 
 class World::WorldImpl {
  private:
-  bool is_solver_init = false;
   Registry registry_;
   SolverPipeline solver_pipeline_;
   CollisionPipeline collision_pipeline_;
@@ -25,8 +24,6 @@ class World::WorldImpl {
  public:
   // Global API
   Result set_global_config(GlobalConfig config) {
-    is_solver_init = false;
-
     auto& c = config;
     solver_pipeline_.const_acceleration = {c.acceleration_x, c.acceleration_y,
                                            c.acceleration_z};
@@ -39,19 +36,11 @@ class World::WorldImpl {
   }
 
   void clear() {
-    is_solver_init = false;
     solver_pipeline_.clear(registry_);
     registry_.clear();
   }
 
   // Solver API
-  Result solver_init() {
-    if (!solver_pipeline_.init(registry_)) {
-      return Result::error(ErrorCode::CholeskyDecompositionFail);
-    }
-    is_solver_init = true;
-    return Result::ok();
-  }
 
   Result solver_step() {
     if (!solver_pipeline_.step(registry_, collision_pipeline_)) {
@@ -75,9 +64,6 @@ class World::WorldImpl {
   }
 
   Result solver_reset() {
-    if (!is_solver_init) {
-      return Result::error(ErrorCode::NeedInitSolverFirst);
-    }
     solver_pipeline_.reset(registry_);
     return Result::ok();
   }
@@ -114,7 +100,6 @@ class World::WorldImpl {
     registry_.set<Pin>(*e, std::move(p));
 
     handle = h.value;
-    is_solver_init = false;
     return Result::ok();
   }
 
@@ -129,7 +114,6 @@ class World::WorldImpl {
       return Result::error(ErrorCode::InvalidHandle);
     }
 
-    is_solver_init = false;
     registry_.remove_entity(handle);
 
     return Result::ok();
@@ -177,7 +161,6 @@ class World::WorldImpl {
       return Result::error(ErrorCode::InvalidHandle);
     }
 
-    is_solver_init = false;
     *cloth_config = config;
 
     // remove outdated components
@@ -215,8 +198,6 @@ class World::WorldImpl {
     if (!cloth_config) {
       return Result::error(ErrorCode::InvalidHandle);
     }
-
-    is_solver_init = false;
 
     // make tri mesh
     auto tri_mesh = registry_.get<TriMesh>(*e);
@@ -361,7 +342,6 @@ Result World::set_global_config(GlobalConfig config) {
   return impl_->set_global_config(config);
 }
 void World::clear() { impl_->clear(); }
-Result World::solver_init() { return impl_->solver_init(); }
 Result World::solver_step() { return impl_->solver_step(); }
 Result World::solver_reset() { return impl_->solver_reset(); }
 Result World::add_cloth(ClothConfig cloth_config,

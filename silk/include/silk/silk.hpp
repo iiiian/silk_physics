@@ -80,7 +80,6 @@ class World {
   void clear();
 
   // Solver API
-  [[nodiscard]] Result solver_init();
   [[nodiscard]] Result solver_step();
   [[nodiscard]] Result solver_reset();
 

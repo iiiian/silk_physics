@@ -12,7 +12,8 @@ namespace silk {
 /**
  * Static, mesh-dependent quantities used by the cloth solver.
  *
- * Built once from mesh and material data, and reused across time steps.
+ * Built once from geometry and reused across time steps. This data should not
+ * depend on runtime-configurable physical parameters.
  *
  * Notation:
  * vnum = number of vertices.
@@ -20,7 +21,7 @@ namespace silk {
  * state_num = 3 * vnum.
  */
 struct ClothStaticSolverData {
-  // Per-vertex mass vector of length vnum.
+  // Geometry-only Voronoi vertex mass of length vnum (no density applied).
   Eigen::VectorXf mass;
   // Per-face area vector of length fnum.
   Eigen::VectorXf area;
@@ -46,7 +47,7 @@ struct ClothStaticSolverData {
 /**
  * Dynamic, time step or config dependent quantities used by the cloth solver.
  *
- * Built once at solver pipeline initialization.
+ * Built at initialization and whenever dt or config changes.
  *
  * Notation:
  * state_num = 3 * vertex num.
@@ -56,6 +57,10 @@ struct ClothDynamicSolverData {
   float dt;
   // Whether barrier constraints are currently active.
   bool has_barrier_constrain;
+
+  // True vectorized per-vertex mass vector (density-scaled) of length state
+  // num.
+  Eigen::VectorXf mass;
 
   // Left-hand side H of Hx = b, combining momentum, bending, in-plane, and pin
   // energies.

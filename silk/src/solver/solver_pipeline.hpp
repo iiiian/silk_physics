@@ -39,12 +39,6 @@ class SolverPipeline {
   void reset(Registry& registry);
 
   /**
-   * @brief Initialize all cloth data needed by the solver.
-   * @returns True on success, false if any cloth init fails.
-   */
-  bool init(Registry& registry);
-
-  /**
    * @brief Advance the simulation by one time step.
    * @param registry ECS registry containing solver states and components.
    * @param collision_pipeline Collision detector used for CCD queries.
