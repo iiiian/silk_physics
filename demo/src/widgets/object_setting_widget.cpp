@@ -105,7 +105,7 @@ void ObjectSettingWidget::draw() {
       obj->draw();
       ImGui::EndDisabled();
 
-      ImGui::Separator();
+      ImGui::SeparatorText("Paint");
 
       ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal &&
                            ctx_.ui_mode != UIMode::Paint);

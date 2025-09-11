@@ -312,7 +312,7 @@ bool Cloth::update_silk_cloth() {
   return true;
 }
 
-void Cloth::apply_position_shift(const glm::vec3& shift) {
+void Cloth::handle_drag(const glm::vec3& shift) {
   if (pin_group.empty()) {
     return;  // No pins to shift
   }

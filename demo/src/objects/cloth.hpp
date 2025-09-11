@@ -70,7 +70,7 @@ class Cloth : public IObject {
                    int pick_radius) override;
 
   // position shift for dragging during simulation
-  void apply_position_shift(const glm::vec3& shift) override;
+  void handle_drag(const glm::vec3& shift) override;
 
  private:
   Cloth() = default;

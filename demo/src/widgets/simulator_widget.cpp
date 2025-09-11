@@ -192,7 +192,7 @@ void SimulatorWidget::handle_pin_dragging() {
                       mouse_dy_ratio * span_y * camera_up;
 
     // Apply shift directly as glm::vec3
-    drag_object_->apply_position_shift(delta);
+    drag_object_->handle_drag(delta);
   }
 
   // On release: clear drag object
