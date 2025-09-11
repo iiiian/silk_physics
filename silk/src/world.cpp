@@ -262,6 +262,7 @@ class World::WorldImpl {
     ObstaclePosition p;
     p.is_static = true;
     p.position = tri_mesh->V.reshaped<Eigen::RowMajor>();
+    p.prev_position = p.position;
 
     auto [h, e] = registry_.add_entity();
     if (h.is_empty()) {
