@@ -5,6 +5,7 @@
 #include "../gui_utils.hpp"
 
 class SceneWidget : public IWidget {
+ private:
   Context& ctx_;
 
  public:

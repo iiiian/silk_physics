@@ -3,6 +3,7 @@
 #include "../gui_utils.hpp"
 
 class HelpBarWidget : public IWidget {
+ private:
   Context& ctx_;
 
  public:

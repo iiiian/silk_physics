@@ -9,6 +9,7 @@
 #include "widgets/statistic_widget.hpp"
 
 class Demo {
+ private:
   Context ctx_ = {};
 
   SceneWidget scene_widget_{ctx_};
@@ -18,10 +19,11 @@ class Demo {
   HelpBarWidget help_bar_widget_{ctx_};
   StatisticWidget statistic_widget_{ctx_};
 
-  void draw();
-
  public:
   Demo();
   void run();
   bool load_model_from_path(const std::string& path);
+
+ private:
+  void draw();
 };

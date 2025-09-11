@@ -84,9 +84,9 @@ void ObjectSettingWidget::handle_paint_input() {
 
   // pass pick result so object can update pin selection
   if (left_mouse_down) {
-    object->handle_pick(pick, true, pick_radius);
+    object->handle_pick(pick, true, pick_radius_);
   } else if (right_mouse_down) {
-    object->handle_pick(pick, false, pick_radius);
+    object->handle_pick(pick, false, pick_radius_);
   }
 }
 
@@ -121,7 +121,7 @@ void ObjectSettingWidget::draw() {
       }
 
       // painting mode pick radius
-      ImGui::SliderInt("Paint Radius", &pick_radius, 0, 30);
+      ImGui::SliderInt("Paint Radius", &pick_radius_, 0, 30);
       if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
             "Breadth-first depth in mesh adjacency. 0 = single vertex.");
