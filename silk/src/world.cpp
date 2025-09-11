@@ -323,7 +323,7 @@ class World::WorldImpl {
     }
 
     if (pos->position.size() != position.size) {
-      return Result::error(ErrorCode::IncorrectPinNum);
+      return Result::error(ErrorCode::IncorrectPositionNum);
     }
 
     pos->is_static = false;
