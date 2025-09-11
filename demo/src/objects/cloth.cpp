@@ -351,3 +351,15 @@ bool Cloth::update_silk_cloth() {
 
   return true;
 }
+
+void Cloth::apply_position_shift(const glm::vec3& shift) {
+  if (pin_group.empty()) {
+    return;  // No pins to shift
+  }
+
+  mesh->vertexPositions.ensureHostBufferAllocated();
+  for (int idx : pin_group) {
+    mesh->vertexPositions.data[idx] += shift;
+  }
+  mesh->vertexPositions.markHostBufferUpdated();
+}

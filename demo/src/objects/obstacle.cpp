@@ -174,3 +174,12 @@ bool Obstacle::update_silk_obstacle() {
 
   return true;
 }
+
+void Obstacle::apply_position_shift(const glm::vec3& shift) {
+  // Shift entire mesh (whole mesh is effectively pinned for obstacles)
+  mesh->vertexPositions.ensureHostBufferAllocated();
+  for (int i = 0; i < V.rows(); ++i) {
+    mesh->vertexPositions.data[i] += shift;
+  }
+  mesh->vertexPositions.markHostBufferUpdated();
+}

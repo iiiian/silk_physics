@@ -67,6 +67,9 @@ class Obstacle : public IObject {
   void handle_pick(const polyscope::PickResult& pick, bool add_to_selection,
                    int pick_radius) override;
 
+  // position shift for dragging during simulation
+  void apply_position_shift(const glm::vec3& shift) override;
+
  private:
   Obstacle() = default;
 
