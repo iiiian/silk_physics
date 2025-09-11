@@ -57,6 +57,12 @@ bool SceneWidget::load_object_from_path(const std::string& path,
   spdlog::info("Loaded model with {} vertices and {} faces", V.rows(),
                F.rows());
 
+  // Auto-center the mesh by computing vertex mean and shifting to origin
+  Eigen::Vector3f center = V.colwise().mean();
+  V.rowwise() -= center.transpose();
+  spdlog::info("Mesh centered by shifting ({}, {}, {})", center.x(), center.y(),
+               center.z());
+
   bool created = false;
   switch (type) {
     case SilkObjectType::Cloth: {
