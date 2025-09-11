@@ -129,7 +129,6 @@ void SimulatorWidget::draw() {
 void SimulatorWidget::handle_pin_dragging() {
   ImVec2 mouse_pos = ImGui::GetMousePos();
   bool is_left_click = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
-  bool is_left_release = ImGui::IsMouseReleased(ImGuiMouseButton_Left);
   bool is_left_down = ImGui::IsMouseDown(ImGuiMouseButton_Left);
   bool is_ctrl = ImGui::GetIO().KeyCtrl;
 
@@ -196,7 +195,7 @@ void SimulatorWidget::handle_pin_dragging() {
   }
 
   // On release: clear drag object
-  if (is_left_release && drag_object_) {
+  if (!is_left_down && drag_object_) {
     spdlog::info("Stopped dragging object: {}", drag_object_->get_name());
     drag_object_ = nullptr;
     py::state::doDefaultMouseInteraction = true;
