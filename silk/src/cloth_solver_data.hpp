@@ -38,9 +38,9 @@ struct ClothStaticSolverData {
   // Since Eigen::SparseMatrix lacks noexcept move ctor, explicitly
   // delete copy ctor to avoid error when used in containers like std::vector.
   ClothStaticSolverData() = default;
-  ClothStaticSolverData(ClothStaticSolverData&) = delete;
+  ClothStaticSolverData(const ClothStaticSolverData&) = delete;
   ClothStaticSolverData(ClothStaticSolverData&&) = default;
-  ClothStaticSolverData& operator=(ClothStaticSolverData&) = delete;
+  ClothStaticSolverData& operator=(const ClothStaticSolverData&) = delete;
   ClothStaticSolverData& operator=(ClothStaticSolverData&&) = default;
 };
 

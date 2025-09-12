@@ -16,12 +16,12 @@ class CholmodCommon {
 
  public:
   CholmodCommon();
-  CholmodCommon(CholmodCommon&) = delete;
+  CholmodCommon(const CholmodCommon&) = delete;
   CholmodCommon(CholmodCommon&&) = delete;
 
   ~CholmodCommon();
 
-  CholmodCommon& operator=(CholmodCommon&) = delete;
+  CholmodCommon& operator=(const CholmodCommon&) = delete;
   CholmodCommon& operator=(CholmodCommon&&) = delete;
 
   operator cholmod_common*();

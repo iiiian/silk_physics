@@ -280,7 +280,7 @@ class KDTree {
  public:
   KDTree() = default;
 
-  KDTree(KDTree&) = delete;
+  KDTree(const KDTree&) = delete;
 
   KDTree(KDTree&& tree) noexcept {
     collider_num_ = tree.collider_num_;
@@ -297,7 +297,7 @@ class KDTree {
 
   ~KDTree() { delete_subtree(root_); }
 
-  KDTree& operator=(KDTree&) = delete;
+  KDTree& operator=(const KDTree&) = delete;
 
   KDTree& operator=(KDTree&& tree) noexcept {
     collider_num_ = tree.collider_num_;

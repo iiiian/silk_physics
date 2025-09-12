@@ -70,8 +70,8 @@ class World {
  public:
   World();
   ~World();
-  World(World&) = delete;
-  World& operator=(World&) = delete;
+  World(const World&) = delete;
+  World& operator=(const World&) = delete;
   World(World&&);
   World& operator=(World&&);
 
