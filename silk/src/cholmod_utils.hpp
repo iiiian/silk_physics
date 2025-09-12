@@ -176,26 +176,6 @@ cholmod_dense make_cholmod_dense_view(Eigen::DenseBase<Derived>& M) {
   return d;
 }
 
-template <typename Scalar>
-cholmod_dense make_cholmod_dense_vector_view(
-    Eigen::Matrix<Scalar, Eigen::Dynamic, 1>& v) {
-  cholmod_dense d;
-  d.nrow = v.size();
-  d.ncol = 1;
-  d.d = v.outerStride();  // usually equals nrow
-  d.x = static_cast<void*>(v.data());
-  d.z = nullptr;
-  d.xtype = CHOLMOD_REAL;
-
-  if constexpr (std::is_same_v<Scalar, double>) {
-    d.dtype = CHOLMOD_DOUBLE;
-  } else {
-    d.dtype = CHOLMOD_SINGLE;
-  }
-
-  return d;
-}
-
 Eigen::Map<Eigen::VectorXf> make_eigen_dense_vector_view(cholmod_dense* v);
 
 }  // namespace silk::cholmod_raii

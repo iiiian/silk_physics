@@ -461,8 +461,8 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
   }
 
   // Global solve with (optionally barrier‑updated) Cholesky factorization.
-  cholmod_dense rhs_view = cholmod_raii::make_cholmod_dense_vector_view(rhs);
   auto& L = (d.has_barrier_constrain) ? d.LB : d.L;
+  cholmod_dense rhs_view = cholmod_raii::make_cholmod_dense_view(rhs);
 
   cholmod_raii::CholmodDense cholmod_solution =
       cholmod_solve(CHOLMOD_A, L, &rhs_view, cholmod_raii::common);
