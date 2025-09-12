@@ -241,10 +241,12 @@ void reset_all_cloth_for_solver(Registry& registry) {
 
 bool init_all_cloth_for_solver(Registry& registry, float dt) {
   for (Entity& e : registry.get_all_entities()) {
-    auto config = registry.get<ClothConfig>(e);
+    auto cloth_config = registry.get<ClothConfig>(e);
+    auto collision_config = registry.get<CollisionConfig>(e);
     auto mesh = registry.get<TriMesh>(e);
     auto pin = registry.get<Pin>(e);
-    if (!(config && mesh && pin)) {
+
+    if (!cloth_config) {
       continue;
     }
 
@@ -259,6 +261,8 @@ bool init_all_cloth_for_solver(Registry& registry, float dt) {
       solver_state = registry.set(e, std::move(new_solver_state));
     }
     assert(solver_state != nullptr);
+    // Cloth entity sanity check.
+    assert(collision_config && mesh && pin);
 
     auto static_data = registry.get<ClothStaticSolverData>(e);
     if (!static_data) {
@@ -279,6 +283,15 @@ bool init_all_cloth_for_solver(Registry& registry, float dt) {
       }
       registry.set<ClothDynamicSolverData>(e, std::move(*new_dynamic_data));
     }
+
+    auto collider = registry.get<ObjectCollider>(e);
+    if (!collider) {
+      auto new_collider =
+          make_physical_object_collider(e.self, *collision_config, *mesh, *pin,
+                                        context->mass, state->state_offset);
+      collider = registry.set<ObjectCollider>(e, std::move(new_collider));
+    }
+    assert(collider != nullptr);
   }
 
   return true;

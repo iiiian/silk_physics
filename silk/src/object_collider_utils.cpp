@@ -4,18 +4,30 @@
 
 #include <Eigen/Core>
 #include <functional>
+#include <silk/silk.hpp>
 #include <unordered_set>
 
-#include "cloth_solver_data.hpp"
 #include "handle.hpp"
 #include "mesh.hpp"
+#include "object_collider.hpp"
+#include "obstacle_position.hpp"
 #include "pin.hpp"
-#include "silk/silk.hpp"
-#include "solver_state.hpp"
 
 namespace silk {
 
-// Create vertex, edge, and face mesh colliders.
+/**
+ * Creates all mesh colliders (vertices, edges, faces) for collision detection.
+ *
+ * @param mesh Triangle mesh to convert into collision primitives
+ * @param bbox_padding Amount to expand bounding boxes for collision tolerance
+ * @param get_inv_mass Function returning inverse mass for each vertex index
+ * @return Vector of mesh colliders ready for spatial partitioning
+ *
+ * Creates three types of colliders for comprehensive collision detection:
+ * - Point colliders for vertex-vertex and vertex-face interactions
+ * - Edge colliders for edge-edge interactions
+ * - Triangle colliders for continuous collision detection against faces
+ */
 std::vector<MeshCollider> make_mesh_colliders(
     const TriMesh& mesh, float bbox_padding,
     std::function<float(int)> get_inv_mass) {
@@ -27,7 +39,7 @@ std::vector<MeshCollider> make_mesh_colliders(
 
   std::vector<MeshCollider> mesh_colliders;
 
-  // Create vertex collider
+  // Create point colliders for vertex-level collision detection.
   for (int i = 0; i < vert_num; ++i) {
     MeshCollider mc;
     mc.type = MeshColliderType::Point;
@@ -42,7 +54,7 @@ std::vector<MeshCollider> make_mesh_colliders(
     mesh_colliders.emplace_back(std::move(mc));
   }
 
-  // Create edge collider
+  // Create edge colliders for edge-edge collision detection.
   for (int i = 0; i < edge_num; ++i) {
     MeshCollider mc;
     auto& p0 = mc.position_t0;
@@ -62,7 +74,7 @@ std::vector<MeshCollider> make_mesh_colliders(
     mesh_colliders.emplace_back(std::move(mc));
   }
 
-  // Create face collider
+  // Create triangle colliders for continuous collision detection.
   for (int i = 0; i < face_num; ++i) {
     MeshCollider mc;
     auto& p0 = mc.position_t0;
@@ -98,7 +110,7 @@ ObjectCollider make_physical_object_collider(
   o.entity_handle = entity_handle;
   o.state_offset = state_offset;
 
-  // Heuristic: pad object AABB by 5% of mesh scale to avoid zero width bbox.
+  // Pad object AABB by 5% of mesh scale to avoid zero-width degenerate cases.
   o.bbox_padding = 0.05f * mesh.avg_edge_length;
   Eigen::Vector3f min = mesh.V.colwise().minCoeff();
   Eigen::Vector3f max = mesh.V.colwise().maxCoeff();
@@ -108,13 +120,12 @@ ObjectCollider make_physical_object_collider(
   // Note: group == -1 disables this collider in the broad phase.
   o.group = (c.is_collision_on) ? c.group : -1;
   o.is_static = false;
-  o.is_obstacle = false;
   o.is_self_collision_on = c.is_self_collision_on;
   o.restitution = config.restitution;
   o.friction = config.friction;
 
   std::unordered_set<int> pin_set(pin.index.begin(), pin.index.end());
-  // inv mass = 0 if vertex is pinned.
+  // Pinned vertices get infinite mass (zero inverse mass) to prevent movement.
   auto get_inv_mass = [&pin_set, &mass](int index) -> float {
     if (pin_set.find(index) != pin_set.end()) {
       return 0.0f;
@@ -137,8 +148,9 @@ ObjectCollider make_obstacle_object_collider(Handle entity_handle,
   o.entity_handle = entity_handle;
   o.state_offset = -1;
 
-  // Heuristic: pad object AABB by 5% of mesh scale to avoid zero width bbox.
+  // Pad object AABB by 5% of mesh scale to avoid zero-width degenerate cases.
   o.bbox_padding = 0.05f * mesh.avg_edge_length;
+
   Eigen::Vector3f min = mesh.V.colwise().minCoeff();
   Eigen::Vector3f max = mesh.V.colwise().maxCoeff();
   o.bbox = Bbox{min, max};
@@ -147,48 +159,16 @@ ObjectCollider make_obstacle_object_collider(Handle entity_handle,
   // Note: group == -1 disables this collider in the broad phase.
   o.group = (c.is_collision_on) ? c.group : -1;
   o.is_static = false;
-  o.is_obstacle = true;
   o.is_self_collision_on = c.is_self_collision_on;
   o.restitution = config.restitution;
   o.friction = config.friction;
 
-  // for obstacle, inv mass is always 0.
+  // Obstacles have infinite mass (zero inverse mass).
   auto get_inv_mass = [](int index) { return 0.0f; };
   o.mesh_collider_tree.init(
       make_mesh_colliders(mesh, o.bbox_padding, get_inv_mass));
 
   return o;
-}
-
-void make_all_object_collider(Registry& registry) {
-  // Lazily attach colliders to entities that have enough data. Existing
-  // colliders are preserved to avoid unnecessary rebuilds.
-  for (Entity& e : registry.get_all_entities()) {
-    auto config = registry.get<CollisionConfig>(e);
-    auto mesh = registry.get<TriMesh>(e);
-    auto pin = registry.get<Pin>(e);
-    auto cloth_static_data = registry.get<ClothStaticSolverData>(e);
-    auto solver_state = registry.get<SolverState>(e);
-    auto object_collider = registry.get<ObjectCollider>(e);
-
-    if (object_collider) {
-      continue;
-    }
-
-    if (config && mesh && pin && cloth_static_data && solver_state) {
-      registry.set<ObjectCollider>(
-          e, make_physical_object_collider(e.self, *config, *mesh, *pin,
-                                           cloth_static_data->mass,
-                                           solver_state->state_offset));
-      continue;
-    };
-
-    if (config && mesh) {
-      registry.set<ObjectCollider>(
-          e, make_obstacle_object_collider(e.self, *config, *mesh));
-      continue;
-    }
-  }
 }
 
 void update_physical_object_collider(
@@ -203,14 +183,12 @@ void update_physical_object_collider(
   o.restitution = config.restitution;
   o.friction = config.friction;
 
-  // Always update mesh colliders for physical entity.
-
+  // Extract vertex positions from state vector.
   auto get_vertex = [](Eigen::Ref<const Eigen::VectorXf> vec,
                        int index) -> Eigen::Vector3f {
     return vec(Eigen::seqN(3 * index, 3));
   };
 
-  // Init bbox with the position of the first vertex.
   o.bbox = Bbox{curr_state(Eigen::seqN(0, 3)), curr_state(Eigen::seqN(0, 3))};
   std::vector<Bbox> thread_local_bboxes(omp_get_max_threads(), o.bbox);
 
@@ -227,6 +205,7 @@ void update_physical_object_collider(
       case MeshColliderType::Point: {
         p0.col(0) = get_vertex(prev_state, mc.index(0));
         p1.col(0) = get_vertex(curr_state, mc.index(0));
+        // Bounding box must contain trajectory between timesteps.
         mc.bbox.min = p0.col(0).cwiseMin(p1.col(0));
         mc.bbox.max = p0.col(0).cwiseMax(p1.col(0));
         mc.bbox.pad_inplace(o.bbox_padding);
@@ -238,6 +217,7 @@ void update_physical_object_collider(
         p0.col(1) = get_vertex(prev_state, mc.index(1));
         p1.col(0) = get_vertex(curr_state, mc.index(0));
         p1.col(1) = get_vertex(curr_state, mc.index(1));
+        // Bounding box contains swept volume of edge between timesteps.
         mc.bbox.min =
             p0.col(0).cwiseMin(p0.col(1)).cwiseMin(p1.col(0)).cwiseMin(
                 p1.col(1));
@@ -255,6 +235,7 @@ void update_physical_object_collider(
         p1.col(0) = get_vertex(curr_state, mc.index(0));
         p1.col(1) = get_vertex(curr_state, mc.index(1));
         p1.col(2) = get_vertex(curr_state, mc.index(2));
+        // Bounding box contains swept volume of triangle between timesteps.
         mc.bbox.min = p0.rowwise().minCoeff().cwiseMin(p1.rowwise().minCoeff());
         mc.bbox.max = p0.rowwise().maxCoeff().cwiseMax(p1.rowwise().maxCoeff());
         mc.bbox.pad_inplace(o.bbox_padding);
@@ -264,28 +245,12 @@ void update_physical_object_collider(
     }
   }
 
+  // Merge thread-local bounding boxes into final object bounding box.
   for (auto& bbox : thread_local_bboxes) {
     o.bbox.merge_inplace(bbox);
   }
 
   o.mesh_collider_tree.update(o.bbox);
-}
-
-void update_all_physical_object_collider(
-    Registry& registry, const Eigen::VectorXf& global_state,
-    const Eigen::VectorXf& prev_global_state) {
-  for (Entity& e : registry.get_all_entities()) {
-    auto config = registry.get<CollisionConfig>(e);
-    auto state = registry.get<SolverState>(e);
-    auto collider = registry.get<ObjectCollider>(e);
-
-    if (config && state && collider) {
-      auto seq = Eigen::seqN(state->state_offset, state->state_num);
-      update_physical_object_collider(*config, global_state(seq),
-                                      prev_global_state(seq), *collider);
-      continue;
-    };
-  }
 }
 
 void update_obstacle_object_collider(const CollisionConfig& config,
@@ -300,20 +265,19 @@ void update_obstacle_object_collider(const CollisionConfig& config,
   o.restitution = config.restitution;
   o.friction = config.friction;
 
-  // If the obstacle is static, skip updates.
+  // Skip expensive position updates for static obstacles.
   if (o.is_static) {
     return;
   }
 
+  // Extract vertex positions from state vector.
   auto get_vertex = [](Eigen::Ref<const Eigen::VectorXf> vec,
                        int index) -> Eigen::Vector3f {
     return vec(Eigen::seqN(3 * index, 3));
   };
 
-  // Init bbox with the position of the first vertex.
   o.bbox = Bbox{p.position(Eigen::seqN(0, 3)), p.position(Eigen::seqN(0, 3))};
   std::vector<Bbox> thread_local_bboxes(omp_get_max_threads(), o.bbox);
-
   auto& colliders = o.mesh_collider_tree.get_colliders();
 
 #pragma omp parallel for
@@ -365,24 +329,12 @@ void update_obstacle_object_collider(const CollisionConfig& config,
     }
   }
 
+  // Merge thread-local bounding boxes into final object bounding box.
   for (auto& bbox : thread_local_bboxes) {
     o.bbox.merge_inplace(bbox);
   }
 
   o.mesh_collider_tree.update(o.bbox);
-}
-
-void update_all_obstacle_object_collider(Registry& registry) {
-  for (Entity& e : registry.get_all_entities()) {
-    auto config = registry.get<CollisionConfig>(e);
-    auto position = registry.get<ObstaclePosition>(e);
-    auto collider = registry.get<ObjectCollider>(e);
-
-    if (config && position && collider) {
-      update_obstacle_object_collider(*config, *position, *collider);
-      continue;
-    };
-  }
 }
 
 }  // namespace silk

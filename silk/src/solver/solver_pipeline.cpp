@@ -35,6 +35,24 @@ bool SolverPipeline::step(Registry& registry,
   if (!init_all_cloth_for_solver(registry, dt)) {
     return false;
   }
+  // Lazily initialze all obstacle for simulation.
+  for (Entity& e : registry.get_all_entities()) {
+    auto config = registry.get<CollisionConfig>(e);
+    auto mesh = registry.get<TriMesh>(e);
+    auto position = registry.get<ObstaclePosition>(e);
+    auto collider = registry.get<ObjectCollider>(e);
+    if (!(config && mesh && position)) {
+      continue;
+    }
+
+    if (!collider) {
+      auto new_collider = make_obstacle_object_collider(e.self, *config, *mesh);
+      collider = registry.set<ObjectCollider>(e, std::move(new_collider));
+    }
+    assert(collider != nullptr);
+
+    update_obstacle_object_collider(*config, *position, *collider);
+  }
 
   // Collect state and state velocity of all physical entities into one global
   // state and velocity.
@@ -44,10 +62,6 @@ bool SolverPipeline::step(Registry& registry,
     SPDLOG_DEBUG("nothing to solve");
     return true;
   }
-
-  // Build/update colliders for objects and obstacles before solving.
-  make_all_object_collider(registry);
-  update_all_obstacle_object_collider(registry);
 
   // Scene bbox is used to estimate the termination criteria of the inner loop
   // and the floating-point precision of the collision pipeline.

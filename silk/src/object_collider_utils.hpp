@@ -1,39 +1,39 @@
 #pragma once
 
 #include <Eigen/Core>
+#include <silk/silk.hpp>
 
-#include "ecs.hpp"
+#include "handle.hpp"
+#include "mesh.hpp"
+#include "object_collider.hpp"
+#include "obstacle_position.hpp"
+#include "pin.hpp"
 
 namespace silk {
 
 /**
- * Build `ObjectCollider` for every entity that lacks one.
- *
- * Existing colliders are preserved.
+ * Creates a collision object for a physical entity.
+ * Pinned vertices get infinite mass to prevent movement.
  */
-void make_all_object_collider(Registry& registry);
+ObjectCollider make_physical_object_collider(
+    Handle entity_handle, const CollisionConfig& config, const TriMesh& mesh,
+    const Pin& pin, const Eigen::VectorXf& mass, int state_offset);
 
 /**
- * Update all dynamic colliders from the global state vectors.
- *
- * Slices `global_state`/`prev_global_state` using each entity's
- * `SolverState::state_offset` and `state_num`, then refreshes every collider's
- * per-primitive positions, AABBs, and KD-tree.
- *
- * Args
- * - `global_state`: concatenated xyz positions for all dynamic entities.
- * - `prev_global_state`: positions from the previous step (same layout).
+ * Creates a collision object for an obstacle with infinite mass.
+ * Obstacles don't respond to forces but can move via prescribed motion.
  */
-void update_all_physical_object_collider(
-    Registry& registry, const Eigen::VectorXf& global_state,
-    const Eigen::VectorXf& prev_global_state);
+ObjectCollider make_obstacle_object_collider(Handle entity_handle,
+                                             const CollisionConfig& config,
+                                             const TriMesh& mesh);
 
-/**
- * Update all obstacle colliders from their `ObstaclePosition` component.
- *
- * Static obstacles are skipped to
- * avoid unnecessary work.
- */
-void update_all_obstacle_object_collider(Registry& registry);
+void update_physical_object_collider(
+    const CollisionConfig& config, Eigen::Ref<const Eigen::VectorXf> curr_state,
+    Eigen::Ref<const Eigen::VectorXf> prev_state,
+    ObjectCollider& object_collider);
+
+void update_obstacle_object_collider(const CollisionConfig& config,
+                                     const ObstaclePosition& obstacle_position,
+                                     ObjectCollider& object_collider);
 
 }  // namespace silk
