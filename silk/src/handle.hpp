@@ -5,13 +5,16 @@
 
 namespace silk {
 
-// dual-use bitfield. can be used as handle in ecs system or internal index map
-// in Manager.
-//
-// Bit layout: | is valid (1) | generation (GEN_BITS) | index (INDEX_BITS) |
+/**
+ * @brief A generational handle for safe resource management.
+ *
+ * Bit layout: | is_valid (1) | generation (11) | index (20) |
+ * - Maximum 1,048,575 concurrent resources (2^20)
+ * - Maximum 2,047 generations per slot (2^11)
+ * - Automatic invalidation when resources are freed
+ */
 class Handle {
  public:
-  // bit operation helper
   static constexpr uint32_t GEN_BITS = 11;
   static constexpr uint32_t INDEX_BITS = 20;
   static constexpr uint32_t MAX_GEN = 1u << GEN_BITS;
@@ -24,6 +27,7 @@ class Handle {
 
   uint32_t value = 0;
 
+ public:
   Handle() = default;
 
   Handle(uint32_t value) : value(value) {};

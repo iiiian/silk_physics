@@ -10,8 +10,8 @@
 #include "collision_pipeline.hpp"
 #include "ecs.hpp"
 #include "mesh_utils.hpp"
+#include "object_state.hpp"
 #include "solver/solver_pipeline.hpp"
-#include "solver_state.hpp"
 
 namespace silk {
 
@@ -125,7 +125,7 @@ class World::WorldImpl {
       return Result::error(ErrorCode::InvalidHandle);
     }
 
-    auto solver_state = registry_.get<SolverState>(e);
+    auto solver_state = registry_.get<ObjectState>(e);
     if (solver_state) {
       if (position.size < solver_state->state_num) {
         return Result::error(ErrorCode::IncorrectPositionNum);
@@ -164,7 +164,7 @@ class World::WorldImpl {
     *cloth_config = config;
 
     // remove outdated components
-    registry_.remove<ClothDynamicSolverData>(*e);
+    registry_.remove<ClothSolverContext>(*e);
     registry_.remove<ObjectCollider>(*e);
 
     return Result::ok();
@@ -219,7 +219,7 @@ class World::WorldImpl {
     }
 
     // remove outdated components
-    registry_.remove<ClothDynamicSolverData>(*e);
+    registry_.remove<ClothSolverContext>(*e);
     registry_.remove<ObjectCollider>(*e);
 
     return Result::ok();

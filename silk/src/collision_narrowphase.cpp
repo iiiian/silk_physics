@@ -242,6 +242,10 @@ std::optional<Collision> point_triangle_collision(
     return std::nullopt;
   }
 
+  // This means two collision primitives are so close that tight inclusion CCD
+  // fails to resolve TOI. It indicates the failure of other parts of the engine
+  // and we have no way to recover it. So just pretend this collision doesn't
+  // exist and hope that the solver can resume to a valid state magically.
   if (ccd_result->use_small_ms && ccd_result->small_ms_t(0) == 0.0f) {
     spdlog::error("Ignore potential collision. Reason: zero toi");
     return std::nullopt;
@@ -252,6 +256,9 @@ std::optional<Collision> point_triangle_collision(
   c.velocity_t0 = c.position_t1 - c.position_t0;
   Eigen::Matrix<float, 3, 4> p_colli = c.position_t0 + toi * c.velocity_t0;
 
+  // The uv parameters from tight inclusion are imprecise and might lead to
+  // invalid collision reponse. Compute exact uv at toi estimated by tight
+  // inclusion CCD.
   auto uv_pair = exact_point_triangle_uv(p_colli, 1e-6f);
   if (!uv_pair) {
     return std::nullopt;
@@ -378,6 +385,10 @@ std::optional<Collision> edge_edge_collision(
     return std::nullopt;
   }
 
+  // This means two collision primitives are so close that tight inclusion CCD
+  // fails to resolve TOI. It indicates the failure of other parts of the engine
+  // and we have no way to recover it. So just pretend this collision doesn't
+  // exist and hope that the solver can resume to a valid state magically.
   if (ccd_result->use_small_ms && ccd_result->small_ms_t(0) == 0.0f) {
     spdlog::error("Ignore potential collision. Reason: zero toi");
     return std::nullopt;
@@ -388,6 +399,9 @@ std::optional<Collision> edge_edge_collision(
   c.velocity_t0 = c.position_t1 - c.position_t0;
   Eigen::Matrix<float, 3, 4> p_colli = c.position_t0 + toi * c.velocity_t0;
 
+  // The uv parameters from tight inclusion are imprecise and might lead to
+  // invalid collision reponse. Compute exact uv at toi estimated by tight
+  // inclusion CCD.
   auto uv_pair = exact_edge_edge_uv(p_colli, 1e-6f);
   if (!uv_pair) {
     return std::nullopt;

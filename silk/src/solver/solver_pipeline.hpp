@@ -8,7 +8,7 @@
 #include "../collision.hpp"
 #include "../collision_pipeline.hpp"
 #include "../ecs.hpp"
-#include "../solver_state.hpp"
+#include "../object_state.hpp"
 
 namespace silk {
 
@@ -26,15 +26,11 @@ class SolverPipeline {
   std::vector<Collision> collisions_;
 
  public:
-  /**
-   * @brief Remove all solver components from entities and clear caches.
+  /** @brief Remove all solver components from entities and clear caches.
    */
   void clear(Registry& registry);
 
-  /**
-   * @brief Reset solver-related data and clear cached collisions.
-   * @details Keeps entities/components but reinitializes their solver data to a
-   *          clean state, suitable for starting a new solve.
+  /** @brief Reset simulation to initial state.
    */
   void reset(Registry& registry);
 
@@ -50,12 +46,9 @@ class SolverPipeline {
   bool step(Registry& registry, CollisionPipeline& collision_pipeline);
 
  private:
-  /**
-   * @brief Assemble a single global solver state across all entities.
-   * @details Also applies per-entity velocity damping as
-   *          `state_velocity = (1 - damping) * state_velocity`.
+  /** @brief Assemble a single global solver state across all entities.
    */
-  SolverState compute_global_state(Registry& registry);
+  ObjectState compute_global_state(Registry& registry);
 
   Bbox compute_scene_bbox(const Eigen::VectorXf& state);
 
@@ -63,18 +56,11 @@ class SolverPipeline {
    */
   void cleanup_collisions(Registry& registry);
 
-  /**
-   * @brief Build diagonal LHS weights and RHS targets from current collisions.
-   * @details For each active DOF that participates in a collision,
-   *          collision stiffness is accumulated into `lhs`, and a reflected
-   *          target position is accumulated into `rhs`.
+  /** @brief Build diagonal LHS weights and RHS targets from current collisions.
    */
   BarrierConstrain compute_barrier_constrain(const Eigen::VectorXf& state);
 
-  /**
-   * @brief Project state onto barrier targets where constraints are active.
-   * @details For entries with positive `lhs`, replaces `state[i]` by
-   *          `rhs[i] / lhs[i]`.
+  /** @brief Project state onto barrier targets where constraints are active.
    */
   void enforce_barrier_constrain(const BarrierConstrain& barrier_constrain,
                                  const Bbox& scene_bbox,

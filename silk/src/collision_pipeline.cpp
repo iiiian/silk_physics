@@ -16,25 +16,46 @@
 
 namespace silk {
 
-// for object collision.
+/**
+ * @brief Filter function for object-level collision detection.
+ *
+ * @param a First object collider
+ * @param b Second object collider
+ * @return true if collision should be tested, false to skip
+ */
 bool object_collision_filter(const ObjectCollider& a, const ObjectCollider& b) {
-  // if group = -1, collision with others is disabled.
-  // if groups are different, a and b does not collide.
-  // if both a and b are pure obstacle, collision is meaningless.
+  // Collision rules:
+  // - Group = -1 means collision is disabled completely
+  // - Objects must belong to the same collision group otherwise
+  // - At least one object must be physical (not pure obstacle)
   return (a.group != -1 && b.group != -1 && a.group == b.group &&
           !(a.state_offset == -1 && b.state_offset == -1));
 };
 
-// for mesh collision between objects.
+/**
+ * @brief Filter function for mesh-level inter-object collision.
+ *
+ * @param a First mesh collider
+ * @param b Second mesh collider
+ * @return Always true (no additional filtering)
+ */
 bool mesh_collision_filter(const MeshCollider& a, const MeshCollider& b) {
+  // No filter here.
   return true;
 };
 
-// for mesh self collision.
+/**
+ * @brief Filter function for mesh self-collision detection.
+ *
+ * @param a First mesh primitive
+ * @param b Second mesh primitive
+ * @return true if collision should be tested
+ */
 bool mesh_self_collision_filter(const MeshCollider& a, const MeshCollider& b) {
-  // 1. only accept point triangle or edge edge collision.
-  // 2. reject collision between neighboring primitives.
-  // 3. reject collision between pinnned primitives, which has 0 inverse mass.
+  // Enforces three filtering rules:
+  // 1. Only allows point-triangle and edge-edge collision types
+  // 2. Rejects collisions between topologically adjacent primitives
+  // 3. Rejects collisions where all vertices are pinned (zero inverse mass)
 
   if (a.type == MeshColliderType::Point &&
       b.type == MeshColliderType::Triangle) {
@@ -68,7 +89,7 @@ bool mesh_self_collision_filter(const MeshCollider& a, const MeshCollider& b) {
 std::vector<Collision> CollisionPipeline::find_collision(
     std::vector<ObjectCollider>& object_colliders, const Bbox& scene_bbox,
     float dt) {
-  // compute floating point err for ccd
+  // Compute scene-dependent numerical error bounds for CCD robustness.
   Eigen::Vector3f abs_max =
       scene_bbox.min.cwiseAbs().cwiseMax(scene_bbox.max.cwiseAbs());
   scene_ee_err_ = ticcd::get_numerical_error(abs_max, false, true);
@@ -78,13 +99,12 @@ std::vector<Collision> CollisionPipeline::find_collision(
       omp_get_max_threads());
   CollisionCache<MeshCollider> mesh_ccache;
 
-  // find collisions between object colliders.
-  // we will do:
-  // 1. object collider broadphase using sweep and prune
-  // 2. mesh collider broadphase using kd tree
-  // 3. mesh collider narrowphase using ccd
+  // Three-stage collision detection for inter-object collisions:
+  // 1. Object-level broadphase using sweep-and-prune
+  // 2. Mesh-level broadphase using KD-tree spatial queries
+  // 3. Narrowphase using continuous collision detection
 
-  // step 1. object collider broadphase using sweep and prune
+  // Stage 1: Object broadphase using sweep-and-prune.
   CollisionCache<ObjectCollider> object_ccache;
   std::vector<int> object_proxies(object_colliders.size());
   for (int i = 0; i < object_colliders.size(); ++i) {
@@ -99,17 +119,18 @@ std::vector<Collision> CollisionPipeline::find_collision(
       object_collision_filter, object_ccache);
 
   for (auto& ccache : object_ccache) {
-    // manually unpack ccache because openMP capture structral binding
+    // Manually unpack pair since OpenMP doesn't support structured bindings in
+    // capture.
     auto& oa = ccache.first;
     auto& ob = ccache.second;
 
-    // step 2. mesh collider broadphase using kd tree
+    // Stage 2: Mesh broadphase using hierarchical KD-tree traversal.
     mesh_ccache.clear();
     KDTree<MeshCollider>::test_tree_collision(
         oa->mesh_collider_tree, ob->mesh_collider_tree, mesh_collision_filter,
         mesh_ccache);
 
-// step 3. mesh collider narrowphase using ccd
+    // Stage 3: Parallel narrowphase using continuous collision detection.
 #pragma omp parallel for
     for (int i = 0; i < mesh_ccache.size(); ++i) {
       auto& pair = mesh_ccache[i];
@@ -126,17 +147,15 @@ std::vector<Collision> CollisionPipeline::find_collision(
     }
   }
 
-  // find object collider self collision.
-  // we will do:
-  // 1. mesh collider broadphase using kd tree
-  // 2. mesh collider narrowphase using ccd
+  // Self-collision detection within individual objects.
+  // Uses same KD-tree + CCD approach but with stricter filtering.
   for (auto& o : object_colliders) {
-    // skip if object is pure obstacle or self collision is off
+    // Skip pure obstacles and objects with self-collision disabled.
     if (o.state_offset == -1 || !o.is_self_collision_on) {
       continue;
     }
 
-    // step 1. mesh collider broadphase using kd tree
+    // Self-collision broadphase using internal KD-tree traversal.
     mesh_ccache.clear();
     o.mesh_collider_tree.test_self_collision(mesh_self_collision_filter,
                                              mesh_ccache);
@@ -147,7 +166,7 @@ std::vector<Collision> CollisionPipeline::find_collision(
       auto* ma = pair.first;
       auto* mb = pair.second;
 
-      // step 2. mesh collider narrowphase using ccd
+      // Self-collision narrowphase using same CCD algorithm.
       auto collision = narrow_phase(
           o, *ma, o, *mb, dt, collision_stiffness_base, min_toi, ccd_tolerance,
           ccd_max_iter, scene_ee_err_, scene_vf_err_);
@@ -158,6 +177,7 @@ std::vector<Collision> CollisionPipeline::find_collision(
     }
   }
 
+  // Merge thread-local collision lists into single result vector.
   auto& thread0_collisions = thread_local_collisions[0];
   for (int i = 1; i < omp_get_max_threads(); ++i) {
     auto& c = thread_local_collisions[i];
@@ -166,12 +186,12 @@ std::vector<Collision> CollisionPipeline::find_collision(
   return thread0_collisions;
 }
 
-void CollisionPipeline::update_collision(const Eigen::VectorXf& solver_state_t0,
-                                         const Eigen::VectorXf& solver_state_t1,
-                                         std::vector<Collision>& collisions) const
-{
+void CollisionPipeline::update_collision(
+    const Eigen::VectorXf& global_state_t0,
+    const Eigen::VectorXf& global_state_t1,
+    std::vector<Collision>& collisions) const {
   for (auto& c : collisions) {
-    partial_ccd_update(solver_state_t0, solver_state_t1, scene_ee_err_,
+    partial_ccd_update(global_state_t0, global_state_t1, scene_ee_err_,
                        scene_vf_err_, collision_stiffness_base,
                        collision_stiffness_max, collision_stiffness_growth,
                        ccd_tolerance, partial_ccd_max_iter, c);

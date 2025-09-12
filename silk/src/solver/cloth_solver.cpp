@@ -17,8 +17,9 @@
 #include "../eigen_utils.hpp"
 #include "../logger.hpp"
 #include "../mesh.hpp"
+#include "../object_collider_utils.hpp"
+#include "../object_state.hpp"
 #include "../pin.hpp"
-#include "../solver_state.hpp"
 #include "silk/silk.hpp"
 
 namespace silk {
@@ -75,14 +76,14 @@ Eigen::Matrix<float, 6, 9> triangle_jacobian_operator(
   return Eigen::KroneckerProduct(B, Eigen::Matrix3f::Identity());
 }
 
-/** Build static, geometry‑dependent solver data for a cloth.
- *  - `mass` uses Voronoi vertex masses scaled by density.
+/** Build static, geometry‑dependent data for a cloth.
+ *  - `mass` uses Voronoi vertex masses.
  *  - `CWC` is the mass‑weighted cotangent Laplacian used for bending.
  *  - `JWJ` assembles the in‑plane elastic quadratic form from per‑face
  *    Jacobians and triangle areas.
  */
-ClothStaticSolverData make_cloth_static_solver_data(const ClothConfig& config,
-                                                    const TriMesh& mesh) {
+ClothTopology make_cloth_topology(const ClothConfig& config,
+                                  const TriMesh& mesh) {
   const TriMesh& m = mesh;
 
   int vert_num = m.V.rows();
@@ -139,43 +140,43 @@ ClothStaticSolverData make_cloth_static_solver_data(const ClothConfig& config,
   Eigen::SparseMatrix<float> JWJ{3 * vert_num, 3 * vert_num};
   JWJ.setFromTriplets(JWJ_triplets.begin(), JWJ_triplets.end());
 
-  ClothStaticSolverData d;
-  d.mass = voroni_mass.diagonal();
-  d.area = std::move(area);
-  d.CWC = std::move(CWC);
-  d.JWJ = std::move(JWJ);
-  d.jacobian_ops = std::move(jops);
-  d.C0 = std::move(C0);
+  ClothTopology t;
+  t.mass = voroni_mass.diagonal();
+  t.area = std::move(area);
+  t.CWC = std::move(CWC);
+  t.JWJ = std::move(JWJ);
+  t.jacobian_ops = std::move(jops);
+  t.C0 = std::move(C0);
 
-  return d;
+  return t;
 }
 
-/** Build dynamic, time‑step‑dependent or config-dependent solver data for a
+/** Build dynamic, time‑step‑dependent or config-dependent data for a
  * cloth.
  *
  *  Returns std::nullopt if analysis/factorization fails.
  */
-std::optional<ClothDynamicSolverData> make_cloth_dynamic_solver_data(
-    const ClothConfig& config, const ClothStaticSolverData& static_data,
-    const Pin& pin, float dt) {
+std::optional<ClothSolverContext> make_cloth_solver_context(
+    const ClothConfig& config, const ClothTopology& topology, const Pin& pin,
+    float dt) {
   auto& c = config;
-  auto& s = static_data;
+  auto& t = topology;
 
-  int state_num = 3 * s.mass.size();
+  int state_num = 3 * t.mass.size();
   std::vector<Eigen::Triplet<float>> H_triplets;
 
   // Assemble momentum term.
-  Eigen::VectorXf M = 1.0f / (dt * dt) * c.density * s.mass;
+  Eigen::VectorXf M = 1.0f / (dt * dt) * c.density * t.mass;
   for (int i = 0; i < M.size(); ++i) {
     H_triplets.emplace_back(3 * i, 3 * i, M(i));
     H_triplets.emplace_back(3 * i + 1, 3 * i + 1, M(i));
     H_triplets.emplace_back(3 * i + 2, 3 * i + 2, M(i));
   }
   // Assemble in-plane elastic energy term.
-  append_triplets_from_sparse(s.JWJ, 0, 0, c.elastic_stiffness, H_triplets,
+  append_triplets_from_sparse(t.JWJ, 0, 0, c.elastic_stiffness, H_triplets,
                               Symmetry::Upper);
   // Assemble bending energy term.
-  append_triplets_from_vectorized_sparse(s.CWC, 0, 0, c.bending_stiffness,
+  append_triplets_from_vectorized_sparse(t.CWC, 0, 0, c.bending_stiffness,
                                          H_triplets, Symmetry::Upper);
   // Assemble pin term.
   for (int i = 0; i < pin.index.size(); ++i) {
@@ -202,44 +203,44 @@ std::optional<ClothDynamicSolverData> make_cloth_dynamic_solver_data(
   }
 
   Eigen::VectorXf vec_mass(state_num);
-  for (int i = 0; i < s.mass.size(); ++i) {
-    float val = c.density * s.mass(i);
+  for (int i = 0; i < t.mass.size(); ++i) {
+    float val = c.density * t.mass(i);
     vec_mass(3 * i) = val;
     vec_mass(3 * i + 1) = val;
     vec_mass(3 * i + 2) = val;
   }
 
-  ClothDynamicSolverData d;
-  d.dt = dt;
-  d.has_barrier_constrain = false;
-  d.mass = std::move(vec_mass);
-  d.H = std::move(H);
-  d.L = std::move(L);
-  d.LB = {};
-  d.C0 = (c.bending_stiffness * s.C0).reshaped<Eigen::RowMajor>();
+  ClothSolverContext ctx;
+  ctx.dt = dt;
+  ctx.has_barrier_constrain = false;
+  ctx.mass = std::move(vec_mass);
+  ctx.H = std::move(H);
+  ctx.L = std::move(L);
+  ctx.LB = {};
+  ctx.C0 = (c.bending_stiffness * t.C0).reshaped<Eigen::RowMajor>();
 
-  return d;
+  return ctx;
 }
 
-void reset_all_cloth_for_solver(Registry& registry) {
+void batch_reset_cloth_simulation(Registry& registry) {
   for (Entity& e : registry.get_all_entities()) {
     auto mesh = registry.get<TriMesh>(e);
-    auto solver_state = registry.get<SolverState>(e);
-    auto dynamic_data = registry.get<ClothDynamicSolverData>(e);
+    auto state = registry.get<ObjectState>(e);
+    auto context = registry.get<ClothSolverContext>(e);
 
-    if (mesh && solver_state && dynamic_data) {
-      solver_state->state_offset = 0;
-      solver_state->curr_state = mesh->V.reshaped<Eigen::RowMajor>();
-      solver_state->state_velocity.setZero();
+    if (mesh && state && context) {
+      state->state_offset = 0;
+      state->curr_state = mesh->V.reshaped<Eigen::RowMajor>();
+      state->state_velocity.setZero();
 
       // Clear any barrier updates on the cached factorization.
-      dynamic_data->has_barrier_constrain = false;
-      dynamic_data->LB = {};
+      context->has_barrier_constrain = false;
+      context->LB = {};
     }
   }
 }
 
-bool init_all_cloth_for_solver(Registry& registry, float dt) {
+bool batch_prepare_cloth_simulation(Registry& registry, float dt) {
   for (Entity& e : registry.get_all_entities()) {
     auto cloth_config = registry.get<ClothConfig>(e);
     auto collision_config = registry.get<CollisionConfig>(e);
@@ -250,39 +251,39 @@ bool init_all_cloth_for_solver(Registry& registry, float dt) {
       continue;
     }
 
-    auto solver_state = registry.get<SolverState>(e);
-    if (!solver_state) {
-      SolverState new_solver_state;
-      new_solver_state.state_offset = 0;
-      new_solver_state.state_num = 3 * mesh->V.rows();
-      new_solver_state.curr_state = mesh->V.reshaped<Eigen::RowMajor>();
-      new_solver_state.state_velocity =
-          Eigen::VectorXf::Zero(new_solver_state.state_num);
-      solver_state = registry.set(e, std::move(new_solver_state));
-    }
-    assert(solver_state != nullptr);
     // Cloth entity sanity check.
     assert(collision_config && mesh && pin);
 
-    auto static_data = registry.get<ClothStaticSolverData>(e);
-    if (!static_data) {
-      static_data =
-          registry.set(e, make_cloth_static_solver_data(*config, *mesh));
+    auto state = registry.get<ObjectState>(e);
+    if (!state) {
+      ObjectState new_state;
+      new_state.state_offset = 0;
+      new_state.state_num = 3 * mesh->V.rows();
+      new_state.curr_state = mesh->V.reshaped<Eigen::RowMajor>();
+      new_state.state_velocity = Eigen::VectorXf::Zero(new_state.state_num);
+      state = registry.set<ObjectState>(e, std::move(new_state));
     }
-    assert(static_data != nullptr);
+    assert(state != nullptr);
 
-    auto dynamic_data = registry.get<ClothDynamicSolverData>(e);
-    if (dynamic_data && dynamic_data->dt == dt) {
-      dynamic_data->has_barrier_constrain = false;
+    auto topology = registry.get<ClothTopology>(e);
+    if (!topology) {
+      topology = registry.set<ClothTopology>(
+          e, make_cloth_topology(*cloth_config, *mesh));
+    }
+    assert(topology != nullptr);
+
+    auto context = registry.get<ClothSolverContext>(e);
+    if (context && context->dt == dt) {
+      context->has_barrier_constrain = false;
     } else {
-      auto new_dynamic_data =
-          make_cloth_dynamic_solver_data(*config, *static_data, *pin, dt);
-      // Fail fast if factorization did not succeed (non‑SPD or ill‑posed).
-      if (!new_dynamic_data) {
+      auto new_context =
+          make_cloth_solver_context(*cloth_config, *topology, *pin, dt);
+      if (!new_context) {
         return false;
       }
-      registry.set<ClothDynamicSolverData>(e, std::move(*new_dynamic_data));
+      context = registry.set<ClothSolverContext>(e, std::move(*new_context));
     }
+    assert(context != nullptr);
 
     auto collider = registry.get<ObjectCollider>(e);
     if (!collider) {
@@ -297,31 +298,31 @@ bool init_all_cloth_for_solver(Registry& registry, float dt) {
   return true;
 }
 
-void compute_cloth_init_rhs(const ClothDynamicSolverData& dynamic_data,
-                            const Pin& pin,
-                            Eigen::Ref<Eigen::VectorXf> init_rhs) {
-  init_rhs.setZero();
+void compute_cloth_invariant_rhs(const ClothSolverContext& solver_context,
+                                 const Pin& pin,
+                                 Eigen::Ref<Eigen::VectorXf> rhs) {
+  rhs.setZero();
 
   // set pin rhs
   for (int i = 0; i < pin.index.size(); ++i) {
-    init_rhs(Eigen::seqN(3 * pin.index(i), 3)) =
+    rhs(Eigen::seqN(3 * pin.index(i), 3)) =
         pin.pin_stiffness * pin.position(Eigen::seqN(3 * i, 3));
   }
 
   // set rest curvature rhs
-  init_rhs += dynamic_data.C0;
+  rhs += solver_context.C0;
 }
 
-void compute_all_cloth_init_rhs(Registry& registry, Eigen::VectorXf& init_rhs) {
+void batch_compute_cloth_invariant_rhs(Registry& registry,
+                                       Eigen::VectorXf& rhs) {
   for (Entity& e : registry.get_all_entities()) {
-    auto solver_state = registry.get<SolverState>(e);
-    auto dynamic_data = registry.get<ClothDynamicSolverData>(e);
+    auto state = registry.get<ObjectState>(e);
+    auto context = registry.get<ClothSolverContext>(e);
     auto pin = registry.get<Pin>(e);
 
-    if (solver_state && dynamic_data && pin) {
-      auto seq =
-          Eigen::seqN(solver_state->state_offset, solver_state->state_num);
-      compute_cloth_init_rhs(*dynamic_data, *pin, init_rhs(seq));
+    if (state && context && pin) {
+      auto seq = Eigen::seqN(state->state_offset, state->state_num);
+      compute_cloth_invariant_rhs(*context, *pin, rhs(seq));
     }
   }
 }
@@ -340,17 +341,16 @@ bool compute_cloth_outer_loop(
     Eigen::Ref<const Eigen::VectorXf> state_acceleration,
     Eigen::Ref<const Eigen::VectorXf> barrier_lhs,
     Eigen::Ref<const Eigen::VectorXf> barrier_rhs,
-    ClothDynamicSolverData& dynamic_data, Eigen::Ref<Eigen::VectorXf> rhs) {
-  auto& d = dynamic_data;
+    ClothSolverContext& solver_context, Eigen::Ref<Eigen::VectorXf> rhs) {
+  auto& s = solver_context;
 
-  // Momentum contribution to RHS (implicit Euler style aggregation).
-  rhs.noalias() += (d.mass / (d.dt * d.dt)).asDiagonal() * state +
-                   (d.mass / d.dt).asDiagonal() * state_velocity +
-                   d.mass.asDiagonal() * state_acceleration;
-
-  int state_num = state.size();
+  // Momentum contribution to RHS.
+  rhs.noalias() += (s.mass / (s.dt * s.dt)).asDiagonal() * state +
+                   (s.mass / s.dt).asDiagonal() * state_velocity +
+                   s.mass.asDiagonal() * state_acceleration;
 
   // Barrier constraint update (diagonal; skip inactive entries).
+  int state_num = state.size();
   Eigen::SparseMatrix<float> C{state_num, state_num};
   for (int i = 0; i < state_num; ++i) {
     // Inactive entry.
@@ -362,10 +362,10 @@ bool compute_cloth_outer_loop(
   }
 
   if (C.nonZeros() == 0) {
-    d.has_barrier_constrain = false;
+    s.has_barrier_constrain = false;
     return true;
   }
-  d.has_barrier_constrain = true;
+  s.has_barrier_constrain = true;
 
   // Barrier contribution to rhs.
   rhs += barrier_rhs;
@@ -375,30 +375,30 @@ bool compute_cloth_outer_loop(
   cholmod_sparse C_view = cholmod_raii::make_cholmod_sparse_view(C);
 
   // Permute C according to L.Perm as suggested by CHOLMOD for up/down updates.
-  int32_t* rset = static_cast<int32_t*>(d.L.raw()->Perm);
-  int64_t rset_num = static_cast<int64_t>(d.L.raw()->n);
+  int32_t* rset = static_cast<int32_t*>(s.L.raw()->Perm);
+  int64_t rset_num = static_cast<int64_t>(s.L.raw()->n);
   cholmod_raii::CholmodSparse C_perm = cholmod_submatrix(
       &C_view, rset, rset_num, nullptr, -1, 1, 1, cholmod_raii::common);
   if (C_perm.is_empty()) {
     return false;
   }
 
-  d.LB = d.L;
-  if (!cholmod_updown(1, C_perm, d.LB, cholmod_raii::common)) {
+  s.LB = s.L;
+  if (!cholmod_updown(1, C_perm, s.LB, cholmod_raii::common)) {
     return false;
   }
 
   return true;
 }
 
-bool compute_all_cloth_outer_loop(
+bool batch_compute_cloth_outer_loop(
     Registry& registry, const Eigen::VectorXf& global_state,
     const Eigen::VectorXf& global_state_velocity,
     const Eigen::VectorXf& global_state_acceleration,
     const BarrierConstrain& barrier_constrain, Eigen::VectorXf& rhs) {
   for (Entity& e : registry.get_all_entities()) {
-    auto solver_state = registry.get<SolverState>(e);
-    auto dynamic_data = registry.get<ClothDynamicSolverData>(e);
+    auto solver_state = registry.get<ObjectState>(e);
+    auto dynamic_data = registry.get<ClothSolverContext>(e);
 
     if (solver_state && dynamic_data) {
       auto seq =
@@ -415,17 +415,17 @@ bool compute_all_cloth_outer_loop(
   return true;
 }
 
-/** Inner loop: local projective step  followed by a global linear solve using
- *  the cached factorization.
+/** Inner loop: Project in-plane elastic constrans followed by a global linear
+ * solve using the cached factorization.
  */
 bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
-                              const ClothStaticSolverData& static_data,
-                              const ClothDynamicSolverData& dynamic_data,
+                              const ClothTopology& topology,
+                              const ClothSolverContext& solver_context,
                               Eigen::Ref<const Eigen::VectorXf> state,
                               Eigen::Ref<const Eigen::VectorXf> outer_rhs,
                               Eigen::Ref<Eigen::VectorXf> solution) {
-  auto& s = static_data;
-  auto& d = dynamic_data;
+  auto& t = topology;
+  auto& s = solver_context;
 
   int state_num = state.size();
 
@@ -433,7 +433,7 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
   std::vector<Eigen::VectorXf> thread_local_rhs(
       omp_get_max_threads(), Eigen::VectorXf::Zero(state_num));
 #pragma omp parallel for
-  for (int i = 0; i < s.jacobian_ops.size(); ++i) {
+  for (int i = 0; i < t.jacobian_ops.size(); ++i) {
     Eigen::Vector3i offset = 3 * F.row(i);
 
     // Assemble local vectorized vertex position.
@@ -443,7 +443,7 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
     buffer(Eigen::seqN(6, 3)) = state(Eigen::seqN(offset(2), 3));
 
     // Deformation matrix.
-    Eigen::Matrix<float, 3, 2> D = (s.jacobian_ops[i] * buffer).reshaped(3, 2);
+    Eigen::Matrix<float, 3, 2> D = (t.jacobian_ops[i] * buffer).reshaped(3, 2);
     // SVD of deformation. Clamp singular values to form the projected target T
     // (rotation + limited stretch). Eigen does not return thin U/V for 3x2, so
     // compute full and slice.
@@ -459,8 +459,8 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
                                    svd.matrixV().transpose();
 
     // Accumulate elastic RHS contribution, scatter back to global layout.
-    float weight = config.elastic_stiffness * s.area(i);
-    buffer = weight * s.jacobian_ops[i].transpose() * T.reshaped();
+    float weight = config.elastic_stiffness * t.area(i);
+    buffer = weight * t.jacobian_ops[i].transpose() * T.reshaped();
 
     auto& local_rhs = thread_local_rhs[omp_get_thread_num()];
     local_rhs(Eigen::seqN(offset(0), 3)) += buffer(Eigen::seqN(0, 3));
@@ -474,8 +474,8 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
   }
 
   // Global solve with (optionally barrier‑updated) Cholesky factorization.
-  auto& L = (d.has_barrier_constrain) ? d.LB : d.L;
   cholmod_dense rhs_view = cholmod_raii::make_cholmod_dense_view(rhs);
+  auto& L = (s.has_barrier_constrain) ? s.LB : s.L;
 
   cholmod_raii::CholmodDense cholmod_solution =
       cholmod_solve(CHOLMOD_A, L, &rhs_view, cholmod_raii::common);
@@ -488,23 +488,23 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
   return true;
 }
 
-bool compute_all_cloth_inner_loop(Registry& registry,
-                                  const Eigen::VectorXf& global_state,
-                                  const Eigen::VectorXf& outer_rhs,
-                                  Eigen::VectorXf& solution) {
+bool batch_compute_cloth_inner_loop(Registry& registry,
+                                    const Eigen::VectorXf& global_state,
+                                    const Eigen::VectorXf& outer_rhs,
+                                    Eigen::VectorXf& solution) {
   for (Entity& e : registry.get_all_entities()) {
     auto config = registry.get<ClothConfig>(e);
     auto mesh = registry.get<TriMesh>(e);
-    auto static_data = registry.get<ClothStaticSolverData>(e);
-    auto dynamic_data = registry.get<ClothDynamicSolverData>(e);
-    auto solver_state = registry.get<SolverState>(e);
+    auto topology = registry.get<ClothTopology>(e);
+    auto solver_context = registry.get<ClothSolverContext>(e);
+    auto state = registry.get<ObjectState>(e);
 
-    if (!(config && mesh && static_data && dynamic_data && solver_state)) {
+    if (!(config && mesh && topology && solver_context && state)) {
       continue;
     }
 
-    auto seq = Eigen::seqN(solver_state->state_offset, solver_state->state_num);
-    if (!compute_cloth_inner_loop(*config, mesh->F, *static_data, *dynamic_data,
+    auto seq = Eigen::seqN(state->state_offset, state->state_num);
+    if (!compute_cloth_inner_loop(*config, mesh->F, *topology, *solver_context,
                                   global_state(seq), outer_rhs(seq),
                                   solution(seq))) {
       return false;

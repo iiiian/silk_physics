@@ -5,6 +5,7 @@
 namespace silk {
 
 float Bbox::proximity(const Bbox& a, const Bbox& b) {
+  // Calculate difference between centers
   Eigen::Vector3f center_delta = (a.min + a.max) - (b.min + b.max);
   return center_delta.array().abs().sum();
 }

@@ -7,37 +7,34 @@
 
 namespace silk {
 
-/** Reset runtime solver state for all cloths.
- *  Sets offsets to zero, copies current mesh vertex positions into
- *  `SolverState::curr_state`, zeroes velocities, and clears any active
- *  barrier constraint update on the factorization.
+/** Reset object state and solver context to the start of simulation.
  */
-void reset_all_cloth_for_solver(Registry& registry);
+void batch_reset_cloth_simulation(Registry& registry);
 
-/** Prepare all cloths for solving at a given time step.
- *  Ensures `SolverState`, `ClothStaticSolverData`, and
- *  `ClothDynamicSolverData` exist and are initialized.
+/** Prepare all cloths for solver stepping at a given time step.
+ *  Ensures `ClothTopology`, `ClothSolverContext`, `ObjectState`, and
+ * `ObjectCollider` exists and are valid.
  *
  *  @param registry ECS storage for all components.
  *  @param dt       Time step in seconds; must be positive.
  *  @return false on factorization failure (e.g., non‑SPD system), true
  *          otherwise.
  */
-bool init_all_cloth_for_solver(Registry& registry, float dt);
+bool batch_prepare_cloth_simulation(Registry& registry, float dt);
 
-/**
- * Assemble step-invariant initial RHS for all cloth entities.
+/** Assemble step-invariant initial RHS for all cloth entities.
  *
- * Writes each object's contribution into its state slice
- * [state_offset, state_offset + state_num).
+ *  Writes each object's contribution into its state slice
+ *  [state_offset, state_offset + state_num).
  *
- * @param registry Registry containing entities and components.
- * @param init_rhs Global RHS vector sized to the sum of state_num across
- * entities.
- * @pre init_rhs is sized to the sum of state_num across entities.
- * @post Overwrites corresponding segments of init_rhs.
+ *  @param registry Registry containing entities and components.
+ *  @param init_rhs Global RHS vector sized to the sum of state_num across
+ *  entities.
+ *  @pre rhs is sized to the sum of state_num across entities.
+ *  @post Overwrites corresponding segments of rhs.
  */
-void compute_all_cloth_init_rhs(Registry& registry, Eigen::VectorXf& init_rhs);
+void batch_compute_cloth_invariant_rhs(Registry& registry,
+                                       Eigen::VectorXf& rhs);
 
 /** Prepare all cloths for current solver outer loop.
  *  Adds momentum and (optionally) barrier‑constraint terms into `rhs` and
@@ -51,7 +48,7 @@ void compute_all_cloth_init_rhs(Registry& registry, Eigen::VectorXf& init_rhs);
  *  @param rhs In/out right‑hand side to be accumulated into.
  *  @return false if a per‑cloth update fails, true otherwise.
  */
-bool compute_all_cloth_outer_loop(
+bool batch_compute_cloth_outer_loop(
     Registry& registry, const Eigen::VectorXf& global_state,
     const Eigen::VectorXf& global_state_velocity,
     const Eigen::VectorXf& global_state_acceleration,
@@ -68,8 +65,8 @@ bool compute_all_cloth_outer_loop(
  *  @param solution Output solution vector; same layout/size as `global_state`.
  *  @return false if the linear solve fails, true otherwise.
  */
-bool compute_all_cloth_inner_loop(Registry& registry,
-                                  const Eigen::VectorXf& global_state,
-                                  const Eigen::VectorXf& outer_rhs,
-                                  Eigen::VectorXf& solution);
+bool batch_compute_cloth_inner_loop(Registry& registry,
+                                    const Eigen::VectorXf& global_state,
+                                    const Eigen::VectorXf& outer_rhs,
+                                    Eigen::VectorXf& solution);
 }  // namespace silk

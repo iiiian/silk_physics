@@ -10,6 +10,7 @@ CholmodCommon::operator cholmod_common*() { return &common_; }
 
 cholmod_common* CholmodCommon::raw() { return &common_; }
 
+// Global cholmod common.
 CholmodCommon common;
 
 Eigen::Map<Eigen::VectorXf> make_eigen_dense_vector_view(cholmod_dense* v) {

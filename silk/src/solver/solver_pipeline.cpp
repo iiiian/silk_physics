@@ -8,15 +8,16 @@
 #include "../ecs.hpp"
 #include "../logger.hpp"
 #include "../object_collider_utils.hpp"
+#include "../obstacle_position.hpp"
 #include "cloth_solver.hpp"
 
 namespace silk {
 
 void SolverPipeline::clear(Registry& registry) {
   for (Entity& e : registry.get_all_entities()) {
-    registry.remove<ClothStaticSolverData>(e);
-    registry.remove<ClothDynamicSolverData>(e);
-    registry.remove<SolverState>(e);
+    registry.remove<ClothTopology>(e);
+    registry.remove<ClothSolverContext>(e);
+    registry.remove<ObjectState>(e);
     registry.remove<ObjectCollider>(e);
   }
 
@@ -24,7 +25,7 @@ void SolverPipeline::clear(Registry& registry) {
 }
 
 void SolverPipeline::reset(Registry& registry) {
-  reset_all_cloth_for_solver(registry);
+  batch_reset_cloth_simulation(registry);
   collisions_.clear();
 }
 
@@ -32,7 +33,8 @@ bool SolverPipeline::step(Registry& registry,
                           CollisionPipeline& collision_pipeline) {
   SPDLOG_DEBUG("solver step");
 
-  if (!init_all_cloth_for_solver(registry, dt)) {
+  // Lazily initialze all clothes for simulation.
+  if (!batch_prepare_cloth_simulation(registry, dt)) {
     return false;
   }
   // Lazily initialze all obstacle for simulation.
@@ -70,10 +72,9 @@ bool SolverPipeline::step(Registry& registry,
   // Clean up collisions involving removed entities.
   cleanup_collisions(registry);
 
-  // compute init rhs for all physical entities
-  Eigen::VectorXf init_rhs;
-  init_rhs.resize(state_num);
-  compute_all_cloth_init_rhs(registry, init_rhs);
+  // Compute step invariant rhs.
+  Eigen::VectorXf init_rhs = Eigen::VectorXf::Zero(state_num);
+  batch_compute_cloth_invariant_rhs(registry, init_rhs);
 
   // Expand per-vertex acceleration (XYZ per vertex) to the packed state vector.
   Eigen::VectorXf acceleration = const_acceleration.replicate(state_num / 3, 1);
@@ -88,9 +89,9 @@ bool SolverPipeline::step(Registry& registry,
     Eigen::VectorXf next_state =
         curr_state + dt * state_velocity + (dt * dt) * acceleration;
 
-    if (!compute_all_cloth_outer_loop(registry, curr_state, state_velocity,
-                                      acceleration, barrier_constrain,
-                                      outer_rhs)) {
+    if (!batch_compute_cloth_outer_loop(registry, curr_state, state_velocity,
+                                        acceleration, barrier_constrain,
+                                        outer_rhs)) {
       return false;
     }
 
@@ -99,8 +100,8 @@ bool SolverPipeline::step(Registry& registry,
       SPDLOG_DEBUG("Inner iter {}", inner_it);
 
       Eigen::VectorXf solution(state_num);
-      if (!compute_all_cloth_inner_loop(registry, next_state, outer_rhs,
-                                        solution)) {
+      if (!batch_compute_cloth_inner_loop(registry, next_state, outer_rhs,
+                                          solution)) {
         return false;
       }
 
@@ -109,7 +110,6 @@ bool SolverPipeline::step(Registry& registry,
         return false;
       }
 
-      // Termination threshold relative to scene extent (5% of diagonal).
       float scene_scale = (scene_bbox.max - scene_bbox.min).norm();
       assert(scene_scale != 0);
       float threshold = 0.05f * scene_scale;
@@ -127,7 +127,19 @@ bool SolverPipeline::step(Registry& registry,
     enforce_barrier_constrain(barrier_constrain, scene_bbox, next_state);
 
     // Full collision update.
-    update_all_physical_object_collider(registry, next_state, curr_state);
+    for (Entity& e : registry.get_all_entities()) {
+      auto config = registry.get<CollisionConfig>(e);
+      auto state = registry.get<ObjectState>(e);
+      auto collider = registry.get<ObjectCollider>(e);
+
+      if (!(config && state && collider)) {
+        continue;
+      }
+
+      auto seq = Eigen::seqN(state->state_offset, state->state_num);
+      update_physical_object_collider(*config, next_state(seq), curr_state(seq),
+                                      *collider);
+    }
     collisions_ = collision_pipeline.find_collision(
         registry.get_all<ObjectCollider>(), scene_bbox, dt);
 
@@ -166,7 +178,7 @@ bool SolverPipeline::step(Registry& registry,
   }
 
   // Write solution back to registry.
-  for (auto& state : registry.get_all<SolverState>()) {
+  for (auto& state : registry.get_all<ObjectState>()) {
     auto seq = Eigen::seqN(state.state_offset, state.state_num);
     state.curr_state = curr_state(seq);
     state.state_velocity = state_velocity(seq);
@@ -175,22 +187,22 @@ bool SolverPipeline::step(Registry& registry,
   return true;
 }
 
-SolverState SolverPipeline::compute_global_state(Registry& registry) {
+ObjectState SolverPipeline::compute_global_state(Registry& registry) {
   // Gather state count and state offsets.
   int offset = 0;
-  for (auto& s : registry.get_all<SolverState>()) {
+  for (auto& s : registry.get_all<ObjectState>()) {
     s.state_offset = offset;
     offset += s.state_num;
   }
 
-  SolverState global_state;
+  ObjectState global_state;
   global_state.state_offset = 0;
   global_state.state_num = offset;
   global_state.curr_state.resize(global_state.state_num);
   global_state.state_velocity.resize(global_state.state_num);
 
   for (Entity& e : registry.get_all_entities()) {
-    auto solver_state = registry.get<SolverState>(e);
+    auto solver_state = registry.get<ObjectState>(e);
     if (!solver_state) {
       continue;
     }
