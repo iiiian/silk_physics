@@ -168,10 +168,10 @@ cholmod_dense make_cholmod_dense_view(Eigen::DenseBase<Derived>& M) {
   d.ncol = M.cols();
   d.d = M.outerStride();
   d.nzmax = d.d * d.ncol;
-  d.x = static_cast<void*>(M.data());
   d.z = nullptr;
   d.xtype = CHOLMOD_REAL;
   d.dtype = dtype;
+  d.x = static_cast<void*>(M.derived().data());  // Data pointer
 
   return d;
 }
