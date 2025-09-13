@@ -5,6 +5,7 @@
 #include <tight_inclusion/ccd.hpp>
 #include <tight_inclusion/interval_root_finder.hpp>
 
+#include "compiler_builtin.hpp"
 #include "logger.hpp"
 
 namespace silk {
@@ -519,7 +520,8 @@ std::optional<Collision> narrow_phase(
                                     tolerance, max_iter, scene_vf_err);
   }
 
-  assert(false && "unreachable code path");
+  SILK_UNREACHABLE();
+
   return std::nullopt;
 }
 
