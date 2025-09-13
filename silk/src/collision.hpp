@@ -14,28 +14,23 @@
 
 namespace silk {
 
-/** Types of collision primitives supported by the collision detection system.
- */
 enum class CollisionType { PointTriangle, EdgeEdge };
 
-/** Collision event data structure containing all information needed for
- * constraint resolution.
- */
 struct Collision {
   CollisionType type;
 
-  /** Handle to first mesh entity involved in collision. */
   Handle entity_handle_a;
-  /** Handle to second mesh entity involved in collision. */
   Handle entity_handle_b;
 
   /** Time of impact in [0,1]. */
   float toi;
+
   /** Minimum separation distance to maintain between primitives. */
   float minimal_separation;
 
   /** Collision constraint stiffness for solver. */
   float stiffness;
+
   /** Whether collision narrowphase use distance smaller than minimal
    * separation to resolve time of impact. */
   bool use_small_ms;
@@ -49,16 +44,16 @@ struct Collision {
    */
   Eigen::Vector4i offset;
 
-  /** Primitive vertex positions at start of timestep (t=0).
+  /** Primitive vertex positions.
    * Layout: [vertex0, vertex1, vertex2, vertex3] as column vectors.
    */
   Eigen::Matrix<float, 3, 4> position_t0;
-  /** Primitive vertex positions at end of timestep (t=1). */
   Eigen::Matrix<float, 3, 4> position_t1;
 
-  /** Primitive vertex velocities before collision response. */
+  /** Primitive vertex velocities before/after collision.
+   * Layout: [vertex0, vertex1, vertex2, vertex3] as column vectors.
+   */
   Eigen::Matrix<float, 3, 4> velocity_t0;
-  /** Primitive vertex velocities after collision response. */
   Eigen::Matrix<float, 3, 4> velocity_t1;
 };
 
