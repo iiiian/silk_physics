@@ -162,7 +162,7 @@ class World {
    * @param collision_config Collision settings
    * @param mesh_config Triangle mesh definition
    * @param pin_index Indices of vertices to pin in place (may be empty)
-   * @param handle Output handle for referencing this cloth object
+   * @param handle Output handle for the new cloth object. Set to zero if fails.
    * @return Success with valid handle, or error (InvalidMesh, TooManyBody)
    */
   [[nodiscard]] Result add_cloth(ClothConfig cloth_config,
@@ -247,7 +247,7 @@ class World {
    *
    * @param collision_config Collision behavior
    * @param mesh_config Triangle mesh definition
-   * @param handle Output handle for referencing this obstacle
+   * @param handle Output handle for the new obstacle. Set to zero if fails.
    * @return Success with valid handle, or error (InvalidMesh, TooManyBody)
    */
   [[nodiscard]] Result add_obstacle(CollisionConfig collision_config,

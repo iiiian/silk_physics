@@ -75,6 +75,7 @@ class World::WorldImpl {
     // make tri mesh
     auto tri_mesh = try_make_cloth_mesh(mesh_config);
     if (!tri_mesh) {
+      handle = 0;
       return Result::error(ErrorCode::InvalidMesh);
     }
 
@@ -91,6 +92,7 @@ class World::WorldImpl {
 
     auto [h, e] = registry_.add_entity();
     if (h.is_empty()) {
+      handle = 0;
       return Result::error(ErrorCode::TooManyBody);
     }
     assert(e);
@@ -255,6 +257,7 @@ class World::WorldImpl {
     // make tri mesh
     auto tri_mesh = try_make_obstacle_mesh(mesh_config);
     if (!tri_mesh) {
+      handle = 0;
       return Result::error(ErrorCode::InvalidMesh);
     }
 
@@ -266,6 +269,7 @@ class World::WorldImpl {
 
     auto [h, e] = registry_.add_entity();
     if (h.is_empty()) {
+      handle = 0;
       return Result::error(ErrorCode::TooManyBody);
     }
     assert(e);
