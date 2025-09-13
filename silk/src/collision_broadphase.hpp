@@ -131,12 +131,13 @@ void sap_sort_proxies(const std::vector<C>& colliders, int* proxies,
   pdqsort_branchless(proxies, proxies + proxy_num, comp);
 }
 
-template <typename C>
 /**
  * Sweep one object against a sorted list on `axis`.
  * Early exits when intervals separate; defers narrow-phase by returning pairs
- * of pointers to colliders; caller may run additional checks.
+ * of pointers to colliders; caller may run additional checks. If flip is true,
+ * return pair [b, a] instead of [a, b].
  */
+template <typename C, bool flip = false>
 void sap_sorted_collision(C& ca, std::vector<C>& colliders_b,
                           const int* proxies_b, int proxy_num_b, int axis,
                           CollisionFilter<C> filter, CollisionCache<C>& cache) {
@@ -157,7 +158,11 @@ void sap_sorted_collision(C& ca, std::vector<C>& colliders_b,
     }
 
     if (Bbox::is_colliding(ca.bbox, cb.bbox)) {
-      cache.emplace_back(&ca, &cb);
+      if constexpr (flip) {
+        cache.emplace_back(&cb, &ca);
+      } else {
+        cache.emplace_back(&ca, &cb);
+      }
     }
   }
 }
@@ -195,12 +200,14 @@ void sap_sorted_group_group_collision(std::vector<C>& colliders_a,
     int pb = proxies_b[b];
 
     if (colliders_a[pa].bbox.min(axis) < colliders_b[pb].bbox.min(axis)) {
-      sap_sorted_collision(colliders_a[pa], colliders_b, proxies_b + b,
-                           proxy_num_b - b, axis, filter, cache);
+      sap_sorted_collision<C, false>(colliders_a[pa], colliders_b,
+                                     proxies_b + b, proxy_num_b - b, axis,
+                                     filter, cache);
       a++;
     } else {
-      sap_sorted_collision(colliders_b[pb], colliders_a, proxies_a + a,
-                           proxy_num_a - a, axis, filter, cache);
+      // Flip the output pairs to ensure consistant pair order.
+      sap_sorted_collision<C, true>(colliders_b[pb], colliders_a, proxies_a + a,
+                                    proxy_num_a - a, axis, filter, cache);
       b++;
     }
   }
