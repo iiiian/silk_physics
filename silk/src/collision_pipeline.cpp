@@ -11,6 +11,7 @@
 #include "collision.hpp"
 #include "collision_broadphase.hpp"
 #include "collision_narrowphase.hpp"
+#include "logger.hpp"
 #include "mesh_collider.hpp"
 #include "object_collider.hpp"
 
@@ -37,11 +38,33 @@ bool object_collision_filter(const ObjectCollider& a, const ObjectCollider& b) {
  *
  * @param a First mesh collider
  * @param b Second mesh collider
- * @return Always true (no additional filtering)
+ * @return True if collision should be tested, false to skip
  */
-bool mesh_collision_filter(const MeshCollider& a, const MeshCollider& b) {
-  // No filter here.
-  return true;
+bool mesh_inter_collision_filter(const MeshCollider& a, const MeshCollider& b) {
+  // Enforces three filtering rules:
+  // 1. Only allows point-triangle and edge-edge collision types
+  // 2. Rejects collisions where all vertices are pinned (zero inverse mass)
+
+  if (a.type == MeshColliderType::Point &&
+      b.type == MeshColliderType::Triangle) {
+    bool is_both_pinned =
+        (a.inv_mass(0) + b.inv_mass(0) + b.inv_mass(1) + b.inv_mass(2) == 0.0f);
+    return (!is_both_pinned);
+  }
+
+  if (a.type == MeshColliderType::Triangle &&
+      b.type == MeshColliderType::Point) {
+    bool is_both_pinned =
+        (a.inv_mass(0) + a.inv_mass(1) + a.inv_mass(2) + b.inv_mass(0) == 0.0f);
+    return (!is_both_pinned);
+  }
+
+  if (a.type == MeshColliderType::Edge && b.type == MeshColliderType::Edge) {
+    bool is_both_pinned =
+        (a.inv_mass(0) + a.inv_mass(1) + b.inv_mass(0) + b.inv_mass(1) == 0.0f);
+    return (!is_both_pinned);
+  }
+  return false;
 };
 
 /**
@@ -127,8 +150,8 @@ std::vector<Collision> CollisionPipeline::find_collision(
     // Stage 2: Mesh broadphase using hierarchical KD-tree traversal.
     mesh_ccache.clear();
     KDTree<MeshCollider>::test_tree_collision(
-        oa->mesh_collider_tree, ob->mesh_collider_tree, mesh_collision_filter,
-        mesh_ccache);
+        oa->mesh_collider_tree, ob->mesh_collider_tree,
+        mesh_inter_collision_filter, mesh_ccache);
 
     // Stage 3: Parallel narrowphase using continuous collision detection.
 #pragma omp parallel for
