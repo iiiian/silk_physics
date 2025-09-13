@@ -3,12 +3,14 @@
 #include <Eigen/Core>
 #include <vector>
 
+#include "../barrier_constrain.hpp"
+#include "../bbox.hpp"
 #include "../collision.hpp"
 #include "../collision_pipeline.hpp"
 #include "../ecs.hpp"
 #include "../logger.hpp"
 #include "../object_collider_utils.hpp"
-#include "../obstacle_position.hpp"
+#include "../object_state.hpp"
 #include "cloth_solver_utils.hpp"
 
 namespace silk {

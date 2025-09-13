@@ -9,8 +9,12 @@
 #include "cloth_solver_data.hpp"
 #include "collision_pipeline.hpp"
 #include "ecs.hpp"
+#include "mesh.hpp"
 #include "mesh_utils.hpp"
+#include "object_collider.hpp"
 #include "object_state.hpp"
+#include "obstacle_position.hpp"
+#include "pin.hpp"
 #include "solver/solver_pipeline.hpp"
 
 namespace silk {

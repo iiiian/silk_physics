@@ -1,9 +1,9 @@
 #pragma once
 
 #include <optional>
+#include <silk/silk.hpp>
 
 #include "mesh.hpp"
-#include "silk/silk.hpp"
 
 namespace silk {
 

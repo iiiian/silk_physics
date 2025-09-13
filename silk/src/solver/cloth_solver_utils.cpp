@@ -9,6 +9,7 @@
 #include <Eigen/SparseCore>
 #include <cassert>
 #include <optional>
+#include <silk/silk.hpp>
 #include <unsupported/Eigen/KroneckerProduct>
 
 #include "../barrier_constrain.hpp"
@@ -17,10 +18,10 @@
 #include "../eigen_utils.hpp"
 #include "../logger.hpp"
 #include "../mesh.hpp"
+#include "../object_collider.hpp"
 #include "../object_collider_utils.hpp"
 #include "../object_state.hpp"
 #include "../pin.hpp"
-#include "silk/silk.hpp"
 
 namespace silk {
 
