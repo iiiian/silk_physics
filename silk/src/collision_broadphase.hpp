@@ -319,7 +319,7 @@ class KDTree {
 
     delete_subtree(root_);
     collider_num_ = colliders.size();
-    colliders_ = colliders;
+    colliders_ = std::move(colliders);
     proxies_.resize(collider_num_);
     for (int i = 0; i < collider_num_; ++i) {
       proxies_[i] = i;
