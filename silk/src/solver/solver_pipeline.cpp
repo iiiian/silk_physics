@@ -9,7 +9,7 @@
 #include "../logger.hpp"
 #include "../object_collider_utils.hpp"
 #include "../obstacle_position.hpp"
-#include "cloth_solver.hpp"
+#include "cloth_solver_utils.hpp"
 
 namespace silk {
 

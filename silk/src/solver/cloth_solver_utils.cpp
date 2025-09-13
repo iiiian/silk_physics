@@ -1,4 +1,4 @@
-#include "cloth_solver.hpp"
+#include "cloth_solver_utils.hpp"
 
 #include <igl/cotmatrix.h>
 #include <igl/doublearea.h>
