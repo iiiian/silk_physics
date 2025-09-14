@@ -47,7 +47,7 @@ Eigen::Matrix<float, 6, 9> triangle_jacobian_operator(
   float area2_eps =
       std::pow(1e-6f * std::max(e0.squaredNorm(), e1.squaredNorm()), 2);
   if (e0xe1.squaredNorm() < area2_eps) {
-    SPDLOG_DEBUG("degenreate triangle in cloth mesh");
+    SPDLOG_DEBUG("degenerate triangle in cloth mesh");
   }
   // Define 2D basis x and y.
   Eigen::Vector3f bx = e0.normalized();
@@ -416,7 +416,7 @@ bool batch_compute_cloth_outer_loop(
   return true;
 }
 
-/** Inner loop: Project in-plane elastic constrans followed by a global linear
+/** Inner loop: Project in-plane elastic constraints followed by a global linear
  * solve using the cached factorization.
  */
 bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,

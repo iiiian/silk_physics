@@ -26,7 +26,7 @@ class CollisionPipeline {
   int ccd_max_iter = 1024;
   int partial_ccd_max_iter = 32;
 
-  // Minimum time-of-impact to prevent infinte solver loop.
+  // Minimum time-of-impact to prevent infinite solver loop.
   float min_toi = 0.05f;
 
   float collision_stiffness_base = 1e4f;

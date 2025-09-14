@@ -40,7 +40,7 @@ class SolverPipeline {
    * @param collision_pipeline Collision detector used for CCD queries.
    * @returns True on success, false if a sub-solver reports failure or
    *          catastrophic numeric issues are detected.
-   * @post Writes back `SolverState::curr_state` and `state_velocity` per
+   * @post Writes back `ObjectState::curr_state` and `state_velocity` per
    * entity.
    */
   bool step(Registry& registry, CollisionPipeline& collision_pipeline);

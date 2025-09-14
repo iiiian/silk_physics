@@ -1,6 +1,6 @@
 /**
  * @file ecs.hpp
- * @brief Entity Compeont System.
+ * @brief Entity Component System.
  *
  * This header contains only forward declarations for components and keeps
  * templates declared but defined in ecs.cpp. Component trait specializations
@@ -138,7 +138,7 @@ class Registry {
 
   /**
    * @brief Remove component from entity and invalidate handle. No-op if
-   * compoent is absent.
+   * component is absent.
    * @param entity Entity to remove component from
    */
   template <typename T>
