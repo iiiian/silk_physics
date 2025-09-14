@@ -51,19 +51,6 @@ class World::WorldImpl {
       return Result::error(ErrorCode::CholeskyDecompositionFail);
     }
 
-    for (Entity& e : registry_.get_all_entities()) {
-      auto obstacle_position = registry_.get<ObstaclePosition>(e);
-      if (!obstacle_position) {
-        continue;
-      }
-
-      if (obstacle_position->position.size() != 0) {
-        std::swap(obstacle_position->position,
-                  obstacle_position->prev_position);
-        obstacle_position->is_static = true;
-      }
-    }
-
     return Result::ok();
   }
 
@@ -267,9 +254,10 @@ class World::WorldImpl {
 
     // make obstacle position
     ObstaclePosition p;
-    p.is_static = true;
-    p.position = tri_mesh->V.reshaped<Eigen::RowMajor>();
-    p.prev_position = p.position;
+    p.is_static = false;
+    p.is_static_twice = false;
+    p.curr_position = tri_mesh->V.reshaped<Eigen::RowMajor>();
+    p.prev_position = p.curr_position;
 
     auto [h, e] = registry_.add_entity();
     if (h.is_empty()) {
@@ -330,13 +318,14 @@ class World::WorldImpl {
       return Result::error(ErrorCode::InvalidHandle);
     }
 
-    if (pos->position.size() != position.size) {
+    if (pos->curr_position.size() != position.size) {
       return Result::error(ErrorCode::IncorrectPositionNum);
     }
 
     pos->is_static = false;
-    std::swap(pos->position, pos->prev_position);
-    pos->position =
+    pos->is_static_twice = false;
+    std::swap(pos->curr_position, pos->prev_position);
+    pos->curr_position =
         Eigen::Map<const Eigen::VectorXf>(position.data, position.size);
 
     return Result::ok();

@@ -22,6 +22,16 @@ struct Collision {
   Handle entity_handle_a;
   Handle entity_handle_b;
 
+  /** Entity global state offset.
+   * Value of -1 indicates vertex belongs an obstacle. */
+  int state_offset_a;
+  int state_offset_b;
+
+  /**
+   * Vertex index.
+   */
+  Eigen::Vector4i index;
+
   /** Time of impact in [0,1]. */
   float toi;
 
@@ -38,11 +48,6 @@ struct Collision {
   /** Inverse mass for each vertex involved in collision. Value of 0 indicates
    * vertex is pinned or belongs to obstacle */
   Eigen::Vector4f inv_mass;
-
-  /** Object state offset for each vertex in global state vector.
-   * Value of -1 indicates vertex is pinned or belongs to obstacle.
-   */
-  Eigen::Vector4i offset;
 
   /** Primitive vertex positions.
    * Layout: [vertex0, vertex1, vertex2, vertex3] as column vectors.

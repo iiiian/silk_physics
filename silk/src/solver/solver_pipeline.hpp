@@ -22,15 +22,14 @@ class SolverPipeline {
   // Numerical epsilon used by various tolerances.
   float eps = 1e-6f;
 
- private:
-  std::vector<Collision> collisions_;
-
  public:
-  /** @brief Remove all solver components from entities and clear caches.
+  /**
+   * @brief Remove all solver components from entities and clear caches.
    */
   void clear(Registry& registry);
 
-  /** @brief Reset simulation to initial state.
+  /**
+   * @brief Reset simulation to initial state.
    */
   void reset(Registry& registry);
 
@@ -46,21 +45,22 @@ class SolverPipeline {
   bool step(Registry& registry, CollisionPipeline& collision_pipeline);
 
  private:
-  /** @brief Assemble a single global solver state across all entities.
+  /**
+   * @brief Prepare all entity for simulation and collect solver state into
+   * global array.
    */
-  ObjectState compute_global_state(Registry& registry);
+  bool init(Registry& registry, ObjectState& global_state);
 
   Bbox compute_scene_bbox(const Eigen::VectorXf& state);
 
-  /** @brief Drop collisions whose entities are no longer alive in the registry.
+  /**
+   * @brief Build diagonal LHS weights and RHS targets from current collisions.
    */
-  void cleanup_collisions(Registry& registry);
+  BarrierConstrain compute_barrier_constrain(
+      const Eigen::VectorXf& state, const std::vector<Collision>& collisions);
 
-  /** @brief Build diagonal LHS weights and RHS targets from current collisions.
-   */
-  BarrierConstrain compute_barrier_constrain(const Eigen::VectorXf& state);
-
-  /** @brief Project state onto barrier targets where constraints are active.
+  /**
+   * @brief Project state onto barrier targets where constraints are active.
    */
   void enforce_barrier_constrain(const BarrierConstrain& barrier_constrain,
                                  const Bbox& scene_bbox,

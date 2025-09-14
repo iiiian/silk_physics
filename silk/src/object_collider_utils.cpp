@@ -171,10 +171,11 @@ ObjectCollider make_obstacle_object_collider(Handle entity_handle,
   return o;
 }
 
-void update_physical_object_collider(
-    const CollisionConfig& config, Eigen::Ref<const Eigen::VectorXf> curr_state,
-    Eigen::Ref<const Eigen::VectorXf> prev_state,
-    ObjectCollider& object_collider) {
+void update_physical_object_collider(const CollisionConfig& config,
+                                     const ObjectState& object_state,
+                                     const Eigen::VectorXf global_curr_state,
+                                     const Eigen::VectorXf global_prev_state,
+                                     ObjectCollider& object_collider) {
   auto& o = object_collider;
   auto& c = config;
 
@@ -188,6 +189,10 @@ void update_physical_object_collider(
                        int index) -> Eigen::Vector3f {
     return vec(Eigen::seqN(3 * index, 3));
   };
+
+  auto seq = Eigen::seqN(object_state.state_offset, object_state.state_num);
+  auto curr_state = global_curr_state(seq);
+  auto prev_state = global_prev_state(seq);
 
   o.bbox = Bbox{curr_state(Eigen::seqN(0, 3)), curr_state(Eigen::seqN(0, 3))};
   std::vector<Bbox> thread_local_bboxes(omp_get_max_threads(), o.bbox);
@@ -265,10 +270,15 @@ void update_obstacle_object_collider(const CollisionConfig& config,
   o.restitution = config.restitution;
   o.friction = config.friction;
 
-  // Skip expensive position updates for static obstacles.
-  if (o.is_static) {
+  // If obstacle stays static for 2+ steps, there's no need to update mesh
+  // colliders.
+  if (p.is_static_twice) {
     return;
   }
+
+  // If obstacle is static, position at t0 is the current obstacle position.
+  auto& position_t0 = (p.is_static) ? p.curr_position : p.prev_position;
+  auto& position_t1 = p.curr_position;
 
   // Extract vertex positions from state vector.
   auto get_vertex = [](Eigen::Ref<const Eigen::VectorXf> vec,
@@ -276,7 +286,8 @@ void update_obstacle_object_collider(const CollisionConfig& config,
     return vec(Eigen::seqN(3 * index, 3));
   };
 
-  o.bbox = Bbox{p.position(Eigen::seqN(0, 3)), p.position(Eigen::seqN(0, 3))};
+  o.bbox = Bbox{p.curr_position(Eigen::seqN(0, 3)),
+                p.curr_position(Eigen::seqN(0, 3))};
   std::vector<Bbox> thread_local_bboxes(omp_get_max_threads(), o.bbox);
   auto& colliders = o.mesh_collider_tree.get_colliders();
 
@@ -290,8 +301,8 @@ void update_obstacle_object_collider(const CollisionConfig& config,
 
     switch (mc.type) {
       case MeshColliderType::Point: {
-        p0.col(0) = get_vertex(p.prev_position, mc.index(0));
-        p1.col(0) = get_vertex(p.position, mc.index(0));
+        p0.col(0) = get_vertex(position_t0, mc.index(0));
+        p1.col(0) = get_vertex(position_t1, mc.index(0));
         mc.bbox.min = p0.col(0).cwiseMin(p1.col(0));
         mc.bbox.max = p0.col(0).cwiseMax(p1.col(0));
         mc.bbox.pad_inplace(o.bbox_padding);
@@ -299,10 +310,10 @@ void update_obstacle_object_collider(const CollisionConfig& config,
         break;
       }
       case MeshColliderType::Edge: {
-        p0.col(0) = get_vertex(p.prev_position, mc.index(0));
-        p0.col(1) = get_vertex(p.prev_position, mc.index(1));
-        p1.col(0) = get_vertex(p.position, mc.index(0));
-        p1.col(1) = get_vertex(p.position, mc.index(1));
+        p0.col(0) = get_vertex(position_t0, mc.index(0));
+        p0.col(1) = get_vertex(position_t0, mc.index(1));
+        p1.col(0) = get_vertex(position_t1, mc.index(0));
+        p1.col(1) = get_vertex(position_t1, mc.index(1));
         mc.bbox.min =
             p0.col(0).cwiseMin(p0.col(1)).cwiseMin(p1.col(0)).cwiseMin(
                 p1.col(1));
@@ -314,12 +325,12 @@ void update_obstacle_object_collider(const CollisionConfig& config,
         break;
       }
       case MeshColliderType::Triangle: {
-        p0.col(0) = get_vertex(p.prev_position, mc.index(0));
-        p0.col(1) = get_vertex(p.prev_position, mc.index(1));
-        p0.col(2) = get_vertex(p.prev_position, mc.index(2));
-        p1.col(0) = get_vertex(p.position, mc.index(0));
-        p1.col(1) = get_vertex(p.position, mc.index(1));
-        p1.col(2) = get_vertex(p.position, mc.index(2));
+        p0.col(0) = get_vertex(position_t0, mc.index(0));
+        p0.col(1) = get_vertex(position_t0, mc.index(1));
+        p0.col(2) = get_vertex(position_t0, mc.index(2));
+        p1.col(0) = get_vertex(position_t1, mc.index(0));
+        p1.col(1) = get_vertex(position_t1, mc.index(1));
+        p1.col(2) = get_vertex(position_t1, mc.index(2));
         mc.bbox.min = p0.rowwise().minCoeff().cwiseMin(p1.rowwise().minCoeff());
         mc.bbox.max = p0.rowwise().maxCoeff().cwiseMax(p1.rowwise().maxCoeff());
         mc.bbox.pad_inplace(o.bbox_padding);

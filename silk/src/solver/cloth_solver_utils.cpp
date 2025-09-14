@@ -241,60 +241,60 @@ void batch_reset_cloth_simulation(Registry& registry) {
   }
 }
 
-bool batch_prepare_cloth_simulation(Registry& registry, float dt) {
-  for (Entity& e : registry.get_all_entities()) {
-    auto cloth_config = registry.get<ClothConfig>(e);
-    auto collision_config = registry.get<CollisionConfig>(e);
-    auto mesh = registry.get<TriMesh>(e);
-    auto pin = registry.get<Pin>(e);
+bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
+                              int state_offset) {
+  auto& e = entity;
 
-    if (!cloth_config) {
-      continue;
-    }
+  auto cloth_config = registry.get<ClothConfig>(e);
+  auto collision_config = registry.get<CollisionConfig>(e);
+  auto mesh = registry.get<TriMesh>(e);
+  auto pin = registry.get<Pin>(e);
 
-    // Cloth entity sanity check.
-    assert(collision_config && mesh && pin);
+  // Cloth entity sanity check.
+  assert(cloth_config && collision_config && mesh && pin);
 
-    auto state = registry.get<ObjectState>(e);
-    if (!state) {
-      ObjectState new_state;
-      new_state.state_offset = 0;
-      new_state.state_num = 3 * mesh->V.rows();
-      new_state.curr_state = mesh->V.reshaped<Eigen::RowMajor>();
-      new_state.state_velocity = Eigen::VectorXf::Zero(new_state.state_num);
-      state = registry.set<ObjectState>(e, std::move(new_state));
-    }
-    assert(state != nullptr);
-
-    auto topology = registry.get<ClothTopology>(e);
-    if (!topology) {
-      topology = registry.set<ClothTopology>(
-          e, make_cloth_topology(*cloth_config, *mesh));
-    }
-    assert(topology != nullptr);
-
-    auto context = registry.get<ClothSolverContext>(e);
-    if (context && context->dt == dt) {
-      context->has_barrier_constrain = false;
-    } else {
-      auto new_context =
-          make_cloth_solver_context(*cloth_config, *topology, *pin, dt);
-      if (!new_context) {
-        return false;
-      }
-      context = registry.set<ClothSolverContext>(e, std::move(*new_context));
-    }
-    assert(context != nullptr);
-
-    auto collider = registry.get<ObjectCollider>(e);
-    if (!collider) {
-      auto new_collider =
-          make_physical_object_collider(e.self, *collision_config, *mesh, *pin,
-                                        context->mass, state->state_offset);
-      collider = registry.set<ObjectCollider>(e, std::move(new_collider));
-    }
-    assert(collider != nullptr);
+  auto state = registry.get<ObjectState>(e);
+  if (!state) {
+    ObjectState new_state;
+    new_state.state_offset = state_offset;
+    new_state.state_num = 3 * mesh->V.rows();
+    new_state.curr_state = mesh->V.reshaped<Eigen::RowMajor>();
+    new_state.state_velocity = Eigen::VectorXf::Zero(new_state.state_num);
+    state = registry.set<ObjectState>(e, std::move(new_state));
+  } else {
+    state->state_offset = state_offset;
   }
+  assert(state != nullptr);
+
+  auto topology = registry.get<ClothTopology>(e);
+  if (!topology) {
+    topology = registry.set<ClothTopology>(
+        e, make_cloth_topology(*cloth_config, *mesh));
+  }
+  assert(topology != nullptr);
+
+  auto context = registry.get<ClothSolverContext>(e);
+  if (context && context->dt == dt) {
+    context->has_barrier_constrain = false;
+  } else {
+    auto new_context =
+        make_cloth_solver_context(*cloth_config, *topology, *pin, dt);
+    if (!new_context) {
+      return false;
+    }
+    context = registry.set<ClothSolverContext>(e, std::move(*new_context));
+  }
+  assert(context != nullptr);
+
+  auto collider = registry.get<ObjectCollider>(e);
+  if (!collider) {
+    auto new_collider = make_physical_object_collider(
+        e.self, *collision_config, *mesh, *pin, context->mass, state_offset);
+    collider = registry.set<ObjectCollider>(e, std::move(new_collider));
+  } else {
+    collider->state_offset = state_offset;
+  }
+  assert(collider != nullptr);
 
   return true;
 }

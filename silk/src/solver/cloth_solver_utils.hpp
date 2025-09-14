@@ -11,16 +11,19 @@ namespace silk {
  */
 void batch_reset_cloth_simulation(Registry& registry);
 
-/** Prepare all cloths for solver stepping at a given time step.
+/** Prepare cloths for solver stepping at a given time step.
  *  Ensures `ClothTopology`, `ClothSolverContext`, `ObjectState`, and
  * `ObjectCollider` exists and are valid.
  *
  *  @param registry ECS storage for all components.
- *  @param dt       Time step in seconds; must be positive.
+ *  @param entity ECS cloth entity.
+ *  @param dt       Time step in seconds
+ *  @param state_offset Object state offset.
  *  @return false on factorization failure (e.g., non‑SPD system), true
  *          otherwise.
  */
-bool batch_prepare_cloth_simulation(Registry& registry, float dt);
+bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
+                              int state_offset);
 
 /** Assemble step-invariant initial RHS for all cloth entities.
  *

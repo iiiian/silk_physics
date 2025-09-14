@@ -321,13 +321,15 @@ std::optional<Collision> point_triangle_collision(
   c.type = CollisionType::PointTriangle;
   c.entity_handle_a = oa.entity_handle;
   c.entity_handle_b = ob.entity_handle;
+  c.state_offset_a = oa.state_offset;
+  c.state_offset_b = ob.state_offset;
+  c.index(0) = ma.index(0);
+  c.index(Eigen::seqN(1, 3)) = mb.index;
   c.minimal_separation = ms;
   c.stiffness = base_stiffness;
   c.inv_mass = inv_mass;
-  c.offset(0) = oa.state_offset + 3 * ma.index(0);
-  c.offset(Eigen::seqN(1, 3)) = (ob.state_offset + 3 * mb.index.array());
 
-  SPDLOG_DEBUG("pt collision: {}", c.offset.transpose());
+  SPDLOG_DEBUG("pt collision: {}", c.index.transpose());
   SPDLOG_DEBUG("tuv: {} {} {}", toi, b1, b2);
   SPDLOG_DEBUG("use small ms: {}", c.use_small_ms);
   SPDLOG_DEBUG("position x0 t0: {}", c.position_t0.col(0).transpose());
@@ -468,15 +470,15 @@ std::optional<Collision> edge_edge_collision(
   c.type = CollisionType::EdgeEdge;
   c.entity_handle_a = oa.entity_handle;
   c.entity_handle_b = ob.entity_handle;
+  c.state_offset_a = oa.state_offset;
+  c.state_offset_b = ob.state_offset;
+  c.index(Eigen::seqN(0, 2)) = ma.index(Eigen::seqN(0, 2));
+  c.index(Eigen::seqN(2, 2)) = mb.index(Eigen::seqN(0, 2));
   c.minimal_separation = ms;
   c.stiffness = base_stiffness;
   c.inv_mass = inv_mass;
-  c.offset(Eigen::seqN(0, 2)) =
-      oa.state_offset + 3 * ma.index(Eigen::seqN(0, 2)).array();
-  c.offset(Eigen::seqN(2, 2)) =
-      ob.state_offset + 3 * mb.index(Eigen::seqN(0, 2)).array();
 
-  SPDLOG_DEBUG("ee collision: {}", c.offset.transpose());
+  SPDLOG_DEBUG("ee collision: {}", c.index.transpose());
   SPDLOG_DEBUG("tuv: {} {} {}", toi, para_a, para_b);
   SPDLOG_DEBUG("use small ms: {}", c.use_small_ms);
   SPDLOG_DEBUG("position x0 t0: {}", c.position_t0.col(0).transpose());
@@ -525,8 +527,8 @@ std::optional<Collision> narrow_phase(
   return std::nullopt;
 }
 
-void partial_ccd_update(const Eigen::VectorXf& solver_state_t0,
-                        const Eigen::VectorXf& solver_state_t1,
+void partial_ccd_update(const Eigen::VectorXf& global_state_t0,
+                        const Eigen::VectorXf& global_state_t1,
                         const Eigen::Array3f& scene_ee_err,
                         const Eigen::Array3f& scene_vf_err,
                         float base_stiffness, float max_stiffness,
@@ -534,18 +536,27 @@ void partial_ccd_update(const Eigen::VectorXf& solver_state_t0,
                         Collision& collision) {
   auto& c = collision;
 
+  Eigen::Vector4i offset = 3 * c.index;
+  if (c.type == CollisionType::PointTriangle) {
+    offset(0) += c.state_offset_a;
+    offset(1) += c.state_offset_b;
+    offset(2) += c.state_offset_b;
+    offset(3) += c.state_offset_b;
+  } else {
+    offset(0) += c.state_offset_a;
+    offset(1) += c.state_offset_a;
+    offset(2) += c.state_offset_b;
+    offset(3) += c.state_offset_b;
+  }
+
   // Update primitive positions.
   for (int i = 0; i < 4; ++i) {
     if (c.inv_mass(i) == 0.0f) {
       continue;
     }
-    c.position_t0.col(i) = solver_state_t0(Eigen::seqN(c.offset(i), 3));
-  }
-  for (int i = 0; i < 4; ++i) {
-    if (c.inv_mass(i) == 0.0f) {
-      continue;
-    }
-    c.position_t1.col(i) = solver_state_t1(Eigen::seqN(c.offset(i), 3));
+    auto seq = Eigen::seqN(offset(i), 3);
+    c.position_t0.col(i) = global_state_t0(seq);
+    c.position_t1.col(i) = global_state_t1(seq);
   }
 
   // CCD with low maximum iterations.
@@ -593,7 +604,6 @@ void partial_ccd_update(const Eigen::VectorXf& solver_state_t0,
   }
 
   // Partial CCD: collision detected.
-
   if (c.stiffness == 0.0f) {
     c.stiffness = base_stiffness;
   } else {

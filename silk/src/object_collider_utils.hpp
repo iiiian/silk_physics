@@ -6,6 +6,7 @@
 #include "handle.hpp"
 #include "mesh.hpp"
 #include "object_collider.hpp"
+#include "object_state.hpp"
 #include "obstacle_position.hpp"
 #include "pin.hpp"
 
@@ -27,10 +28,11 @@ ObjectCollider make_obstacle_object_collider(Handle entity_handle,
                                              const CollisionConfig& config,
                                              const TriMesh& mesh);
 
-void update_physical_object_collider(
-    const CollisionConfig& config, Eigen::Ref<const Eigen::VectorXf> curr_state,
-    Eigen::Ref<const Eigen::VectorXf> prev_state,
-    ObjectCollider& object_collider);
+void update_physical_object_collider(const CollisionConfig& config,
+                                     const ObjectState& object_state,
+                                     const Eigen::VectorXf global_curr_state,
+                                     const Eigen::VectorXf global_prev_state,
+                                     ObjectCollider& object_collider);
 
 void update_obstacle_object_collider(const CollisionConfig& config,
                                      const ObstaclePosition& obstacle_position,
