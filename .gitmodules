@@ -7,3 +7,6 @@
 [submodule "extern/pdqsort"]
 	path = extern/pdqsort
 	url = https://github.com/orlp/pdqsort.git
+[submodule "extern/portable-file-dialogs"]
+	path = extern/portable-file-dialogs
+	url = https://github.com/Michaelliu1017/portable-file-dialogs
