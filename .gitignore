@@ -18,3 +18,5 @@ ClothSolver::solve() [clone ._omp_fn.0].annotation
 Testing
 cmake-build-debug
 misc/physics_scene
+.DS_Store
+._*
