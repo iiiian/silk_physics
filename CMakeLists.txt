@@ -79,11 +79,6 @@ FetchContent_Declare(
         <SOURCE_DIR>/deps/imgui/CMakeLists.txt
 )
 
-FetchContent_Declare(
-    portable-file-dialogs
-    GIT_REPOSITORY https://github.com/samhocevar/portable-file-dialogs.git
-    GIT_TAG c12ea8c9a727f5320a2b4570aee863bbede2a204
-)
 
 # base dependencies
 find_package(OpenMP REQUIRED)
@@ -106,9 +101,10 @@ set(TIGHT_INCLUSION_WITH_DOUBLE_PRECISION OFF)
 add_subdirectory(extern/tight-inclusion)
 
 add_subdirectory(silk)
+add_subdirectory(extern/portable-file-dialogs)
 
 if(SILK_BUILD_DEMO)
-    FetchContent_MakeAvailable(polyscope portable-file-dialogs)
+    FetchContent_MakeAvailable(polyscope)
     add_subdirectory(demo)
 endif()
 
