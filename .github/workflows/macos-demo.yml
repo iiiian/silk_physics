@@ -1,0 +1,51 @@
+name: macOS Demo
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-demo:
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Sync submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
+      - name: Install dependencies (Homebrew)
+        run: |
+          brew update
+          brew list --versions ninja  >/dev/null || brew install ninja
+          brew list --versions libomp >/dev/null || brew install libomp
+
+      - name: Configure (CMake)
+        run: |
+          OMP_PREFIX="$(brew --prefix libomp)"
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSILK_BUILD_DEMO=ON \
+            -DSILK_BUILD_TEST=OFF \
+            -DOpenMP_ROOT="$OMP_PREFIX"
+
+      - name: Build demo
+        run: cmake --build build --target demo --parallel
+
+      - name: Upload demo artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: silk-demo-macos14-Release-${{ github.run_number }}
+          path: |
+            build/demo/demo
+            build/demo/demo.app
+            build/*/demo/demo
+            build/*/demo/demo.app
+          compression-level: 6
+          if-no-files-found: error
