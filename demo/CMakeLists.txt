@@ -43,7 +43,7 @@ target_link_libraries(
     demo
     PRIVATE spdlog::spdlog
     PRIVATE Eigen3::Eigen
-    PRIVATE igl::core
+    PRIVATE ${SILK_IGL_CORE}
     PRIVATE polyscope
     PRIVATE portable_file_dialogs
     PRIVATE silk::silk

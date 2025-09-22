@@ -36,7 +36,7 @@ target_link_libraries(
     silk
     PRIVATE
         Eigen3::Eigen
-        igl::core
+        ${SILK_IGL_CORE}
         spdlog::spdlog
         TBB::tbb
         tight_inclusion::tight_inclusion
