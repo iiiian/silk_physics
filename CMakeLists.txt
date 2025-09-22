@@ -70,18 +70,6 @@ FetchContent_Declare(
     FIND_PACKAGE_ARGS 1.15
 )
 
-FetchContent_Declare(
-    polyscope
-    GIT_REPOSITORY https://github.com/nmwsharp/polyscope.git
-    # pull from master branch for hidpi patch
-    GIT_TAG aba50436d7d138ab6e1e9b6e498a3ae736366ae8
-    # To add imgui_stdlib.cpp to the source list, patch polyscope's homemade CMakeLists.txt for DearIMGui.
-    PATCH_COMMAND
-        ${CMAKE_COMMAND} -E copy
-        ${CMAKE_SOURCE_DIR}/misc/hacks/polyscope/deps/imgui/CMakeLists.txt
-        <SOURCE_DIR>/deps/imgui/CMakeLists.txt
-)
-
 
 set(SUITESPARSE_ENABLE_PROJECTS
     "suitesparse_config;amd;camd;colamd;ccolamd;cholmod;"
@@ -100,7 +88,7 @@ add_subdirectory(extern/tight-inclusion)
 add_subdirectory(silk)
 
 if(SILK_BUILD_DEMO)
-    FetchContent_MakeAvailable(polyscope)
+    add_subdirectory(extern/polyscope)
     add_subdirectory(extern/portable-file-dialogs)
     add_subdirectory(demo)
 endif()

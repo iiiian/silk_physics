@@ -10,3 +10,6 @@
 [submodule "extern/portable-file-dialogs"]
 	path = extern/portable-file-dialogs
 	url = https://github.com/Michaelliu1017/portable-file-dialogs
+[submodule "extern/polyscope"]
+	path = extern/polyscope
+	url = https://github.com/iiiian/polyscope.git
