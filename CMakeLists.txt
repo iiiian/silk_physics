@@ -93,7 +93,6 @@ FetchContent_MakeAvailable(
     Eigen3
     Libigl
     SuiteSparse
-    Catch2
     spdlog
 )
 
@@ -109,6 +108,7 @@ if(SILK_BUILD_DEMO)
 endif()
 
 if(SILK_BUILD_TEST)
+    FetchContent_MakeAvailable(Catch2)
     find_package(Alembic REQUIRED)
     enable_testing()
     add_subdirectory(test)
