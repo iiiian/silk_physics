@@ -1,6 +1,7 @@
 #include "object_collider_utils.hpp"
 
-#include <omp.h>
+#include <tbb/enumerable_thread_specific.h>
+#include <tbb/parallel_for.h>
 
 #include <Eigen/Core>
 #include <functional>
@@ -195,16 +196,17 @@ void update_physical_object_collider(const CollisionConfig& config,
   auto prev_state = global_prev_state(seq);
 
   o.bbox = Bbox{curr_state(Eigen::seqN(0, 3)), curr_state(Eigen::seqN(0, 3))};
-  std::vector<Bbox> thread_local_bboxes(omp_get_max_threads(), o.bbox);
 
   auto& colliders = o.mesh_collider_tree.get_colliders();
-#pragma omp parallel for
-  for (int i = 0; i < colliders.size(); ++i) {
+  int collider_num = colliders.size();
+  tbb::enumerable_thread_specific<Bbox> thread_bboxes(o.bbox);
+
+  tbb::parallel_for(0, collider_num, [&](int i) {
     MeshCollider& mc = colliders[i];
     auto& p0 = mc.position_t0;
     auto& p1 = mc.position_t1;
 
-    Bbox& bbox = thread_local_bboxes[omp_get_thread_num()];
+    Bbox& bbox = thread_bboxes.local();
 
     switch (mc.type) {
       case MeshColliderType::Point: {
@@ -248,10 +250,10 @@ void update_physical_object_collider(const CollisionConfig& config,
         break;
       }
     }
-  }
+  });
 
   // Merge thread-local bounding boxes into final object bounding box.
-  for (auto& bbox : thread_local_bboxes) {
+  for (auto& bbox : thread_bboxes) {
     o.bbox.merge_inplace(bbox);
   }
 
@@ -288,16 +290,17 @@ void update_obstacle_object_collider(const CollisionConfig& config,
 
   o.bbox = Bbox{p.curr_position(Eigen::seqN(0, 3)),
                 p.curr_position(Eigen::seqN(0, 3))};
-  std::vector<Bbox> thread_local_bboxes(omp_get_max_threads(), o.bbox);
-  auto& colliders = o.mesh_collider_tree.get_colliders();
 
-#pragma omp parallel for
-  for (int i = 0; i < colliders.size(); ++i) {
+  auto& colliders = o.mesh_collider_tree.get_colliders();
+  int collider_num = colliders.size();
+  tbb::enumerable_thread_specific<Bbox> thread_bboxes(o.bbox);
+
+  tbb::parallel_for(0, collider_num, [&](int i) {
     MeshCollider& mc = colliders[i];
     auto& p0 = mc.position_t0;
     auto& p1 = mc.position_t1;
 
-    Bbox& bbox = thread_local_bboxes[omp_get_thread_num()];
+    Bbox& bbox = thread_bboxes.local();
 
     switch (mc.type) {
       case MeshColliderType::Point: {
@@ -338,10 +341,10 @@ void update_obstacle_object_collider(const CollisionConfig& config,
         break;
       }
     }
-  }
+  });
 
   // Merge thread-local bounding boxes into final object bounding box.
-  for (auto& bbox : thread_local_bboxes) {
+  for (auto& bbox : thread_bboxes) {
     o.bbox.merge_inplace(bbox);
   }
 

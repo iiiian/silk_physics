@@ -1,7 +1,5 @@
 #include "collision_broadphase_test_utils.hpp"
 
-#include <omp.h>
-
 bool SimpleCollider::operator==(const SimpleCollider& other) const {
   return object_id == other.object_id && face_id == other.face_id;
 }
@@ -45,22 +43,14 @@ void brute_force_self_collision(
     std::vector<SimpleCollider>& colliders,
     silk::CollisionFilter<SimpleCollider> filter_callback,
     silk::CollisionCache<SimpleCollider>& cache) {
-  std::vector<silk::CollisionCache<SimpleCollider>> thread_local_caches(
-      omp_get_max_threads());
-#pragma omp parallel for
   for (int i = 0; i < colliders.size(); ++i) {
     for (int j = i + 1; j < colliders.size(); ++j) {
       if (filter_callback(colliders[i], colliders[j])) {
         if (silk::Bbox::is_colliding(colliders[i].bbox, colliders[j].bbox)) {
-          thread_local_caches[omp_get_thread_num()].emplace_back(
-              colliders.data() + i, colliders.data() + j);
+          cache.emplace_back(colliders.data() + i, colliders.data() + j);
         }
       }
     }
-  }
-  for (auto& thread_local_cache : thread_local_caches) {
-    cache.insert(cache.end(), thread_local_cache.begin(),
-                 thread_local_cache.end());
   }
 }
 
@@ -69,22 +59,14 @@ void brute_force_group_group_collision(
     std::vector<SimpleCollider>& colliders_b,
     silk::CollisionFilter<SimpleCollider> filter_callback,
     silk::CollisionCache<SimpleCollider>& cache) {
-  std::vector<silk::CollisionCache<SimpleCollider>> thread_local_caches(
-      omp_get_max_threads());
-#pragma omp parallel for
   for (int i = 0; i < colliders_a.size(); ++i) {
     for (int j = 0; j < colliders_b.size(); ++j) {
       if (filter_callback(colliders_a[i], colliders_b[j])) {
         if (silk::Bbox::is_colliding(colliders_a[i].bbox,
                                      colliders_b[j].bbox)) {
-          thread_local_caches[omp_get_thread_num()].emplace_back(
-              colliders_a.data() + i, colliders_b.data() + j);
+          cache.emplace_back(colliders_a.data() + i, colliders_b.data() + j);
         }
       }
     }
-  }
-  for (auto& thread_local_cache : thread_local_caches) {
-    cache.insert(cache.end(), thread_local_cache.begin(),
-                 thread_local_cache.end());
   }
 }

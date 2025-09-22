@@ -37,7 +37,8 @@ target_link_libraries(
     PRIVATE
         Eigen3::Eigen
         igl::core
-        OpenMP::OpenMP_CXX
+        spdlog::spdlog
+        TBB::tbb
         tight_inclusion::tight_inclusion
         # dependencies for SuiteSparse cholmod
         SuiteSparse::SuiteSparseConfig

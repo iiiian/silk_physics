@@ -3,7 +3,8 @@
 #include <igl/cotmatrix.h>
 #include <igl/doublearea.h>
 #include <igl/massmatrix.h>
-#include <omp.h>
+#include <tbb/enumerable_thread_specific.h>
+#include <tbb/parallel_for.h>
 
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
@@ -431,10 +432,11 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
   int state_num = state.size();
 
   // Project in‑plane elastic constraint (per‑face, threaded accumulation).
-  std::vector<Eigen::VectorXf> thread_local_rhs(
-      omp_get_max_threads(), Eigen::VectorXf::Zero(state_num));
-#pragma omp parallel for
-  for (int i = 0; i < t.jacobian_ops.size(); ++i) {
+
+  tbb::enumerable_thread_specific<Eigen::VectorXf> thread_rhs(
+      Eigen::VectorXf::Zero(state_num));
+  int ops_num = t.jacobian_ops.size();
+  tbb::parallel_for(0, ops_num, [&](int i) {
     Eigen::Vector3i offset = 3 * F.row(i);
 
     // Assemble local vectorized vertex position.
@@ -445,9 +447,9 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
 
     // Deformation matrix.
     Eigen::Matrix<float, 3, 2> D = (t.jacobian_ops[i] * buffer).reshaped(3, 2);
-    // SVD of deformation. Clamp singular values to form the projected target T
-    // (rotation + limited stretch). Eigen does not return thin U/V for 3x2, so
-    // compute full and slice.
+    // SVD of deformation. Clamp singular values to form the projected
+    // target T (rotation + limited stretch). Eigen does not return thin U/V
+    // for 3x2, so compute full and slice.
     Eigen::JacobiSVD<Eigen::Matrix<float, 3, 2>> svd(
         D, Eigen::ComputeFullV | Eigen::ComputeFullU);
     Eigen::Vector2f sigma = svd.singularValues();
@@ -463,14 +465,14 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
     float weight = config.elastic_stiffness * t.area(i);
     buffer = weight * t.jacobian_ops[i].transpose() * T.reshaped();
 
-    auto& local_rhs = thread_local_rhs[omp_get_thread_num()];
+    auto& local_rhs = thread_rhs.local();
     local_rhs(Eigen::seqN(offset(0), 3)) += buffer(Eigen::seqN(0, 3));
     local_rhs(Eigen::seqN(offset(1), 3)) += buffer(Eigen::seqN(3, 3));
     local_rhs(Eigen::seqN(offset(2), 3)) += buffer(Eigen::seqN(6, 3));
-  }
+  });
 
   Eigen::VectorXf rhs = outer_rhs;
-  for (auto& local_rhs : thread_local_rhs) {
+  for (auto& local_rhs : thread_rhs) {
     rhs += local_rhs;
   }
 

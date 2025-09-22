@@ -1,6 +1,7 @@
 #include "collision_pipeline.hpp"
 
-#include <omp.h>
+#include <tbb/enumerable_thread_specific.h>
+#include <tbb/parallel_for.h>
 
 #include <Eigen/Core>
 #include <cassert>
@@ -118,8 +119,7 @@ std::vector<Collision> CollisionPipeline::find_collision(
   scene_ee_err_ = ticcd::get_numerical_error(abs_max, false, true);
   scene_vf_err_ = ticcd::get_numerical_error(abs_max, true, true);
 
-  std::vector<std::vector<Collision>> thread_local_collisions(
-      omp_get_max_threads());
+  tbb::enumerable_thread_specific<std::vector<Collision>> thread_collisions;
   CollisionCache<MeshCollider> mesh_ccache;
 
   // Three-stage collision detection for inter-object collisions:
@@ -142,8 +142,6 @@ std::vector<Collision> CollisionPipeline::find_collision(
       object_collision_filter, object_ccache);
 
   for (auto& ccache : object_ccache) {
-    // Manually unpack pair since OpenMP doesn't support structured bindings in
-    // capture.
     auto& oa = ccache.first;
     auto& ob = ccache.second;
 
@@ -154,8 +152,8 @@ std::vector<Collision> CollisionPipeline::find_collision(
         mesh_inter_collision_filter, mesh_ccache);
 
     // Stage 3: Parallel narrowphase using continuous collision detection.
-#pragma omp parallel for
-    for (int i = 0; i < mesh_ccache.size(); ++i) {
+    int ccache_num = mesh_ccache.size();
+    tbb::parallel_for(0, ccache_num, [&](int i) {
       auto& pair = mesh_ccache[i];
       auto* ma = pair.first;
       auto* mb = pair.second;
@@ -163,11 +161,11 @@ std::vector<Collision> CollisionPipeline::find_collision(
       auto collision = narrow_phase(
           *oa, *ma, *ob, *mb, dt, collision_stiffness_base, min_toi,
           ccd_tolerance, ccd_max_iter, scene_ee_err_, scene_vf_err_);
-      auto& out = thread_local_collisions[omp_get_thread_num()];
+      auto& out = thread_collisions.local();
       if (collision) {
         out.emplace_back(std::move(*collision));
       }
-    }
+    });
   }
 
   // Self-collision detection within individual objects.
@@ -183,8 +181,8 @@ std::vector<Collision> CollisionPipeline::find_collision(
     o.mesh_collider_tree.test_self_collision(mesh_self_collision_filter,
                                              mesh_ccache);
 
-#pragma omp parallel for
-    for (int i = 0; i < mesh_ccache.size(); ++i) {
+    int ccache_num = mesh_ccache.size();
+    tbb::parallel_for(0, ccache_num, [&](int i) {
       auto& pair = mesh_ccache[i];
       auto* ma = pair.first;
       auto* mb = pair.second;
@@ -193,20 +191,19 @@ std::vector<Collision> CollisionPipeline::find_collision(
       auto collision = narrow_phase(
           o, *ma, o, *mb, dt, collision_stiffness_base, min_toi, ccd_tolerance,
           ccd_max_iter, scene_ee_err_, scene_vf_err_);
-      auto& out = thread_local_collisions[omp_get_thread_num()];
+      auto& out = thread_collisions.local();
       if (collision) {
         out.push_back(std::move(*collision));
       }
-    }
+    });
   }
 
   // Merge thread-local collision lists into single result vector.
-  auto& thread0_collisions = thread_local_collisions[0];
-  for (int i = 1; i < omp_get_max_threads(); ++i) {
-    auto& c = thread_local_collisions[i];
-    thread0_collisions.insert(thread0_collisions.end(), c.begin(), c.end());
+  std::vector<Collision> collisions;
+  for (auto& c : thread_collisions) {
+    collisions.insert(collisions.end(), c.begin(), c.end());
   }
-  return thread0_collisions;
+  return collisions;
 }
 
 void CollisionPipeline::update_collision(

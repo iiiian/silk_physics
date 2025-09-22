@@ -8,18 +8,11 @@ WIP C++17 cloth physics library with continuous collision detection and a GUI de
 - Self/obstacle collisions with tight-inclusion CCD
 - GUI demo built with Polyscope (mesh IO: OBJ/OFF/PLY/STL)
 
-Most third‑party dependencies are downloaded automatically by CMake. You still need a BLAS/LAPACK implementation and an OpenMP-enabled compiler installed on your system.
+Most third‑party dependencies are downloaded automatically except BLAS/LAPACK implementation.
 
 ## Quick Start
 
 ### Prerequisites
-
-- C++17 compiler with OpenMP
-  - GCC ≥ 9, Clang/AppleClang ≥ 10
-  - Windows: MSVC (VS 2022 17.2+ with `/openmp:llvm`) or clang-cl + LLVM OpenMP
-- CMake ≥ 3.24 and a build tool (Ninja or Make)
-- Git
-- BLAS + LAPACK (e.g., OpenBLAS or Apple Accelerate)
 
 Install BLAS/LAPACK examples:
 

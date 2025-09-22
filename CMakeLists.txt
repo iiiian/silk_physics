@@ -17,7 +17,6 @@ option(SILK_BUILD_TEST "Build tests" ON)
 # System dependencies
 # ---------------------------------------------------------------
 
-find_package(OpenMP REQUIRED)
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
 
@@ -70,6 +69,15 @@ FetchContent_Declare(
     FIND_PACKAGE_ARGS 1.15
 )
 
+set(TBB_TEST OFF)
+set(TBB_STRICT OFF) # prevent tb from throwing error due to gcc 15 
+FetchContent_Declare(
+    tbb
+    GIT_REPOSITORY https://github.com/uxlfoundation/oneTBB.git
+    GIT_TAG
+        6f468b0385b2104a9f485e49bb55508d0024e32d
+    FIND_PACKAGE_ARGS 2022.2.0
+)
 
 set(SUITESPARSE_ENABLE_PROJECTS
     "suitesparse_config;amd;camd;colamd;ccolamd;cholmod;"
@@ -81,6 +89,7 @@ FetchContent_MakeAvailable(
     Libigl
     SuiteSparse
     spdlog
+    tbb
 )
 
 set(TIGHT_INCLUSION_WITH_DOUBLE_PRECISION OFF)

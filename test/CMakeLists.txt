@@ -18,7 +18,7 @@ target_link_libraries(
     PRIVATE spdlog::spdlog
     PRIVATE Alembic::Alembic
     PRIVATE Catch2::Catch2WithMain
-    PRIVATE OpenMP::OpenMP_CXX
+    PRIVATE TBB::tbb
 )
 target_compile_definitions(
     sap_test
@@ -42,7 +42,7 @@ target_link_libraries(
     PRIVATE spdlog::spdlog
     PRIVATE Alembic::Alembic
     PRIVATE Catch2::Catch2WithMain
-    PRIVATE OpenMP::OpenMP_CXX
+    PRIVATE TBB::tbb
 )
 target_compile_definitions(
     sap_kd_tree_test
@@ -66,7 +66,7 @@ target_link_libraries(
     PRIVATE spdlog::spdlog
     PRIVATE Alembic::Alembic
     PRIVATE Catch2::Catch2WithMain
-    PRIVATE OpenMP::OpenMP_CXX
+    PRIVATE TBB::tbb
 )
 target_compile_definitions(
     sap_benchmark
@@ -90,7 +90,7 @@ target_link_libraries(
     PRIVATE spdlog::spdlog
     PRIVATE Alembic::Alembic
     PRIVATE Catch2::Catch2WithMain
-    PRIVATE OpenMP::OpenMP_CXX
+    PRIVATE TBB::tbb
 )
 target_compile_definitions(
     sap_kd_tree_benchmark

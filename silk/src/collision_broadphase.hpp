@@ -1,6 +1,8 @@
 #pragma once
 
 #include <pdqsort.h>
+#include <tbb/enumerable_thread_specific.h>
+#include <tbb/task_group.h>
 
 #include <Eigen/Core>
 #include <algorithm>
@@ -28,7 +30,7 @@ namespace silk {
  *   temporal coherence and avoids full rebuilds.
  * - Query: candidate pairs are generated per node using SAP along the axis with
  *   the largest variance of collider centers. Node–node and node–external pairs
- *   are handled; work is parallelized with OpenMP tasks and accumulated in per-
+ *   are handled; work is parallelized with tbb tasks and accumulated in per-
  *   thread caches before merging.
  *
  * Key invariants
@@ -273,6 +275,9 @@ template <typename C>
  */
 class KDTree {
  private:
+  using ThreadCollisionCache =
+      tbb::enumerable_thread_specific<CollisionCache<C>>;
+
   static constexpr int NODE_PROXY_NUM_THRESHOLD = 1024;
 
   int collider_num_ = 0;
@@ -282,7 +287,6 @@ class KDTree {
   std::vector<KDNode*> stack_;  // for tree traversal
   std::vector<int> proxies_;    // in-order layout proxy array
   std::vector<int> buffer_;     // for both proxies and external colliders
-  std::vector<CollisionCache<C>> local_cache_;  // thread local collision cache
 
  public:
   KDTree() = default;
@@ -296,7 +300,6 @@ class KDTree {
     stack_ = std::move(tree.stack_);
     proxies_ = std::move(tree.proxies_);
     buffer_ = std::move(tree.buffer_);
-    local_cache_ = std::move(tree.local_cache_);
 
     tree.collider_num_ = 0;
     tree.root_ = nullptr;
@@ -313,7 +316,6 @@ class KDTree {
     stack_ = std::move(tree.stack_);
     proxies_ = std::move(tree.proxies_);
     buffer_ = std::move(tree.buffer_);
-    local_cache_ = std::move(tree.local_cache_);
 
     tree.collider_num_ = 0;
     tree.root_ = nullptr;
@@ -336,7 +338,6 @@ class KDTree {
     root_->proxy_start = 0;
     root_->proxy_end = collider_num_;
     root_->population = collider_num_;
-    local_cache_.resize(omp_get_max_threads());
   }
 
   /** Mutable access to stored colliders (ownership kept by the tree). */
@@ -364,7 +365,7 @@ class KDTree {
   /**
    * Enumerate potentially colliding pairs within this tree.
    * - Uses SAP per node on the axis of largest variance; schedules node work as
-   *   OpenMP tasks and merges per-thread caches into `cache`.
+   *   tbb tasks and merges per-thread caches into `cache`.
    * - `filter` is applied before AABB checks and can skip domain-excluded
    *   pairs (e.g. static-static in incremental mode).
    */
@@ -374,13 +375,13 @@ class KDTree {
 
     stack_.clear();
     buffer_.clear();
-    for (int i = 0; i < local_cache_.size(); ++i) {
-      local_cache_[i].clear();
-    }
+
+    tbb::task_group task_group;
+    ThreadCollisionCache thread_cache;
 
     root_->ext_start = 0;
     root_->ext_end = 0;
-    test_node_collision(root_, filter);
+    test_node_collision(root_, filter, thread_cache, task_group);
 
     if (!root_->is_leaf()) {
       stack_.push_back(root_->right);
@@ -389,14 +390,12 @@ class KDTree {
 
     // one main thread traverse the tree while collision detection at each node
     // is processed in parallel
-#pragma omp parallel
-#pragma omp single
     while (!stack_.empty()) {
       KDNode* n = stack_.back();
       stack_.pop_back();
 
       update_ext_collider(n);
-      test_node_collision(n, filter);
+      test_node_collision(n, filter, thread_cache, task_group);
 
       // recurse into subtree
       if (!n->is_leaf()) {
@@ -404,9 +403,10 @@ class KDTree {
         stack_.push_back(n->left);
       }
     }
+    task_group.wait();
 
-    for (int i = 0; i < local_cache_.size(); ++i) {
-      cache.insert(cache.end(), local_cache_[i].begin(), local_cache_[i].end());
+    for (auto& t : thread_cache) {
+      cache.insert(cache.end(), t.begin(), t.end());
     }
   }
 
@@ -494,9 +494,6 @@ class KDTree {
   void delete_cache() {
     stack_ = {};
     buffer_ = {};
-    for (auto& cache : local_cache_) {
-      cache = {};
-    }
   }
 
  private:
@@ -1055,7 +1052,9 @@ class KDTree {
 
   // Run SAP at a node. If no externals, do intra-node only; otherwise also do
   // bipartite with externals. Work is spawned as an OpenMP task.
-  void test_node_collision(KDNode* n, CollisionFilter<C> filter) {
+  void test_node_collision(KDNode* n, CollisionFilter<C> filter,
+                           ThreadCollisionCache& cache,
+                           tbb::task_group& task_group) {
     int* proxy_start = proxies_.data() + n->proxy_start;
     int proxy_num = n->proxy_num();
     if (proxy_num == 0) {
@@ -1067,13 +1066,11 @@ class KDTree {
       int axis = sap_optimal_axis(colliders_, proxy_start, proxy_num);
       sap_sort_proxies(colliders_, proxy_start, proxy_num, axis);
 
-#pragma omp task firstprivate(proxy_start, proxy_num, axis)
-      {
-        auto& cache = local_cache_[omp_get_thread_num()];
+      auto task_func = [this, proxy_start, proxy_num, axis, filter, &cache]() {
         sap_sorted_group_self_collision(colliders_, proxy_start, proxy_num,
-                                        axis, filter, cache);
-      }
-
+                                        axis, filter, cache.local());
+      };
+      task_group.run(task_func);
     } else {
       // node-node and node-external test
       int* ext_start = buffer_.data() + n->ext_start;
@@ -1087,15 +1084,15 @@ class KDTree {
       // hence external collider buffer needs to be copied.
       std::vector<int> ext_copy(ext_start, ext_start + ext_num);
 
-#pragma omp task firstprivate(proxy_start, proxy_num, axis, ext_copy)
-      {
-        auto& cache = local_cache_[omp_get_thread_num()];
+      auto task_func = [this, proxy_start, proxy_num, axis, filter, ext_copy,
+                        ext_num, &cache]() {
         sap_sorted_group_self_collision(colliders_, proxy_start, proxy_num,
-                                        axis, filter, cache);
+                                        axis, filter, cache.local());
         sap_sorted_group_group_collision(colliders_, proxy_start, proxy_num,
                                          colliders_, ext_copy.data(), ext_num,
-                                         axis, filter, cache);
-      }
+                                         axis, filter, cache.local());
+      };
+      task_group.run(task_func);
     }
   }
 };
