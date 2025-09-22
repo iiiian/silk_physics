@@ -15,18 +15,8 @@ set(DEMO_SOURCES
 
 add_executable(demo ${DEMO_SOURCES})
 
-# set debug flag
-target_compile_options(
-    demo
-    PRIVATE
-        $<$<CONFIG:Debug>:
-        -Wall
-        -Wextra
-        -fdiagnostics-color
-        -Wno-unused-parameter
-        -Wno-sign-compare # prevent libigl vomiting error
-        >
-)
+include(${CMAKE_SOURCE_DIR}/cmake/SilkDebugFlags.cmake)
+silk_debug_warnings(silk)
 
 # set spdlog log level based on build type
 target_compile_definitions(

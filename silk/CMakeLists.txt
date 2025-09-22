@@ -11,18 +11,8 @@ add_library(silk::silk ALIAS silk)
 
 set_target_properties(silk PROPERTIES VERSION 0.1.0)
 
-target_compile_options(
-    silk
-    PRIVATE
-        $<$<CONFIG:Debug>:
-        -Wall
-        -Wextra
-        -Wpedantic
-        -fdiagnostics-color
-        -Wno-unused-parameter
-        -Wno-sign-compare # prevent libigl vomiting error
-        >
-)
+include(${CMAKE_SOURCE_DIR}/cmake/SilkDebugFlags.cmake)
+silk_debug_warnings(silk)
 
 target_include_directories(
     silk
