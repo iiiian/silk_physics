@@ -6,20 +6,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Compiler checks: GCC/Clang need C++17; MSVC needs LLVM OpenMP support
-if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    # Require VS 2022 17.2+ (MSVC 19.32+) for /openmp:llvm with tasks
-    if(MSVC_VERSION LESS 1932)
-        message(FATAL_ERROR "MSVC 19.32+ (VS 2022 17.2+) required for OpenMP tasks via /openmp:llvm.")
-    endif()
-    # Enable LLVM OpenMP backend on MSVC
-    add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/openmp:llvm>)
-elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-    # C++17 is required; CMake will enforce due to CMAKE_CXX_STANDARD_REQUIRED
-    message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} (C++17 required)")
-else()
-    message(STATUS "Unknown compiler '${CMAKE_CXX_COMPILER_ID}'. Proceeding with C++17 requirement.")
-endif()
 
 option(SILK_BUILD_DEMO "Build the GUI demo application" ON)
 option(SILK_BUILD_TEST "Build tests" ON)
