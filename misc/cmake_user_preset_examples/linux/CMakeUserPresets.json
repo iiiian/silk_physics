@@ -1,0 +1,19 @@
+{
+  "version": 5,
+  "configurePresets": [
+    {
+      "name": "linux_debug",
+      "inherits": "debug",
+      "displayName": "Linux Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/debug"
+    },
+    {
+      "name": "linux_release",
+      "inherits": "release",
+      "displayName": "Linux Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release"
+    }
+  ]
+}
