@@ -1,22 +1,29 @@
 .cache
 build
 compile_commands.json
-.aider*
-smart*
-default*
+
+# Testing
+Testing
+misc/physics_scene
+
+# GUI Demo data
 .polyscope.ini
 imgui.ini
+
+# profiling data
 flamegraph.html
 gmon.out
 out.perf
 perf.data
 perf.data.old
-ClothSolver::solve() [clone ._omp_fn.0].annotation
-ClothSolver::solve() [clone ._omp_fn.0].annotation
-ClothSolver::solve() [clone ._omp_fn.0].annotation
-.idea
-Testing
-cmake-build-debug
-misc/physics_scene
+
+# macOS
 .DS_Store
 ._*
+
+# Visual Studio
+.vs
+vcpkg_installed
+
+# Clion
+.idea
