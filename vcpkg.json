@@ -1,5 +1,15 @@
 {
+  "name": "silk-deps",
+  "version-string": "0",
+  "description": "Third-party dependencies including demo and tests",
   "dependencies": [
-    "openblas"
+    "eigen3",
+    "libigl",
+    "suitesparse",
+    "spdlog",
+    "tbb",
+    "portable-file-dialogs",
+    "catch2",
+    "alembic"
   ]
 }
