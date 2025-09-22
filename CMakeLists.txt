@@ -98,10 +98,10 @@ set(TIGHT_INCLUSION_WITH_DOUBLE_PRECISION OFF)
 add_subdirectory(extern/tight-inclusion)
 
 add_subdirectory(silk)
-add_subdirectory(extern/portable-file-dialogs)
 
 if(SILK_BUILD_DEMO)
     FetchContent_MakeAvailable(polyscope)
+    add_subdirectory(extern/portable-file-dialogs)
     add_subdirectory(demo)
 endif()
 
