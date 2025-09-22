@@ -3,9 +3,14 @@
   "version-string": "0",
   "description": "Third-party dependencies including demo and tests",
   "dependencies": [
+    "blas",
+    "lapack",
     "eigen3",
     "libigl",
-    "suitesparse",
+    {
+      "name": "suitesparse",
+      "features": [ "gpl" ]
+    },
     "spdlog",
     "tbb",
     "portable-file-dialogs",
