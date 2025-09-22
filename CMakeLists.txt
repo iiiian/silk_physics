@@ -74,6 +74,7 @@ FetchContent_Declare(
 set(SUITESPARSE_ENABLE_PROJECTS
     "suitesparse_config;amd;camd;colamd;ccolamd;cholmod;"
 )
+set(CHOLMOD_USE_CUDA OFF)
 
 FetchContent_MakeAvailable(
     Eigen3
