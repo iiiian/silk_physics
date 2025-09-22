@@ -6,9 +6,26 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# ---------------------------------------------------------------
+# Options
+# ---------------------------------------------------------------
 
 option(SILK_BUILD_DEMO "Build the GUI demo application" ON)
 option(SILK_BUILD_TEST "Build tests" ON)
+
+# ---------------------------------------------------------------
+# System dependencies
+# ---------------------------------------------------------------
+
+find_package(OpenMP REQUIRED)
+find_package(BLAS REQUIRED)
+find_package(LAPACK REQUIRED)
+
+# ---------------------------------------------------------------
+# Internal dependencies
+# ---------------------------------------------------------------
+
+# Defined via fetch content or add_subdirectory.
 
 include(FetchContent)
 
@@ -65,11 +82,6 @@ FetchContent_Declare(
         <SOURCE_DIR>/deps/imgui/CMakeLists.txt
 )
 
-
-# base dependencies
-find_package(OpenMP REQUIRED)
-find_package(BLAS REQUIRED)
-find_package(LAPACK REQUIRED)
 
 set(SUITESPARSE_ENABLE_PROJECTS
     "suitesparse_config;amd;camd;colamd;ccolamd;cholmod;"
