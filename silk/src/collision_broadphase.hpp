@@ -203,12 +203,12 @@ void sap_sorted_group_group_collision(std::vector<C>& colliders_a,
       sap_sorted_collision<C, false>(colliders_a[pa], colliders_b,
                                      proxies_b + b, proxy_num_b - b, axis,
                                      filter, cache);
-      a++;
+      ++a;
     } else {
       // Flip the output pairs to ensure consistant pair order.
       sap_sorted_collision<C, true>(colliders_b[pb], colliders_a, proxies_a + a,
                                     proxy_num_a - a, axis, filter, cache);
-      b++;
+      ++b;
     }
   }
 }
@@ -820,15 +820,15 @@ class KDTree {
       int p = proxies_[i];
       // strictly left
       if (colliders_[p].bbox.max(n->axis) < n->position) {
-        left_num++;
+        ++left_num;
       }
       // strictly right
       else if (colliders_[p].bbox.min(n->axis) > n->position) {
-        right_num++;
+        ++right_num;
       }
       // on the plane
       else {
-        middle_num++;
+        ++middle_num;
       }
     }
 
@@ -1025,12 +1025,12 @@ class KDTree {
       if (n->is_left()) {
         if (colliders_[p].bbox.min(axis) < position) {
           buffer_[n->ext_end] = p;
-          ++n->ext_end;
+          ++(n->ext_end);
         }
       } else {
         if (colliders_[p].bbox.max(axis) > position) {
           buffer_[n->ext_end] = p;
-          ++n->ext_end;
+          ++(n->ext_end);
         }
       }
     }
@@ -1042,12 +1042,12 @@ class KDTree {
       if (n->is_left()) {
         if (colliders_[p].bbox.min(axis) < position) {
           buffer_[n->ext_end] = p;
-          ++n->ext_end;
+          ++(n->ext_end);
         }
       } else {
         if (colliders_[p].bbox.max(axis) > position) {
           buffer_[n->ext_end] = p;
-          ++n->ext_end;
+          ++(n->ext_end);
         }
       }
     }
