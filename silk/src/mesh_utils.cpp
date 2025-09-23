@@ -8,10 +8,6 @@
 
 #include <Eigen/Core>
 
-// Ensure M_PI exists across platforms.
-#define _USE_MATH_DEFINES
-#include <cmath>
-
 #include "logger.hpp"
 
 namespace silk {
@@ -124,11 +120,13 @@ bool check_indexing(const RMatrixX3i& F, int vnum) {
  */
 bool check_triangle_angles_min(const RMatrixX3f& V, const RMatrixX3i& F,
                                float min_degree = 0.5f) {
+  static constexpr float PI = 3.14159265358979323846f;
+
   Eigen::MatrixXf K;  // #faces × 3 matrix of internal angles in radians
   igl::internal_angles(V, F, K);
 
-  float min_rad = min_degree * M_PI / 180.0f;
-  float max_rad = M_PI - min_rad;  // Complement angle threshold
+  float min_rad = min_degree * PI / 180.0f;
+  float max_rad = PI - min_rad;  // Complement angle threshold
   float K_min = K.minCoeff();
   float K_max = K.maxCoeff();
   if (K_min < min_rad || K_max > max_rad) {
@@ -136,7 +134,7 @@ bool check_triangle_angles_min(const RMatrixX3f& V, const RMatrixX3i& F,
         "Invalid mesh: poor triangle angle quality. Min angle {:.2f}°, Max "
         "angle "
         "{:.2f}°.",
-        180.0f * K_min / M_PI, 180.0f * K_max / M_PI);
+        180.0f * K_min / PI, 180.0f * K_max / PI);
     return false;
   }
 

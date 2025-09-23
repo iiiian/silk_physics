@@ -9,10 +9,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-// Ensure M_PI exists across platforms.
-#define _USE_MATH_DEFINES
-#include <cmath>
-
 namespace py = polyscope;
 
 void SimulatorWidget::enter_sim_mode() {
@@ -176,7 +172,7 @@ void SimulatorWidget::handle_pin_dragging() {
 
     // Calculate world space conversion factors
     float fov_y = camera.getFoVVerticalDegrees();
-    float span_y = plane_dist * std::tan(M_PI * fov_y / 360.0f);
+    float span_y = plane_dist * std::tan(3.14 * fov_y / 360.0f);
     float span_x = camera.getAspectRatioWidthOverHeight() * span_y;
 
     // Convert mouse delta to world space
