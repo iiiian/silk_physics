@@ -18,7 +18,7 @@ const fs::path cloth_sphere_abc = root / "cloth_sphere_collision.abc";
 TEST_CASE("sap-test", "[collision]") {
   spdlog::set_level(spdlog::level::debug);
 
-  auto objects = loadAllMeshes(cloth_sphere_abc);
+  auto objects = load_all_meshes(cloth_sphere_abc);
 
   auto& cloth = objects[0];
   auto& sphere = objects[1];

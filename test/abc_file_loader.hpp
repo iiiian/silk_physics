@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Eigen/Core>
+#include <filesystem>
 
 struct AlembicObject {
   std::string name;
@@ -10,4 +11,4 @@ struct AlembicObject {
 };
 
 // load all IPolyMesh with triangle mesh
-std::vector<AlembicObject> loadAllMeshes(const std::string& path_to_abc);
+std::vector<AlembicObject> load_all_meshes(const std::filesystem::path& path_to_abc);

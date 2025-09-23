@@ -21,7 +21,7 @@ TEST_CASE("sap-kd-tree-test", "[collision]") {
   // object 0 is the cloth
   // object 1 is a icosphere
   // the cloth will fall onto the icosphere
-  auto objects = loadAllMeshes(cloth_sphere_abc);
+  auto objects = load_all_meshes(cloth_sphere_abc);
 
   auto& cloth = objects[0];
   auto& sphere = objects[1];

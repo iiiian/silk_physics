@@ -16,7 +16,7 @@ const fs::path root{PHYSICS_SCENE_ROOT};
 const fs::path cloth_sphere_abc = root / "cloth_sphere_collision_dense.abc";
 
 TEST_CASE("sap-benchmark", "[collision]") {
-  auto objects = loadAllMeshes(cloth_sphere_abc);
+  auto objects = load_all_meshes(cloth_sphere_abc);
 
   auto& cloth = objects[0];
   auto& sphere = objects[1];

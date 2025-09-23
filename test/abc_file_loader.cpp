@@ -63,13 +63,13 @@ AlembicObject loadSinglePolyMesh(const Alembic::AbcGeom::IPolyMesh& mesh) {
   return out;
 }
 
-std::vector<AlembicObject> loadAllMeshes(const std::string& path_to_abc) {
+std::vector<AlembicObject> load_all_meshes(const std::filesystem::path& path_to_abc) {
   using namespace Alembic;
 
   AbcCoreFactory::IFactory factory;
-  Abc::IArchive archive = factory.getArchive(path_to_abc);
+  Abc::IArchive archive = factory.getArchive(path_to_abc.string());
   if (!archive.valid()) {
-    throw std::runtime_error("Cannot open Alembic file: " + path_to_abc);
+    throw std::runtime_error("Cannot open Alembic file: " + path_to_abc.string());
   }
 
   std::vector<AlembicObject> result;
