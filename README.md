@@ -10,38 +10,13 @@ WIP C++17 cloth physics library with continuous collision detection and a GUI de
 
 Most third‑party dependencies are downloaded automatically except BLAS/LAPACK implementation.
 
-## Quick Start
+## Compile From Source
 
-### Prerequisites
+[Windows Compile Guide](docs/compile_on_windows.md)
 
-Install BLAS/LAPACK examples:
+[Linux Compile Guide](docs/compile_on_linux.md)
 
-- Ubuntu/Debian: `sudo apt install libopenblas-dev`
-- Fedora: `sudo dnf install openblas-devel`
-- macOS: `brew install openblas` (or use the system Accelerate framework)
-
-### Clone, Configure, Build, Run
-
-```bash
-git clone https://github.com/iiiian/silk_physics.git
-cd silk_physics
-git submodule update --init --recursive
-
-# Configure (downloads most deps automatically on first run)
-cmake --preset release
-
-# Build the demo
-cmake --build build/release --target demo -j
-
-# Run the demo (optional path to a model)
-./build/release/demo/demo ./model/dense_sheet.obj
-```
-
-### CMake Options
-
-- `-DSILK_BUILD_DEMO=ON|OFF` (default ON)
-- `-DSILK_BUILD_TEST=ON|OFF` (default ON; requires Alembic)
-- Optional BLAS picker: `-DBLA_VENDOR=OpenBLAS|Apple|Intel10_64lp|Generic`
+Unfortuntely, MacOS is not tested because I don't own a mac and apple make it difficult to develop without their hardware. You can try to follow the Linux guide and it should work.
 
 ## Demo Basics
 
@@ -136,23 +111,10 @@ int main() {
 }
 ```
 
-## Repository Layout
+## Other Resources
 
-- `silk/` – library sources and public headers
-- `demo/` – GUI demo
-- `test/` – tests/benchmarks (requires Alembic when enabled)
-- `extern/` – third-party code (submodules + fetched deps)
-- `misc/` – build hacks and assets used by deps
-- `model/` – sample meshes
-- `assets/` – images for docs
-
-## Roadmap
-
-- GPU solver (A-Jacobi style) for the PD framework
-
-## Theoretical Background
-
-See “Theoretical Background.md” in the repo for a quick reading path and paper links.
+- [Theoretical background](docs/theoretical_background.md): A gentle introduction to the theory behind the silk engine.
+- [Project Overview](docs/project_overview.md): A breif overview of the code structure.
 
 ## Acknowledgments
 
