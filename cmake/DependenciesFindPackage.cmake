@@ -28,6 +28,8 @@ set(TIGHT_INCLUSION_WITH_DOUBLE_PRECISION OFF)
 add_subdirectory(extern/tight-inclusion)
 
 if(SILK_BUILD_DEMO)
+    find_package(argparse REQUIRED)
+    find_package(nlohmann_json REQUIRED)
     add_subdirectory(extern/polyscope)
     add_subdirectory(extern/portable-file-dialogs)
 endif()
