@@ -16,7 +16,7 @@ Most third‑party dependencies are downloaded automatically except BLAS/LAPACK 
 
 [Linux Compile Guide](docs/compile_on_linux.md)
 
-Unfortuntely, MacOS is not tested because I don't own a mac and apple make it difficult to develop without their hardware. You can try to follow the Linux guide and it should work.
+[MacOS Compile Guide](docs/compile_on_mac.md)
 
 ## Demo Basics
 
