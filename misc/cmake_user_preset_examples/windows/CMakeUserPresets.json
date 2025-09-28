@@ -1,5 +1,6 @@
 {
   "version": 5,
+
   "configurePresets": [
     {
       "name": "vs_debug",
@@ -9,7 +10,10 @@
       "architecture": "x64",
       "binaryDir": "${sourceDir}/build/debug",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        "CMAKE_TOOLCHAIN_FILE": "C:/Users/Ian/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "1",
+        "SILK_BUILD_DEMO": "ON",
+        "SILK_BUILD_TEST": "ON"
       }
     },
     {
@@ -20,8 +24,28 @@
       "architecture": "x64",
       "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        "CMAKE_TOOLCHAIN_FILE": "C:/Users/Ian/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "1",
+        "SILK_BUILD_DEMO": "ON",
+        "SILK_BUILD_TEST": "OFF"
       }
+    }
+  ],
+
+  "buildPresets": [
+    {
+      "name": "vs_debug",
+      "configurePreset": "vs_debug",
+      "configuration": "Debug",
+      "jobs": 0
+    },
+    {
+      "name": "vs_release",
+      "configurePreset": "vs_release",
+      "configuration": "Release",
+      "targets": ["demo"],
+      "jobs": 0,
+      "nativeToolOptions": [ "/verbosity:detailed" ]
     }
   ]
 }
