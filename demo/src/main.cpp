@@ -2,11 +2,11 @@
 #include <spdlog/spdlog.h>
 
 #include <argparse/argparse.hpp>
+#include <fstream>
+#include <nlohmann/json.hpp>
 #include <string>
 
 #include "demo.hpp"
-
-#include <imgui.h>   
 
 namespace py = polyscope;
 
@@ -14,7 +14,7 @@ int main(int argc, char** argv) {
   spdlog::set_level(spdlog::level::debug);
 
   argparse::ArgumentParser program("Silk Demo");
-  program.add_description("A Blazing fast projective dynamics cloth solver");
+  program.add_description("A Blazingly fast projective dynamics cloth solver");
 
   std::string config_path;
   program.add_argument("-c", "--config")
@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
       .store_into(is_headless);
 
   std::string cloth_model_path;
-  program.add_argument("cloth_model_path")
+  program.add_argument("-m", "--model")
       .help("Path to cloth model file. Soon to be deprecated")
       .store_into(cloth_model_path);
 
