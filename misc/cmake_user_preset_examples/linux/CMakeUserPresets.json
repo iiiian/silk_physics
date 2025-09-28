@@ -13,7 +13,10 @@
       "inherits": "release",
       "displayName": "Linux Release",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/release"
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-march=native"
+      }
     }
   ]
 }

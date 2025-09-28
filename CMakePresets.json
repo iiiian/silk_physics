@@ -17,26 +17,10 @@
       }
     },
     {
-      "name": "sanitize",
-      "inherits": "debug",
-      "cacheVariables": {
-        "CMAKE_CXX_FLAGS": "-fsanitize=address"
-      }
-    },
-    {
       "name": "release",
       "inherits": "base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_CXX_FLAGS": "/arch:AVX2"
-      }
-    },
-    {
-      "name": "profile",
-      "inherits": "release",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "CMAKE_CXX_FLAGS": "/O2 /arch:AVX2"
+        "CMAKE_BUILD_TYPE": "Release"
       }
     }
   ]
