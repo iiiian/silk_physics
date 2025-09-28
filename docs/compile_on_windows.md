@@ -58,7 +58,7 @@ Modify the "CMAKE_TOOLCHAIN_FILE" field to point to your vcpkg install. For exam
 
 ```
 "cacheVariables": {
-	"CMAKE_TOOLCHAIN_FILE": "C:/Users/Ian/vcpkg/scripts/buildsystems/vcpkg.cmake"
+	"CMAKE_TOOLCHAIN_FILE": "/Users/Ian/vcpkg/scripts/buildsystems/vcpkg.cmake"
 }
 ```
 
@@ -73,7 +73,4 @@ This should trigger vcpkg to install all the dependencies and will take a while.
 ```
 cmake --build build/debug
 ```
-For running the demo, build the program using
-```
-cmake --build --preset vs_release
-```
+
