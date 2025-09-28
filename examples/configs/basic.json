@@ -1,0 +1,21 @@
+{
+  "paths": {
+    "mesh": "assets/cloth_square.obj"
+  },
+  "global": {
+    "total_steps": 300,
+    "time_step": 0.01,
+    "headless": true
+  },
+  "cloth": {
+    "mass": 1.0,
+    "stiffness_stretch": 5000.0,
+    "stiffness_bending": 0.5,
+    "damping": 0.02
+  },
+  "collision": {
+    "enabled": true,
+    "thickness": 0.005,
+    "self_collision": false
+  }
+}

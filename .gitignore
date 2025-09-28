@@ -25,6 +25,7 @@ perf.data.old
 # Visual Studio
 .vs
 vcpkg_installed
+.vscode/
 
 # Clion
 .idea
