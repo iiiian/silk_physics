@@ -28,7 +28,7 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_CXX_FLAGS": "-march=native"
+        "CMAKE_CXX_FLAGS": "/arch:AVX2"
       }
     },
     {
@@ -36,7 +36,7 @@
       "inherits": "release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "CMAKE_CXX_FLAGS": "-O3 -march=native"
+        "CMAKE_CXX_FLAGS": "/O2 /arch:AVX2"
       }
     }
   ]
