@@ -2,13 +2,12 @@
 #include <spdlog/spdlog.h>
 
 #include <argparse/argparse.hpp>
+#include <fstream>
+#include <nlohmann/json.hpp>
 #include <string>
 
 #include "demo.hpp"
-#include <nlohmann/json.hpp>
-#include <fstream>
 using json = nlohmann::json;
-
 
 namespace py = polyscope;
 
@@ -16,7 +15,7 @@ int main(int argc, char** argv) {
   spdlog::set_level(spdlog::level::debug);
 
   argparse::ArgumentParser program("Silk Demo");
-  program.add_description("A Blazing fast projective dynamics cloth solver");
+  program.add_description("A Blazingly fast projective dynamics cloth solver");
 
   std::string config_path;
   program.add_argument("-c", "--config")
@@ -30,7 +29,7 @@ int main(int argc, char** argv) {
       .store_into(is_headless);
 
   std::string cloth_model_path;
-  program.add_argument("cloth_model_path")
+  program.add_argument("-m", "--model")
       .help("Path to cloth model file. Soon to be deprecated")
       .store_into(cloth_model_path);
 
@@ -41,36 +40,35 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-if (!config_path.empty()) {
-  try {
-    std::ifstream in(config_path);
-    if (!in) {
-      spdlog::error("Cannot open config file: {}", config_path);
+  if (!config_path.empty()) {
+    try {
+      std::ifstream in(config_path);
+      if (!in) {
+        spdlog::error("Cannot open config file: {}", config_path);
+        return 1;
+      }
+
+      json cfg = json::parse(in, nullptr, true, true);  // 允许注释
+
+      if (cfg.contains("headless") && cfg["headless"].is_boolean()) {
+        if (is_headless == false) {
+          is_headless = cfg["headless"].get<bool>();
+        }
+      }
+
+      if (cfg.contains("cloth_model_path") &&
+          cfg["cloth_model_path"].is_string()) {
+        if (cloth_model_path.empty()) {
+          cloth_model_path = cfg["cloth_model_path"].get<std::string>();
+        }
+      }
+
+      spdlog::info("Config loaded from {}", config_path);
+    } catch (const std::exception& e) {
+      spdlog::error("JSON error: {}", e.what());
       return 1;
     }
-
-    json cfg = json::parse(in, nullptr, true, true); // 允许注释
-
-    if (cfg.contains("headless") && cfg["headless"].is_boolean()) {
-      if (is_headless == false) {
-        is_headless = cfg["headless"].get<bool>();
-      }
-    }
-
-
-    if (cfg.contains("cloth_model_path") && cfg["cloth_model_path"].is_string()) {
-      if (cloth_model_path.empty()) {
-        cloth_model_path = cfg["cloth_model_path"].get<std::string>();
-      }
-    }
-
-    spdlog::info("Config loaded from {}", config_path);
-  } catch (const std::exception& e) {
-    spdlog::error("JSON error: {}", e.what());
-    return 1;
   }
-}
-
 
   if (is_headless) {
     // TODO: lauch cli mode here.
