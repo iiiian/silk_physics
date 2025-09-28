@@ -1,0 +1,4 @@
+{
+    "headless": true,
+    "cloth_model_path": "model/dense_sheet.obj"
+}
