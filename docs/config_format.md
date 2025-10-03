@@ -11,6 +11,7 @@ The config file will be a json file containing below sections:
 - object specific setting (A json list, containing settings for each object)
   - cloth
     - object type (Cloth)
+    - object name
     - ClothConfig
     - CollisionConfig
     - 3D model file path (.off, .obj, .ply, .stl)
@@ -21,6 +22,7 @@ The config file will be a json file containing below sections:
       - scaling (xyz)
   - obstacle
     - Object type (Obstacle)
+    - object name
     - CollisionConfig
     - 3D model file path (.off, .obj, .ply, .stl)
     - transformation (optional)
