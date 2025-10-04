@@ -22,6 +22,7 @@ class IObject {
   // getters
   virtual std::string get_name() const = 0;
   virtual const polyscope::SurfaceMesh* get_mesh() const = 0;
+  virtual const Face& get_faces() const = 0;
   virtual float get_object_scale() const = 0;
   virtual uint32_t get_silk_handle() const = 0;
   virtual ObjectStat get_stat() const = 0;

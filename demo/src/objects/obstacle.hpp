@@ -53,6 +53,7 @@ class Obstacle : public IObject {
 
   std::string get_name() const override;
   const polyscope::SurfaceMesh* get_mesh() const override;
+  const Face& get_faces() const override;
   float get_object_scale() const override;
   uint32_t get_silk_handle() const override;
   ObjectStat get_stat() const override;

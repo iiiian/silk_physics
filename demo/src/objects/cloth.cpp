@@ -125,6 +125,8 @@ std::string Cloth::get_name() const { return name_; }
 
 const polyscope::SurfaceMesh* Cloth::get_mesh() const { return mesh_; }
 
+const Face& Cloth::get_faces() const { return F_; }
+
 float Cloth::get_object_scale() const { return mesh_scale_; }
 
 uint32_t Cloth::get_silk_handle() const { return silk_handle_; }

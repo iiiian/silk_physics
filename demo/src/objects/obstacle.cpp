@@ -114,6 +114,8 @@ std::string Obstacle::get_name() const { return name_; }
 
 const polyscope::SurfaceMesh* Obstacle::get_mesh() const { return mesh_; }
 
+const Face& Obstacle::get_faces() const { return F_; }
+
 float Obstacle::get_object_scale() const { return mesh_scale_; }
 
 uint32_t Obstacle::get_silk_handle() const { return silk_handle_; }

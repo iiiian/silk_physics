@@ -2,12 +2,18 @@
 
 #include <polyscope/pick.h>
 #include <polyscope/polyscope.h>
+#include <portable-file-dialogs.h>
 #include <spdlog/spdlog.h>
 
 #include <Eigen/Core>
 #include <cassert>
+#include <filesystem>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <string>
+#include <vector>
+
+#include "../alembic_writer.hpp"
 
 namespace py = polyscope;
 
@@ -86,6 +92,30 @@ void SimulatorWidget::draw() {
         leave_sim_mode();
       } else {
         enter_sim_mode();
+      }
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+
+    bool can_export_scene =
+        (ctx_.ui_mode == UIMode::Normal) && !ctx_.objects.empty();
+    ImGui::BeginDisabled(!can_export_scene);
+    if (ImGui::Button("Export Simulation")) {
+      std::vector<std::string> filters = {"Alembic Files", "*.abc"};
+
+      std::string destination =
+          pfd::save_file("Export Simulation", "scene export.abc", filters,
+                         pfd::opt::force_overwrite)
+              .result();
+
+      if (!destination.empty()) {
+        std::filesystem::path export_path(destination);
+        if (!write_scene(export_path, ctx_.objects)) {
+          spdlog::error("Failed to export scene to {}", export_path.string());
+        } else {
+          spdlog::info("Exported scene to {}", export_path.string());
+        }
       }
     }
     ImGui::EndDisabled();
