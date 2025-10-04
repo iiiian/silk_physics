@@ -5,12 +5,13 @@
 #include <polyscope/surface_mesh.h>
 #include <spdlog/spdlog.h>
 
-#include <cstring>
 #include <glm/glm.hpp>
 #include <queue>
 
+#include "../eigen_alias.hpp"
 #include "../glm_utils.hpp"
 #include "../polyscope_silk_interop.hpp"
+#include "../position_cache.hpp"
 #include "draw_utils.hpp"
 
 namespace py = polyscope;
@@ -50,6 +51,7 @@ std::optional<Cloth> Cloth::try_make_cloth(silk::World* world, std::string name,
   c.collision_config_ = {};
   c.pin_group_ = {};
   c.pin_index_ = {};
+  c.cache_ = {};
   c.pin_index_changed_ = false;
   c.cloth_config_changed_ = false;
   c.collision_config_changed_ = false;
@@ -99,6 +101,7 @@ void Cloth::swap(Cloth& other) noexcept {
   std::swap(collision_config_, other.collision_config_);
   std::swap(pin_group_, other.pin_group_);
   std::swap(pin_index_, other.pin_index_);
+  std::swap(cache_, other.cache_);
   std::swap(pin_index_changed_, other.pin_index_changed_);
   std::swap(cloth_config_changed_, other.cloth_config_changed_);
   std::swap(collision_config_changed_, other.collision_config_changed_);
@@ -115,11 +118,14 @@ void Cloth::clear() noexcept {
   adjacency_list_ = {};
   world_ = nullptr;
   silk_handle_ = 0;
+  cache_.clear();
 }
 
 std::string Cloth::get_name() const { return name_; }
 
 const polyscope::SurfaceMesh* Cloth::get_mesh() const { return mesh_; }
+
+const Face& Cloth::get_faces() const { return F_; }
 
 float Cloth::get_object_scale() const { return mesh_scale_; }
 
@@ -128,6 +134,10 @@ uint32_t Cloth::get_silk_handle() const { return silk_handle_; }
 ObjectStat Cloth::get_stat() const {
   return {static_cast<int>(V_.rows()), static_cast<int>(F_.rows())};
 }
+
+const PositionCache& Cloth::get_cache() const { return cache_; }
+
+PositionCache& Cloth::get_cache() { return cache_; }
 
 void Cloth::draw() {
   draw_cloth_config(cloth_config_, cloth_config_changed_);
@@ -140,6 +150,8 @@ void Cloth::draw() {
 }
 
 bool Cloth::init_sim() {
+  cache_.clear();
+
   // apply transformation
   mesh_->vertexPositions.ensureHostBufferPopulated();
   glm::mat4 T = build_transformation(position_, rotation_, scale_);
@@ -149,6 +161,7 @@ bool Cloth::init_sim() {
   mesh_->vertexPositions.markHostBufferUpdated();
   mesh_->resetTransform();
 
+  // Setup cloth in silk
   silk::ConstSpan<float> vert_span =
       make_const_span_from_position(mesh_->vertexPositions);
 
@@ -235,7 +248,8 @@ bool Cloth::sim_step_pre() {
   return true;
 }
 
-bool Cloth::sim_step_post() {
+bool Cloth::sim_step_post(float current_time) {
+  // Update position in polyscope
   mesh_->vertexPositions.ensureHostBufferAllocated();
   silk::Span<float> position = make_span_from_position(mesh_->vertexPositions);
   silk::Result r = world_->get_cloth_position(silk_handle_, position);
@@ -245,6 +259,10 @@ bool Cloth::sim_step_post() {
     return false;
   }
   mesh_->vertexPositions.markHostBufferUpdated();
+
+  // Also save a copy in simulation cache
+  Eigen::Map<Vert> vert{position.data, position.size / 3, 3};
+  cache_.emplace_back(current_time, vert);
 
   return true;
 }

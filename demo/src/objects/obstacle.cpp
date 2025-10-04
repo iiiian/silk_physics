@@ -7,8 +7,10 @@
 #include <glm/gtx/euler_angles.hpp>
 #include <utility>
 
+#include "../eigen_alias.hpp"
 #include "../glm_utils.cpp"
 #include "../polyscope_silk_interop.hpp"
+#include "../position_cache.hpp"
 #include "draw_utils.hpp"
 
 namespace py = polyscope;
@@ -46,6 +48,7 @@ std::optional<Obstacle> Obstacle::try_make_obstacle(silk::World* world,
   o.world_ = world;
   o.silk_handle_ = 0;
   o.collision_config_ = {};
+  o.cache_ = {};
   o.collision_config_changed_ = false;
   o.position_ = glm::vec3(0.0f);
   o.rotation_ = glm::vec3(0.0f);
@@ -89,6 +92,7 @@ void Obstacle::swap(Obstacle& other) noexcept {
   std::swap(world_, other.world_);
   std::swap(silk_handle_, other.silk_handle_);
   std::swap(collision_config_, other.collision_config_);
+  std::swap(cache_, other.cache_);
   std::swap(collision_config_changed_, other.collision_config_changed_);
   std::swap(position_, other.position_);
   std::swap(rotation_, other.rotation_);
@@ -103,11 +107,14 @@ void Obstacle::clear() noexcept {
   F_ = {};
   world_ = nullptr;
   silk_handle_ = 0;
+  cache_.clear();
 }
 
 std::string Obstacle::get_name() const { return name_; }
 
 const polyscope::SurfaceMesh* Obstacle::get_mesh() const { return mesh_; }
+
+const Face& Obstacle::get_faces() const { return F_; }
 
 float Obstacle::get_object_scale() const { return mesh_scale_; }
 
@@ -116,6 +123,10 @@ uint32_t Obstacle::get_silk_handle() const { return silk_handle_; }
 ObjectStat Obstacle::get_stat() const {
   return {static_cast<int>(V_.rows()), static_cast<int>(F_.rows())};
 }
+
+const PositionCache& Obstacle::get_cache() const { return cache_; }
+
+PositionCache& Obstacle::get_cache() { return cache_; }
 
 void Obstacle::draw() {
   draw_collision_config(collision_config_, collision_config_changed_);
@@ -128,6 +139,8 @@ void Obstacle::draw() {
 }
 
 bool Obstacle::init_sim() {
+  cache_.clear();
+
   // apply transformation
   mesh_->vertexPositions.ensureHostBufferPopulated();
   glm::mat4 T = build_transformation(position_, rotation_, scale_);
@@ -188,13 +201,23 @@ bool Obstacle::sim_step_pre() {
                     name_, r.to_string());
       return false;
     }
-    drag_position_changed_ = false;
   }
 
   return true;
 }
 
-bool Obstacle::sim_step_post() { return true; }
+bool Obstacle::sim_step_post(float current_time) {
+  if (cache_.empty() || drag_position_changed_) {
+    mesh_->vertexPositions.ensureHostBufferPopulated();
+    silk::ConstSpan<float> vert_span =
+        make_const_span_from_position(mesh_->vertexPositions);
+    Eigen::Map<const Vert> vert{vert_span.data, vert_span.size / 3, 3};
+    cache_.emplace_back(current_time, vert);
+
+    drag_position_changed_ = false;
+  }
+  return true;
+}
 
 bool Obstacle::exit_sim() {
   mesh_->updateVertexPositions(V_);

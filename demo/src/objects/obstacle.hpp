@@ -4,8 +4,9 @@
 #include <glm/glm.hpp>
 #include <optional>
 
-#include "../gui_utils.hpp"
+#include "../eigen_alias.hpp"
 #include "../object.hpp"
+#include "../position_cache.hpp"
 #include "silk/silk.hpp"
 
 class Obstacle : public IObject {
@@ -23,6 +24,8 @@ class Obstacle : public IObject {
   silk::World* world_;
   uint32_t silk_handle_;
   silk::CollisionConfig collision_config_;
+
+  PositionCache cache_;
 
   // transform
   glm::vec3 position_;
@@ -50,15 +53,18 @@ class Obstacle : public IObject {
 
   std::string get_name() const override;
   const polyscope::SurfaceMesh* get_mesh() const override;
+  const Face& get_faces() const override;
   float get_object_scale() const override;
   uint32_t get_silk_handle() const override;
   ObjectStat get_stat() const override;
+  const PositionCache& get_cache() const override;
+  PositionCache& get_cache() override;
 
   void draw() override;
 
   bool init_sim() override;
   bool sim_step_pre() override;
-  bool sim_step_post() override;
+  bool sim_step_post(float current_time) override;
   bool exit_sim() override;
 
   void handle_pick(const polyscope::PickResult& pick, bool add_to_selection,
