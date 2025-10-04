@@ -32,6 +32,7 @@ void SimulatorWidget::enter_sim_mode() {
   }
 
   prev_update_time_ = std::chrono::steady_clock::now();
+  sim_time_ = 0.0f;
   ctx_.ui_mode = UIMode::Sim;
   spdlog::info("Enter sim mode");
 }
@@ -64,8 +65,9 @@ void SimulatorWidget::solver_step(int substep) {
   }
 
   // post-step hooks
+  sim_time_ += substep * ctx_.global_config.dt;
   for (auto& pobj : ctx_.objects) {
-    pobj->sim_step_post();
+    pobj->sim_step_post(sim_time_);
   }
 }
 
@@ -74,6 +76,7 @@ SimulatorWidget::SimulatorWidget(Context& context) : ctx_(context) {}
 void SimulatorWidget::draw() {
   if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Text("Simulation FPS: %f", sim_fps_);
+    ImGui::Text("Simulation Time: %f", sim_time_);
 
     ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal &&
                          ctx_.ui_mode != UIMode::Sim);

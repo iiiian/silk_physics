@@ -8,6 +8,8 @@
 #include <memory>
 #include <string>
 
+#include "position_cache.hpp"
+
 struct ObjectStat {
   int vert_num = 0;
   int face_num = 0;
@@ -23,6 +25,8 @@ class IObject {
   virtual float get_object_scale() const = 0;
   virtual uint32_t get_silk_handle() const = 0;
   virtual ObjectStat get_stat() const = 0;
+  virtual const PositionCache& get_cache() const = 0;
+  virtual PositionCache& get_cache() = 0;
 
   // draw per-object imgui controls
   virtual void draw() = 0;
@@ -30,7 +34,7 @@ class IObject {
   // simulation hooks
   virtual bool init_sim() = 0;
   virtual bool sim_step_pre() = 0;
-  virtual bool sim_step_post() = 0;
+  virtual bool sim_step_post(float current_time) = 0;
   virtual bool exit_sim() = 0;
 
   // picking/selection hook: widget forwards raw pick + add/remove intent
