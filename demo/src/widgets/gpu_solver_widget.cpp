@@ -7,17 +7,27 @@
 
 GpuSolverWidget::GpuSolverWidget(Context& ctx,
                                  std::function<void(SolverBackend, SolverBackend)> onChange)
-  : ctx_(ctx), on_change_(std::move(onChange)) {}
+: ctx_(ctx), on_change_(std::move(onChange)) {}
 
 void GpuSolverWidget::set_backend(SolverBackend b) { backend_ = b; }
 
 void GpuSolverWidget::draw() {
   if (ImGui::CollapsingHeader(title_.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+
     bool useGpu = (backend_ == SolverBackend::GPU);
+
     if (ImGui::Checkbox("Use GPU solver", &useGpu)) {
+
       SolverBackend old = backend_;
       backend_ = useGpu ? SolverBackend::GPU : SolverBackend::CPU;
-      spdlog::info("[UI] Solver backend -> {}", useGpu ? "GPU" : "CPU");
+      
+      //Status Log 
+      if(useGpu){
+        spdlog::info("[UI] Solver backend -> GPU");
+      }else{
+        spdlog::info("[UI] Solver backend -> CPU");
+      }
+
       if (on_change_) on_change_(old, backend_);
     }
   }

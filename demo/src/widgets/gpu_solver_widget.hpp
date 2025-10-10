@@ -24,7 +24,7 @@ class GpuSolverWidget : public IWidget {
   // draw 
   void draw() override;            
 
-  // extern set
+  // extern setter
   void set_backend(SolverBackend b);
   SolverBackend backend() const { return backend_; }
 
