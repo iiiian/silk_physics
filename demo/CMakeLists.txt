@@ -1,6 +1,7 @@
 set(DEMO_SOURCES
     src/demo.cpp
     src/main.cpp
+    src/config_parser.cpp
     src/polyscope_silk_interop.cpp
     src/objects/cloth.cpp
     src/objects/obstacle.cpp
@@ -36,5 +37,7 @@ target_link_libraries(
     PRIVATE ${SILK_IGL_CORE}
     PRIVATE polyscope
     PRIVATE portable_file_dialogs
+    PRIVATE nlohmann_json::nlohmann_json
+    PRIVATE argparse::argparse
     PRIVATE silk::silk
 )
