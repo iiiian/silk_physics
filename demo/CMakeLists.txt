@@ -1,6 +1,7 @@
 set(DEMO_SOURCES
     src/demo.cpp
     src/main.cpp
+    src/config_parser.cpp
     src/polyscope_silk_interop.cpp
     src/objects/cloth.cpp
     src/objects/obstacle.cpp
