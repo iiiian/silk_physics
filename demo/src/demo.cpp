@@ -31,6 +31,9 @@ void Demo::draw() {
                    ImGuiWindowFlags_NoCollapse);
   sim_setting_widget_.draw();
   simulator_widget_.draw();
+    //*******************************/
+  gpu_solver_widget_.draw();
+  //*******************************/
   ImGui::End();
 
   help_bar_widget_.draw();

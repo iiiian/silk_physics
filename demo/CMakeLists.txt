@@ -7,6 +7,7 @@ set(DEMO_SOURCES
     src/objects/draw_utils.cpp
     src/widgets/help_bar_widget.cpp
     src/widgets/object_setting_widget.cpp
+    src/widgets/gpu_solver_widget.cpp
     src/widgets/scene_widget.cpp
     src/widgets/sim_setting_widget.cpp
     src/widgets/simulator_widget.cpp
