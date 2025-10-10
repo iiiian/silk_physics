@@ -7,6 +7,7 @@
 #include "widgets/sim_setting_widget.hpp"
 #include "widgets/simulator_widget.hpp"
 #include "widgets/statistic_widget.hpp"
+#include "widgets/gpu_solver_widget.hpp"
 
 class Demo {
  private:
@@ -18,6 +19,8 @@ class Demo {
   SimulatorWidget simulator_widget_{ctx_};
   HelpBarWidget help_bar_widget_{ctx_};
   StatisticWidget statistic_widget_{ctx_};
+  GpuSolverWidget gpu_solver_widget_{ctx_};
+
 
  public:
   Demo();

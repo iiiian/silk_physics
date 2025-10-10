@@ -5,11 +5,13 @@
 
 #include "demo.hpp"
 
+#include <imgui.h>   
+
 namespace py = polyscope;
 
 int main(int argc, char** argv) {
   spdlog::set_level(spdlog::level::debug);
-
+  
   py::options::buildGui = false;
   py::init();
   py::view::setUpDir(polyscope::UpDir::ZUp);
