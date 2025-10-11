@@ -115,6 +115,7 @@ int main() {
 
 - [Theoretical background](docs/theoretical_background.md): A gentle introduction to the theory behind the silk engine.
 - [Project Overview](docs/project_overview.md): A breif overview of the code structure.
+- [Style Guideline](docs/style_guidelines.md)
 
 ## Acknowledgments
 
