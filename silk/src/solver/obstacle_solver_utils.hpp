@@ -4,15 +4,19 @@
 
 namespace silk {
 
-/** Reset object state and solver context to the start of simulation.
+/**
+ * @brief Reset obstacle solver state to initial conditions.
+ * @param registry ECS registry storing obstacle-related components.
+ * @return void
  */
 void batch_reset_obstacle_simulation(Registry& registry);
 
-/** Prepare obstacle for solver stepping at a given time step.
- *  Ensures `ObjectCollider` exists and are valid then update ObstaclePosition.
- *
- *  @param registry ECS storage for all components.
- *  @param entity ECS obstacle entity.
+/**
+ * @brief Prepare an obstacle entity for solver stepping.
+ * Ensures `ObjectCollider` exists and updates obstacle pose data.
+ * @param registry ECS storage for all components.
+ * @param entity ECS obstacle entity being initialized.
+ * @return void
  */
 void prepare_obstacle_simulation(Registry& registry, Entity& entity);
 

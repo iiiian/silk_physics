@@ -33,6 +33,13 @@ class CollisionPipeline {
   float collision_stiffness_max = 1e4f;
   float collision_stiffness_growth = 16.0f;
 
+  /**
+   * @brief Detect collisions by running broad- and narrow-phase CCD.
+   * @param object_colliders Collider set to test and update.
+   * @param scene_bbox Axis-aligned bounds enclosing the scene for error metrics.
+   * @param dt Simulation timestep size in seconds.
+   * @return All collisions detected during the timestep.
+   */
   std::vector<Collision> find_collision(
       std::vector<ObjectCollider>& object_colliders, const Bbox& scene_bbox,
       float dt);

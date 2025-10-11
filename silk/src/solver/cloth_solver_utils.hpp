@@ -7,7 +7,10 @@
 
 namespace silk {
 
-/** Reset object state and solver context to the start of simulation.
+/**
+ * @brief Reset cloth solver state to initial simulation conditions.
+ * @param registry ECS registry storing cloth-related components.
+ * @return void
  */
 void batch_reset_cloth_simulation(Registry& registry);
 

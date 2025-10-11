@@ -106,6 +106,7 @@ struct GlobalConfig {
  * @brief Main simulation world managing all physics entities and systems.
  */
 class World {
+ private:
   class WorldImpl;
   std::unique_ptr<WorldImpl> impl_;
 
