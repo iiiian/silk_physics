@@ -30,7 +30,7 @@ struct ObjectCollider;
 
 // Helper to trigger static_assert for unsupported component types.
 template <typename T>
-inline constexpr bool always_false_v = false;
+inline constexpr bool ALWAYS_FALSE_V = false;
 
 /**
  * @brief Entity record containing handles to all possible components.
@@ -66,12 +66,12 @@ class Registry {
    * intentionally fails on use for unsupported types.
    *
    * Specializations provide:
-   * - handle_ptr  : pointer to the Handle field in Entity for this component
-   * - manager_ptr : pointer to the Manager<T> field in Impl for this component
+   * - HANDLE_PTR  : pointer to the Handle field in Entity for this component
+   * - MANAGER_PTR : pointer to the Manager<T> field in Impl for this component
    */
   template <typename T>
   struct ComponentTraits {
-    static_assert(always_false_v<T>, "This type is not an ECS component!!");
+    static_assert(ALWAYS_FALSE_V<T>, "This type is not an ECS component!!");
   };
 
  public:

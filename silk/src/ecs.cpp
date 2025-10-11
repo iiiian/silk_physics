@@ -35,8 +35,8 @@ struct Registry::Impl {
 #define SILK_ECS_SPECIALIZE_COMPONENT_TRAIT(type, name)            \
   template <>                                                      \
   struct Registry::ComponentTraits<type> {                         \
-    static constexpr Handle Entity::* handle_ptr = &Entity::name;  \
-    static constexpr Manager<type> Registry::Impl::* manager_ptr = \
+    static constexpr Handle Entity::* HANDLE_PTR = &Entity::name;  \
+    static constexpr Manager<type> Registry::Impl::* MANAGER_PTR = \
         &Registry::Impl::name;                                     \
   };
 
@@ -60,16 +60,16 @@ Registry& Registry::operator=(Registry&& other) noexcept = default;
 template <typename T>
 T* Registry::get(const Entity& entity) {
   Impl* impl_ptr = impl_.get();
-  Manager<T>& manager = impl_ptr->*ComponentTraits<T>::manager_ptr;
-  Handle handle = entity.*ComponentTraits<T>::handle_ptr;
+  Manager<T>& manager = impl_ptr->*ComponentTraits<T>::MANAGER_PTR;
+  Handle handle = entity.*ComponentTraits<T>::HANDLE_PTR;
   return manager.get(handle);
 }
 
 template <typename T>
 const T* Registry::get(const Entity& entity) const {
   const Impl* impl_ptr = impl_.get();
-  const Manager<T>& manager = impl_ptr->*ComponentTraits<T>::manager_ptr;
-  Handle handle = entity.*ComponentTraits<T>::handle_ptr;
+  const Manager<T>& manager = impl_ptr->*ComponentTraits<T>::MANAGER_PTR;
+  Handle handle = entity.*ComponentTraits<T>::HANDLE_PTR;
   return manager.get(handle);
 }
 
@@ -92,23 +92,23 @@ const T* Registry::get(const Entity* entity) const {
 template <typename T>
 std::vector<T>& Registry::get_all() {
   Impl* impl_ptr = impl_.get();
-  Manager<T>& manager = impl_ptr->*ComponentTraits<T>::manager_ptr;
+  Manager<T>& manager = impl_ptr->*ComponentTraits<T>::MANAGER_PTR;
   return manager.data();
 }
 
 template <typename T>
 const std::vector<T>& Registry::get_all() const {
   const Impl* impl_ptr = impl_.get();
-  const Manager<T>& manager = impl_ptr->*ComponentTraits<T>::manager_ptr;
+  const Manager<T>& manager = impl_ptr->*ComponentTraits<T>::MANAGER_PTR;
   return manager.data();
 }
 
 template <typename T>
 void Registry::remove(Entity& entity) {
   Impl* impl_ptr = impl_.get();
-  Manager<T>& manager = impl_ptr->*ComponentTraits<T>::manager_ptr;
-  manager.remove(entity.*ComponentTraits<T>::handle_ptr);
-  entity.*ComponentTraits<T>::handle_ptr = {};
+  Manager<T>& manager = impl_ptr->*ComponentTraits<T>::MANAGER_PTR;
+  manager.remove(entity.*ComponentTraits<T>::HANDLE_PTR);
+  entity.*ComponentTraits<T>::HANDLE_PTR = {};
 }
 
 template <typename T>
@@ -124,12 +124,12 @@ T* Registry::set(Entity& entity, T&& component) {
   remove<T>(entity);
 
   Impl* impl_ptr = impl_.get();
-  Manager<T>& manager = impl_ptr->*ComponentTraits<T>::manager_ptr;
+  Manager<T>& manager = impl_ptr->*ComponentTraits<T>::MANAGER_PTR;
   Handle new_handle = manager.add(std::forward<T>(component));
   if (new_handle.is_empty()) {
     return nullptr;
   }
-  entity.*ComponentTraits<T>::handle_ptr = new_handle;
+  entity.*ComponentTraits<T>::HANDLE_PTR = new_handle;
 
   // Newly added component always locates at the end of the data vector.
   return &manager.data().back();
