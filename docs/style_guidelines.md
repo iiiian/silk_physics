@@ -85,19 +85,19 @@ Explicitly write out `private`/`public` in each sections and follow below layout
 
 ```c++
 class Basket {
-  private:
+  public:
     // anything that is not a method. i.e. class member, constexpr variable, using alias
     int private_var_;
   
-  public:
+  private:
     // anything that is not a method. i.e. class member, constexpr variable, using alias
     int public_var_;
     
-  private:
+  public:
     // private class method
     int count();
     
-  public:
+  private:
     // public class method
     void clear();
 };
