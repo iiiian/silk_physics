@@ -1,12 +1,3 @@
-/**
- * @file ecs.cpp
- * @brief Defines the ECS registry internals and template bridges.
- *
- * Owns the Manager-backed storage, ComponentTraits specializations, and
- * explicit instantiations so that component code is compiled once and the
- * public header stays lightweight.
- */
-
 #include "ecs.hpp"
 
 // Make sure you've include all component definition here.
@@ -14,13 +5,14 @@
 #include <cassert>
 #include <silk/silk.hpp>
 
-#include "cloth_solver_data.hpp"
+#include "cloth_topology.hpp"
+#include "collision/cpu/object_collider.hpp"
 #include "manager.hpp"
 #include "mesh.hpp"
-#include "object_collider.hpp"
 #include "object_state.hpp"
 #include "obstacle_position.hpp"
 #include "pin.hpp"
+#include "solver/cpu/cloth_solver_context.hpp"
 
 namespace silk {
 

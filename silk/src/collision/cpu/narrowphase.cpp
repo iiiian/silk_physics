@@ -1,4 +1,4 @@
-#include "collision_narrowphase.hpp"
+#include "collision/cpu/narrowphase.hpp"
 
 #include <Eigen/Geometry>
 #include <cassert>
@@ -208,9 +208,10 @@ std::optional<Eigen::Vector3f> velocity_diff(const Eigen::Vector3f& v_relative,
 }
 
 std::optional<Collision> point_triangle_collision(
-    const ObjectCollider& oa, const MeshCollider& ma, const ObjectCollider& ob,
-    const MeshCollider& mb, float dt, float base_stiffness, float min_toi,
-    float tolerance, int max_iter, const Eigen::Array3f& scene_vf_err) {
+    const CpuObjectCollider& oa, const MeshCollider& ma,
+    const CpuObjectCollider& ob, const MeshCollider& mb, float dt,
+    float base_stiffness, float min_toi, float tolerance, int max_iter,
+    const Eigen::Array3f& scene_vf_err) {
   // Minimal separation.
   float ms = std::min(oa.bbox_padding, ob.bbox_padding);
 
@@ -354,9 +355,10 @@ std::optional<Collision> point_triangle_collision(
 
 // Perform edge–edge CCD and construct a Collision record if one occurs.
 std::optional<Collision> edge_edge_collision(
-    const ObjectCollider& oa, const MeshCollider& ma, const ObjectCollider& ob,
-    const MeshCollider& mb, float dt, float base_stiffness, float min_toi,
-    float tolerance, int max_iter, const Eigen::Array3f& scene_ee_err) {
+    const CpuObjectCollider& oa, const MeshCollider& ma,
+    const CpuObjectCollider& ob, const MeshCollider& mb, float dt,
+    float base_stiffness, float min_toi, float tolerance, int max_iter,
+    const Eigen::Array3f& scene_ee_err) {
   // Minimal separation.
   float ms = std::min(oa.bbox_padding, ob.bbox_padding);
 
@@ -502,10 +504,10 @@ std::optional<Collision> edge_edge_collision(
 }
 
 std::optional<Collision> narrow_phase(
-    const ObjectCollider& oa, const MeshCollider& ma, const ObjectCollider& ob,
-    const MeshCollider& mb, float dt, float base_stiffness, float min_toi,
-    float tolerance, int max_iter, const Eigen::Array3f& scene_ee_err,
-    const Eigen::Array3f& scene_vf_err) {
+    const CpuObjectCollider& oa, const MeshCollider& ma,
+    const CpuObjectCollider& ob, const MeshCollider& mb, float dt,
+    float base_stiffness, float min_toi, float tolerance, int max_iter,
+    const Eigen::Array3f& scene_ee_err, const Eigen::Array3f& scene_vf_err) {
   // Edge–edge collision.
   if (ma.type == MeshColliderType::Edge) {
     return edge_edge_collision(oa, ma, ob, mb, dt, base_stiffness, min_toi,

@@ -2,9 +2,9 @@
 
 #include <optional>
 
-#include "collision.hpp"
-#include "mesh_collider.hpp"
-#include "object_collider.hpp"
+#include "collision/cpu/collision.hpp"
+#include "collision/cpu/mesh_collider.hpp"
+#include "collision/cpu/object_collider.hpp"
 
 namespace silk {
 
@@ -29,10 +29,10 @@ namespace silk {
  * @return Populated Collision or std::nullopt if no collision is detected.
  */
 std::optional<Collision> narrow_phase(
-    const ObjectCollider& oa, const MeshCollider& ma, const ObjectCollider& ob,
-    const MeshCollider& mb, float dt, float base_stiffness, float min_toi,
-    float tolerance, int max_iter, const Eigen::Array3f& scene_ee_err,
-    const Eigen::Array3f& scene_vf_err);
+    const CpuObjectCollider& oa, const MeshCollider& ma,
+    const CpuObjectCollider& ob, const MeshCollider& mb, float dt,
+    float base_stiffness, float min_toi, float tolerance, int max_iter,
+    const Eigen::Array3f& scene_ee_err, const Eigen::Array3f& scene_vf_err);
 
 /**
  * Re-evaluate an existing collision with updated positions and adjust

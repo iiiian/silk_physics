@@ -1,39 +1,38 @@
-#include "solver_pipeline.hpp"
+#include "collision/cpu/pipeline.hpp"
 
 #include <Eigen/Core>
 #include <silk/silk.hpp>
 #include <vector>
 
-#include "../barrier_constrain.hpp"
-#include "../bbox.hpp"
-#include "../collision.hpp"
-#include "../collision_pipeline.hpp"
-#include "../ecs.hpp"
-#include "../logger.hpp"
-#include "../object_collider_utils.hpp"
-#include "../object_state.hpp"
-#include "../obstacle_position.hpp"
 #include "cloth_solver_utils.hpp"
+#include "collision/cpu/bbox.hpp"
+#include "collision/cpu/collision.hpp"
+#include "collision/cpu/object_collider.hpp"
+#include "ecs.hpp"
+#include "logger.hpp"
+#include "object_state.hpp"
+#include "obstacle_position.hpp"
 #include "obstacle_solver_utils.hpp"
+#include "solver/cpu/barrier_constrain.hpp"
+#include "solver/cpu/pipeline.hpp"
 
 namespace silk {
 
-void SolverPipeline::clear(Registry& registry) {
+void CpuSolverPipeline::clear(Registry& registry) {
   for (Entity& e : registry.get_all_entities()) {
     registry.remove<ClothTopology>(e);
-    registry.remove<ClothSolverContext>(e);
+    registry.remove<CpuClothSolverContext>(e);
     registry.remove<ObjectState>(e);
-    registry.remove<ObjectCollider>(e);
+    registry.remove<CpuObjectCollider>(e);
   }
 }
 
-void SolverPipeline::reset(Registry& registry) {
+void CpuSolverPipeline::reset(Registry& registry) {
   batch_reset_cloth_simulation(registry);
   batch_reset_obstacle_simulation(registry);
 }
 
-bool SolverPipeline::step(Registry& registry,
-                          CollisionPipeline& collision_pipeline) {
+bool CpuSolverPipeline::step(Registry& registry) {
   SPDLOG_DEBUG("solver step");
 
   ObjectState global_state;
@@ -117,15 +116,13 @@ bool SolverPipeline::step(Registry& registry,
     for (Entity& e : registry.get_all_entities()) {
       auto config = registry.get<CollisionConfig>(e);
       auto state = registry.get<ObjectState>(e);
-      auto collider = registry.get<ObjectCollider>(e);
+      auto collider = registry.get<CpuObjectCollider>(e);
       if (!(config && state && collider)) {
         continue;
       }
-      update_physical_object_collider(*config, *state, next_state, curr_state,
-                                      *collider);
+      collider->update(*config, *state, next_state, curr_state);
     }
-    collisions = collision_pipeline.find_collision(
-        registry.get_all<ObjectCollider>(), scene_bbox, dt);
+    collisions = collision_pipeline.find_collision(registry, scene_bbox, dt);
 
     // CCD line search over the remaining normalized substep.
     float earliest_toi = 1.0f;
@@ -169,7 +166,7 @@ bool SolverPipeline::step(Registry& registry,
 }
 
 // Lazily init all entity and collect solver state into global array.
-bool SolverPipeline::init(Registry& registry, ObjectState& global_state) {
+bool CpuSolverPipeline::init(Registry& registry, ObjectState& global_state) {
   int state_num = 0;
   for (Entity& e : registry.get_all_entities()) {
     auto cloth_config = registry.get<ClothConfig>(e);
@@ -219,7 +216,7 @@ bool SolverPipeline::init(Registry& registry, ObjectState& global_state) {
   return true;
 }
 
-Bbox SolverPipeline::compute_scene_bbox(const Eigen::VectorXf& state) {
+Bbox CpuSolverPipeline::compute_scene_bbox(const Eigen::VectorXf& state) {
   int num = state.size();
   auto reshaped = state.reshaped(3, num / 3);
   Eigen::Vector3f min = reshaped.rowwise().minCoeff();
@@ -228,7 +225,7 @@ Bbox SolverPipeline::compute_scene_bbox(const Eigen::VectorXf& state) {
   return Bbox{min, max};
 }
 
-BarrierConstrain SolverPipeline::compute_barrier_constrain(
+BarrierConstrain CpuSolverPipeline::compute_barrier_constrain(
     const Eigen::VectorXf& state, const std::vector<Collision>& collisions) {
   int state_num = state.size();
   Eigen::VectorXf lhs = Eigen::VectorXf::Zero(state_num);
@@ -287,7 +284,7 @@ BarrierConstrain SolverPipeline::compute_barrier_constrain(
   return BarrierConstrain{std::move(lhs), std::move(rhs)};
 }
 
-void SolverPipeline::enforce_barrier_constrain(
+void CpuSolverPipeline::enforce_barrier_constrain(
     const BarrierConstrain& barrier_constrain, const Bbox& scene_bbox,
     Eigen::VectorXf& state) const {
   auto& b = barrier_constrain;

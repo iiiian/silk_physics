@@ -2,9 +2,22 @@
 # Library config
 # -------------------------------------------------
 
-file(GLOB SILK_SOURCES "src/*.cpp")
-file(GLOB SILK_SOURCES_ALT "src/solver/*.cpp")
-list(APPEND SILK_SOURCES ${SILK_SOURCES_ALT})
+file(GLOB SILK_SOURCES 
+    src/cloth_topology.cpp
+    src/collision/cpu/bbox.cpp
+    src/collision/cpu/narrowphase.cpp
+    src/collision/cpu/object_collider.cpp
+    src/collision/cpu/pipeline.cpp
+    src/ecs.cpp
+    src/mesh.cpp
+    src/result.cpp
+    src/solver/cpu/cholmod_utils.cpp
+    src/solver/cpu/cloth_solver_context.cpp
+    src/solver/cpu/cloth_solver_utils.cpp
+    src/solver/cpu/obstacle_solver_utils.cpp
+    src/solver/cpu/pipeline.cpp
+    src/world.cpp
+)
 
 add_library(silk ${SILK_SOURCES})
 add_library(silk::silk ALIAS silk)
@@ -19,7 +32,7 @@ target_include_directories(
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
-    PRIVATE ${CMAKE_SOURCE_DIR}/extern/pdqsort
+    PRIVATE ${CMAKE_SOURCE_DIR}/extern/pdqsort ${CMAKE_CURRENT_LIST_DIR}/src
 )
 
 target_link_libraries(

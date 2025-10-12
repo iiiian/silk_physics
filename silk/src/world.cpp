@@ -6,24 +6,20 @@
 #include <silk/result.hpp>
 #include <silk/silk.hpp>
 
-#include "cloth_solver_data.hpp"
-#include "collision_pipeline.hpp"
+#include "collision/cpu/object_collider.hpp"
 #include "ecs.hpp"
 #include "mesh.hpp"
-#include "mesh_utils.hpp"
-#include "object_collider.hpp"
 #include "object_state.hpp"
 #include "obstacle_position.hpp"
 #include "pin.hpp"
-#include "solver/solver_pipeline.hpp"
+#include "solver/cpu/pipeline.hpp"
 
 namespace silk {
 
 class World::WorldImpl {
  private:
   Registry registry_;
-  SolverPipeline solver_pipeline_;
-  CollisionPipeline collision_pipeline_;
+  CpuSolverPipeline solver_pipeline_;
 
  public:
   // Global API
@@ -47,7 +43,7 @@ class World::WorldImpl {
   // Solver API
 
   Result solver_step() {
-    if (!solver_pipeline_.step(registry_, collision_pipeline_)) {
+    if (!solver_pipeline_.step(registry_)) {
       return Result::error(ErrorCode::CholeskyDecompositionFail);
     }
 
@@ -64,7 +60,7 @@ class World::WorldImpl {
                    MeshConfig mesh_config, ConstSpan<int> pin_index,
                    uint32_t& handle) {
     // make tri mesh
-    auto tri_mesh = try_make_cloth_mesh(mesh_config);
+    auto tri_mesh = make_cloth_mesh(mesh_config);
     if (!tri_mesh) {
       handle = 0;
       return Result::error(ErrorCode::InvalidMesh);
@@ -157,8 +153,8 @@ class World::WorldImpl {
     *cloth_config = config;
 
     // remove outdated components
-    registry_.remove<ClothSolverContext>(*e);
-    registry_.remove<ObjectCollider>(*e);
+    registry_.remove<CpuClothSolverContext>(*e);
+    registry_.remove<CpuObjectCollider>(*e);
 
     return Result::ok();
   }
@@ -192,11 +188,11 @@ class World::WorldImpl {
       return Result::error(ErrorCode::InvalidHandle);
     }
 
-    // make tri mesh
+    // Fetch the cloth mesh to refresh pin anchors.
     auto tri_mesh = registry_.get<TriMesh>(*e);
     assert(tri_mesh);
 
-    // make pin
+    // Update the existing pin component.
     auto pin = registry_.get<Pin>(*e);
     assert(pin);
     if (pin_index.data != nullptr && pin_index.size != 0) {
@@ -212,8 +208,8 @@ class World::WorldImpl {
     }
 
     // remove outdated components
-    registry_.remove<ClothSolverContext>(*e);
-    registry_.remove<ObjectCollider>(*e);
+    registry_.remove<CpuClothSolverContext>(*e);
+    registry_.remove<CpuObjectCollider>(*e);
 
     return Result::ok();
   }
@@ -246,7 +242,7 @@ class World::WorldImpl {
   Result add_obstacle(CollisionConfig collision_config, MeshConfig mesh_config,
                       uint32_t& handle) {
     // make tri mesh
-    auto tri_mesh = try_make_obstacle_mesh(mesh_config);
+    auto tri_mesh = make_obstacle_mesh(mesh_config);
     if (!tri_mesh) {
       handle = 0;
       return Result::error(ErrorCode::InvalidMesh);

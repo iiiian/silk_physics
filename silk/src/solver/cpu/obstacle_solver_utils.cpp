@@ -2,10 +2,10 @@
 
 #include <silk/silk.hpp>
 
-#include "../ecs.hpp"
-#include "../mesh.hpp"
-#include "../object_collider_utils.hpp"
-#include "../obstacle_position.hpp"
+#include "collision/cpu/object_collider.hpp"
+#include "ecs.hpp"
+#include "mesh.hpp"
+#include "obstacle_position.hpp"
 
 namespace silk {
 
@@ -33,13 +33,13 @@ void prepare_obstacle_simulation(Registry& registry, Entity& entity) {
   assert(config && mesh && position);
 
   // Ensure collider exists and is up-to-date
-  auto collider = registry.get<ObjectCollider>(e);
+  auto collider = registry.get<CpuObjectCollider>(e);
   if (!collider) {
-    auto new_collider = make_obstacle_object_collider(e.self, *config, *mesh);
-    collider = registry.set<ObjectCollider>(e, std::move(new_collider));
+    auto new_collider = CpuObjectCollider(e.self, *config, *mesh);
+    collider = registry.set<CpuObjectCollider>(e, std::move(new_collider));
   }
   assert(collider != nullptr);
-  update_obstacle_object_collider(*config, *position, *collider);
+  collider->update(*config, *position);
 
   // Update obstacle position for future step.
   if (position->is_static) {

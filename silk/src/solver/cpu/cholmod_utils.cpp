@@ -1,4 +1,4 @@
-#include "cholmod_utils.hpp"
+#include "solver/cpu/cholmod_utils.hpp"
 
 namespace silk::cholmod_raii {
 

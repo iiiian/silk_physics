@@ -2,15 +2,16 @@
 
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
+#include <silk/silk.hpp>
 #include <vector>
 
-#include "cholmod_utils.hpp"
 #include "eigen_alias.hpp"
+#include "mesh.hpp"
 
 namespace silk {
 
 /**
- * Static, mesh-dependent quantities used to compute ClothSolverContext.
+ * Static, mesh-dependent quantities used for cloth simulation.
  *
  * Built once from geometry and reused across time steps. This data should not
  * depend on runtime-configurable physical parameters.
@@ -20,7 +21,8 @@ namespace silk {
  * fnum = number of faces.
  * state_num = 3 * vnum.
  */
-struct ClothTopology {
+class ClothTopology {
+ public:
   // Voronoi vertex mass of length vnum (no density applied).
   Eigen::VectorXf mass;
 
@@ -40,43 +42,15 @@ struct ClothTopology {
   // Rest curvature per vertex (vnum x 3).
   RMatrixX3f C0;
 
+ public:
+  ClothTopology(const ClothConfig& config, const TriMesh& mesh);
+
   // Since Eigen::SparseMatrix lacks noexcept move ctor, explicitly
   // delete copy ctor to avoid error when used in containers like std::vector.
-  ClothTopology() = default;
   ClothTopology(const ClothTopology&) = delete;
   ClothTopology(ClothTopology&&) = default;
   ClothTopology& operator=(const ClothTopology&) = delete;
   ClothTopology& operator=(ClothTopology&&) = default;
-};
-
-/**
- * Dynamic, time step or config dependent quantities used by the cloth solver.
- *
- * Notation:
- * state_num = 3 * vertex num.
- */
-struct ClothSolverContext {
-  // Time step in seconds.
-  float dt;
-  // Whether barrier constraints are currently active.
-  bool has_barrier_constrain;
-
-  // True vectorized per-vertex mass vector (density-scaled) of length state
-  // num.
-  Eigen::VectorXf mass;
-
-  // Left-hand side H of Hx = b, combining momentum, bending, in-plane, and pin
-  // energies.
-  Eigen::SparseMatrix<float> H;
-
-  // Cholesky factorization of H produced via CHOLMOD.
-  cholmod_raii::CholmodFactor L;
-
-  // Updated factorization to account for barrier constraints.
-  cholmod_raii::CholmodFactor LB;
-
-  // Weighted rest-curvature vector (state_num x 1).
-  Eigen::VectorXf C0;
 };
 
 }  // namespace silk

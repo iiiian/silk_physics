@@ -2,8 +2,8 @@
 
 #include <Eigen/Core>
 
-#include "../barrier_constrain.hpp"
-#include "../ecs.hpp"
+#include "ecs.hpp"
+#include "solver/cpu/barrier_constrain.hpp"
 
 namespace silk {
 
@@ -16,7 +16,7 @@ void batch_reset_cloth_simulation(Registry& registry);
 
 /** Prepare cloths for solver stepping at a given time step.
  *  Ensures `ClothTopology`, `ClothSolverContext`, `ObjectState`, and
- * `ObjectCollider` exists and are valid.
+ * `CpuObjectCollider` exist and are valid.
  *
  *  @param registry ECS storage for all components.
  *  @param entity ECS cloth entity.
@@ -75,4 +75,5 @@ bool batch_compute_cloth_inner_loop(Registry& registry,
                                     const Eigen::VectorXf& global_state,
                                     const Eigen::VectorXf& outer_rhs,
                                     Eigen::VectorXf& solution);
+
 }  // namespace silk

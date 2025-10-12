@@ -1,4 +1,4 @@
-#include "mesh_utils.hpp"
+#include "mesh.hpp"
 
 #include <igl/edges.h>
 #include <igl/facet_components.h>
@@ -190,7 +190,7 @@ bool check_single_component(const RMatrixX3i& F) {
   return true;
 }
 
-std::optional<TriMesh> try_make_cloth_mesh(MeshConfig mesh_config) {
+std::optional<TriMesh> make_cloth_mesh(MeshConfig mesh_config) {
   if (!check_schema(mesh_config, 3, 1)) {
     return std::nullopt;
   }
@@ -235,7 +235,7 @@ std::optional<TriMesh> try_make_cloth_mesh(MeshConfig mesh_config) {
   return m;
 }
 
-std::optional<TriMesh> try_make_obstacle_mesh(MeshConfig mesh_config) {
+std::optional<TriMesh> make_obstacle_mesh(MeshConfig mesh_config) {
   if (!check_schema(mesh_config, 1, 0)) {
     return std::nullopt;
   }
