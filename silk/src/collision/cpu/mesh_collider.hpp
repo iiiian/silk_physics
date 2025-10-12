@@ -2,7 +2,7 @@
 
 #include <Eigen/Core>
 
-#include "bbox.hpp"
+#include "collision/cpu/bbox.hpp"
 
 namespace silk {
 

@@ -128,8 +128,8 @@ class Foo{
   
   public:
     // Factory function should be static and returns the optional of class type.
-    // The name should be try_make_<class name>.
-    static std::optional<Foo> try_make_foo();
+    // The name should be make_<class name>.
+    static std::optional<Foo> make_foo();
 }
 ```
 

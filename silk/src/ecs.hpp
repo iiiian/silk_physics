@@ -27,16 +27,16 @@ namespace silk {
 // explicit instantiations can see the definition.
 // These entries drive every ECS_X_MACRO expansion for declarations, handles,
 // traits, and template instantiations.
-#define ECS_X_MACRO(X)                        \
-  X(ClothConfig, cloth_config)                \
-  X(CollisionConfig, collision_config)        \
-  X(TriMesh, tri_mesh)                        \
-  X(Pin, pin)                                 \
-  X(ClothTopology, cloth_topology)            \
-  X(ClothSolverContext, cloth_solver_context) \
-  X(ObjectState, object_state)                \
-  X(ObstaclePosition, obstacle_position)      \
-  X(ObjectCollider, object_collider)
+#define ECS_X_MACRO(X)                               \
+  X(ClothConfig, cloth_config)                       \
+  X(CollisionConfig, collision_config)               \
+  X(TriMesh, tri_mesh)                               \
+  X(Pin, pin)                                        \
+  X(ClothTopology, cloth_topology)                   \
+  X(CpuClothSolverContext, cpu_cloth_solver_context) \
+  X(ObjectState, object_state)                       \
+  X(ObstaclePosition, obstacle_position)             \
+  X(CpuObjectCollider, cpu_object_collider)
 
 // Forward declarations of component types.
 #define ECS_FORWARD_DECLARATION(type, name) struct type;

@@ -6,7 +6,7 @@ add_executable(
     sap_test.cpp
     collision_broadphase_test_utils.cpp
     abc_file_loader.cpp
-    ${SILK_DIR}/bbox.cpp
+    ${SILK_DIR}/collision/cpu/bbox.cpp
 )
 target_include_directories(
     sap_test
@@ -43,7 +43,7 @@ add_executable(
     sap_kd_tree_test.cpp
     collision_broadphase_test_utils.cpp
     abc_file_loader.cpp
-    ${SILK_DIR}/bbox.cpp
+    ${SILK_DIR}/collision/cpu/bbox.cpp
 )
 target_include_directories(
     sap_kd_tree_test
@@ -67,7 +67,7 @@ add_executable(
     sap_benchmark.cpp
     collision_broadphase_test_utils.cpp
     abc_file_loader.cpp
-    ${SILK_DIR}/bbox.cpp
+    ${SILK_DIR}/collision/cpu/bbox.cpp
 )
 target_include_directories(
     sap_benchmark
@@ -91,7 +91,7 @@ add_executable(
     sap_kd_tree_benchmark.cpp
     collision_broadphase_test_utils.cpp
     abc_file_loader.cpp
-    ${SILK_DIR}/bbox.cpp
+    ${SILK_DIR}/collision/cpu/bbox.cpp
 )
 target_include_directories(
     sap_kd_tree_benchmark

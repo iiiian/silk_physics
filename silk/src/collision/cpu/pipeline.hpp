@@ -1,26 +1,18 @@
-/**
- * @file collision_pipeline.hpp
- * @brief Main collision detection and resolution pipeline for physics
- * simulation.
- *
- * This pipeline orchestrates multi-threaded collision detection between objects
- * and within objects (self-collision), using hierarchical broadphase and
- * continuous collision detection.
- */
 #pragma once
 
 #include <Eigen/Core>
 #include <vector>
 
-#include "collision.hpp"
-#include "object_collider.hpp"
+#include "collision/cpu/bbox.hpp"
+#include "collision/cpu/collision.hpp"
+#include "ecs.hpp"
 
 namespace silk {
 
 /**
  * @brief Collision detection and resolution pipeline.
  */
-class CollisionPipeline {
+class CpuCollisionPipeline {
  public:
   float ccd_tolerance = 1e-6f;
   int ccd_max_iter = 1024;
@@ -35,14 +27,14 @@ class CollisionPipeline {
 
   /**
    * @brief Detect collisions by running broad- and narrow-phase CCD.
-   * @param object_colliders Collider set to test and update.
-   * @param scene_bbox Axis-aligned bounds enclosing the scene for error metrics.
+   * @param registry ECS registry providing colliders to test and update.
+   * @param scene_bbox Axis-aligned bounds enclosing the scene for error
+   * metrics.
    * @param dt Simulation timestep size in seconds.
    * @return All collisions detected during the timestep.
    */
-  std::vector<Collision> find_collision(
-      std::vector<ObjectCollider>& object_colliders, const Bbox& scene_bbox,
-      float dt);
+  std::vector<Collision> find_collision(Registry& registry,
+                                        const Bbox& scene_bbox, float dt);
 
   /**
    * @brief Partial CCD update.
