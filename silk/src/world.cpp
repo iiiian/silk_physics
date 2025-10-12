@@ -118,14 +118,14 @@ class World::WorldImpl {
       return Result::error(ErrorCode::InvalidHandle);
     }
 
-    auto solver_state = registry_.get<ObjectState>(e);
-    if (solver_state) {
-      if (position.size < solver_state->state_num) {
+    auto obj_state = registry_.get<ObjectState>(e);
+    if (obj_state) {
+      if (position.size < obj_state->state_num) {
         return Result::error(ErrorCode::IncorrectPositionNum);
       }
 
-      memcpy(position.data, solver_state->curr_state.data(),
-             solver_state->state_num * sizeof(float));
+      memcpy(position.data, obj_state->curr_state.data(),
+             obj_state->state_num * sizeof(float));
       return Result::ok();
     }
 

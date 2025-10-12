@@ -1,10 +1,14 @@
 /**
  * @file ecs.hpp
- * @brief Entity Component System.
+ * @brief Declares the ECS registry and component handles.
  *
- * This header contains only forward declarations for components and keeps
- * templates declared but defined in ecs.cpp. Component trait specializations
- * and manager storage live in ecs.cpp.
+ * Exposes the public API and compile-time traits that bind component types to
+ * storage without pulling in heavyweight implementation headers. Definitions
+ * live in ecs.cpp so that registry internals remain private and templates are
+ * instantiated in one translation unit, keeping compile times predictable.
+ *
+ * P.S. If you can think of a way to implement this ECS system without abusing
+ * macros, please make a pull request.
  */
 
 #pragma once
@@ -17,16 +21,27 @@
 
 namespace silk {
 
+// Central registry of ECS component types.
+// To introduce a new component, add its type name and handle name to
+// this list, then include the component's header in ecs.cpp so the traits and
+// explicit instantiations can see the definition.
+// These entries drive every ECS_X_MACRO expansion for declarations, handles,
+// traits, and template instantiations.
+#define ECS_X_MACRO(X)                        \
+  X(ClothConfig, cloth_config)                \
+  X(CollisionConfig, collision_config)        \
+  X(TriMesh, tri_mesh)                        \
+  X(Pin, pin)                                 \
+  X(ClothTopology, cloth_topology)            \
+  X(ClothSolverContext, cloth_solver_context) \
+  X(ObjectState, object_state)                \
+  X(ObstaclePosition, obstacle_position)      \
+  X(ObjectCollider, object_collider)
+
 // Forward declarations of component types.
-struct ClothConfig;
-struct CollisionConfig;
-struct TriMesh;
-struct Pin;
-struct ClothTopology;
-struct ClothSolverContext;
-struct ObjectState;
-struct ObstaclePosition;
-struct ObjectCollider;
+#define ECS_FORWARD_DECLARATION(type, name) struct type;
+ECS_X_MACRO(ECS_FORWARD_DECLARATION);
+#undef ECS_FORWARD_DECLARATION
 
 // Helper to trigger static_assert for unsupported component types.
 template <typename T>
@@ -39,18 +54,12 @@ inline constexpr bool ALWAYS_FALSE_V = false;
  * points to a valid component or is empty. The actual component data is stored
  * in the Registry's Manager instances.
  */
+#define ECS_ENTITY_DEFINITION(type, name) Handle name;
 struct Entity {
   Handle self;
-  Handle cloth_config;
-  Handle cloth_topology;
-  Handle cloth_solver_context;
-  Handle solver_state;
-  Handle collision_config;
-  Handle tri_mesh;
-  Handle pin;
-  Handle obstacle_position;
-  Handle object_collider;
+  ECS_X_MACRO(ECS_ENTITY_DEFINITION)
 };
+#undef ECS_ENTITY_DEFINITION
 
 /**
  * @brief Central ECS registry managing all entities and components.

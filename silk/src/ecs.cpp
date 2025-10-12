@@ -1,9 +1,15 @@
 /**
  * @file ecs.cpp
- * @brief ECS registry implementation and template instantiations.
+ * @brief Defines the ECS registry internals and template bridges.
+ *
+ * Owns the Manager-backed storage, ComponentTraits specializations, and
+ * explicit instantiations so that component code is compiled once and the
+ * public header stays lightweight.
  */
 
 #include "ecs.hpp"
+
+// Make sure you've include all component definition here.
 
 #include <cassert>
 #include <silk/silk.hpp>
@@ -18,39 +24,25 @@
 
 namespace silk {
 
+#define ECS_REGISTRY_IMPL_DEFINITION(type, name) Manager<type> name;
 struct Registry::Impl {
   Manager<Entity> entity;
-  Manager<ClothConfig> cloth_config;
-  Manager<CollisionConfig> collision_config;
-  Manager<TriMesh> tri_mesh;
-  Manager<Pin> pin;
-  Manager<ClothTopology> cloth_topology;
-  Manager<ClothSolverContext> cloth_solver_context;
-  Manager<ObjectState> solver_state;
-  Manager<ObstaclePosition> obstacle_position;
-  Manager<ObjectCollider> object_collider;
+  ECS_X_MACRO(ECS_REGISTRY_IMPL_DEFINITION)
 };
+#undef ECS_REGISTRY_IMPL_DEFINITION
 
 // ComponentTraits specializations
-#define SILK_ECS_SPECIALIZE_COMPONENT_TRAIT(type, name)            \
+#define ECS_SPECIALIZE_COMPONENT_TRAIT(type, name)                 \
   template <>                                                      \
   struct Registry::ComponentTraits<type> {                         \
     static constexpr Handle Entity::* HANDLE_PTR = &Entity::name;  \
     static constexpr Manager<type> Registry::Impl::* MANAGER_PTR = \
         &Registry::Impl::name;                                     \
   };
+ECS_X_MACRO(ECS_SPECIALIZE_COMPONENT_TRAIT)
+#undef ECS_SPECIALIZE_COMPONENT_TRAIT
 
-SILK_ECS_SPECIALIZE_COMPONENT_TRAIT(ClothConfig, cloth_config)
-SILK_ECS_SPECIALIZE_COMPONENT_TRAIT(CollisionConfig, collision_config)
-SILK_ECS_SPECIALIZE_COMPONENT_TRAIT(TriMesh, tri_mesh)
-SILK_ECS_SPECIALIZE_COMPONENT_TRAIT(Pin, pin)
-SILK_ECS_SPECIALIZE_COMPONENT_TRAIT(ClothTopology, cloth_topology)
-SILK_ECS_SPECIALIZE_COMPONENT_TRAIT(ClothSolverContext, cloth_solver_context)
-SILK_ECS_SPECIALIZE_COMPONENT_TRAIT(ObjectState, solver_state)
-SILK_ECS_SPECIALIZE_COMPONENT_TRAIT(ObstaclePosition, obstacle_position)
-SILK_ECS_SPECIALIZE_COMPONENT_TRAIT(ObjectCollider, object_collider)
-
-#undef SILK_ECS_SPECIALIZE_COMPONENT_TRAIT
+#undef ECS_SPECIALIZE_COMPONENT_TRAIT
 
 Registry::Registry() : impl_(std::make_unique<Impl>()) {}
 Registry::Registry(Registry&& other) noexcept = default;
@@ -175,60 +167,34 @@ void Registry::remove_entity(Handle entity_handle) {
     return;
   }
 
-  remove<ClothConfig>(entity);
-  remove<CollisionConfig>(entity);
-  remove<TriMesh>(entity);
-  remove<Pin>(entity);
-  remove<ClothTopology>(entity);
-  remove<ClothSolverContext>(entity);
-  remove<ObjectState>(entity);
-  remove<ObstaclePosition>(entity);
-  remove<ObjectCollider>(entity);
+#define ECS_REMOVE_COMPONENT(type, name) remove<type>(entity);
+  ECS_X_MACRO(ECS_REMOVE_COMPONENT)
+#undef ECS_REMOVE_COMPONENT
 
   impl_->entity.remove(entity_handle);
 }
 
 void Registry::clear() {
   impl_->entity.clear();
-  impl_->cloth_config.clear();
-  impl_->collision_config.clear();
-  impl_->tri_mesh.clear();
-  impl_->pin.clear();
-  impl_->cloth_topology.clear();
-  impl_->cloth_solver_context.clear();
-  impl_->solver_state.clear();
-  impl_->obstacle_position.clear();
-  impl_->object_collider.clear();
+
+#define ECS_CLEAR_MANAGER(type, name) impl_->name.clear();
+  ECS_X_MACRO(ECS_CLEAR_MANAGER)
+#undef ECS_CLEAR_MANAGER
 }
 
 // Template initialization.
-
-#define SILK_ECS_COMPONENT_TYPES(X) \
-  X(ClothConfig)                    \
-  X(CollisionConfig)                \
-  X(TriMesh)                        \
-  X(Pin)                            \
-  X(ClothTopology)                  \
-  X(ClothSolverContext)             \
-  X(ObjectState)                    \
-  X(ObstaclePosition)               \
-  X(ObjectCollider)
-
-#define SILK_ECS_INSTANTIATE_FOR(T_)                                \
-  template T_* Registry::get<T_>(const Entity& entity);             \
-  template const T_* Registry::get<T_>(const Entity& entity) const; \
-  template T_* Registry::get<T_>(const Entity* entity);             \
-  template const T_* Registry::get<T_>(const Entity* entity) const; \
-  template std::vector<T_>& Registry::get_all<T_>();                \
-  template const std::vector<T_>& Registry::get_all<T_>() const;    \
-  template void Registry::remove<T_>(Entity & entity);              \
-  template void Registry::remove<T_>(Entity * entity);              \
-  template T_* Registry::set<T_>(Entity & entity, T_ && component); \
-  template T_* Registry::set<T_>(Entity * entity, T_ && component);
-
-SILK_ECS_COMPONENT_TYPES(SILK_ECS_INSTANTIATE_FOR)
-
-#undef SILK_ECS_INSTANTIATE_FOR
-#undef SILK_ECS_COMPONENT_TYPES
+#define ECS_INSTANTIATE_FOR(type, name)                                   \
+  template type* Registry::get<type>(const Entity& entity);               \
+  template const type* Registry::get<type>(const Entity& entity) const;   \
+  template type* Registry::get<type>(const Entity* entity);               \
+  template const type* Registry::get<type>(const Entity* entity) const;   \
+  template std::vector<type>& Registry::get_all<type>();                  \
+  template const std::vector<type>& Registry::get_all<type>() const;      \
+  template void Registry::remove<type>(Entity & entity);                  \
+  template void Registry::remove<type>(Entity * entity);                  \
+  template type* Registry::set<type>(Entity & entity, type && component); \
+  template type* Registry::set<type>(Entity * entity, type && component);
+ECS_X_MACRO(ECS_INSTANTIATE_FOR)
+#undef ECS_INSTANTIATE_FOR
 
 }  // namespace silk

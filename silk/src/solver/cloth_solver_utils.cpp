@@ -399,12 +399,11 @@ bool batch_compute_cloth_outer_loop(
     const Eigen::VectorXf& global_state_acceleration,
     const BarrierConstrain& barrier_constrain, Eigen::VectorXf& rhs) {
   for (Entity& e : registry.get_all_entities()) {
-    auto solver_state = registry.get<ObjectState>(e);
+    auto obj_state = registry.get<ObjectState>(e);
     auto dynamic_data = registry.get<ClothSolverContext>(e);
 
-    if (solver_state && dynamic_data) {
-      auto seq =
-          Eigen::seqN(solver_state->state_offset, solver_state->state_num);
+    if (obj_state && dynamic_data) {
+      auto seq = Eigen::seqN(obj_state->state_offset, obj_state->state_num);
       if (!compute_cloth_outer_loop(
               global_state(seq), global_state_velocity(seq),
               global_state_acceleration(seq), barrier_constrain.lhs(seq),
