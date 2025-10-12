@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <utility>
 #include <vector>
 
 #include "handle.hpp"
@@ -102,6 +103,22 @@ class Manager {
    * @param component Resource to add
    * @return Handle to new resource, or empty handle if out of capacity
    */
+  Handle add(const T& component) {
+    if (free_slots_.empty()) {
+      return Handle{};  // At maximum capacity
+    }
+
+    uint32_t slot_idx = free_slots_.front();
+    free_slots_.pop_front();
+
+    Handle& slot = slots_[slot_idx];
+    slot.set_is_valid(true);
+    slot.set_index(data_.size());
+    data_.push_back(component);
+    slot_of_data_.push_back(slot_idx);
+    return Handle{true, slot.get_generation(), slot_idx};
+  }
+
   Handle add(T&& component) {
     if (free_slots_.empty()) {
       return Handle{};  // At maximum capacity
@@ -113,7 +130,7 @@ class Manager {
     Handle& slot = slots_[slot_idx];
     slot.set_is_valid(true);
     slot.set_index(data_.size());
-    data_.push_back(std::forward<T>(component));
+    data_.push_back(std::move(component));
     slot_of_data_.push_back(slot_idx);
     return Handle{true, slot.get_generation(), slot_idx};
   }
