@@ -1,36 +1,48 @@
 #include "gpu_solver_widget.hpp"
 #include <imgui.h>
 #include <spdlog/spdlog.h>
+#include "ui_console.hpp"
 
 #include <polyscope/pick.h>
 #include <polyscope/point_cloud.h>
 
 GpuSolverWidget::GpuSolverWidget(Context& ctx,
-                                 std::function<void(SolverBackend, SolverBackend)> onChange)
-: ctx_(ctx), on_change_(std::move(onChange)) {}
+                                 std::function<void(SolverBackend)> onChange)
+: ctx_(ctx), n_change_(std::move(onChange)) {}
 
 void GpuSolverWidget::set_backend(SolverBackend b) { backend_ = b; }
 
 void GpuSolverWidget::draw() {
-  if (ImGui::CollapsingHeader(title_.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::PushID(this);  
+
+  if (ImGui::CollapsingHeader((title_ + "##gpu_solver").c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 
     bool useGpu = (backend_ == SolverBackend::GPU);
 
-    if (ImGui::Checkbox("Use GPU solver", &useGpu)) {
+    if (ImGui::Checkbox("Use GPU solver##gpu_solver_checkbox", &useGpu)) {
 
-      SolverBackend old = backend_;
-      backend_ = useGpu ? SolverBackend::GPU : SolverBackend::CPU;
-      
       //Status Log 
       if(useGpu){
-        spdlog::info("[UI] Solver backend -> GPU");
+
+        backend_= SolverBackend::GPU;
+        UI_LOGI("[UI] Solver backend -> GPU");
+
       }else{
-        spdlog::info("[UI] Solver backend -> CPU");
+
+        backend_= SolverBackend::CPU;
+        UI_LOGI("[UI] Solver backend -> CPU");
       }
 
-      if (on_change_) on_change_(old, backend_);
     }
   }
+
+        // Pass an animated negative value, e.g. -1.0f * (float)ImGui::GetTime() is the recommended value.
+        // Adjust the factor if you want to adjust the animation speed.
+        // ImGui::ProgressBar(-1.0f * (float)ImGui::GetTime(), ImVec2(0.0f, 0.0f), "Simulating..");
+        //ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+        //ImGui::Text("");
+
+  ImGui::PopID(); 
 }
 
 
