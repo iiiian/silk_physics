@@ -8,7 +8,8 @@
 #include "widgets/simulator_widget.hpp"
 #include "widgets/statistic_widget.hpp"
 #include "widgets/gpu_solver_widget.hpp"
-
+#include "widgets/config_widget.hpp"
+#include "widgets/ui_console.hpp"
 class Demo {
  private:
   Context ctx_ = {};
@@ -20,6 +21,7 @@ class Demo {
   HelpBarWidget help_bar_widget_{ctx_};
   StatisticWidget statistic_widget_{ctx_};
   GpuSolverWidget gpu_solver_widget_{ctx_};
+  ConfigWidget config_widget_{ctx_};
 
 
  public:
