@@ -22,6 +22,10 @@ namespace silk {
 template <typename T>
 class Manager {
  private:
+  static constexpr uint32_t INITIAL_CAPACITY = 1024;
+  static_assert(INITIAL_CAPACITY <= Handle::MAX_INDEX,
+                "Initial capacity larger max handle index.");
+
   // Indirection table mapping handle indices to data array indices.
   std::vector<Handle> slots_;
   // Queue of available slot indices for new allocations.
@@ -33,8 +37,8 @@ class Manager {
 
  public:
   Manager() {
-    slots_.resize(Handle::MAX_INDEX);
-    for (uint32_t i = 0; i < Handle::MAX_INDEX; ++i) {
+    slots_.resize(INITIAL_CAPACITY, Handle{});
+    for (uint32_t i = 0; i < INITIAL_CAPACITY; ++i) {
       free_slots_.push_back(i);
     }
   }
@@ -49,7 +53,7 @@ class Manager {
     }
 
     free_slots_.clear();
-    for (uint32_t i = 0; i < Handle::MAX_INDEX; ++i) {
+    for (uint32_t i = 0; i < slots_.size(); ++i) {
       free_slots_.push_back(i);
     }
 
@@ -104,12 +108,18 @@ class Manager {
    * @return Handle to new resource, or empty handle if out of capacity
    */
   Handle add(const T& component) {
-    if (free_slots_.empty()) {
+    if (free_slots_.empty() && slots_.size() >= Handle::MAX_INDEX) {
       return Handle{};  // At maximum capacity
     }
 
-    uint32_t slot_idx = free_slots_.front();
-    free_slots_.pop_front();
+    uint32_t slot_idx;
+    if (free_slots_.empty()) {
+      slot_idx = static_cast<uint32_t>(slots_.size());
+      slots_.push_back(Handle{});
+    } else {
+      slot_idx = free_slots_.front();
+      free_slots_.pop_front();
+    }
 
     Handle& slot = slots_[slot_idx];
     slot.set_is_valid(true);
@@ -120,12 +130,18 @@ class Manager {
   }
 
   Handle add(T&& component) {
-    if (free_slots_.empty()) {
+    if (free_slots_.empty() && slots_.size() >= Handle::MAX_INDEX) {
       return Handle{};  // At maximum capacity
     }
 
-    uint32_t slot_idx = free_slots_.front();
-    free_slots_.pop_front();
+    uint32_t slot_idx;
+    if (free_slots_.empty()) {
+      slot_idx = static_cast<uint32_t>(slots_.size());
+      slots_.push_back(Handle{});
+    } else {
+      slot_idx = free_slots_.front();
+      free_slots_.pop_front();
+    }
 
     Handle& slot = slots_[slot_idx];
     slot.set_is_valid(true);
