@@ -66,7 +66,8 @@ void ConfigWidget::draw() {
           // TEST (readable)
           ParseResult r = parse_config(picked_path_, DefaultJsonPath, true);
           if (r.ok) {
-            UI_LOGI("JSON Parsing Sucessed使用路径:{}", r.source_path);
+            UI_LOGI("JSON Parsing Sucessed: {}", r.source_path);
+            
           } else {
             UI_LOGE("JSON Parsing Failed:{}", r.error);
           }

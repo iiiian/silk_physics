@@ -1,19 +1,28 @@
 #pragma once
 #include <string>
+#include "config.hpp"
+
+struct Config;
 
 //**************************************************************/
 //**                 JSON File Parser                          */
 //**************************************************************/
 
-//Struct for simulation parameter
-//Work in Progress...
+// Struct for simulation parameter
+// The struct below is not the one use for simulation enviroment setup, 
+// rather, it include it--Config struct--inside.
+
 struct ParseResult {
-  bool ok = false;           // Parse Success?
-  std::string source_path;   // JSON Path
-  std::string error;         // Error Info
+  bool ok{false};
+  std::string error;
+  std::string source_path;
+  Config config;
 };
 
-//Path
-ParseResult parse_config(const std::string& path,
-                         const std::string& default_path = "/DTest/default.json",
-                         bool check_readable = true);
+/**
+ * @brief Parsing a JSON file into a struct.
+ * @param path, default_path, check_readable Storage container to inspect.
+ * @return ParseResult struct.
+ */
+ 
+ParseResult parse_config(const std::string& path, const std::string& default_path, bool check_readable);
