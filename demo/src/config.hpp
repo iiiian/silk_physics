@@ -1,10 +1,10 @@
 #pragma once
+
+#include <array>
 #include <string>
 #include <vector>
-#include <array>
 
 struct Config {
-  
   //********************************/
   //*          Global             */
   //********************************/
@@ -12,7 +12,7 @@ struct Config {
     double dt = 0.01;
     int max_outer_iteration = 100;
     int max_inner_iteration = 50;
-    std::array<double,3> acceleration {0.0, 0.0, -9.8};
+    std::array<double, 3> acceleration{0.0, 0.0, -9.8};
     int total_steps = 100;
     double max_time = 0.0;
     bool headless = false;
@@ -34,9 +34,9 @@ struct Config {
   //*          Transform           */
   //********************************/
   struct Transform {
-    std::array<double,3> translation {0.0, 0.0, 0.0};
-    std::array<double,3> rotation_euler_deg {0.0, 0.0, 0.0};
-    std::array<double,3> scale {1.0, 1.0, 1.0}; 
+    std::array<double, 3> translation{0.0, 0.0, 0.0};
+    std::array<double, 3> rotation_euler_deg{0.0, 0.0, 0.0};
+    std::array<double, 3> scale{1.0, 1.0, 1.0};
   };
 
   //********************************/
@@ -57,34 +57,27 @@ struct Config {
 
   struct ObjectBase {
     ObjectType type = ObjectType::Cloth;
-    std::string name;      
-    std::string mesh;      
-    Collision collision; 
-    Transform transform; 
+    std::string name;
+    std::string mesh;
+    Collision collision;
+    Transform transform;
   };
 
   //******** Cloth Object **********/
   struct ClothObject : public ObjectBase {
-    ClothParams cloth;      
-    ClothObject() { 
-      type = ObjectType::Cloth; 
-      }
+    ClothParams cloth;
+    ClothObject() { type = ObjectType::Cloth; }
   };
 
   //******* Obstacle Object *******/
   struct ObstacleObject : public ObjectBase {
-  
-    ObstacleObject() { 
-      type = ObjectType::Obstacle; 
-    }
+    ObstacleObject() { type = ObjectType::Obstacle; }
   };
 
-
   Global global;
-  std::vector<ClothObject>    cloths;    
-  std::vector<ObstacleObject> obstacles; 
+  std::vector<ClothObject> cloths;
+  std::vector<ObstacleObject> obstacles;
 };
-
 
 using Global = Config::Global;
 using Collision = Config::Collision;

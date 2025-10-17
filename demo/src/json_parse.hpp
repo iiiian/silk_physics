@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+
 #include "config.hpp"
 
 struct Config;
@@ -9,7 +10,7 @@ struct Config;
 //**************************************************************/
 
 // Struct for simulation parameter
-// The struct below is not the one use for simulation enviroment setup, 
+// The struct below is not the one use for simulation enviroment setup,
 // rather, it include it--Config struct--inside.
 
 struct ParseResult {
@@ -24,5 +25,6 @@ struct ParseResult {
  * @param path, default_path, check_readable Storage container to inspect.
  * @return ParseResult struct.
  */
- 
-ParseResult parse_config(const std::string& path, const std::string& default_path, bool check_readable);
+
+ParseResult parse_config(const std::string& path,
+                         const std::string& default_path, bool check_readable);

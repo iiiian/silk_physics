@@ -1,1 +1,1 @@
-  config_widget_.draw();
+config_widget_.draw();

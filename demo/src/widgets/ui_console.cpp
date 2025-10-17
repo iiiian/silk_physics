@@ -1,11 +1,13 @@
 #include "ui_console.hpp"
+
 #include <imgui.h>
+
+#include <algorithm>
 #include <deque>
 #include <string>
-#include <algorithm>
 
-static std::deque<std::string> g_lines;    
-static const size_t G_CAP = 2000;       
+static std::deque<std::string> g_lines;
+static const size_t G_CAP = 2000;
 static bool g_autoScroll = true;
 static char g_filter[128] = {0};
 
@@ -15,7 +17,6 @@ void ui_console_push(std::string line) {
 }
 
 void ui_console_clear() { g_lines.clear(); }
-
 
 static void ui_console_render_list() {
   const bool useFilter = (g_filter[0] != '\0');
@@ -33,16 +34,20 @@ static void ui_console_render_list() {
     ImGui::SetScrollHereY(1.0f);
 }
 
-//console panel
+// console panel
 void ui_console_draw_window(const char* title) {
-  if (!ImGui::Begin(title)) { ImGui::End(); return; }
+  if (!ImGui::Begin(title)) {
+    ImGui::End();
+    return;
+  }
 
   if (ImGui::Button("Clear")) ui_console_clear();
   ImGui::SameLine();
   ImGui::Checkbox("Auto-scroll", &g_autoScroll);
   ImGui::SameLine();
   ImGui::SetNextItemWidth(220.f);
-  ImGui::InputTextWithHint("##filter", "filter (substring)", g_filter, IM_ARRAYSIZE(g_filter));
+  ImGui::InputTextWithHint("##filter", "filter (substring)", g_filter,
+                           IM_ARRAYSIZE(g_filter));
   ImGui::Separator();
 
   ImGui::BeginChild("console_region_window", ImVec2(0, 0), false,
@@ -55,13 +60,13 @@ void ui_console_draw_window(const char* title) {
 
 // ui_console.cpp
 void ui_console_draw_inline(float height) {
-  //color
-  ImVec4 orange     = ImVec4(1.00f, 0.647f, 0.00f, 1.0f); // #FFA500
+  // color
+  ImVec4 orange = ImVec4(1.00f, 0.647f, 0.00f, 1.0f);  // #FFA500
   ImVec4 orange_act = ImVec4(0.80f, 0.52f, 0.10f, 1.0f);
 
-  ImGui::PushStyleColor(ImGuiCol_Header,        orange_act);
+  ImGui::PushStyleColor(ImGuiCol_Header, orange_act);
   ImGui::PushStyleColor(ImGuiCol_HeaderHovered, orange);
-  ImGui::PushStyleColor(ImGuiCol_HeaderActive,  orange_act);
+  ImGui::PushStyleColor(ImGuiCol_HeaderActive, orange_act);
 
   // retracktable
   const ImGuiTreeNodeFlags flags =
@@ -70,20 +75,20 @@ void ui_console_draw_inline(float height) {
   bool open = ImGui::CollapsingHeader("Console", flags);
   ImGui::PopStyleColor(3);
 
-  if (!open) return; 
-
+  if (!open) return;
 
   if (ImGui::Button("Clear")) ui_console_clear();
   ImGui::SameLine();
   ImGui::Checkbox("Auto-scroll", &g_autoScroll);
   ImGui::SameLine();
   ImGui::SetNextItemWidth(220.f);
-  ImGui::InputTextWithHint("##filter_inline", "filter (substring)", g_filter, IM_ARRAYSIZE(g_filter));
+  ImGui::InputTextWithHint("##filter_inline", "filter (substring)", g_filter,
+                           IM_ARRAYSIZE(g_filter));
   ImGui::Separator();
 
   if (height < 0.0f) height = ImGui::GetTextLineHeight() * 12.0f;
   ImGui::BeginChild("console_region_inline", ImVec2(0, height), false,
                     ImGuiWindowFlags_HorizontalScrollbar);
-  ui_console_render_list(); 
+  ui_console_render_list();
   ImGui::EndChild();
 }

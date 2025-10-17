@@ -1,0 +1,115 @@
+#include <polyscope/polyscope.h>
+#include <spdlog/spdlog.h>
+
+#include <argparse/argparse.hpp>
+#include <fstream>
+#include <nlohmann/json.hpp>
+#include <string>
+
+#include "demo.hpp"
+<<<<<<< HEAD
+
+#include <imgui.h>   
+=======
+using json = nlohmann::json;
+>>>>>>> 5650551 (fix typo and formatting and change cloth model path to optional arg)
+
+namespace py = polyscope;
+
+int main(int argc, char** argv) {
+  spdlog::set_level(spdlog::level::debug);
+
+  argparse::ArgumentParser program("Silk Demo");
+  program.add_description("A Blazingly fast projective dynamics cloth solver");
+
+  std::string config_path;
+  program.add_argument("-c", "--config")
+      .help("The all in one simulation config file")
+      .store_into(config_path);
+
+  bool is_headless = false;
+  program.add_argument("-h", "--headless")
+      .help("Run the simulation in headless cli")
+      .flag()
+      .store_into(is_headless);
+
+  std::string cloth_model_path;
+  program.add_argument("-m", "--model")
+      .help("Path to cloth model file. Soon to be deprecated")
+      .store_into(cloth_model_path);
+
+  try {
+    program.parse_args(argc, argv);
+  } catch (const std::exception& err) {
+    spdlog::error("Fail to parse cli args. Reason: {}", err.what());
+    return 1;
+  }
+
+  if (!config_path.empty()) {
+<<<<<<< HEAD
+    // TODO: call json parsing routine here.
+    spdlog::info("Load config file {}. Currently doing nothing", config_path);
+=======
+    try {
+      std::ifstream in(config_path);
+      if (!in) {
+        spdlog::error("Cannot open config file: {}", config_path);
+        return 1;
+      }
+
+      json cfg = json::parse(in, nullptr, true, true);  // 允许注释
+
+      if (cfg.contains("headless") && cfg["headless"].is_boolean()) {
+        if (is_headless == false) {
+          is_headless = cfg["headless"].get<bool>();
+        }
+      }
+
+      if (cfg.contains("cloth_model_path") &&
+          cfg["cloth_model_path"].is_string()) {
+        if (cloth_model_path.empty()) {
+          cloth_model_path = cfg["cloth_model_path"].get<std::string>();
+        }
+      }
+
+      spdlog::info("Config loaded from {}", config_path);
+    } catch (const std::exception& e) {
+      spdlog::error("JSON error: {}", e.what());
+      return 1;
+    }
+>>>>>>> 5650551 (fix typo and formatting and change cloth model path to optional arg)
+  }
+
+  if (is_headless) {
+    // TODO: lauch cli mode here.
+    spdlog::info("Headless mode. Currently doing nothing");
+    return 0;
+  }
+
+  py::options::buildGui = false;
+  py::init();
+  py::view::setUpDir(polyscope::UpDir::ZUp);
+  py::view::setFrontDir(polyscope::FrontDir::XFront);
+  py::options::groundPlaneMode = py::GroundPlaneMode::None;
+
+  Demo demo_app;
+
+  if (!cloth_model_path.empty()) {
+    spdlog::info("Attempting to load model from command line argument: {}",
+                 cloth_model_path);
+    if (!demo_app.load_model_from_path(cloth_model_path)) {
+      spdlog::warn(
+          "Could not load initial model specified via command line: {}. "
+          "Application will continue without it.",
+          cloth_model_path);
+    } else {
+      spdlog::info(
+          "No initial model path provided via command line arguments. "
+          "Load a model using the GUI.");
+    }
+  }
+
+  demo_app.run();
+
+  return 0;
+}

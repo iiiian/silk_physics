@@ -26,7 +26,7 @@ SceneWidget::SceneWidget(Context& context) : ctx_(context) {}
 std::string SceneWidget::generate_unique_name(const std::string& base_name) {
   std::string candidate = base_name;
   int counter = 1;
-  
+
   while (true) {
     bool name_exists = false;
     for (const auto& obj : ctx_.objects) {
@@ -35,11 +35,11 @@ std::string SceneWidget::generate_unique_name(const std::string& base_name) {
         break;
       }
     }
-    
+
     if (!name_exists) {
       return candidate;
     }
-    
+
     candidate = base_name + " (" + std::to_string(counter) + ")";
     counter++;
   }
@@ -92,8 +92,7 @@ bool SceneWidget::load_object_from_path(const std::string& path,
   bool created = false;
   switch (type) {
     case SilkObjectType::Cloth: {
-      auto cloth =
-          Cloth::try_make_cloth(&ctx_.silk_world, unique_name, V, F);
+      auto cloth = Cloth::try_make_cloth(&ctx_.silk_world, unique_name, V, F);
       if (cloth) {
         ctx_.objects.push_back(std::make_unique<Cloth>(std::move(*cloth)));
         created = true;
@@ -103,8 +102,8 @@ bool SceneWidget::load_object_from_path(const std::string& path,
       break;
     }
     case SilkObjectType::Obstacle: {
-      auto obstacle = Obstacle::try_make_obstacle(&ctx_.silk_world,
-                                                  unique_name, V, F);
+      auto obstacle =
+          Obstacle::try_make_obstacle(&ctx_.silk_world, unique_name, V, F);
       if (obstacle) {
         ctx_.objects.push_back(
             std::make_unique<Obstacle>(std::move(*obstacle)));
