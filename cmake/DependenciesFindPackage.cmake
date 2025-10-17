@@ -1,5 +1,7 @@
 include_guard(GLOBAL)
 
+find_package(CUDAToolkit)
+
 find_package(eigen3 REQUIRED)
 
 find_package(libigl REQUIRED)

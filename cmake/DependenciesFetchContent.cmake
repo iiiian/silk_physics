@@ -6,6 +6,7 @@ include_guard(GLOBAL)
 
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
+find_package(CUDAToolkit)
 
 # ---------------------------------------------------------------
 # Other dependencies

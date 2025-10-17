@@ -23,6 +23,7 @@ add_library(silk ${SILK_SOURCES})
 add_library(silk::silk ALIAS silk)
 
 set_target_properties(silk PROPERTIES VERSION 0.1.0)
+set_target_properties(silk PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
 include(${CMAKE_SOURCE_DIR}/cmake/SilkDebugFlags.cmake)
 silk_debug_warnings(silk)
