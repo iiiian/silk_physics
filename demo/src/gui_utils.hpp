@@ -4,6 +4,7 @@
 #include <polyscope/surface_mesh.h>
 
 #include <Eigen/Core>
+#include <optional>
 #include <silk/silk.hpp>
 #include <vector>
 
@@ -15,6 +16,13 @@ enum class UIMode { Normal, Paint, Sim };
 using Vert = Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor>;
 using Face = Eigen::Matrix<int, Eigen::Dynamic, 3, Eigen::RowMajor>;
 using Edge = Eigen::Matrix<int, Eigen::Dynamic, 2, Eigen::RowMajor>;
+
+struct Mesh {
+  Vert verts;
+  Face faces;
+};
+
+std::optional<Mesh> load_mesh_from_file(const std::string& path);
 
 struct Context {
   UIMode ui_mode = UIMode::Normal;
