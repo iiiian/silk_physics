@@ -6,13 +6,15 @@
 #include <deque>
 #include <string>
 
-static std::deque<std::string> g_lines;
-static const size_t G_CAP = 2000;
-static bool g_autoScroll = true;
-static char g_filter[128] = {0};
+std::deque<std::string> g_lines;
+const size_t G_CAP = 2000;
+bool g_autoScroll = true;
+char g_filter[128] = {0};
 
 void ui_console_push(std::string line) {
-  if (g_lines.size() >= G_CAP) g_lines.pop_front();
+  if (g_lines.size() >= G_CAP) {
+    g_lines.pop_front();
+  }
   g_lines.push_back(std::move(line));
 }
 
@@ -30,8 +32,9 @@ static void ui_console_render_list() {
     ImGui::TextUnformatted(s.c_str());
   }
 
-  if (g_autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+  if (g_autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
     ImGui::SetScrollHereY(1.0f);
+  }
 }
 
 // console panel
@@ -41,7 +44,9 @@ void ui_console_draw_window(const char* title) {
     return;
   }
 
-  if (ImGui::Button("Clear")) ui_console_clear();
+  if (ImGui::Button("Clear")) {
+    ui_console_clear();
+  }
   ImGui::SameLine();
   ImGui::Checkbox("Auto-scroll", &g_autoScroll);
   ImGui::SameLine();
@@ -58,7 +63,6 @@ void ui_console_draw_window(const char* title) {
   ImGui::End();
 }
 
-// ui_console.cpp
 void ui_console_draw_inline(float height) {
   // color
   ImVec4 orange = ImVec4(1.00f, 0.647f, 0.00f, 1.0f);  // #FFA500
@@ -75,9 +79,13 @@ void ui_console_draw_inline(float height) {
   bool open = ImGui::CollapsingHeader("Console", flags);
   ImGui::PopStyleColor(3);
 
-  if (!open) return;
+  if (!open) {
+    return;
+  }
 
-  if (ImGui::Button("Clear")) ui_console_clear();
+  if (ImGui::Button("Clear")) {
+    ui_console_clear();
+  }
   ImGui::SameLine();
   ImGui::Checkbox("Auto-scroll", &g_autoScroll);
   ImGui::SameLine();
@@ -86,7 +94,9 @@ void ui_console_draw_inline(float height) {
                            IM_ARRAYSIZE(g_filter));
   ImGui::Separator();
 
-  if (height < 0.0f) height = ImGui::GetTextLineHeight() * 12.0f;
+  if (height < 0.0f) {
+    height = ImGui::GetTextLineHeight() * 12.0f;
+  }
   ImGui::BeginChild("console_region_inline", ImVec2(0, height), false,
                     ImGuiWindowFlags_HorizontalScrollbar);
   ui_console_render_list();
