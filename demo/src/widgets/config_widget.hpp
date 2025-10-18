@@ -1,36 +1,24 @@
 #pragma once
-#include <polyscope/point_cloud.h>
 
-#include <Eigen/Core>
-#include <functional>
-#include <glm/glm.hpp>
 #include <string>
+#include <string_view>
 
 #include "../gui_utils.hpp"
-#include "ui_console.hpp"
 
 //**************************************************************/
 //**             Configuration Selection                       */
 //**************************************************************/
 
-// Work in Progress...
-enum class jsonPath { DEFAULT, CUSTOM };
 class ConfigWidget : public IWidget {
  private:
+  static constexpr std::string_view DEFAULT_JSON = "/DTest/default.json";
+
   Context& ctx_;
-  jsonPath path = jsonPath::DEFAULT;
-  std::string title_ = "Config Selection";  // Title
-  std::function<void(jsonPath)> status_;
-  // default path
-  std::string picked_path_ = "/DTest/default.json";
+  std::string title_ = "Config Selection";
+  bool use_default_json_ = true;
 
  public:
-  // onChange
-  explicit ConfigWidget(Context& ctx,
-                        std::function<void(jsonPath)> status = nullptr);
-  // draw
-  void draw() override;
+  explicit ConfigWidget(Context& ctx);
 
-  void set_path(jsonPath p);
-  jsonPath p() const { return path; }
+  void draw() override;
 };
