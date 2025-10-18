@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include <optional>
 
+#include "../config.hpp"
 #include "../gui_utils.hpp"
 #include "../object.hpp"
 #include "silk/silk.hpp"
@@ -34,9 +35,11 @@ class Obstacle : public IObject {
   bool drag_position_changed_;
 
  public:
-  static std::optional<Obstacle> try_make_obstacle(silk::World* world,
-                                                   std::string name, Vert V,
-                                                   Face F);
+  static std::optional<Obstacle> make_obstacle(silk::World* world,
+                                               std::string name, Vert V,
+                                               Face F);
+  static std::optional<Obstacle> make_obstacle(
+      silk::World* world, const config::ObstacleObject& obj);
 
   // default ctor is private, use factory function try_make_obstacle instead.
   Obstacle(const Obstacle&) = delete;

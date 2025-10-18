@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 
+#include "../config.hpp"
 #include "../gui_utils.hpp"
 #include "../object.hpp"
 #include "silk/silk.hpp"
@@ -40,8 +41,10 @@ class Cloth : public IObject {
   bool transform_changed_;
 
  public:
-  static std::optional<Cloth> try_make_cloth(silk::World* world,
-                                             std::string name, Vert V, Face F);
+  static std::optional<Cloth> make_cloth(silk::World* world, std::string name,
+                                         Vert V, Face F);
+  static std::optional<Cloth> make_cloth(silk::World* world,
+                                         const config::ClothObject& obj);
 
   // default ctor is private, use factory function try_make_cloth instead.
   Cloth(const Cloth&) = delete;

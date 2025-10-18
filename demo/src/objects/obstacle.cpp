@@ -8,14 +8,15 @@
 #include <utility>
 
 #include "../glm_utils.cpp"
+#include "../gui_utils.hpp"
 #include "../polyscope_silk_interop.hpp"
 #include "draw_utils.hpp"
 
 namespace py = polyscope;
 
-std::optional<Obstacle> Obstacle::try_make_obstacle(silk::World* world,
-                                                    std::string name, Vert V,
-                                                    Face F) {
+std::optional<Obstacle> Obstacle::make_obstacle(silk::World* world,
+                                                std::string name, Vert V,
+                                                Face F) {
   if (!world) {
     return std::nullopt;
   }
@@ -54,6 +55,45 @@ std::optional<Obstacle> Obstacle::try_make_obstacle(silk::World* world,
   o.drag_position_changed_ = false;
 
   return o;
+}
+
+std::optional<Obstacle> Obstacle::make_obstacle(
+    silk::World* world, const config::ObstacleObject& obj) {
+  auto mesh = load_mesh_from_file(obj.mesh);
+  if (!mesh) {
+    return std::nullopt;
+  }
+
+  auto obstacle = make_obstacle(world, obj.name, std::move(mesh->verts),
+                                std::move(mesh->faces));
+  if (!obstacle) {
+    return std::nullopt;
+  }
+
+  obstacle->collision_config_.is_collision_on = obj.collision.enabled;
+  obstacle->collision_config_.is_self_collision_on =
+      obj.collision.self_collision;
+  obstacle->collision_config_.group = obj.collision.group;
+  obstacle->collision_config_.friction = obj.collision.friction;
+  obstacle->collision_config_.restitution = obj.collision.restitution;
+
+  // TODO: improve config type to avoid this akward translation.
+  auto arr_to_glm = [](const std::array<double, 3>& arr) -> glm::vec3 {
+    glm::vec3 v;
+    v[0] = arr[0];
+    v[1] = arr[1];
+    v[2] = arr[2];
+
+    return v;
+  };
+
+  obstacle->position_ = arr_to_glm(obj.transform.translation);
+  obstacle->rotation_ = arr_to_glm(obj.transform.rotation_euler_deg);
+
+  auto& s = obj.transform.scale;
+  obstacle->scale_ = std::max(s[0], std::max(s[1], s[2]));
+
+  return obstacle;
 }
 
 Obstacle::Obstacle(Obstacle&& other) noexcept {

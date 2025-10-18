@@ -7,6 +7,9 @@ void SimSettingWidget::draw() {
 
   if (ImGui::CollapsingHeader("Simulation Settings",
                               ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ctx_.global_config.dt != 0) {
+      target_fps_ = 1.0f / ctx_.global_config.dt;
+    }
     if (ImGui::InputInt("Target FPS", &target_fps_)) {
       ctx_.global_config.dt = 1.0f / target_fps_;
     }

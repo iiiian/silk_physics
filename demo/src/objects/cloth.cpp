@@ -5,18 +5,19 @@
 #include <polyscope/surface_mesh.h>
 #include <spdlog/spdlog.h>
 
-#include <cstring>
+#include <array>
 #include <glm/glm.hpp>
 #include <queue>
 
 #include "../glm_utils.hpp"
+#include "../gui_utils.hpp"
 #include "../polyscope_silk_interop.hpp"
 #include "draw_utils.hpp"
 
 namespace py = polyscope;
 
-std::optional<Cloth> Cloth::try_make_cloth(silk::World* world, std::string name,
-                                           Vert V, Face F) {
+std::optional<Cloth> Cloth::make_cloth(silk::World* world, std::string name,
+                                       Vert V, Face F) {
   if (V.rows() == 0) {
     return std::nullopt;
   }
@@ -59,6 +60,48 @@ std::optional<Cloth> Cloth::try_make_cloth(silk::World* world, std::string name,
   c.transform_changed_ = false;
 
   return c;
+}
+
+std::optional<Cloth> Cloth::make_cloth(silk::World* world,
+                                       const config::ClothObject& obj) {
+  auto mesh = load_mesh_from_file(obj.mesh);
+  if (!mesh) {
+    return std::nullopt;
+  }
+
+  auto cloth = make_cloth(world, obj.name, std::move(mesh->verts),
+                          std::move(mesh->faces));
+  if (!cloth) {
+    return std::nullopt;
+  }
+
+  cloth->cloth_config_.elastic_stiffness = obj.cloth.elastic_stiffness;
+  cloth->cloth_config_.bending_stiffness = obj.cloth.bending_stiffness;
+  cloth->cloth_config_.density = obj.cloth.density;
+  cloth->cloth_config_.damping = obj.cloth.damping;
+  cloth->collision_config_.is_collision_on = obj.collision.enabled;
+  cloth->collision_config_.is_self_collision_on = obj.collision.self_collision;
+  cloth->collision_config_.group = obj.collision.group;
+  cloth->collision_config_.friction = obj.collision.friction;
+  cloth->collision_config_.restitution = obj.collision.restitution;
+
+  // TODO: improve config type to avoid this akward translation.
+  auto arr_to_glm = [](const std::array<double, 3>& arr) -> glm::vec3 {
+    glm::vec3 v;
+    v[0] = arr[0];
+    v[1] = arr[1];
+    v[2] = arr[2];
+
+    return v;
+  };
+
+  cloth->position_ = arr_to_glm(obj.transform.translation);
+  cloth->rotation_ = arr_to_glm(obj.transform.rotation_euler_deg);
+
+  auto& s = obj.transform.scale;
+  cloth->scale_ = std::max(s[0], std::max(s[1], s[2]));
+
+  return cloth;
 }
 
 Cloth::Cloth(Cloth&& other) noexcept {

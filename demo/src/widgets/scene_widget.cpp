@@ -81,7 +81,7 @@ bool SceneWidget::load_object_from_path(const std::string& path,
     }
     case SilkObjectType::Obstacle: {
       auto obstacle =
-          Obstacle::try_make_obstacle(&ctx_.silk_world, unique_name, V, F);
+          Obstacle::make_obstacle(&ctx_.silk_world, unique_name, V, F);
       if (obstacle) {
         ctx_.objects.push_back(
             std::make_unique<Obstacle>(std::move(*obstacle)));
