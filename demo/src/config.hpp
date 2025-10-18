@@ -82,12 +82,3 @@ struct SimConfig {
   std::vector<config::ClothObject> cloths;
   std::vector<config::ObstacleObject> obstacles;
 };
-
-// using Global = Config::Global;
-// using Collision = Config::Collision;
-// using Transform = Config::Transform;
-// using ClothParams = Config::ClothParams;
-// using ObjectType = Config::ObjectType;
-// using ObjectBase = Config::ObjectBase;
-// using ClothObject = Config::ClothObject;
-// using ObstacleObject = Config::ObstacleObject;
