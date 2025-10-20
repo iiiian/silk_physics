@@ -3,10 +3,12 @@
 #include <spdlog/spdlog.h>
 
 #include <argparse/argparse.hpp>
-#include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 
+#include "config.hpp"
 #include "demo.hpp"
+#include "json_parse.hpp"
 
 namespace py = polyscope;
 
@@ -34,9 +36,15 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  std::optional<SimConfig> sim_config = std::nullopt;
   if (!config_path.empty()) {
     // TODO: call json parsing routine here.
-    spdlog::info("Load config file {}. Currently doing nothing", config_path);
+    sim_config = parse_config(config_path);
+    if (!sim_config) {
+      spdlog::error("Fail to parse config file {}.", config_path);
+    } else {
+      spdlog::info("Load config file {}. Currently doing nothing", config_path);
+    }
   }
 
   if (is_headless) {
@@ -52,6 +60,9 @@ int main(int argc, char** argv) {
   py::options::groundPlaneMode = py::GroundPlaneMode::None;
 
   Demo demo_app;
+  if (sim_config) {
+    demo_app.apply_config(*sim_config);
+  }
 
   demo_app.run();
 

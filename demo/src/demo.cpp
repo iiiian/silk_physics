@@ -41,13 +41,6 @@ void Demo::draw() {
 
 void Demo::run() { py::show(); }
 
-bool Demo::load_model_from_path(const std::string& path) {
-  // Default initial load as a cloth object
-  if (scene_widget_.load_object_from_path(path, SilkObjectType::Cloth)) {
-    spdlog::info("Initial model loaded successfully from: {}", path);
-    return true;
-  }
-
-  spdlog::error("Failed to load initial model from: {}", path);
-  return false;
+void Demo::apply_config(const SimConfig& config) {
+  config_widget_.apply_config_to_gui(config);
 }

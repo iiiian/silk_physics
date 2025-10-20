@@ -13,9 +13,6 @@ class ConfigWidget : public IWidget {
 
  public:
   explicit ConfigWidget(Context& ctx);
-
   void draw() override;
-
- private:
   void apply_config_to_gui(const SimConfig& config);
 };

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config.hpp"
 #include "gui_utils.hpp"
 #include "widgets/config_widget.hpp"
 #include "widgets/gpu_solver_widget.hpp"
@@ -10,6 +11,7 @@
 #include "widgets/simulator_widget.hpp"
 #include "widgets/statistic_widget.hpp"
 #include "widgets/ui_console.hpp"
+
 class Demo {
  private:
   Context ctx_ = {};
@@ -26,7 +28,7 @@ class Demo {
  public:
   Demo();
   void run();
-  bool load_model_from_path(const std::string& path);
+  void apply_config(const SimConfig& config);
 
  private:
   void draw();
