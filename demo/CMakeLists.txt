@@ -3,6 +3,7 @@ set(DEMO_SOURCES
     src/main.cpp
     src/polyscope_silk_interop.cpp
     src/alembic_writer.cpp
+    src/gui_utils.cpp
     src/objects/cloth.cpp
     src/objects/obstacle.cpp
     src/objects/draw_utils.cpp
@@ -13,6 +14,10 @@ set(DEMO_SOURCES
     src/widgets/sim_setting_widget.cpp
     src/widgets/simulator_widget.cpp
     src/widgets/statistic_widget.cpp
+    src/widgets/config_widget.cpp
+    src/json_parse.cpp
+    src/widgets/ui_console.cpp 
+    
 )
 
 add_executable(demo ${DEMO_SOURCES})
