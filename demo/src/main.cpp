@@ -38,8 +38,8 @@ int main(int argc, char** argv) {
 
   std::optional<SimConfig> sim_config = std::nullopt;
   if (!config_path.empty()) {
-    // TODO: call json parsing routine here.
     sim_config = parse_config(config_path);
+    // TODO: sanitize simulation config here
     if (!sim_config) {
       spdlog::error("Fail to parse config file {}.", config_path);
     } else {
