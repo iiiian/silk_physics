@@ -17,21 +17,24 @@
 #include "gui_utils.hpp"
 #include "object.hpp"
 
-constexpr float DEG_TO_RAD = 0.017453292519943295769f;
-
-Eigen::Vector3f make_vec3(const std::array<double, 3>& arr) {
-  return {static_cast<float>(arr[0]), static_cast<float>(arr[1]),
-          static_cast<float>(arr[2])};
-}
-
 void apply_transform_to_vertices(const config::Transform& transform,
                                  Vert& verts) {
-  Eigen::Vector3f translation = make_vec3(transform.translation);
+  constexpr float DEG_TO_RAD = 0.017453292519943295769f;
+
+  Eigen::Vector3f translation;
+  translation[0] = transform.translation[0];
+  translation[1] = transform.translation[1];
+  translation[2] = transform.translation[2];
+
   Eigen::Vector3f rotation{
       static_cast<float>(transform.rotation_euler_deg[0]) * DEG_TO_RAD,
       static_cast<float>(transform.rotation_euler_deg[1]) * DEG_TO_RAD,
       static_cast<float>(transform.rotation_euler_deg[2]) * DEG_TO_RAD};
-  Eigen::Vector3f scale = make_vec3(transform.scale);
+
+  Eigen::Vector3f scale;
+  scale[0] = transform.scale[0];
+  scale[1] = transform.scale[1];
+  scale[2] = transform.scale[2];
 
   Eigen::Matrix3f rot_x =
       Eigen::AngleAxisf(rotation.x(), Eigen::Vector3f::UnitX())
