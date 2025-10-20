@@ -1,6 +1,7 @@
 set(DEMO_SOURCES
     src/demo.cpp
     src/main.cpp
+    src/headless.cpp
     src/polyscope_silk_interop.cpp
     src/alembic_writer.cpp
     src/gui_utils.cpp

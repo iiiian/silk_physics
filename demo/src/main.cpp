@@ -8,6 +8,7 @@
 
 #include "config.hpp"
 #include "demo.hpp"
+#include "headless.hpp"
 #include "json_parse.hpp"
 
 namespace py = polyscope;
@@ -29,6 +30,11 @@ int main(int argc, char** argv) {
       .flag()
       .store_into(is_headless);
 
+  std::string out_path = "out.abc";
+  program.add_argument("-o", "--output")
+      .help("Output path for headless mode")
+      .store_into(is_headless);
+
   try {
     program.parse_args(argc, argv);
   } catch (const std::exception& err) {
@@ -48,23 +54,24 @@ int main(int argc, char** argv) {
   }
 
   if (is_headless) {
-    // TODO: lauch cli mode here.
-    spdlog::info("Headless mode. Currently doing nothing");
+    spdlog::info("Headless mode.");
+    headless_run(*sim_config, out_path);
     return 0;
+  } else {
+    spdlog::info("GUI mode.");
+
+    py::options::buildGui = false;
+    py::init();
+    py::view::setUpDir(polyscope::UpDir::ZUp);
+    py::view::setFrontDir(polyscope::FrontDir::XFront);
+    py::options::groundPlaneMode = py::GroundPlaneMode::None;
+
+    Demo demo_app;
+    if (sim_config) {
+      demo_app.apply_config(*sim_config);
+    }
+    demo_app.run();
   }
-
-  py::options::buildGui = false;
-  py::init();
-  py::view::setUpDir(polyscope::UpDir::ZUp);
-  py::view::setFrontDir(polyscope::FrontDir::XFront);
-  py::options::groundPlaneMode = py::GroundPlaneMode::None;
-
-  Demo demo_app;
-  if (sim_config) {
-    demo_app.apply_config(*sim_config);
-  }
-
-  demo_app.run();
 
   return 0;
 }
