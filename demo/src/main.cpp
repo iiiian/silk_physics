@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
     if (!sim_config) {
       spdlog::error("Fail to parse config file {}.", config_path);
     } else {
-      spdlog::info("Load config file {}. Currently doing nothing", config_path);
+      spdlog::info("Load config file {}.", config_path);
     }
   }
 
