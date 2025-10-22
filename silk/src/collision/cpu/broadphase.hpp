@@ -293,33 +293,14 @@ class KDTree {
 
   KDTree(const KDTree&) = delete;
 
-  KDTree(KDTree&& tree) noexcept {
-    collider_num_ = tree.collider_num_;
-    colliders_ = std::move(tree.colliders_);
-    root_ = tree.root_;
-    stack_ = std::move(tree.stack_);
-    proxies_ = std::move(tree.proxies_);
-    buffer_ = std::move(tree.buffer_);
-
-    tree.collider_num_ = 0;
-    tree.root_ = nullptr;
-  }
+  KDTree(KDTree&& other) noexcept { swap(other); }
 
   ~KDTree() { delete_subtree(root_); }
 
   KDTree& operator=(const KDTree&) = delete;
 
-  KDTree& operator=(KDTree&& tree) noexcept {
-    collider_num_ = tree.collider_num_;
-    colliders_ = std::move(tree.colliders_);
-    root_ = tree.root_;
-    stack_ = std::move(tree.stack_);
-    proxies_ = std::move(tree.proxies_);
-    buffer_ = std::move(tree.buffer_);
-
-    tree.collider_num_ = 0;
-    tree.root_ = nullptr;
-
+  KDTree& operator=(KDTree&& other) noexcept {
+    swap(other);
     return *this;
   }
 
@@ -497,6 +478,18 @@ class KDTree {
   }
 
  private:
+  void swap(KDTree& other) noexcept {
+    if (this == &other) {
+      return;
+    }
+    std::swap(collider_num_, other.collider_num_);
+    std::swap(colliders_, other.colliders_);
+    std::swap(root_, other.root_);
+    std::swap(stack_, other.stack_);
+    std::swap(proxies_, other.proxies_);
+    std::swap(buffer_, other.buffer_);
+  }
+
   // Ensure `buffer_` can hold at least `num` integers; avoids repeated
   // reallocations during traversal when building external collider lists.
   void ensure_buffer_size(int num) {
