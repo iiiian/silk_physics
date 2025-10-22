@@ -85,11 +85,11 @@ class HeadlessCloth : public IObject {
 
   ~HeadlessCloth() override {
     if (world_ && handle_ != 0) {
-      silk::Result result = world_->remove_cloth(handle_);
-      if (!result) {
+      silk::Result r = world_->remove_cloth(handle_);
+      if (!r) {
         spdlog::warn(
             "Failed to remove cloth '{}' during destruction. Error: {}", name_,
-            result.to_string());
+            r.to_string());
       }
     }
   }
@@ -98,12 +98,15 @@ class HeadlessCloth : public IObject {
 
   HeadlessCloth& operator=(const HeadlessCloth&) = delete;
 
-  HeadlessCloth(HeadlessCloth&& other) noexcept { swap(other); }
+  HeadlessCloth(HeadlessCloth&& other) noexcept {
+    swap(other);
+    other.handle_ = 0;
+  }
 
   HeadlessCloth& operator=(HeadlessCloth&& other) noexcept {
     if (this != &other) {
-      HeadlessCloth temp(std::move(other));
-      swap(temp);
+      swap(other);
+      other.handle_ = 0;
     }
     return *this;
   }
@@ -130,8 +133,6 @@ class HeadlessCloth : public IObject {
   void draw() override {}
 
   bool init_sim() override {
-    cache_.clear();
-
     silk::MeshConfig mesh_config;
     mesh_config.verts.data = verts_.data();
     mesh_config.verts.size = verts_.size();
@@ -175,15 +176,8 @@ class HeadlessCloth : public IObject {
     return true;
   }
 
-  bool exit_sim() override {
-    silk::Result r = world_->remove_cloth(handle_);
-    if (!r) {
-      spdlog::error("Failed to remove cloth '{}' after simulation. Error: {}",
-                    name_, r.to_string());
-      return false;
-    }
-    return true;
-  }
+  // dummy
+  bool exit_sim() override { return true; }
 
   // dummy
   void handle_pick(const polyscope::PickResult&, bool, int) override {}
@@ -195,15 +189,14 @@ class HeadlessCloth : public IObject {
   HeadlessCloth() = default;
 
   void swap(HeadlessCloth& other) noexcept {
-    using std::swap;
-    swap(world_, other.world_);
-    swap(name_, other.name_);
-    swap(verts_, other.verts_);
-    swap(faces_, other.faces_);
-    swap(cloth_config_, other.cloth_config_);
-    swap(collision_config_, other.collision_config_);
-    swap(handle_, other.handle_);
-    swap(cache_, other.cache_);
+    std::swap(world_, other.world_);
+    std::swap(name_, other.name_);
+    std::swap(verts_, other.verts_);
+    std::swap(faces_, other.faces_);
+    std::swap(cloth_config_, other.cloth_config_);
+    std::swap(collision_config_, other.collision_config_);
+    std::swap(handle_, other.handle_);
+    std::swap(cache_, other.cache_);
   }
 };
 
@@ -252,11 +245,13 @@ class HeadlessObstacle : public IObject {
   }
 
   ~HeadlessObstacle() override {
-    silk::Result result = world_->remove_obstacle(handle_);
-    if (!result) {
-      spdlog::warn(
-          "Failed to remove obstacle '{}' during destruction. Error: {}", name_,
-          result.to_string());
+    if (world_ && handle_ != 0) {
+      silk::Result r = world_->remove_obstacle(handle_);
+      if (!r) {
+        spdlog::warn(
+            "Failed to remove obstacle '{}' during destruction. Error: {}",
+            name_, r.to_string());
+      }
     }
   }
 
@@ -264,12 +259,15 @@ class HeadlessObstacle : public IObject {
 
   HeadlessObstacle& operator=(const HeadlessObstacle&) = delete;
 
-  HeadlessObstacle(HeadlessObstacle&& other) noexcept { swap(other); }
+  HeadlessObstacle(HeadlessObstacle&& other) noexcept {
+    swap(other);
+    other.handle_ = 0;
+  }
 
   HeadlessObstacle& operator=(HeadlessObstacle&& other) noexcept {
     if (this != &other) {
-      HeadlessObstacle temp(std::move(other));
-      swap(temp);
+      swap(other);
+      other.handle_ = 0;
     }
     return *this;
   }
@@ -297,8 +295,6 @@ class HeadlessObstacle : public IObject {
   void draw() override {}
 
   bool init_sim() override {
-    cache_.clear();
-
     silk::MeshConfig mesh_config;
     mesh_config.verts.data = verts_.data();
     mesh_config.verts.size = verts_.size();
@@ -323,16 +319,8 @@ class HeadlessObstacle : public IObject {
   // dummy
   bool sim_step_post(float current_time) override { return true; }
 
-  bool exit_sim() override {
-    silk::Result r = world_->remove_obstacle(handle_);
-    if (!r) {
-      spdlog::error(
-          "Failed to remove obstacle '{}' after simulation. Error: {}", name_,
-          r.to_string());
-      return false;
-    }
-    return true;
-  }
+  // dummy
+  bool exit_sim() override { return true; }
 
   // dummy
   void handle_pick(const polyscope::PickResult&, bool, int) override {}
@@ -344,14 +332,13 @@ class HeadlessObstacle : public IObject {
   HeadlessObstacle() = default;
 
   void swap(HeadlessObstacle& other) noexcept {
-    using std::swap;
-    swap(world_, other.world_);
-    swap(name_, other.name_);
-    swap(verts_, other.verts_);
-    swap(faces_, other.faces_);
-    swap(collision_config_, other.collision_config_);
-    swap(handle_, other.handle_);
-    swap(cache_, other.cache_);
+    std::swap(world_, other.world_);
+    std::swap(name_, other.name_);
+    std::swap(verts_, other.verts_);
+    std::swap(faces_, other.faces_);
+    std::swap(collision_config_, other.collision_config_);
+    std::swap(handle_, other.handle_);
+    std::swap(cache_, other.cache_);
   }
 };
 
@@ -409,6 +396,8 @@ void headless_run(const SimConfig& sim_config, const std::string& out_path) {
   }
 
   int total_steps = sim_config.global.total_steps;
+  spdlog::info("Headless simulation start. Total time {}s. Total steps {}",
+               sim_config.global.max_time, total_steps);
   for (int step = 0; step < total_steps; ++step) {
     for (auto& object : objects) {
       if (!object->sim_step_pre()) {
@@ -426,6 +415,7 @@ void headless_run(const SimConfig& sim_config, const std::string& out_path) {
     }
 
     float current_time = (step + 1) * global_cfg.dt;
+    spdlog::info("Finish step {}. Current time {}s", step, current_time);
     for (auto& object : objects) {
       if (!object->sim_step_post(current_time)) {
         spdlog::error("Headless simulation aborted during post-step for '{}'.",
