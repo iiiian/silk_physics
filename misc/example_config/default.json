@@ -9,8 +9,7 @@
       -9.8
     ],
     "total_steps": 500,
-    "max_time": 6.0,
-    "headless": false
+    "max_time": 6.0
   },
   "objects": [
     {

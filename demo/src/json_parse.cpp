@@ -368,14 +368,6 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
       g.max_time = v;
       return true;
     }
-    if (k == "headless") {
-      bool b;
-      if (!parse_bool(cur, b)) {
-        return false;
-      }
-      g.headless = b;
-      return true;
-    }
     // skip unknown
     return jx::skip_value(cur);
   });
@@ -585,7 +577,6 @@ void console_test(const SimConfig& c) {
           c.global.acceleration[1], c.global.acceleration[2]);
   ui_info("  total_steps = {}", c.global.total_steps);
   ui_info("  max_time = {:.6f}", c.global.max_time);
-  ui_info("  headless = {}", c.global.headless ? "true" : "false");
 
   // Cloths
   ui_info("[Cloths] count = {}", c.cloths.size());
