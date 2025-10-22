@@ -16,44 +16,7 @@
 #include "alembic_writer.hpp"
 #include "gui_utils.hpp"
 #include "object.hpp"
-
-void apply_transform_to_vertices(const config::Transform& transform,
-                                 Vert& verts) {
-  constexpr float DEG_TO_RAD = 0.017453292519943295769f;
-
-  Eigen::Vector3f translation;
-  translation[0] = transform.translation[0];
-  translation[1] = transform.translation[1];
-  translation[2] = transform.translation[2];
-
-  Eigen::Vector3f rotation{
-      static_cast<float>(transform.rotation_euler_deg[0]) * DEG_TO_RAD,
-      static_cast<float>(transform.rotation_euler_deg[1]) * DEG_TO_RAD,
-      static_cast<float>(transform.rotation_euler_deg[2]) * DEG_TO_RAD};
-
-  Eigen::Vector3f scale;
-  scale[0] = transform.scale[0];
-  scale[1] = transform.scale[1];
-  scale[2] = transform.scale[2];
-
-  Eigen::Matrix3f rot_x =
-      Eigen::AngleAxisf(rotation.x(), Eigen::Vector3f::UnitX())
-          .toRotationMatrix();
-  Eigen::Matrix3f rot_y =
-      Eigen::AngleAxisf(rotation.y(), Eigen::Vector3f::UnitY())
-          .toRotationMatrix();
-  Eigen::Matrix3f rot_z =
-      Eigen::AngleAxisf(rotation.z(), Eigen::Vector3f::UnitZ())
-          .toRotationMatrix();
-  Eigen::Matrix3f rotation_matrix = rot_z * rot_y * rot_x;
-  Eigen::Matrix3f linear = rotation_matrix * scale.asDiagonal();
-
-  for (int i = 0; i < verts.rows(); ++i) {
-    Eigen::Vector3f v = verts.row(i).transpose();
-    v = linear * v + translation;
-    verts.row(i) = v.transpose();
-  }
-}
+#include "transform.hpp"
 
 silk::ClothConfig to_cloth_config(const config::ClothParams& params) {
   silk::ClothConfig cloth;
@@ -103,7 +66,8 @@ class HeadlessCloth : public IObject {
       return std::nullopt;
     }
 
-    apply_transform_to_vertices(config.transform, mesh->verts);
+    AffineTransformer transformer{config.transform};
+    transformer.apply(mesh->verts);
 
     HeadlessCloth cloth;
     cloth.world_ = world;
@@ -271,7 +235,8 @@ class HeadlessObstacle : public IObject {
       return std::nullopt;
     }
 
-    apply_transform_to_vertices(config.transform, mesh->verts);
+    AffineTransformer transformer{config.transform};
+    transformer.apply(mesh->verts);
 
     HeadlessObstacle obstacle;
     obstacle.world_ = world;

@@ -8,10 +8,10 @@
 #include <utility>
 
 #include "../eigen_alias.hpp"
-#include "../glm_utils.cpp"
 #include "../gui_utils.hpp"
 #include "../polyscope_silk_interop.hpp"
 #include "../position_cache.hpp"
+#include "../transform.hpp"
 #include "draw_utils.hpp"
 
 namespace py = polyscope;
@@ -67,6 +67,9 @@ std::optional<Obstacle> Obstacle::make_obstacle(
     return std::nullopt;
   }
 
+  AffineTransformer transformer{obj.transform};
+  transformer.apply(mesh->verts);
+
   auto obstacle = make_obstacle(world, obj.name, std::move(mesh->verts),
                                 std::move(mesh->faces));
   if (!obstacle) {
@@ -79,22 +82,6 @@ std::optional<Obstacle> Obstacle::make_obstacle(
   obstacle->collision_config_.group = obj.collision.group;
   obstacle->collision_config_.friction = obj.collision.friction;
   obstacle->collision_config_.restitution = obj.collision.restitution;
-
-  // TODO: improve config type to avoid this akward translation.
-  auto arr_to_glm = [](const std::array<float, 3>& arr) -> glm::vec3 {
-    glm::vec3 v;
-    v[0] = arr[0];
-    v[1] = arr[1];
-    v[2] = arr[2];
-
-    return v;
-  };
-
-  obstacle->position_ = arr_to_glm(obj.transform.translation);
-  obstacle->rotation_ = arr_to_glm(obj.transform.rotation_euler_deg);
-
-  auto& s = obj.transform.scale;
-  obstacle->scale_ = std::max(s[0], std::max(s[1], s[2]));
 
   return obstacle;
 }
@@ -173,7 +160,8 @@ void Obstacle::draw() {
 
   draw_transform_widget(position_, rotation_, scale_, transform_changed_);
   if (transform_changed_) {
-    mesh_->setTransform(build_transformation(position_, rotation_, scale_));
+    AffineTransformer transformer{position_, rotation_, scale_};
+    mesh_->setTransform(transformer.get_glm_affine());
     transform_changed_ = false;
   }
 }
@@ -183,10 +171,8 @@ bool Obstacle::init_sim() {
 
   // apply transformation
   mesh_->vertexPositions.ensureHostBufferPopulated();
-  glm::mat4 T = build_transformation(position_, rotation_, scale_);
-  for (auto& v : mesh_->vertexPositions.data) {
-    v = transform_vertex(T, v);
-  }
+  AffineTransformer transformer{position_, rotation_, scale_};
+  transformer.apply(mesh_->vertexPositions.data);
   mesh_->vertexPositions.markHostBufferUpdated();
   mesh_->resetTransform();
 
@@ -261,7 +247,8 @@ bool Obstacle::sim_step_post(float current_time) {
 
 bool Obstacle::exit_sim() {
   mesh_->updateVertexPositions(V_);
-  mesh_->setTransform(build_transformation(position_, rotation_, scale_));
+  AffineTransformer transformer{position_, rotation_, scale_};
+  mesh_->setTransform(transformer.get_glm_affine());
   return true;
 }
 
