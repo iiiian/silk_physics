@@ -144,7 +144,7 @@ bool parse_string(Cur& c, std::string& out) {
   return false;
 }
 
-bool parse_number(Cur& c, double& out) {
+bool parse_number(Cur& c, float& out) {
   skip_ws(c);
   size_t start = c.i;
   if (c.peek() == '-' || c.peek() == '+') {
@@ -173,7 +173,7 @@ bool parse_number(Cur& c, double& out) {
   }
   const char* begin = c.s->c_str() + start;
   char* endptr = nullptr;
-  out = std::strtod(begin, &endptr);
+  out = std::strtof(begin, &endptr);
   if (endptr == begin) {
     return false;
   }
@@ -181,13 +181,13 @@ bool parse_number(Cur& c, double& out) {
   return true;
 }
 
-bool parse_number_array3(Cur& c, std::array<double, 3>& out) {
+bool parse_number_array3(Cur& c, std::array<float, 3>& out) {
   skip_ws(c);
   if (!expect(c, '[')) {
     return false;
   }
   skip_ws(c);
-  double a, b, d;
+  float a, b, d;
   if (!parse_number(c, a)) {
     return false;
   }
@@ -213,12 +213,12 @@ bool parse_number_array3(Cur& c, std::array<double, 3>& out) {
   return true;
 }
 
-bool parse_scale3(Cur& c, std::array<double, 3>& out) {
+bool parse_scale3(Cur& c, std::array<float, 3>& out) {
   skip_ws(c);
   if (c.peek() == '[') {
     return parse_number_array3(c, out);
   } else {
-    double s;
+    float s;
     if (!parse_number(c, s)) {
       return false;
     }
@@ -299,7 +299,7 @@ bool skip_value(Cur& cur) {
     return parse_string(cur, tmp);
   }
   bool b;
-  double d;
+  float d;
   if (parse_bool(cur, b)) {
     return true;
   }
@@ -321,7 +321,7 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
   using namespace jx;
   return parse_object(cur, [&](const std::string& k) -> bool {
     if (k == "dt") {
-      double v;
+      float v;
       if (!parse_number(cur, v)) {
         return false;
       }
@@ -329,7 +329,7 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
       return true;
     }
     if (k == "max_outer_iteration") {
-      double v;
+      float v;
       if (!parse_number(cur, v)) {
         return false;
       }
@@ -337,7 +337,7 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
       return true;
     }
     if (k == "max_inner_iteration") {
-      double v;
+      float v;
       if (!parse_number(cur, v)) {
         return false;
       }
@@ -345,7 +345,7 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
       return true;
     }
     if (k == "acceleration") {
-      std::array<double, 3> a;
+      std::array<float, 3> a;
       if (!parse_number_array3(cur, a)) {
         return false;
       }
@@ -353,7 +353,7 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
       return true;
     }
     if (k == "total_steps") {
-      double v;
+      float v;
       if (!parse_number(cur, v)) {
         return false;
       }
@@ -361,7 +361,7 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
       return true;
     }
     if (k == "max_time") {
-      double v;
+      float v;
       if (!parse_number(cur, v)) {
         return false;
       }
@@ -400,19 +400,19 @@ bool parse_collision_obj(jx::Cur& cur, config::Collision& c) {
       return true;
     }
     if (k == "group") {
-      double v;
+      float v;
       if (!parse_number(cur, v)) return false;
       c.group = (int)v;
       return true;
     }
     if (k == "restitution") {
-      double v;
+      float v;
       if (!parse_number(cur, v)) return false;
       c.restitution = v;
       return true;
     }
     if (k == "friction") {
-      double v;
+      float v;
       if (!parse_number(cur, v)) return false;
       c.friction = v;
       return true;
@@ -428,7 +428,7 @@ bool parse_transform_obj(jx::Cur& cur, config::Transform& t) {
   using namespace jx;
   return parse_object(cur, [&](const std::string& k) -> bool {
     if (k == "translation") {
-      std::array<double, 3> v;
+      std::array<float, 3> v;
       if (!parse_number_array3(cur, v)) {
         return false;
       }
@@ -436,7 +436,7 @@ bool parse_transform_obj(jx::Cur& cur, config::Transform& t) {
       return true;
     }
     if (k == "rotation_euler_deg") {
-      std::array<double, 3> v;
+      std::array<float, 3> v;
       if (!parse_number_array3(cur, v)) {
         return false;
       }
@@ -444,7 +444,7 @@ bool parse_transform_obj(jx::Cur& cur, config::Transform& t) {
       return true;
     }
     if (k == "scale") {
-      std::array<double, 3> v;
+      std::array<float, 3> v;
       if (!parse_scale3(cur, v)) {
         return false;
       }
@@ -462,7 +462,7 @@ bool parse_cloth_params_obj(jx::Cur& cur, config::ClothParams& p) {
   using namespace jx;
   return parse_object(cur, [&](const std::string& k) -> bool {
     if (k == "elastic_stiffness") {
-      double v;
+      float v;
       if (!parse_number(cur, v)) {
         return false;
       }
@@ -470,7 +470,7 @@ bool parse_cloth_params_obj(jx::Cur& cur, config::ClothParams& p) {
       return true;
     }
     if (k == "bending_stiffness") {
-      double v;
+      float v;
       if (!parse_number(cur, v)) {
         return false;
       }
@@ -478,7 +478,7 @@ bool parse_cloth_params_obj(jx::Cur& cur, config::ClothParams& p) {
       return true;
     }
     if (k == "density") {
-      double v;
+      float v;
       if (!parse_number(cur, v)) {
         return false;
       }
@@ -486,7 +486,7 @@ bool parse_cloth_params_obj(jx::Cur& cur, config::ClothParams& p) {
       return true;
     }
     if (k == "damping") {
-      double v;
+      float v;
       if (!parse_number(cur, v)) {
         return false;
       }

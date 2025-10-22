@@ -81,7 +81,7 @@ std::optional<Obstacle> Obstacle::make_obstacle(
   obstacle->collision_config_.restitution = obj.collision.restitution;
 
   // TODO: improve config type to avoid this akward translation.
-  auto arr_to_glm = [](const std::array<double, 3>& arr) -> glm::vec3 {
+  auto arr_to_glm = [](const std::array<float, 3>& arr) -> glm::vec3 {
     glm::vec3 v;
     v[0] = arr[0];
     v[1] = arr[1];
