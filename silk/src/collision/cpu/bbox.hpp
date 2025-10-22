@@ -1,8 +1,3 @@
-/** @file
- * Axis-aligned bounding box (AABB) implementation for spatial queries and
- * collision detection.
- */
-
 #pragma once
 
 #include <Eigen/Core>

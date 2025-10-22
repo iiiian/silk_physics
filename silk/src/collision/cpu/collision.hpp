@@ -1,11 +1,3 @@
-/** @file
- * Collision detection and response data structures for continuous collision
- * detection (CCD).
- *
- * Defines collision primitives and associated data needed for constraint-based
- * collision resolution in deformable body simulation.
- */
-
 #pragma once
 
 #include <Eigen/Core>

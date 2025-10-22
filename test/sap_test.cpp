@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "abc_file_loader.hpp"
-#include "collision_broadphase.hpp"
+#include "collision/cpu/broadphase.hpp"
 #include "collision_broadphase_test_utils.hpp"
 
 using namespace silk;

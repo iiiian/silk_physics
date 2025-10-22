@@ -1,20 +1,19 @@
-#include "collision_pipeline.hpp"
+#include "collision/cpu/pipeline.hpp"
 
 #include <tbb/enumerable_thread_specific.h>
 #include <tbb/parallel_for.h>
 
 #include <Eigen/Core>
 #include <cassert>
-#include <optional>
 #include <tight_inclusion/interval_root_finder.hpp>
 #include <vector>
 
-#include "collision.hpp"
-#include "collision_broadphase.hpp"
-#include "collision_narrowphase.hpp"
+#include "collision/cpu/broadphase.hpp"
+#include "collision/cpu/collision.hpp"
+#include "collision/cpu/mesh_collider.hpp"
+#include "collision/cpu/narrowphase.hpp"
+#include "collision/cpu/object_collider.hpp"
 #include "logger.hpp"
-#include "mesh_collider.hpp"
-#include "object_collider.hpp"
 
 namespace silk {
 
@@ -25,7 +24,8 @@ namespace silk {
  * @param b Second object collider
  * @return true if collision should be tested, false to skip
  */
-bool object_collision_filter(const ObjectCollider& a, const ObjectCollider& b) {
+bool object_collision_filter(const CpuObjectCollider& a,
+                             const CpuObjectCollider& b) {
   // Collision rules:
   // - Group = -1 means collision is disabled completely
   // - Objects must belong to the same collision group otherwise
@@ -110,9 +110,8 @@ bool mesh_self_collision_filter(const MeshCollider& a, const MeshCollider& b) {
   return false;
 };
 
-std::vector<Collision> CollisionPipeline::find_collision(
-    std::vector<ObjectCollider>& object_colliders, const Bbox& scene_bbox,
-    float dt) {
+std::vector<Collision> CpuCollisionPipeline::find_collision(
+    Registry& registry, const Bbox& scene_bbox, float dt) {
   // Compute scene-dependent numerical error bounds for CCD robustness.
   Eigen::Vector3f abs_max =
       scene_bbox.min.cwiseAbs().cwiseMax(scene_bbox.max.cwiseAbs());
@@ -121,6 +120,8 @@ std::vector<Collision> CollisionPipeline::find_collision(
 
   tbb::enumerable_thread_specific<std::vector<Collision>> thread_collisions;
   CollisionCache<MeshCollider> mesh_ccache;
+  std::vector<CpuObjectCollider>& object_colliders =
+      registry.get_all<CpuObjectCollider>();
 
   // Three-stage collision detection for inter-object collisions:
   // 1. Object-level broadphase using sweep-and-prune
@@ -128,16 +129,16 @@ std::vector<Collision> CollisionPipeline::find_collision(
   // 3. Narrowphase using continuous collision detection
 
   // Stage 1: Object broadphase using sweep-and-prune.
-  CollisionCache<ObjectCollider> object_ccache;
+  CollisionCache<CpuObjectCollider> object_ccache;
   std::vector<int> object_proxies(object_colliders.size());
   for (int i = 0; i < object_colliders.size(); ++i) {
     object_proxies[i] = i;
   }
-  int axis = sap_optimal_axis<ObjectCollider>(
+  int axis = sap_optimal_axis<CpuObjectCollider>(
       object_colliders, object_proxies.data(), object_proxies.size());
-  sap_sort_proxies<ObjectCollider>(object_colliders, object_proxies.data(),
-                                   object_proxies.size(), axis);
-  sap_sorted_group_self_collision<ObjectCollider>(
+  sap_sort_proxies<CpuObjectCollider>(object_colliders, object_proxies.data(),
+                                      object_proxies.size(), axis);
+  sap_sorted_group_self_collision<CpuObjectCollider>(
       object_colliders, object_proxies.data(), object_proxies.size(), axis,
       object_collision_filter, object_ccache);
 
@@ -206,7 +207,7 @@ std::vector<Collision> CollisionPipeline::find_collision(
   return collisions;
 }
 
-void CollisionPipeline::update_collision(
+void CpuCollisionPipeline::update_collision(
     const Eigen::VectorXf& global_state_t0,
     const Eigen::VectorXf& global_state_t1,
     std::vector<Collision>& collisions) const {

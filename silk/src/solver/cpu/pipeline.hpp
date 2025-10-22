@@ -3,16 +3,16 @@
 #include <Eigen/Core>
 #include <vector>
 
-#include "../barrier_constrain.hpp"
-#include "../bbox.hpp"
-#include "../collision.hpp"
-#include "../collision_pipeline.hpp"
-#include "../ecs.hpp"
-#include "../object_state.hpp"
+#include "collision/cpu/bbox.hpp"
+#include "collision/cpu/collision.hpp"
+#include "collision/cpu/pipeline.hpp"
+#include "ecs.hpp"
+#include "object_state.hpp"
+#include "solver/cpu/barrier_constrain.hpp"
 
 namespace silk {
 
-class SolverPipeline {
+class CpuSolverPipeline {
  public:
   Eigen::Vector3f const_acceleration = {0.0f, 0.0f, -1.0f};
   int max_inner_iteration = 100;
@@ -21,6 +21,9 @@ class SolverPipeline {
 
   // Numerical epsilon used by various tolerances.
   float eps = 1e-6f;
+
+ private:
+  CpuCollisionPipeline collision_pipeline;
 
  public:
   /**
@@ -36,13 +39,11 @@ class SolverPipeline {
   /**
    * @brief Advance the simulation by one time step.
    * @param registry ECS registry containing solver states and components.
-   * @param collision_pipeline Collision detector used for CCD queries.
-   * @returns True on success, false if a sub-solver reports failure or
-   *          catastrophic numeric issues are detected.
-   * @post Writes back `ObjectState::curr_state` and `state_velocity` per
-   * entity.
+   * @return True on success, false if a sub-solver reports failure or
+   *         catastrophic numeric issues are detected.
+   * @post Writes back `ObjectState::curr_state` and `state_velocity` per entity.
    */
-  bool step(Registry& registry, CollisionPipeline& collision_pipeline);
+  bool step(Registry& registry);
 
  private:
   /**

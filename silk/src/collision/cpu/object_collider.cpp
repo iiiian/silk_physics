@@ -1,4 +1,4 @@
-#include "object_collider_utils.hpp"
+#include "collision/cpu/object_collider.hpp"
 
 #include <tbb/enumerable_thread_specific.h>
 #include <tbb/parallel_for.h>
@@ -10,7 +10,6 @@
 
 #include "handle.hpp"
 #include "mesh.hpp"
-#include "object_collider.hpp"
 #include "obstacle_position.hpp"
 #include "pin.hpp"
 
@@ -102,28 +101,29 @@ std::vector<MeshCollider> make_mesh_colliders(
   return mesh_colliders;
 }
 
-ObjectCollider make_physical_object_collider(
-    Handle entity_handle, const CollisionConfig& config, const TriMesh& mesh,
-    const Pin& pin, const Eigen::VectorXf& mass, int state_offset) {
+CpuObjectCollider::CpuObjectCollider(Handle entity_handle,
+                                     const CollisionConfig& config,
+                                     const TriMesh& mesh, const Pin& pin,
+                                     const Eigen::VectorXf& mass,
+                                     int state_offset) {
   auto& c = config;
 
-  ObjectCollider o;
-  o.entity_handle = entity_handle;
-  o.state_offset = state_offset;
+  this->entity_handle = entity_handle;
+  this->state_offset = state_offset;
 
   // Pad object AABB by 5% of mesh scale to avoid zero-width degenerate cases.
-  o.bbox_padding = 0.05f * mesh.avg_edge_length;
+  bbox_padding = 0.05f * mesh.avg_edge_length;
   Eigen::Vector3f min = mesh.V.colwise().minCoeff();
   Eigen::Vector3f max = mesh.V.colwise().maxCoeff();
-  o.bbox = Bbox{min, max};
-  o.bbox.pad_inplace(o.bbox_padding);
+  bbox = Bbox{min, max};
+  bbox.pad_inplace(bbox_padding);
 
   // Note: group == -1 disables this collider in the broad phase.
-  o.group = (c.is_collision_on) ? c.group : -1;
-  o.is_static = false;
-  o.is_self_collision_on = c.is_self_collision_on;
-  o.restitution = config.restitution;
-  o.friction = config.friction;
+  group = (c.is_collision_on) ? c.group : -1;
+  is_static = false;
+  is_self_collision_on = c.is_self_collision_on;
+  restitution = config.restitution;
+  friction = config.friction;
 
   std::unordered_set<int> pin_set(pin.index.begin(), pin.index.end());
   // Pinned vertices get infinite mass (zero inverse mass) to prevent movement.
@@ -134,56 +134,49 @@ ObjectCollider make_physical_object_collider(
     return 1.0f / mass(index);
   };
 
-  o.mesh_collider_tree.init(
-      make_mesh_colliders(mesh, o.bbox_padding, get_inv_mass));
-
-  return o;
+  mesh_collider_tree.init(
+      make_mesh_colliders(mesh, bbox_padding, get_inv_mass));
 }
 
-ObjectCollider make_obstacle_object_collider(Handle entity_handle,
-                                             const CollisionConfig& config,
-                                             const TriMesh& mesh) {
+CpuObjectCollider::CpuObjectCollider(Handle entity_handle,
+                                     const CollisionConfig& config,
+                                     const TriMesh& mesh) {
   auto& c = config;
 
-  ObjectCollider o;
-  o.entity_handle = entity_handle;
-  o.state_offset = -1;
+  this->entity_handle = entity_handle;
+  state_offset = -1;
 
   // Pad object AABB by 5% of mesh scale to avoid zero-width degenerate cases.
-  o.bbox_padding = 0.05f * mesh.avg_edge_length;
+  bbox_padding = 0.05f * mesh.avg_edge_length;
 
   Eigen::Vector3f min = mesh.V.colwise().minCoeff();
   Eigen::Vector3f max = mesh.V.colwise().maxCoeff();
-  o.bbox = Bbox{min, max};
-  o.bbox.pad_inplace(o.bbox_padding);
+  bbox = Bbox{min, max};
+  bbox.pad_inplace(bbox_padding);
 
   // Note: group == -1 disables this collider in the broad phase.
-  o.group = (c.is_collision_on) ? c.group : -1;
-  o.is_static = false;
-  o.is_self_collision_on = c.is_self_collision_on;
-  o.restitution = config.restitution;
-  o.friction = config.friction;
+  group = (c.is_collision_on) ? c.group : -1;
+  is_static = false;
+  is_self_collision_on = c.is_self_collision_on;
+  restitution = config.restitution;
+  friction = config.friction;
 
   // Obstacles have infinite mass (zero inverse mass).
   auto get_inv_mass = [](int index) { return 0.0f; };
-  o.mesh_collider_tree.init(
-      make_mesh_colliders(mesh, o.bbox_padding, get_inv_mass));
-
-  return o;
+  mesh_collider_tree.init(
+      make_mesh_colliders(mesh, bbox_padding, get_inv_mass));
 }
 
-void update_physical_object_collider(const CollisionConfig& config,
-                                     const ObjectState& object_state,
-                                     const Eigen::VectorXf global_curr_state,
-                                     const Eigen::VectorXf global_prev_state,
-                                     ObjectCollider& object_collider) {
-  auto& o = object_collider;
+void CpuObjectCollider::update(const CollisionConfig& config,
+                               const ObjectState& object_state,
+                               const Eigen::VectorXf global_curr_state,
+                               const Eigen::VectorXf global_prev_state) {
   auto& c = config;
 
-  o.group = (c.is_collision_on) ? c.group : -1;
-  o.is_self_collision_on = c.is_self_collision_on;
-  o.restitution = config.restitution;
-  o.friction = config.friction;
+  group = (c.is_collision_on) ? c.group : -1;
+  is_self_collision_on = c.is_self_collision_on;
+  restitution = config.restitution;
+  friction = config.friction;
 
   // Extract vertex positions from state vector.
   auto get_vertex = [](Eigen::Ref<const Eigen::VectorXf> vec,
@@ -195,11 +188,11 @@ void update_physical_object_collider(const CollisionConfig& config,
   auto curr_state = global_curr_state(seq);
   auto prev_state = global_prev_state(seq);
 
-  o.bbox = Bbox{curr_state(Eigen::seqN(0, 3)), curr_state(Eigen::seqN(0, 3))};
+  bbox = Bbox{curr_state(Eigen::seqN(0, 3)), curr_state(Eigen::seqN(0, 3))};
 
-  auto& colliders = o.mesh_collider_tree.get_colliders();
+  auto& colliders = mesh_collider_tree.get_colliders();
   int collider_num = colliders.size();
-  tbb::enumerable_thread_specific<Bbox> thread_bboxes(o.bbox);
+  tbb::enumerable_thread_specific<Bbox> thread_bboxes(bbox);
 
   tbb::parallel_for(0, collider_num, [&](int i) {
     MeshCollider& mc = colliders[i];
@@ -215,7 +208,7 @@ void update_physical_object_collider(const CollisionConfig& config,
         // Bounding box must contain trajectory between timesteps.
         mc.bbox.min = p0.col(0).cwiseMin(p1.col(0));
         mc.bbox.max = p0.col(0).cwiseMax(p1.col(0));
-        mc.bbox.pad_inplace(o.bbox_padding);
+        mc.bbox.pad_inplace(bbox_padding);
         bbox.merge_inplace(mc.bbox);
         break;
       }
@@ -231,7 +224,7 @@ void update_physical_object_collider(const CollisionConfig& config,
         mc.bbox.max =
             p0.col(0).cwiseMax(p0.col(1)).cwiseMax(p1.col(0)).cwiseMax(
                 p1.col(1));
-        mc.bbox.pad_inplace(o.bbox_padding);
+        mc.bbox.pad_inplace(bbox_padding);
         bbox.merge_inplace(mc.bbox);
         break;
       }
@@ -245,7 +238,7 @@ void update_physical_object_collider(const CollisionConfig& config,
         // Bounding box contains swept volume of triangle between timesteps.
         mc.bbox.min = p0.rowwise().minCoeff().cwiseMin(p1.rowwise().minCoeff());
         mc.bbox.max = p0.rowwise().maxCoeff().cwiseMax(p1.rowwise().maxCoeff());
-        mc.bbox.pad_inplace(o.bbox_padding);
+        mc.bbox.pad_inplace(bbox_padding);
         bbox.merge_inplace(mc.bbox);
         break;
       }
@@ -254,23 +247,21 @@ void update_physical_object_collider(const CollisionConfig& config,
 
   // Merge thread-local bounding boxes into final object bounding box.
   for (auto& bbox : thread_bboxes) {
-    o.bbox.merge_inplace(bbox);
+    bbox.merge_inplace(bbox);
   }
 
-  o.mesh_collider_tree.update(o.bbox);
+  mesh_collider_tree.update(bbox);
 }
 
-void update_obstacle_object_collider(const CollisionConfig& config,
-                                     const ObstaclePosition& obstacle_position,
-                                     ObjectCollider& object_collider) {
+void CpuObjectCollider::update(const CollisionConfig& config,
+                               const ObstaclePosition& obstacle_position) {
   const CollisionConfig& c = config;
   const ObstaclePosition& p = obstacle_position;
-  ObjectCollider& o = object_collider;
 
-  o.group = (c.is_collision_on) ? c.group : -1;
-  o.is_static = p.is_static;
-  o.restitution = config.restitution;
-  o.friction = config.friction;
+  group = (c.is_collision_on) ? c.group : -1;
+  is_static = p.is_static;
+  restitution = config.restitution;
+  friction = config.friction;
 
   // If obstacle stays static for 2+ steps, there's no need to update mesh
   // colliders.
@@ -288,12 +279,12 @@ void update_obstacle_object_collider(const CollisionConfig& config,
     return vec(Eigen::seqN(3 * index, 3));
   };
 
-  o.bbox = Bbox{p.curr_position(Eigen::seqN(0, 3)),
-                p.curr_position(Eigen::seqN(0, 3))};
+  bbox = Bbox{p.curr_position(Eigen::seqN(0, 3)),
+              p.curr_position(Eigen::seqN(0, 3))};
 
-  auto& colliders = o.mesh_collider_tree.get_colliders();
+  auto& colliders = mesh_collider_tree.get_colliders();
   int collider_num = colliders.size();
-  tbb::enumerable_thread_specific<Bbox> thread_bboxes(o.bbox);
+  tbb::enumerable_thread_specific<Bbox> thread_bboxes(bbox);
 
   tbb::parallel_for(0, collider_num, [&](int i) {
     MeshCollider& mc = colliders[i];
@@ -308,7 +299,7 @@ void update_obstacle_object_collider(const CollisionConfig& config,
         p1.col(0) = get_vertex(position_t1, mc.index(0));
         mc.bbox.min = p0.col(0).cwiseMin(p1.col(0));
         mc.bbox.max = p0.col(0).cwiseMax(p1.col(0));
-        mc.bbox.pad_inplace(o.bbox_padding);
+        mc.bbox.pad_inplace(bbox_padding);
         bbox.merge_inplace(mc.bbox);
         break;
       }
@@ -323,7 +314,7 @@ void update_obstacle_object_collider(const CollisionConfig& config,
         mc.bbox.max =
             p0.col(0).cwiseMax(p0.col(1)).cwiseMax(p1.col(0)).cwiseMax(
                 p1.col(1));
-        mc.bbox.pad_inplace(o.bbox_padding);
+        mc.bbox.pad_inplace(bbox_padding);
         bbox.merge_inplace(mc.bbox);
         break;
       }
@@ -336,7 +327,7 @@ void update_obstacle_object_collider(const CollisionConfig& config,
         p1.col(2) = get_vertex(position_t1, mc.index(2));
         mc.bbox.min = p0.rowwise().minCoeff().cwiseMin(p1.rowwise().minCoeff());
         mc.bbox.max = p0.rowwise().maxCoeff().cwiseMax(p1.rowwise().maxCoeff());
-        mc.bbox.pad_inplace(o.bbox_padding);
+        mc.bbox.pad_inplace(bbox_padding);
         bbox.merge_inplace(mc.bbox);
         break;
       }
@@ -345,10 +336,10 @@ void update_obstacle_object_collider(const CollisionConfig& config,
 
   // Merge thread-local bounding boxes into final object bounding box.
   for (auto& bbox : thread_bboxes) {
-    o.bbox.merge_inplace(bbox);
+    bbox.merge_inplace(bbox);
   }
 
-  o.mesh_collider_tree.update(o.bbox);
+  mesh_collider_tree.update(bbox);
 }
 
 }  // namespace silk
