@@ -28,8 +28,7 @@
         "self_collision": true,
         "group": 1,
         "restitution": 0.25,
-        "friction": 0.45,
-        "thickness": 0.002
+        "friction": 0.45
       },
       "transform": {
         "translation": [
@@ -60,8 +59,7 @@
         "self_collision": true,
         "group": 1,
         "restitution": 0.3,
-        "friction": 0.5,
-        "thickness": 0.001
+        "friction": 0.5
       },
       "transform": {
         "translation": [
@@ -90,8 +88,7 @@
         "self_collision": false,
         "group": 2,
         "restitution": 0.1,
-        "friction": 0.6,
-        "thickness": 0.001
+        "friction": 0.6
       },
       "transform": {
         "translation": [

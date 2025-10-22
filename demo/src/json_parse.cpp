@@ -417,12 +417,6 @@ bool parse_collision_obj(jx::Cur& cur, config::Collision& c) {
       c.friction = v;
       return true;
     }
-    if (k == "thickness") {
-      double v;
-      if (!parse_number(cur, v)) return false;
-      c.thickness = v;
-      return true;
-    }
     return jx::skip_value(cur);
   });
 }
@@ -601,10 +595,10 @@ void console_test(const SimConfig& c) {
     ui_info("      mesh = {}", o.mesh);
     ui_info(
         "      [collision] enabled={}, self_collision={}, group={}, "
-        "restitution={:.6f}, friction={:.6f}, thickness={:.6f}",
+        "restitution={:.6f}, friction={:.6f}",
         o.collision.enabled ? "true" : "false",
         o.collision.self_collision ? "true" : "false", o.collision.group,
-        o.collision.restitution, o.collision.friction, o.collision.thickness);
+        o.collision.restitution, o.collision.friction);
     ui_info(
         "      [transform] translation=[{:.6f},{:.6f},{:.6f}] "
         "rotation_euler_deg=[{:.6f},{:.6f},{:.6f}] "
@@ -628,10 +622,10 @@ void console_test(const SimConfig& c) {
     ui_info("      mesh = {}", o.mesh);
     ui_info(
         "      [collision] enabled={}, self_collision={}, group={}, "
-        "restitution={:.6f}, friction={:.6f}, thickness={:.6f}",
+        "restitution={:.6f}, friction={:.6f}",
         o.collision.enabled ? "true" : "false",
         o.collision.self_collision ? "true" : "false", o.collision.group,
-        o.collision.restitution, o.collision.friction, o.collision.thickness);
+        o.collision.restitution, o.collision.friction);
     ui_info(
         "      [transform] translation=[{:.6f},{:.6f},{:.6f}] "
         "rotation_euler_deg=[{:.6f},{:.6f},{:.6f}] "

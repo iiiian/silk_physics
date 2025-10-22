@@ -28,7 +28,6 @@ struct Collision {
   int group = 0;
   double restitution = 0.0;
   double friction = 0.5;
-  double thickness = 0.0;
 };
 
 //********************************/
