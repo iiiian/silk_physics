@@ -323,6 +323,7 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
     if (k == "dt") {
       float v;
       if (!parse_number(cur, v)) {
+        ui_error("Fail to parse global config. Incorrect json field 'dt'");
         return false;
       }
       g.dt = v;
@@ -331,6 +332,9 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
     if (k == "max_outer_iteration") {
       float v;
       if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse global config. Incorrect json field "
+            "'max_outer_iteration'");
         return false;
       }
       g.max_outer_iteration = static_cast<int>(v);
@@ -339,6 +343,9 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
     if (k == "max_inner_iteration") {
       float v;
       if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse global config. Incorrect json field "
+            "'max_inner_iteration'");
         return false;
       }
       g.max_inner_iteration = static_cast<int>(v);
@@ -347,6 +354,8 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
     if (k == "acceleration") {
       std::array<float, 3> a;
       if (!parse_number_array3(cur, a)) {
+        ui_error(
+            "Fail to parse global config. Incorrect json field 'acceleration'");
         return false;
       }
       g.acceleration = a;
@@ -355,6 +364,8 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
     if (k == "total_steps") {
       float v;
       if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse global config. Incorrect json field 'total_steps'");
         return false;
       }
       g.total_steps = static_cast<int>(v);
@@ -363,6 +374,8 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
     if (k == "max_time") {
       float v;
       if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse global config. Incorrect json field 'max_time'");
         return false;
       }
       g.max_time = v;
@@ -381,31 +394,53 @@ bool parse_collision_obj(jx::Cur& cur, config::Collision& c) {
   return parse_object(cur, [&](const std::string& k) -> bool {
     if (k == "enabled") {
       bool b;
-      if (!parse_bool(cur, b)) return false;
+      if (!parse_bool(cur, b)) {
+        ui_error(
+            "Fail to parse collision config. Incorrect json field 'enabled'");
+        return false;
+      }
       c.enabled = b;
       return true;
     }
     if (k == "self_collision") {
       bool b;
-      if (!parse_bool(cur, b)) return false;
+      if (!parse_bool(cur, b)) {
+        ui_error(
+            "Fail to parse collision config. Incorrect json field "
+            "'self_collision'");
+        return false;
+      }
       c.self_collision = b;
       return true;
     }
     if (k == "group") {
       float v;
-      if (!parse_number(cur, v)) return false;
+      if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse collision config. Incorrect json field 'group'");
+        return false;
+      }
       c.group = (int)v;
       return true;
     }
     if (k == "restitution") {
       float v;
-      if (!parse_number(cur, v)) return false;
+      if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse collision config. Incorrect json field "
+            "'restitution'");
+        return false;
+      }
       c.restitution = v;
       return true;
     }
     if (k == "friction") {
       float v;
-      if (!parse_number(cur, v)) return false;
+      if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse collision config. Incorrect json field 'friction'");
+        return false;
+      }
       c.friction = v;
       return true;
     }
@@ -422,6 +457,9 @@ bool parse_transform_obj(jx::Cur& cur, config::Transform& t) {
     if (k == "translation") {
       std::array<float, 3> v;
       if (!parse_number_array3(cur, v)) {
+        ui_error(
+            "Fail to parse transformation config. Incorrect json field "
+            "'translation'");
         return false;
       }
       t.translation = v;
@@ -430,6 +468,9 @@ bool parse_transform_obj(jx::Cur& cur, config::Transform& t) {
     if (k == "rotation_euler_deg") {
       std::array<float, 3> v;
       if (!parse_number_array3(cur, v)) {
+        ui_error(
+            "Fail to parse transformation config. Incorrect json field "
+            "'rotation_euler_deg'");
         return false;
       }
       t.rotation_euler_deg = v;
@@ -438,6 +479,9 @@ bool parse_transform_obj(jx::Cur& cur, config::Transform& t) {
     if (k == "scale") {
       std::array<float, 3> v;
       if (!parse_scale3(cur, v)) {
+        ui_error(
+            "Fail to parse transformation config. Incorrect json field "
+            "'scale'");
         return false;
       }
       t.scale = v;
@@ -456,6 +500,9 @@ bool parse_cloth_params_obj(jx::Cur& cur, config::ClothParams& p) {
     if (k == "elastic_stiffness") {
       float v;
       if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse cloth parameters config. Incorrect json field "
+            "'elastic_stiffness'");
         return false;
       }
       p.elastic_stiffness = v;
@@ -464,6 +511,9 @@ bool parse_cloth_params_obj(jx::Cur& cur, config::ClothParams& p) {
     if (k == "bending_stiffness") {
       float v;
       if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse cloth parameters config. Incorrect json field "
+            "'bending_stiffness'");
         return false;
       }
       p.bending_stiffness = v;
@@ -472,6 +522,9 @@ bool parse_cloth_params_obj(jx::Cur& cur, config::ClothParams& p) {
     if (k == "density") {
       float v;
       if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse cloth parameters config. Incorrect json field "
+            "'density'");
         return false;
       }
       p.density = v;
@@ -480,6 +533,9 @@ bool parse_cloth_params_obj(jx::Cur& cur, config::ClothParams& p) {
     if (k == "damping") {
       float v;
       if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse cloth parameters config. Incorrect json field "
+            "'damping'");
         return false;
       }
       p.damping = v;
