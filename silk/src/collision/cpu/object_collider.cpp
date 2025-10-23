@@ -246,8 +246,8 @@ void CpuObjectCollider::update(const CollisionConfig& config,
   });
 
   // Merge thread-local bounding boxes into final object bounding box.
-  for (auto& bbox : thread_bboxes) {
-    bbox.merge_inplace(bbox);
+  for (auto& tbbox : thread_bboxes) {
+    bbox.merge_inplace(tbbox);
   }
 
   mesh_collider_tree.update(bbox);
@@ -335,8 +335,8 @@ void CpuObjectCollider::update(const CollisionConfig& config,
   });
 
   // Merge thread-local bounding boxes into final object bounding box.
-  for (auto& bbox : thread_bboxes) {
-    bbox.merge_inplace(bbox);
+  for (auto& tbbox : thread_bboxes) {
+    bbox.merge_inplace(tbbox);
   }
 
   mesh_collider_tree.update(bbox);
