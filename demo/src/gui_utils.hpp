@@ -22,11 +22,14 @@ struct Mesh {
 std::optional<Mesh> load_mesh_from_file(const std::string& path);
 
 struct Context {
+  // pIObject contains silk handle so it must be destroyed after silk world.
+  // So silk_world must be declared before objects.
+  silk::World silk_world;
+
   UIMode ui_mode = UIMode::Normal;
   int selection = -1;
   std::vector<pIObject> objects;
   silk::GlobalConfig global_config;
-  silk::World silk_world;
 };
 
 class IWidget {
