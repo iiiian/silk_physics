@@ -5,7 +5,9 @@
 #include <spdlog/spdlog.h>
 
 #include <Eigen/Core>
+#include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <glm/glm.hpp>
 
 #include "../gui_utils.hpp"

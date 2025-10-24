@@ -3,6 +3,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <cctype>
 #include <deque>
 #include <string>
 

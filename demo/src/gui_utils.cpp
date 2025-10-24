@@ -8,6 +8,7 @@
 
 #include <Eigen/Core>
 #include <filesystem>
+#include <fstream>
 
 std::optional<Mesh> load_mesh_from_file(const std::string& path) {
   std::filesystem::path p{path};
