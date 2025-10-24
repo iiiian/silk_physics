@@ -15,7 +15,7 @@
 
 /**
  * @brief Parsing a JSON file into a struct.
- * @param path, default_path, check_readable Storage container to inspect.
+ * @param path Path to config json.
  * @return ParseResult struct.
  */
 std::optional<SimConfig> parse_config(const std::string& path);
