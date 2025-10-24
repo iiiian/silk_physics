@@ -8,8 +8,8 @@
 #include <string>
 
 std::deque<std::string> g_lines;
-const size_t G_CAP = 2000;
-bool g_autoScroll = true;
+constexpr size_t G_CAP = 2000;
+bool g_auto_scroll = true;
 char g_filter[128] = {0};
 
 void ui_console_push(std::string line) {
@@ -22,18 +22,20 @@ void ui_console_push(std::string line) {
 void ui_console_clear() { g_lines.clear(); }
 
 static void ui_console_render_list() {
-  const bool useFilter = (g_filter[0] != '\0');
+  const bool use_filter = (g_filter[0] != '\0');
   for (const auto& s : g_lines) {
-    if (useFilter) {
+    if (use_filter) {
       std::string hay = s, nee = g_filter;
       std::transform(hay.begin(), hay.end(), hay.begin(), ::tolower);
       std::transform(nee.begin(), nee.end(), nee.begin(), ::tolower);
-      if (hay.find(nee) == std::string::npos) continue;
+      if (hay.find(nee) == std::string::npos) {
+        continue;
+      }
     }
     ImGui::TextUnformatted(s.c_str());
   }
 
-  if (g_autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+  if (g_auto_scroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
     ImGui::SetScrollHereY(1.0f);
   }
 }
@@ -49,7 +51,7 @@ void ui_console_draw_window(const char* title) {
     ui_console_clear();
   }
   ImGui::SameLine();
-  ImGui::Checkbox("Auto-scroll", &g_autoScroll);
+  ImGui::Checkbox("Auto-scroll", &g_auto_scroll);
   ImGui::SameLine();
   ImGui::SetNextItemWidth(220.f);
   ImGui::InputTextWithHint("##filter", "filter (substring)", g_filter,
@@ -88,7 +90,7 @@ void ui_console_draw_inline(float height) {
     ui_console_clear();
   }
   ImGui::SameLine();
-  ImGui::Checkbox("Auto-scroll", &g_autoScroll);
+  ImGui::Checkbox("Auto-scroll", &g_auto_scroll);
   ImGui::SameLine();
   ImGui::SetNextItemWidth(220.f);
   ImGui::InputTextWithHint("##filter_inline", "filter (substring)", g_filter,
