@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
   std::string out_path = "out.abc";
   program.add_argument("-o", "--output")
       .help("Output path for headless mode")
-      .store_into(is_headless);
+      .store_into(out_path);
 
   try {
     program.parse_args(argc, argv);
