@@ -54,7 +54,7 @@ void ConfigWidget::apply_config_to_gui(const SimConfig& config) {
   // Modify current global config
   ctx_.global_config.dt = c.global.dt;
   ctx_.global_config.max_inner_iteration = c.global.max_inner_iteration;
-  ctx_.global_config.max_inner_iteration = c.global.max_inner_iteration;
+  ctx_.global_config.max_outer_iteration = c.global.max_outer_iteration;
   ctx_.global_config.acceleration_x = c.global.acceleration[0];
   ctx_.global_config.acceleration_y = c.global.acceleration[1];
   ctx_.global_config.acceleration_z = c.global.acceleration[2];
