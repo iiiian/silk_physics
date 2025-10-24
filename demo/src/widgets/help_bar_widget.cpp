@@ -5,7 +5,8 @@
 HelpBarWidget::HelpBarWidget(Context& context) : ctx_(context) {};
 
 void HelpBarWidget::draw() {
-  const float PAD = 10.0f;
+  constexpr float PAD = 10.0f;
+
   ImGuiIO& io = ImGui::GetIO();
   ImVec2 window_pos = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y - PAD);
   ImVec2 window_pos_pivot = ImVec2(0.5f, 1.0f);
