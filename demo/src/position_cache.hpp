@@ -1,3 +1,5 @@
+#pragma once
+
 #include <vector>
 
 #include "eigen_alias.hpp"
