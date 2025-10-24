@@ -8,15 +8,11 @@ AffineTransformer::EigenAffine make_eigen_affine(
 
     const Eigen::Vector3f& position, const Eigen::Vector3f& rotation,
     const Eigen::Vector3f& scale) {
-
-  //Eigen::Vector3f rad_rotation = 3.14159f / 180.0f * rotation;
-   Eigen::Vector3f rad_rotation = rotation;
-   
   AffineTransformer::EigenAffine t =
       Eigen::Translation3f(position) *
-      Eigen::AngleAxisf(rad_rotation.z(), Eigen::Vector3f::UnitZ()) *
-      Eigen::AngleAxisf(rad_rotation.y(), Eigen::Vector3f::UnitY()) *
-      Eigen::AngleAxisf(rad_rotation.x(), Eigen::Vector3f::UnitX()) *
+      Eigen::AngleAxisf(rotation.z(), Eigen::Vector3f::UnitZ()) *
+      Eigen::AngleAxisf(rotation.y(), Eigen::Vector3f::UnitY()) *
+      Eigen::AngleAxisf(rotation.x(), Eigen::Vector3f::UnitX()) *
       Eigen::Scaling(scale);
   return t;
 }
@@ -24,12 +20,8 @@ AffineTransformer::EigenAffine make_eigen_affine(
 // Helper function to build glm::mat4.
 glm::mat4 make_glm_affine(const glm::vec3& position, const glm::vec3& rotation,
                           const glm::vec3& scale) {
-  //glm::vec3 rad_rotation = 3.14159f / 180.0f * rotation;
-   glm::vec3 rad_rotation = rotation;
-   
   glm::mat4 T = glm::translate(glm::mat4(1.0f), position);
-  glm::mat4 R =
-      glm::eulerAngleXYZ(rad_rotation.x, rad_rotation.y, rad_rotation.z);
+  glm::mat4 R = glm::eulerAngleXYZ(rotation.x, rotation.y, rotation.z);
   glm::mat4 S = glm::scale(glm::mat4(1.0f), scale);
   return T * R * S;
 }
