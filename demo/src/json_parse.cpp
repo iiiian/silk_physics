@@ -371,16 +371,6 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
       g.total_steps = static_cast<int>(v);
       return true;
     }
-    if (k == "max_time") {
-      float v;
-      if (!parse_number(cur, v)) {
-        ui_error(
-            "Fail to parse global config. Incorrect json field 'max_time'");
-        return false;
-      }
-      g.max_time = v;
-      return true;
-    }
     // skip unknown
     return jx::skip_value(cur);
   });
@@ -632,7 +622,6 @@ void console_test(const SimConfig& c) {
   ui_info("  acceleration = [{:.6f}, {:.6f}, {:.6f}]", c.global.acceleration[0],
           c.global.acceleration[1], c.global.acceleration[2]);
   ui_info("  total_steps = {}", c.global.total_steps);
-  ui_info("  max_time = {:.6f}", c.global.max_time);
 
   // Cloths
   ui_info("[Cloths] count = {}", c.cloths.size());

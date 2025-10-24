@@ -15,7 +15,6 @@ struct Global {
   int max_inner_iteration = 50;
   std::array<float, 3> acceleration{0.0, 0.0, -9.8};
   int total_steps = 100;
-  float max_time = 0.0;
 };
 
 //********************************/

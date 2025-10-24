@@ -8,8 +8,7 @@
       0.0,
       -9.8
     ],
-    "total_steps": 500,
-    "max_time": 6.0
+    "total_steps": 500
   },
   "objects": [
     {

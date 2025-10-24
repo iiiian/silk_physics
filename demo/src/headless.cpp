@@ -397,7 +397,7 @@ void headless_run(const SimConfig& sim_config, const std::string& out_path) {
 
   int total_steps = sim_config.global.total_steps;
   spdlog::info("Headless simulation start. Total time {}s. Total steps {}",
-               sim_config.global.max_time, total_steps);
+               total_steps * global_cfg.dt, total_steps);
   for (int step = 0; step < total_steps; ++step) {
     for (auto& object : objects) {
       if (!object->sim_step_pre()) {
