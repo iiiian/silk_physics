@@ -54,6 +54,11 @@ int main(int argc, char** argv) {
   }
 
   if (is_headless) {
+    if (!sim_config) {
+      spdlog::error(
+          "Please provide a config json through -c flag in headless mode.");
+      return 1;
+    }
     spdlog::info("Headless mode.");
     headless_run(*sim_config, out_path);
     return 0;
