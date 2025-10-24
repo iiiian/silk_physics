@@ -1,7 +1,11 @@
 set(DEMO_SOURCES
     src/demo.cpp
     src/main.cpp
+    src/headless.cpp
+    src/transform.cpp
     src/polyscope_silk_interop.cpp
+    src/alembic_writer.cpp
+    src/gui_utils.cpp
     src/objects/cloth.cpp
     src/objects/obstacle.cpp
     src/objects/draw_utils.cpp
@@ -12,6 +16,10 @@ set(DEMO_SOURCES
     src/widgets/sim_setting_widget.cpp
     src/widgets/simulator_widget.cpp
     src/widgets/statistic_widget.cpp
+    src/widgets/config_widget.cpp
+    src/json_parse.cpp
+    src/widgets/ui_console.cpp 
+    
 )
 
 add_executable(demo ${DEMO_SOURCES})
@@ -37,5 +45,8 @@ target_link_libraries(
     PRIVATE ${SILK_IGL_CORE}
     PRIVATE polyscope
     PRIVATE portable_file_dialogs
+    PRIVATE nlohmann_json::nlohmann_json
+    PRIVATE argparse::argparse
+    PRIVATE Alembic::Alembic
     PRIVATE silk::silk
 )

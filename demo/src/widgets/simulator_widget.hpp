@@ -12,6 +12,7 @@ class SimulatorWidget : public IWidget {
   Context& ctx_;
 
   std::chrono::steady_clock::time_point prev_update_time_;
+  float sim_time_ = 0.0f;
   float sim_fps_ = 0.0f;
 
   // Drag tracking for pin dragging

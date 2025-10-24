@@ -1,10 +1,6 @@
 #include "scene_widget.hpp"
 
 #include <igl/edges.h>
-#include <igl/readOBJ.h>
-#include <igl/readOFF.h>
-#include <igl/readPLY.h>
-#include <igl/readSTL.h>
 #include <polyscope/polyscope.h>
 #include <portable-file-dialogs.h>
 #include <spdlog/spdlog.h>
@@ -15,6 +11,8 @@
 #include <string>
 #include <vector>
 
+#include "../eigen_alias.hpp"
+#include "../gui_utils.hpp"
 #include "../objects/cloth.hpp"
 #include "../objects/obstacle.hpp"
 
@@ -26,7 +24,7 @@ SceneWidget::SceneWidget(Context& context) : ctx_(context) {}
 std::string SceneWidget::generate_unique_name(const std::string& base_name) {
   std::string candidate = base_name;
   int counter = 1;
-  
+
   while (true) {
     bool name_exists = false;
     for (const auto& obj : ctx_.objects) {
@@ -35,11 +33,11 @@ std::string SceneWidget::generate_unique_name(const std::string& base_name) {
         break;
       }
     }
-    
+
     if (!name_exists) {
       return candidate;
     }
-    
+
     candidate = base_name + " (" + std::to_string(counter) + ")";
     counter++;
   }
@@ -50,33 +48,14 @@ bool SceneWidget::load_object_from_path(const std::string& path,
                                         SilkObjectType type) {
   spdlog::info("Loading model from: {}", path);
 
-  std::filesystem::path p{path};
-
-  bool success = false;
-  Vert V;
-  Face F;
-  if (p.extension() == ".off") {
-    success = igl::readOFF(path, V, F);
-  } else if (p.extension() == ".obj") {
-    success = igl::readOBJ(path, V, F);
-  } else if (p.extension() == ".ply") {
-    success = igl::readPLY(path, V, F);
-  } else if (p.extension() == ".stl") {
-    std::ifstream file(path, std::ios::binary);
-    if (!file.is_open()) {
-      spdlog::error("Failed to open STL file: {}", path);
-    } else {
-      Eigen::MatrixX3f N;
-      success = igl::readSTL(file, V, F, N);
-      file.close();
-    }
-  }
-
-  if (!success || V.rows() == 0 || F.rows() == 0) {
-    spdlog::error("Failed to load model or empty mesh from: {}", path);
+  auto mesh = load_mesh_from_file(path);
+  if (!mesh) {
+    spdlog::error("Fail to load mesh file {}", path);
     return false;
   }
 
+  auto& V = mesh->verts;
+  auto& F = mesh->faces;
   spdlog::info("Loaded model with {} vertices and {} faces", V.rows(),
                F.rows());
 
@@ -87,13 +66,13 @@ bool SceneWidget::load_object_from_path(const std::string& path,
                center.z());
 
   // Generate unique name for the object
-  std::string unique_name = generate_unique_name(p.stem().string());
+  std::filesystem::path pa{path};
+  std::string unique_name = generate_unique_name(pa.stem().string());
 
   bool created = false;
   switch (type) {
     case SilkObjectType::Cloth: {
-      auto cloth =
-          Cloth::try_make_cloth(&ctx_.silk_world, unique_name, V, F);
+      auto cloth = Cloth::make_cloth(&ctx_.silk_world, unique_name, V, F);
       if (cloth) {
         ctx_.objects.push_back(std::make_unique<Cloth>(std::move(*cloth)));
         created = true;
@@ -103,8 +82,8 @@ bool SceneWidget::load_object_from_path(const std::string& path,
       break;
     }
     case SilkObjectType::Obstacle: {
-      auto obstacle = Obstacle::try_make_obstacle(&ctx_.silk_world,
-                                                  unique_name, V, F);
+      auto obstacle =
+          Obstacle::make_obstacle(&ctx_.silk_world, unique_name, V, F);
       if (obstacle) {
         ctx_.objects.push_back(
             std::make_unique<Obstacle>(std::move(*obstacle)));

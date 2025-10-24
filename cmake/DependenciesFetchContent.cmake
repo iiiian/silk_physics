@@ -54,6 +54,33 @@ FetchContent_Declare(
     GIT_TAG 6f468b0385b2104a9f485e49bb55508d0024e32d
 )
 
+FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG 55f93686c01528224f448c19128836e7df245f72 # version 3.12.0
+)
+
+FetchContent_Declare(
+    argparse
+    GIT_REPOSITORY https://github.com/p-ranav/argparse.git
+    GIT_TAG 3eda91b2e1ce7d569f84ba295507c4cd8fd96910 # version 3.2
+)
+
+# A dependency of Alembic.
+# Newest version does not work with Alembic, be careful when update.
+FetchContent_Declare(
+    Imath
+    GIT_REPOSITORY https://github.com/AcademySoftwareFoundation/Imath.git
+    GIT_TAG c0396a055a01bc537d32f435aee11a9b7ed6f0b5 # version 3.1.12
+)
+
+FetchContent_Declare(
+    Alembic
+    GIT_REPOSITORY https://github.com/alembic/alembic.git
+    GIT_TAG 43a1489a0f5e15420e4be7225df86e819884b6fa # version 1.8.8
+)
+
+
 FetchContent_MakeAvailable(
     Eigen3
     Libigl
@@ -76,11 +103,11 @@ set(TIGHT_INCLUSION_WITH_DOUBLE_PRECISION OFF)
 add_subdirectory(extern/tight-inclusion)
 
 if(SILK_BUILD_DEMO)
+    FetchContent_MakeAvailable(argparse nlohmann_json Imath Alembic)
     add_subdirectory(extern/polyscope)
     add_subdirectory(extern/portable-file-dialogs)
 endif()
 
 if(SILK_BUILD_TEST)
-    FetchContent_MakeAvailable(Catch2)
-    find_package(Alembic REQUIRED)
+  FetchContent_MakeAvailable(Catch2 Imath Alembic)
 endif()

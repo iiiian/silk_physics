@@ -1,38 +1,32 @@
 #include "gpu_solver_widget.hpp"
-#include <imgui.h>
-#include <spdlog/spdlog.h>
 
+#include <imgui.h>
 #include <polyscope/pick.h>
 #include <polyscope/point_cloud.h>
+#include <spdlog/spdlog.h>
 
-GpuSolverWidget::GpuSolverWidget(Context& ctx,
-                                 std::function<void(SolverBackend, SolverBackend)> onChange)
-: ctx_(ctx), on_change_(std::move(onChange)) {}
+#include "ui_console.hpp"
 
-void GpuSolverWidget::set_backend(SolverBackend b) { backend_ = b; }
+GpuSolverWidget::GpuSolverWidget(Context& ctx) : ctx_(ctx) {}
 
 void GpuSolverWidget::draw() {
-  if (ImGui::CollapsingHeader(title_.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+  ImGui::PushID(this);
 
-    bool useGpu = (backend_ == SolverBackend::GPU);
+  if (ImGui::CollapsingHeader("Solver##gpu_solver",
+                              ImGuiTreeNodeFlags_DefaultOpen)) {
+    bool use_gpu = (backend_ == SolverBackend::GPU);
 
-    if (ImGui::Checkbox("Use GPU solver", &useGpu)) {
-
-      SolverBackend old = backend_;
-      backend_ = useGpu ? SolverBackend::GPU : SolverBackend::CPU;
-      
-      //Status Log 
-      if(useGpu){
-        spdlog::info("[UI] Solver backend -> GPU");
-      }else{
-        spdlog::info("[UI] Solver backend -> CPU");
+    if (ImGui::Checkbox("Use GPU solver##gpu_solver_checkbox", &use_gpu)) {
+      // Status Log
+      if (use_gpu) {
+        backend_ = SolverBackend::GPU;
+        ui_info("[UI] Solver backend -> GPU");
+      } else {
+        backend_ = SolverBackend::CPU;
+        ui_info("[UI] Solver backend -> CPU");
       }
-
-      if (on_change_) on_change_(old, backend_);
     }
   }
+
+  ImGui::PopID();
 }
-
-
-
-

@@ -5,8 +5,11 @@
 #include <optional>
 #include <vector>
 
+#include "../config.hpp"
+#include "../eigen_alias.hpp"
 #include "../gui_utils.hpp"
 #include "../object.hpp"
+#include "../position_cache.hpp"
 #include "silk/silk.hpp"
 
 class Cloth : public IObject {
@@ -29,6 +32,8 @@ class Cloth : public IObject {
   std::unordered_set<int> pin_group_;
   std::vector<int> pin_index_;
 
+  PositionCache cache_;
+
   // transform
   glm::vec3 position_;
   glm::vec3 rotation_;
@@ -40,8 +45,10 @@ class Cloth : public IObject {
   bool transform_changed_;
 
  public:
-  static std::optional<Cloth> try_make_cloth(silk::World* world,
-                                             std::string name, Vert V, Face F);
+  static std::optional<Cloth> make_cloth(silk::World* world, std::string name,
+                                         Vert V, Face F);
+  static std::optional<Cloth> make_cloth(silk::World* world,
+                                         const config::ClothObject& obj);
 
   // default ctor is private, use factory function try_make_cloth instead.
   Cloth(const Cloth&) = delete;
@@ -58,9 +65,12 @@ class Cloth : public IObject {
   // getters
   std::string get_name() const override;
   const polyscope::SurfaceMesh* get_mesh() const override;
+  const Face& get_faces() const override;
   float get_object_scale() const override;
   uint32_t get_silk_handle() const override;
   ObjectStat get_stat() const override;
+  const PositionCache& get_cache() const override;
+  PositionCache& get_cache() override;
 
   // draw per-object imgui controls
   void draw() override;
@@ -68,7 +78,7 @@ class Cloth : public IObject {
   // simulation hooks
   bool init_sim() override;
   bool sim_step_pre() override;
-  bool sim_step_post() override;
+  bool sim_step_post(float current_time) override;
   bool exit_sim() override;
 
   void handle_pick(const polyscope::PickResult& pick, bool add_to_selection,
