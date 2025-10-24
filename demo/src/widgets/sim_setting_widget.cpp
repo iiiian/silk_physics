@@ -11,7 +11,9 @@ void SimSettingWidget::draw() {
       target_fps_ = 1.0f / ctx_.global_config.dt;
     }
     if (ImGui::InputInt("Target FPS", &target_fps_)) {
-      ctx_.global_config.dt = 1.0f / target_fps_;
+      if (ctx_.global_config.dt != 0) {
+        ctx_.global_config.dt = 1.0f / target_fps_;
+      }
     }
 
     ImGui::InputFloat("Acceleration (X)", &ctx_.global_config.acceleration_x);
