@@ -58,7 +58,11 @@ void SimulatorWidget::leave_sim_mode() {
 void SimulatorWidget::solver_step(int substep) {
   // pre-step hooks
   for (auto& pobj : ctx_.objects) {
-    pobj->sim_step_pre();
+    if (!pobj->sim_step_pre()) {
+      spdlog::info("Object {} fails to compute pre-simulation step.",
+                   pobj->get_name());
+      return;
+    }
   }
 
   for (int i = 0; i < substep; ++i) {
@@ -73,7 +77,11 @@ void SimulatorWidget::solver_step(int substep) {
   // post-step hooks
   sim_time_ += substep * ctx_.global_config.dt;
   for (auto& pobj : ctx_.objects) {
-    pobj->sim_step_post(sim_time_);
+    if (!pobj->sim_step_post(sim_time_)) {
+      spdlog::info("Object {} fails to compute post-simulation step.",
+                   pobj->get_name());
+      return;
+    }
   }
 }
 
