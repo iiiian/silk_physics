@@ -51,6 +51,7 @@ bool SceneWidget::load_object_from_path(const std::string& path,
   auto mesh = load_mesh_from_file(path);
   if (!mesh) {
     spdlog::error("Fail to load mesh file {}", path);
+    return false;
   }
 
   auto& V = mesh->verts;
