@@ -2,6 +2,14 @@
  * GPU cloth solver utilities implementation.
  */
 
+// Prevent NVCC from including x86 intrinsic headers that cause compilation errors
+#ifdef __CUDACC__
+#define _AMXTILEINTRIN_H_INCLUDED
+#define _AMXBF16INTRIN_H_INCLUDED
+#define _AMXINT8INTRIN_H_INCLUDED
+#define _AMXFP16INTRIN_H_INCLUDED
+#endif
+
 #include "solver/gpu/cloth_solver_utils.hpp"
 
 #include <Eigen/Core>
@@ -227,17 +235,21 @@ bool compute_gpu_cloth_inner_loop(const ClothConfig& config,
 
   Eigen::VectorXf rhs = outer_rhs;
 
-  // Choose diagonal based on whether barriers are active
-  const Eigen::VectorXf& diag = s.has_barrier_constrain ? s.HB_diag : s.H_diag;
-
   // GPU Jacobi solve: (D + R) * x = rhs
-  // We use a const_cast here because the solve method needs non-const reference,
-  // but we're not modifying the diagonal in this call.
   int max_iter = 100;
   float tol = 1e-6f;
 
   GpuClothSolverContext& mutable_context = const_cast<GpuClothSolverContext&>(s);
-  if (!mutable_context.jacobi_solver.solve(diag, rhs, solution, max_iter, tol)) {
+
+  // Choose diagonal based on whether barriers are active and call solve
+  bool solve_success;
+  if (s.has_barrier_constrain) {
+    solve_success = mutable_context.jacobi_solver.solve(s.HB_diag, rhs, solution, max_iter, tol);
+  } else {
+    solve_success = mutable_context.jacobi_solver.solve(s.H_diag, rhs, solution, max_iter, tol);
+  }
+
+  if (!solve_success) {
     SPDLOG_ERROR("GPU Jacobi solve failed");
     return false;
   }

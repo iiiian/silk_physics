@@ -40,6 +40,17 @@ set_target_properties(silk PROPERTIES
     CUDA_ARCHITECTURES "60;70;75;80;86"
 )
 
+# Add CUDA compiler flags to suppress warnings and avoid x86 intrinsic issues
+target_compile_options(silk PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:
+        --expt-relaxed-constexpr
+        -Xcompiler=-Wno-unknown-pragmas
+        --diag-suppress=68
+        --diag-suppress=128
+        --diag-suppress=2417
+    >
+)
+
 set_target_properties(silk PROPERTIES VERSION 0.1.0)
 
 include(${CMAKE_SOURCE_DIR}/cmake/SilkDebugFlags.cmake)

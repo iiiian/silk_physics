@@ -2,6 +2,14 @@
  * CUDA implementation of Jacobi iterative solver.
  */
 
+// Prevent NVCC from including x86 intrinsic headers that cause compilation errors
+#ifdef __CUDACC__
+#define _AMXTILEINTRIN_H_INCLUDED
+#define _AMXBF16INTRIN_H_INCLUDED
+#define _AMXINT8INTRIN_H_INCLUDED
+#define _AMXFP16INTRIN_H_INCLUDED
+#endif
+
 #include "jacobi_solver.cuh"
 
 #include <iostream>
