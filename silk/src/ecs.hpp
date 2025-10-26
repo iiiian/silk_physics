@@ -34,6 +34,7 @@ namespace silk {
   X(Pin, pin)                                        \
   X(ClothTopology, cloth_topology)                   \
   X(CpuClothSolverContext, cpu_cloth_solver_context) \
+  X(GpuClothSolverContext, gpu_cloth_solver_context) \
   X(ObjectState, object_state)                       \
   X(ObstaclePosition, obstacle_position)             \
   X(CpuObjectCollider, cpu_object_collider)

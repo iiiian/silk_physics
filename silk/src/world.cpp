@@ -13,37 +13,81 @@
 #include "obstacle_position.hpp"
 #include "pin.hpp"
 #include "solver/cpu/pipeline.hpp"
+#include "solver/gpu/pipeline.hpp"
 
 namespace silk {
 
 class World::WorldImpl {
  private:
   Registry registry_;
-  CpuSolverPipeline solver_pipeline_;
+  CpuSolverPipeline cpu_solver_pipeline_;
+  GpuSolverPipeline gpu_solver_pipeline_;
+  SolverBackend backend_ = SolverBackend::CPU;
+
+  // Helper to get current active pipeline
+  template<typename Func>
+  auto with_solver_pipeline(Func&& func) -> decltype(func(cpu_solver_pipeline_)) {
+    if (backend_ == SolverBackend::GPU) {
+      return func(gpu_solver_pipeline_);
+    } else {
+      return func(cpu_solver_pipeline_);
+    }
+  }
 
  public:
   // Global API
   Result set_global_config(GlobalConfig config) {
     auto& c = config;
-    solver_pipeline_.const_acceleration = {c.acceleration_x, c.acceleration_y,
-                                           c.acceleration_z};
-    // solver_.max_inner_iteration = c.max_iteration;
-    solver_pipeline_.dt = c.dt;
-    solver_pipeline_.max_outer_iteration = c.max_outer_iteration;
-    solver_pipeline_.max_inner_iteration = c.max_inner_iteration;
+
+    // Update both pipelines (whichever is active will use these values)
+    cpu_solver_pipeline_.const_acceleration = {c.acceleration_x, c.acceleration_y,
+                                               c.acceleration_z};
+    cpu_solver_pipeline_.dt = c.dt;
+    cpu_solver_pipeline_.max_outer_iteration = c.max_outer_iteration;
+    cpu_solver_pipeline_.max_inner_iteration = c.max_inner_iteration;
+
+    gpu_solver_pipeline_.const_acceleration = {c.acceleration_x, c.acceleration_y,
+                                               c.acceleration_z};
+    gpu_solver_pipeline_.dt = c.dt;
+    gpu_solver_pipeline_.max_outer_iteration = c.max_outer_iteration;
+    gpu_solver_pipeline_.max_inner_iteration = c.max_inner_iteration;
 
     return Result::ok();
   }
 
+  Result set_solver_backend(SolverBackend backend) {
+    if (backend == backend_) {
+      return Result::ok();  // Already using this backend
+    }
+
+    // Clear current solver state before switching
+    with_solver_pipeline([&](auto& pipeline) {
+      pipeline.clear(registry_);
+    });
+
+    backend_ = backend;
+    return Result::ok();
+  }
+
+  SolverBackend get_solver_backend() const {
+    return backend_;
+  }
+
   void clear() {
-    solver_pipeline_.clear(registry_);
+    with_solver_pipeline([&](auto& pipeline) {
+      pipeline.clear(registry_);
+    });
     registry_.clear();
   }
 
   // Solver API
 
   Result solver_step() {
-    if (!solver_pipeline_.step(registry_)) {
+    bool success = with_solver_pipeline([&](auto& pipeline) {
+      return pipeline.step(registry_);
+    });
+
+    if (!success) {
       return Result::error(ErrorCode::CholeskyDecompositionFail);
     }
 
@@ -51,7 +95,9 @@ class World::WorldImpl {
   }
 
   Result solver_reset() {
-    solver_pipeline_.reset(registry_);
+    with_solver_pipeline([&](auto& pipeline) {
+      pipeline.reset(registry_);
+    });
     return Result::ok();
   }
 
@@ -335,6 +381,12 @@ World& World::operator=(World&&) = default;
 
 Result World::set_global_config(GlobalConfig config) {
   return impl_->set_global_config(config);
+}
+Result World::set_solver_backend(SolverBackend backend) {
+  return impl_->set_solver_backend(backend);
+}
+SolverBackend World::get_solver_backend() const {
+  return impl_->get_solver_backend();
 }
 void World::clear() { impl_->clear(); }
 Result World::solver_step() { return impl_->solver_step(); }

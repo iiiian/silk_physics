@@ -83,6 +83,15 @@ struct ClothConfig {
 };
 
 /**
+ * @brief Solver backend selection.
+ */
+enum class SolverBackend {
+  Auto,  ///< Automatically select best available backend
+  CPU,   ///< Force CPU solver (CHOLMOD Cholesky)
+  GPU    ///< Force GPU solver (CUDA Jacobi)
+};
+
+/**
  * @brief Global simulation parameters.
  */
 struct GlobalConfig {
@@ -130,6 +139,19 @@ class World {
    * @return Success or failure result
    */
   [[nodiscard]] Result set_global_config(GlobalConfig config);
+
+  /**
+   * @brief Set solver backend (CPU or GPU).
+   * @param backend Solver backend selection
+   * @return Success result
+   */
+  [[nodiscard]] Result set_solver_backend(SolverBackend backend);
+
+  /**
+   * @brief Get current solver backend.
+   * @return Current backend setting
+   */
+  [[nodiscard]] SolverBackend get_solver_backend() const;
 
   /**
    * @brief Remove all objects and simulation data.

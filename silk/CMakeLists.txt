@@ -2,7 +2,11 @@
 # Library config
 # -------------------------------------------------
 
-file(GLOB SILK_SOURCES 
+# Enable CUDA support
+enable_language(CUDA)
+find_package(CUDAToolkit REQUIRED)
+
+file(GLOB SILK_SOURCES
     src/cloth_topology.cpp
     src/collision/cpu/bbox.cpp
     src/collision/cpu/narrowphase.cpp
@@ -19,8 +23,22 @@ file(GLOB SILK_SOURCES
     src/world.cpp
 )
 
-add_library(silk ${SILK_SOURCES})
+# GPU solver sources (CUDA)
+file(GLOB SILK_GPU_SOURCES
+    src/solver/gpu/jacobi_solver.cu
+    src/solver/gpu/cloth_solver_context.cu
+    src/solver/gpu/cloth_solver_utils.cu
+    src/solver/gpu/pipeline.cu
+)
+
+add_library(silk ${SILK_SOURCES} ${SILK_GPU_SOURCES})
 add_library(silk::silk ALIAS silk)
+
+# Set CUDA properties
+set_target_properties(silk PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
+    CUDA_ARCHITECTURES "60;70;75;80;86"
+)
 
 set_target_properties(silk PROPERTIES VERSION 0.1.0)
 
@@ -50,6 +68,8 @@ target_link_libraries(
         SuiteSparse::COLAMD
         SuiteSparse::CCOLAMD
         SuiteSparse::CHOLMOD
+        # CUDA dependencies
+        CUDA::cudart
 )
 
 # -------------------------------------------------

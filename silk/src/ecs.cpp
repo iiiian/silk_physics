@@ -13,6 +13,7 @@
 #include "obstacle_position.hpp"
 #include "pin.hpp"
 #include "solver/cpu/cloth_solver_context.hpp"
+#include "solver/gpu/cloth_solver_context.hpp"
 
 namespace silk {
 
