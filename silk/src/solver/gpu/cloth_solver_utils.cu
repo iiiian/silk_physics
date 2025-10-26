@@ -243,10 +243,10 @@ bool compute_gpu_cloth_inner_loop(const ClothConfig& config,
 
   // Choose diagonal based on whether barriers are active and call solve
   bool solve_success;
-  if (s.has_barrier_constrain) {
-    solve_success = mutable_context.jacobi_solver.solve(s.HB_diag, rhs, solution, max_iter, tol);
+  if (mutable_context.has_barrier_constrain) {
+    solve_success = mutable_context.jacobi_solver.solve(mutable_context.HB_diag, rhs, solution, max_iter, tol);
   } else {
-    solve_success = mutable_context.jacobi_solver.solve(s.H_diag, rhs, solution, max_iter, tol);
+    solve_success = mutable_context.jacobi_solver.solve(mutable_context.H_diag, rhs, solution, max_iter, tol);
   }
 
   if (!solve_success) {
