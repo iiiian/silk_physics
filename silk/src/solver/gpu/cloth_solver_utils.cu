@@ -242,12 +242,12 @@ bool compute_gpu_cloth_inner_loop(const ClothConfig& config,
   GpuClothSolverContext& mutable_context = const_cast<GpuClothSolverContext&>(s);
 
   // Choose diagonal based on whether barriers are active and call solve
-  bool solve_success;
-  if (mutable_context.has_barrier_constrain) {
-    solve_success = mutable_context.jacobi_solver.solve(mutable_context.HB_diag, rhs, solution, max_iter, tol);
-  } else {
-    solve_success = mutable_context.jacobi_solver.solve(mutable_context.H_diag, rhs, solution, max_iter, tol);
-  }
+  // Extract diagonal reference to avoid Eigen::Ref type issues with NVCC
+  const Eigen::VectorXf& diag = mutable_context.has_barrier_constrain
+                                 ? mutable_context.HB_diag
+                                 : mutable_context.H_diag;
+
+  bool solve_success = mutable_context.jacobi_solver.solve(diag, rhs, solution, max_iter, tol);
 
   if (!solve_success) {
     SPDLOG_ERROR("GPU Jacobi solve failed");
