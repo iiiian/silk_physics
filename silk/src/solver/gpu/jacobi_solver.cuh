@@ -78,7 +78,7 @@ class GpuJacobiSolver {
    * @return true on success, false on CUDA error
    */
   bool setup(const Eigen::SparseMatrix<float, Eigen::RowMajor>& A,
-             Eigen::VectorXf& D_host);
+             Eigen::Ref<Eigen::VectorXf> D_host);
 
   /**
    * @brief Solve Ax = b using Jacobi iteration.
@@ -93,8 +93,9 @@ class GpuJacobiSolver {
    * @param tol Residual norm tolerance for convergence
    * @return true if converged or max iterations reached, false on error
    */
-  bool solve(const Eigen::VectorXf& D_host, const Eigen::VectorXf& b_host,
-             Eigen::VectorXf& x_host, int max_iter, float tol);
+  bool solve(Eigen::Ref<const Eigen::VectorXf> D_host,
+             Eigen::Ref<const Eigen::VectorXf> b_host,
+             Eigen::Ref<Eigen::VectorXf> x_host, int max_iter, float tol);
 
   /**
    * @brief Free all GPU memory.

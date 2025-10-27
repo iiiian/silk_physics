@@ -166,7 +166,7 @@ GpuJacobiSolver& GpuJacobiSolver::operator=(GpuJacobiSolver&& other) noexcept {
 
 bool GpuJacobiSolver::setup(
     const Eigen::SparseMatrix<float, Eigen::RowMajor>& A,
-    Eigen::VectorXf& D_host) {
+    Eigen::Ref<Eigen::VectorXf> D_host) {
   cleanup();  // Clean up any previous allocation
 
   n_ = A.rows();
@@ -218,9 +218,9 @@ bool GpuJacobiSolver::setup(
   return true;
 }
 
-bool GpuJacobiSolver::solve(const Eigen::VectorXf& D_host,
-                            const Eigen::VectorXf& b_host,
-                            Eigen::VectorXf& x_host, int max_iter, float tol) {
+bool GpuJacobiSolver::solve(Eigen::Ref<const Eigen::VectorXf> D_host,
+                            Eigen::Ref<const Eigen::VectorXf> b_host,
+                            Eigen::Ref<Eigen::VectorXf> x_host, int max_iter, float tol) {
   if (!is_initialized()) {
     std::cerr << "Error: GpuJacobiSolver not initialized. Call setup() first.\n";
     return false;
