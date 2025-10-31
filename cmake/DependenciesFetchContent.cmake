@@ -6,7 +6,7 @@ include_guard(GLOBAL)
 
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
-find_package(CUDAToolkit)
+# find_package(CUDAToolkit)
 
 # ---------------------------------------------------------------
 # Other dependencies
@@ -72,9 +72,6 @@ elseif (TARGET igl::igl_core)
 else()
   message(FATAL_ERROR "Could not find libigl core target")
 endif()
-
-set(TIGHT_INCLUSION_WITH_DOUBLE_PRECISION OFF)
-add_subdirectory(extern/tight-inclusion)
 
 if(SILK_BUILD_DEMO)
     add_subdirectory(extern/polyscope)
