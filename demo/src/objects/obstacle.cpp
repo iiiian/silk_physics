@@ -7,15 +7,18 @@
 #include <glm/gtx/euler_angles.hpp>
 #include <utility>
 
-#include "../glm_utils.cpp"
+#include "../eigen_alias.hpp"
+#include "../gui_utils.hpp"
 #include "../polyscope_silk_interop.hpp"
+#include "../position_cache.hpp"
+#include "../transform.hpp"
 #include "draw_utils.hpp"
 
 namespace py = polyscope;
 
-std::optional<Obstacle> Obstacle::try_make_obstacle(silk::World* world,
-                                                    std::string name, Vert V,
-                                                    Face F) {
+std::optional<Obstacle> Obstacle::make_obstacle(silk::World* world,
+                                                std::string name, Vert V,
+                                                Face F) {
   if (!world) {
     return std::nullopt;
   }
@@ -46,6 +49,7 @@ std::optional<Obstacle> Obstacle::try_make_obstacle(silk::World* world,
   o.world_ = world;
   o.silk_handle_ = 0;
   o.collision_config_ = {};
+  o.cache_ = {};
   o.collision_config_changed_ = false;
   o.position_ = glm::vec3(0.0f);
   o.rotation_ = glm::vec3(0.0f);
@@ -54,6 +58,32 @@ std::optional<Obstacle> Obstacle::try_make_obstacle(silk::World* world,
   o.drag_position_changed_ = false;
 
   return o;
+}
+
+std::optional<Obstacle> Obstacle::make_obstacle(
+    silk::World* world, const config::ObstacleObject& obj) {
+  auto mesh = load_mesh_from_file(obj.mesh);
+  if (!mesh) {
+    return std::nullopt;
+  }
+
+  AffineTransformer transformer{obj.transform};
+  transformer.apply(mesh->verts);
+
+  auto obstacle = make_obstacle(world, obj.name, std::move(mesh->verts),
+                                std::move(mesh->faces));
+  if (!obstacle) {
+    return std::nullopt;
+  }
+
+  obstacle->collision_config_.is_collision_on = obj.collision.enabled;
+  obstacle->collision_config_.is_self_collision_on =
+      obj.collision.self_collision;
+  obstacle->collision_config_.group = obj.collision.group;
+  obstacle->collision_config_.friction = obj.collision.friction;
+  obstacle->collision_config_.restitution = obj.collision.restitution;
+
+  return obstacle;
 }
 
 Obstacle::Obstacle(Obstacle&& other) noexcept {
@@ -89,6 +119,7 @@ void Obstacle::swap(Obstacle& other) noexcept {
   std::swap(world_, other.world_);
   std::swap(silk_handle_, other.silk_handle_);
   std::swap(collision_config_, other.collision_config_);
+  std::swap(cache_, other.cache_);
   std::swap(collision_config_changed_, other.collision_config_changed_);
   std::swap(position_, other.position_);
   std::swap(rotation_, other.rotation_);
@@ -103,11 +134,14 @@ void Obstacle::clear() noexcept {
   F_ = {};
   world_ = nullptr;
   silk_handle_ = 0;
+  cache_.clear();
 }
 
 std::string Obstacle::get_name() const { return name_; }
 
 const polyscope::SurfaceMesh* Obstacle::get_mesh() const { return mesh_; }
+
+const Face& Obstacle::get_faces() const { return F_; }
 
 float Obstacle::get_object_scale() const { return mesh_scale_; }
 
@@ -117,23 +151,28 @@ ObjectStat Obstacle::get_stat() const {
   return {static_cast<int>(V_.rows()), static_cast<int>(F_.rows())};
 }
 
+const PositionCache& Obstacle::get_cache() const { return cache_; }
+
+PositionCache& Obstacle::get_cache() { return cache_; }
+
 void Obstacle::draw() {
   draw_collision_config(collision_config_, collision_config_changed_);
 
   draw_transform_widget(position_, rotation_, scale_, transform_changed_);
   if (transform_changed_) {
-    mesh_->setTransform(build_transformation(position_, rotation_, scale_));
+    AffineTransformer transformer{position_, rotation_, scale_};
+    mesh_->setTransform(transformer.get_glm_affine());
     transform_changed_ = false;
   }
 }
 
 bool Obstacle::init_sim() {
+  cache_.clear();
+
   // apply transformation
   mesh_->vertexPositions.ensureHostBufferPopulated();
-  glm::mat4 T = build_transformation(position_, rotation_, scale_);
-  for (auto& v : mesh_->vertexPositions.data) {
-    v = transform_vertex(T, v);
-  }
+  AffineTransformer transformer{position_, rotation_, scale_};
+  transformer.apply(mesh_->vertexPositions.data);
   mesh_->vertexPositions.markHostBufferUpdated();
   mesh_->resetTransform();
 
@@ -188,17 +227,28 @@ bool Obstacle::sim_step_pre() {
                     name_, r.to_string());
       return false;
     }
-    drag_position_changed_ = false;
   }
 
   return true;
 }
 
-bool Obstacle::sim_step_post() { return true; }
+bool Obstacle::sim_step_post(float current_time) {
+  if (cache_.empty() || drag_position_changed_) {
+    mesh_->vertexPositions.ensureHostBufferPopulated();
+    silk::ConstSpan<float> vert_span =
+        make_const_span_from_position(mesh_->vertexPositions);
+    Eigen::Map<const Vert> vert{vert_span.data, vert_span.size / 3, 3};
+    cache_.emplace_back(current_time, vert);
+
+    drag_position_changed_ = false;
+  }
+  return true;
+}
 
 bool Obstacle::exit_sim() {
   mesh_->updateVertexPositions(V_);
-  mesh_->setTransform(build_transformation(position_, rotation_, scale_));
+  AffineTransformer transformer{position_, rotation_, scale_};
+  mesh_->setTransform(transformer.get_glm_affine());
   return true;
 }
 

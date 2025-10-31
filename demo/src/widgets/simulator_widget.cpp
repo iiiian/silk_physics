@@ -2,12 +2,20 @@
 
 #include <polyscope/pick.h>
 #include <polyscope/polyscope.h>
+#include <portable-file-dialogs.h>
 #include <spdlog/spdlog.h>
 
 #include <Eigen/Core>
+#include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <filesystem>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <string>
+#include <vector>
+
+#include "../alembic_writer.hpp"
 
 namespace py = polyscope;
 
@@ -32,6 +40,7 @@ void SimulatorWidget::enter_sim_mode() {
   }
 
   prev_update_time_ = std::chrono::steady_clock::now();
+  sim_time_ = 0.0f;
   ctx_.ui_mode = UIMode::Sim;
   spdlog::info("Enter sim mode");
 }
@@ -51,7 +60,11 @@ void SimulatorWidget::leave_sim_mode() {
 void SimulatorWidget::solver_step(int substep) {
   // pre-step hooks
   for (auto& pobj : ctx_.objects) {
-    pobj->sim_step_pre();
+    if (!pobj->sim_step_pre()) {
+      spdlog::info("Object {} fails to compute pre-simulation step.",
+                   pobj->get_name());
+      return;
+    }
   }
 
   for (int i = 0; i < substep; ++i) {
@@ -64,8 +77,13 @@ void SimulatorWidget::solver_step(int substep) {
   }
 
   // post-step hooks
+  sim_time_ += substep * ctx_.global_config.dt;
   for (auto& pobj : ctx_.objects) {
-    pobj->sim_step_post();
+    if (!pobj->sim_step_post(sim_time_)) {
+      spdlog::info("Object {} fails to compute post-simulation step.",
+                   pobj->get_name());
+      return;
+    }
   }
 }
 
@@ -74,6 +92,7 @@ SimulatorWidget::SimulatorWidget(Context& context) : ctx_(context) {}
 void SimulatorWidget::draw() {
   if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Text("Simulation FPS: %f", sim_fps_);
+    ImGui::Text("Simulation Time: %f", sim_time_);
 
     ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal &&
                          ctx_.ui_mode != UIMode::Sim);
@@ -83,6 +102,30 @@ void SimulatorWidget::draw() {
         leave_sim_mode();
       } else {
         enter_sim_mode();
+      }
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+
+    bool can_export_scene =
+        (ctx_.ui_mode == UIMode::Normal) && !ctx_.objects.empty();
+    ImGui::BeginDisabled(!can_export_scene);
+    if (ImGui::Button("Export Simulation")) {
+      std::vector<std::string> filters = {"Alembic Files", "*.abc"};
+
+      std::string destination =
+          pfd::save_file("Export Simulation", "scene export.abc", filters,
+                         pfd::opt::force_overwrite)
+              .result();
+
+      if (!destination.empty()) {
+        std::filesystem::path export_path(destination);
+        if (!write_scene(export_path, ctx_.objects)) {
+          spdlog::error("Failed to export scene to {}", export_path.string());
+        } else {
+          spdlog::info("Exported scene to {}", export_path.string());
+        }
       }
     }
     ImGui::EndDisabled();

@@ -5,18 +5,21 @@
 #include <polyscope/surface_mesh.h>
 #include <spdlog/spdlog.h>
 
-#include <cstring>
+#include <array>
 #include <glm/glm.hpp>
 #include <queue>
 
-#include "../glm_utils.hpp"
+#include "../eigen_alias.hpp"
+#include "../gui_utils.hpp"
 #include "../polyscope_silk_interop.hpp"
+#include "../position_cache.hpp"
+#include "../transform.hpp"
 #include "draw_utils.hpp"
 
 namespace py = polyscope;
 
-std::optional<Cloth> Cloth::try_make_cloth(silk::World* world, std::string name,
-                                           Vert V, Face F) {
+std::optional<Cloth> Cloth::make_cloth(silk::World* world, std::string name,
+                                       Vert V, Face F) {
   if (V.rows() == 0) {
     return std::nullopt;
   }
@@ -50,6 +53,7 @@ std::optional<Cloth> Cloth::try_make_cloth(silk::World* world, std::string name,
   c.collision_config_ = {};
   c.pin_group_ = {};
   c.pin_index_ = {};
+  c.cache_ = {};
   c.pin_index_changed_ = false;
   c.cloth_config_changed_ = false;
   c.collision_config_changed_ = false;
@@ -59,6 +63,35 @@ std::optional<Cloth> Cloth::try_make_cloth(silk::World* world, std::string name,
   c.transform_changed_ = false;
 
   return c;
+}
+
+std::optional<Cloth> Cloth::make_cloth(silk::World* world,
+                                       const config::ClothObject& obj) {
+  auto mesh = load_mesh_from_file(obj.mesh);
+  if (!mesh) {
+    return std::nullopt;
+  }
+
+  AffineTransformer transformer{obj.transform};
+  transformer.apply(mesh->verts);
+
+  auto cloth = make_cloth(world, obj.name, std::move(mesh->verts),
+                          std::move(mesh->faces));
+  if (!cloth) {
+    return std::nullopt;
+  }
+
+  cloth->cloth_config_.elastic_stiffness = obj.cloth.elastic_stiffness;
+  cloth->cloth_config_.bending_stiffness = obj.cloth.bending_stiffness;
+  cloth->cloth_config_.density = obj.cloth.density;
+  cloth->cloth_config_.damping = obj.cloth.damping;
+  cloth->collision_config_.is_collision_on = obj.collision.enabled;
+  cloth->collision_config_.is_self_collision_on = obj.collision.self_collision;
+  cloth->collision_config_.group = obj.collision.group;
+  cloth->collision_config_.friction = obj.collision.friction;
+  cloth->collision_config_.restitution = obj.collision.restitution;
+
+  return cloth;
 }
 
 Cloth::Cloth(Cloth&& other) noexcept {
@@ -99,6 +132,7 @@ void Cloth::swap(Cloth& other) noexcept {
   std::swap(collision_config_, other.collision_config_);
   std::swap(pin_group_, other.pin_group_);
   std::swap(pin_index_, other.pin_index_);
+  std::swap(cache_, other.cache_);
   std::swap(pin_index_changed_, other.pin_index_changed_);
   std::swap(cloth_config_changed_, other.cloth_config_changed_);
   std::swap(collision_config_changed_, other.collision_config_changed_);
@@ -115,11 +149,14 @@ void Cloth::clear() noexcept {
   adjacency_list_ = {};
   world_ = nullptr;
   silk_handle_ = 0;
+  cache_.clear();
 }
 
 std::string Cloth::get_name() const { return name_; }
 
 const polyscope::SurfaceMesh* Cloth::get_mesh() const { return mesh_; }
+
+const Face& Cloth::get_faces() const { return F_; }
 
 float Cloth::get_object_scale() const { return mesh_scale_; }
 
@@ -129,26 +166,32 @@ ObjectStat Cloth::get_stat() const {
   return {static_cast<int>(V_.rows()), static_cast<int>(F_.rows())};
 }
 
+const PositionCache& Cloth::get_cache() const { return cache_; }
+
+PositionCache& Cloth::get_cache() { return cache_; }
+
 void Cloth::draw() {
   draw_cloth_config(cloth_config_, cloth_config_changed_);
   draw_collision_config(collision_config_, collision_config_changed_);
 
   draw_transform_widget(position_, rotation_, scale_, transform_changed_);
   if (transform_changed_) {
-    mesh_->setTransform(build_transformation(position_, rotation_, scale_));
+    AffineTransformer transformer{position_, rotation_, scale_};
+    mesh_->setTransform(transformer.get_glm_affine());
   }
 }
 
 bool Cloth::init_sim() {
+  cache_.clear();
+
   // apply transformation
   mesh_->vertexPositions.ensureHostBufferPopulated();
-  glm::mat4 T = build_transformation(position_, rotation_, scale_);
-  for (auto& v : mesh_->vertexPositions.data) {
-    v = transform_vertex(T, v);
-  }
+  AffineTransformer transformer{position_, rotation_, scale_};
+  transformer.apply(mesh_->vertexPositions.data);
   mesh_->vertexPositions.markHostBufferUpdated();
   mesh_->resetTransform();
 
+  // Setup cloth in silk
   silk::ConstSpan<float> vert_span =
       make_const_span_from_position(mesh_->vertexPositions);
 
@@ -235,7 +278,8 @@ bool Cloth::sim_step_pre() {
   return true;
 }
 
-bool Cloth::sim_step_post() {
+bool Cloth::sim_step_post(float current_time) {
+  // Update position in polyscope
   mesh_->vertexPositions.ensureHostBufferAllocated();
   silk::Span<float> position = make_span_from_position(mesh_->vertexPositions);
   silk::Result r = world_->get_cloth_position(silk_handle_, position);
@@ -246,13 +290,18 @@ bool Cloth::sim_step_post() {
   }
   mesh_->vertexPositions.markHostBufferUpdated();
 
+  // Also save a copy in simulation cache
+  Eigen::Map<Vert> vert{position.data, position.size / 3, 3};
+  cache_.emplace_back(current_time, vert);
+
   return true;
 }
 
 bool Cloth::exit_sim() {
   mesh_->vertexPositions.ensureHostBufferAllocated();
   mesh_->updateVertexPositions(V_);
-  mesh_->setTransform(build_transformation(position_, rotation_, scale_));
+  AffineTransformer transformer{position_, rotation_, scale_};
+  mesh_->setTransform(transformer.get_glm_affine());
   mesh_->vertexPositions.markHostBufferUpdated();
 
   return true;

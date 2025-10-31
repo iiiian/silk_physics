@@ -1,0 +1,80 @@
+{
+  "global": {
+    "dt": 0.01,
+    "max_outer_iteration": 120,
+    "max_inner_iteration": 80,
+    "acceleration": [
+      0.0,
+      0.0,
+      -9.8
+    ],
+    "total_steps": 300
+  },
+  "objects": [
+    {
+      "type": "cloth",
+      "name": "dense_cloth",
+      "mesh": "model/dense_sheet.obj",
+      "cloth": {
+        "elastic_stiffness": 120.0,
+        "bending_stiffness": 0.0001,
+        "density": 0.1,
+        "damping": 0.015
+      },
+      "collision": {
+        "enabled": true,
+        "self_collision": true,
+        "group": 1,
+        "restitution": 0.3,
+        "friction": 0.5
+      },
+      "transform": {
+        "translation": [
+          0.2,
+          0.0,
+          2.2
+        ],
+        "rotation_euler_deg": [
+          0.0,
+          90.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "type": "obstacle",
+      "name": "bunny_obstacle",
+      "mesh": "model/bunny.ply",
+      "collision": {
+        "enabled": true,
+        "self_collision": false,
+        "group": 1,
+        "restitution": 0.1,
+        "friction": 0.6
+      },
+      "transform": {
+        "translation": [
+          0.0,
+          6.4,
+          0.0
+        ],
+        "rotation_euler_deg": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          10.0,
+          10.0,
+          10.0
+        ]
+      }
+    }
+  ]
+}
+
