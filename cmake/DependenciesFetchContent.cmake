@@ -99,9 +99,6 @@ else()
   message(FATAL_ERROR "Could not find libigl core target")
 endif()
 
-set(TIGHT_INCLUSION_WITH_DOUBLE_PRECISION OFF)
-add_subdirectory(extern/tight-inclusion)
-
 if(SILK_BUILD_DEMO)
     FetchContent_MakeAvailable(argparse nlohmann_json Imath Alembic)
     add_subdirectory(extern/polyscope)

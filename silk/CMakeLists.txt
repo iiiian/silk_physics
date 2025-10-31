@@ -8,6 +8,9 @@ file(GLOB SILK_SOURCES
     src/collision/cpu/narrowphase.cpp
     src/collision/cpu/object_collider.cpp
     src/collision/cpu/pipeline.cpp
+    src/collision/cpu/interval.cpp
+    src/collision/cpu/interval_root_finder.cpp
+    src/collision/cpu/ccd.cpp
     src/ecs.cpp
     src/mesh.cpp
     src/result.cpp
@@ -42,7 +45,6 @@ target_link_libraries(
         ${SILK_IGL_CORE}
         spdlog::spdlog
         TBB::tbb
-        tight_inclusion::tight_inclusion
         # dependencies for SuiteSparse cholmod
         SuiteSparse::SuiteSparseConfig
         SuiteSparse::AMD

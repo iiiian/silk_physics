@@ -2,9 +2,8 @@
 
 #include <Eigen/Geometry>
 #include <cassert>
-#include <tight_inclusion/ccd.hpp>
-#include <tight_inclusion/interval_root_finder.hpp>
 
+#include "collision/cpu/ccd.hpp"
 #include "compiler_builtin.hpp"
 #include "logger.hpp"
 
@@ -223,7 +222,7 @@ std::optional<Collision> point_triangle_collision(
   c.position_t1.block(0, 1, 3, 3) = mb.position_t1.block(0, 0, 3, 3);
 
   // CCD test.
-  std::optional<ticcd::CCDResult> ccd_result = ticcd::vertexFaceCCD(
+  std::optional<CCDResult> ccd_result = vertex_face_ccd(
       c.position_t0.col(0),  // Point at t0.
       c.position_t0.col(1),  // Triangle vertex 0 at t0.
       c.position_t0.col(2),  // Triangle vertex 1 at t0.
@@ -235,7 +234,6 @@ std::optional<Collision> point_triangle_collision(
       scene_vf_err,          // Floating-point error for the whole scene.
       ms,                    // Minimal separation.
       tolerance,             // TICCD solving precision.
-      1.0f,                  // Maximum time; uses normalized interval [0, 1].
       max_iter,              // Maximum TICCD iterations; set -1 to disable.
       true                   // Enable TOI refinement if TOI = 0.
   );
@@ -369,22 +367,21 @@ std::optional<Collision> edge_edge_collision(
   c.position_t1.block(0, 2, 3, 2) = mb.position_t1.block(0, 0, 3, 2);
 
   // CCD test.
-  std::optional<ticcd::CCDResult> ccd_result = ticcd::edgeEdgeCCD(
-      c.position_t0.col(0),  // Edge A vertex 0 at t0.
-      c.position_t0.col(1),  // Edge A vertex 1 at t0.
-      c.position_t0.col(2),  // Edge B vertex 0 at t0.
-      c.position_t0.col(3),  // Edge B vertex 1 at t0.
-      c.position_t1.col(0),  // Edge A vertex 0 at t1.
-      c.position_t1.col(1),  // Edge A vertex 1 at t1.
-      c.position_t1.col(2),  // Edge B vertex 0 at t1.
-      c.position_t1.col(3),  // Edge B vertex 1 at t1.
-      scene_ee_err,          // Floating-point error for the whole scene.
-      ms,                    // Minimal separation.
-      tolerance,             // TICCD solving precision.
-      1.0f,                  // Maximum time; uses normalized interval [0, 1].
-      max_iter,              // Maximum TICCD iterations; set -1 to disable.
-      true                   // Enable TOI refinement if TOI = 0.
-  );
+  std::optional<CCDResult> ccd_result =
+      edge_edge_ccd(c.position_t0.col(0),  // Edge A vertex 0 at t0.
+                    c.position_t0.col(1),  // Edge A vertex 1 at t0.
+                    c.position_t0.col(2),  // Edge B vertex 0 at t0.
+                    c.position_t0.col(3),  // Edge B vertex 1 at t0.
+                    c.position_t1.col(0),  // Edge A vertex 0 at t1.
+                    c.position_t1.col(1),  // Edge A vertex 1 at t1.
+                    c.position_t1.col(2),  // Edge B vertex 0 at t1.
+                    c.position_t1.col(3),  // Edge B vertex 1 at t1.
+                    scene_ee_err,  // Floating-point error for the whole scene.
+                    ms,            // Minimal separation.
+                    tolerance,     // TICCD solving precision.
+                    max_iter,  // Maximum TICCD iterations; set -1 to disable.
+                    true       // Enable TOI refinement if TOI = 0.
+      );
 
   if (!ccd_result) {
     return std::nullopt;
@@ -562,9 +559,9 @@ void partial_ccd_update(const Eigen::VectorXf& global_state_t0,
   }
 
   // CCD with low maximum iterations.
-  std::optional<ticcd::CCDResult> ccd_result;
+  std::optional<CCDResult> ccd_result;
   if (c.type == CollisionType::PointTriangle) {
-    ccd_result = ticcd::vertexFaceCCD(
+    ccd_result = vertex_face_ccd(
         c.position_t0.col(0),  // Point at t0.
         c.position_t0.col(1),  // Triangle vertex 0 at t0.
         c.position_t0.col(2),  // Triangle vertex 1 at t0.
@@ -576,12 +573,11 @@ void partial_ccd_update(const Eigen::VectorXf& global_state_t0,
         scene_vf_err,          // Floating-point error for the whole scene.
         c.minimal_separation,  // Minimal separation.
         tolerance,             // TICCD solving precision.
-        1.0f,                  // Maximum time; uses normalized interval [0, 1].
         max_iter,              // Maximum TICCD iterations; set -1 to disable.
         false                  // No TOI refinement if TOI = 0.
     );
   } else {
-    ccd_result = ticcd::edgeEdgeCCD(
+    ccd_result = edge_edge_ccd(
         c.position_t0.col(0),  // Edge A vertex 0 at t0.
         c.position_t0.col(1),  // Edge A vertex 1 at t0.
         c.position_t0.col(2),  // Edge B vertex 0 at t0.
@@ -593,7 +589,6 @@ void partial_ccd_update(const Eigen::VectorXf& global_state_t0,
         scene_ee_err,          // Floating-point error for the whole scene.
         c.minimal_separation,  // Minimal separation.
         tolerance,             // TICCD solving precision.
-        1.0f,                  // Maximum time; uses normalized interval [0, 1].
         max_iter,              // Maximum TICCD iterations; set -1 to disable.
         false                  // No TOI refinement if TOI = 0.
     );

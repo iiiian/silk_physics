@@ -5,11 +5,11 @@
 
 #include <Eigen/Core>
 #include <cassert>
-#include <tight_inclusion/interval_root_finder.hpp>
 #include <vector>
 
 #include "collision/cpu/broadphase.hpp"
 #include "collision/cpu/collision.hpp"
+#include "collision/cpu/interval_root_finder.hpp"
 #include "collision/cpu/mesh_collider.hpp"
 #include "collision/cpu/narrowphase.hpp"
 #include "collision/cpu/object_collider.hpp"
@@ -115,8 +115,8 @@ std::vector<Collision> CpuCollisionPipeline::find_collision(
   // Compute scene-dependent numerical error bounds for CCD robustness.
   Eigen::Vector3f abs_max =
       scene_bbox.min.cwiseAbs().cwiseMax(scene_bbox.max.cwiseAbs());
-  scene_ee_err_ = ticcd::get_numerical_error(abs_max, false, true);
-  scene_vf_err_ = ticcd::get_numerical_error(abs_max, true, true);
+  scene_ee_err_ = get_numerical_error(abs_max, false);
+  scene_vf_err_ = get_numerical_error(abs_max, true);
 
   tbb::enumerable_thread_specific<std::vector<Collision>> thread_collisions;
   CollisionCache<MeshCollider> mesh_ccache;
