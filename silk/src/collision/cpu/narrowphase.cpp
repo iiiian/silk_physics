@@ -41,10 +41,10 @@ std::optional<std::pair<float, float>> exact_point_triangle_uv(
   float b2 = (x21dx21 * x31dx01 - x21dx31 * x21dx01) / det;  // V.
 
   // Outside of triangle.
-  if (b1 < -eps || b2 < -eps || b1 + b2 > 1.0f + eps) {
-    SPDLOG_DEBUG("Ignore potential collision. Reason: outside of triangle");
-    return std::nullopt;
-  }
+  // if (b1 < -eps || b2 < -eps || b1 + b2 > 1.0f + eps) {
+  //   SPDLOG_DEBUG("Ignore potential collision. Reason: outside of triangle");
+  //   return std::nullopt;
+  // }
 
   return std::make_pair(b1, b2);
 }
@@ -248,10 +248,31 @@ std::optional<Collision> point_triangle_collision(
   // exist and hope that the solver can resume to a valid state magically.
   if (ccd_result->use_small_ms && ccd_result->small_ms_t(0) == 0.0f) {
     spdlog::error("Ignore potential collision. Reason: zero toi");
+    SPDLOG_ERROR("ccd result:");
+    SPDLOG_ERROR("tuv = {}, {}, {}", ccd_result->t.transpose(),
+                 ccd_result->u.transpose(), ccd_result->v.transpose());
+    SPDLOG_ERROR("small ms t = {}", ccd_result->small_ms_t.transpose());
+    SPDLOG_ERROR("ms = {}", ms);
+    SPDLOG_ERROR("pt collision: {}", c.index.transpose());
+    SPDLOG_ERROR("position x0 t0: {}", c.position_t0.col(0).transpose());
+    SPDLOG_ERROR("position x1 t0: {}", c.position_t0.col(1).transpose());
+    SPDLOG_ERROR("position x2 t0: {}", c.position_t0.col(2).transpose());
+    SPDLOG_ERROR("position x3 t0: {}", c.position_t0.col(3).transpose());
+    SPDLOG_ERROR("position x0 t1: {}", c.position_t1.col(0).transpose());
+    SPDLOG_ERROR("position x1 t1: {}", c.position_t1.col(1).transpose());
+    SPDLOG_ERROR("position x2 t1: {}", c.position_t1.col(2).transpose());
+    SPDLOG_ERROR("position x3 t1: {}", c.position_t1.col(3).transpose());
+
+    std::exit(1);
     return std::nullopt;
   }
 
-  float toi = ccd_result->t(0);
+  float toi;
+  if (ccd_result->use_small_ms) {
+    toi = ccd_result->small_ms_t(0);
+  } else {
+    toi = ccd_result->t(0);
+  }
 
   c.velocity_t0 = c.position_t1 - c.position_t0;
   Eigen::Matrix<float, 3, 4> p_colli = c.position_t0 + toi * c.velocity_t0;
@@ -309,13 +330,8 @@ std::optional<Collision> point_triangle_collision(
   // or within the minimal separation distance. To avoid the solver getting
   // stuck with zero TOI, enforce a small TOI min_toi. Likewise, even when CCD
   // does not use small_ms, ensure TOI is at least min_toi.
-  if (ccd_result->use_small_ms || toi < min_toi) {
-    c.toi = min_toi;
-    c.use_small_ms = true;
-  } else {
-    c.toi = toi;
-    c.use_small_ms = false;
-  }
+  c.toi = toi;
+  c.use_small_ms = (ccd_result->use_small_ms);
 
   c.type = CollisionType::PointTriangle;
   c.entity_handle_a = oa.entity_handle;
@@ -357,6 +373,7 @@ std::optional<Collision> edge_edge_collision(
     const CpuObjectCollider& ob, const MeshCollider& mb, float dt,
     float base_stiffness, float min_toi, float tolerance, int max_iter,
     const Eigen::Array3f& scene_ee_err) {
+  return std::nullopt;
   // Minimal separation.
   float ms = std::min(oa.bbox_padding, ob.bbox_padding);
 
@@ -393,6 +410,22 @@ std::optional<Collision> edge_edge_collision(
   // exist and hope that the solver can resume to a valid state magically.
   if (ccd_result->use_small_ms && ccd_result->small_ms_t(0) == 0.0f) {
     spdlog::error("Ignore potential collision. Reason: zero toi");
+    SPDLOG_ERROR("ccd result:");
+    SPDLOG_ERROR("tuv = {}, {}, {}", ccd_result->t.transpose(),
+                 ccd_result->u.transpose(), ccd_result->v.transpose());
+    SPDLOG_ERROR("small ms t = {}", ccd_result->small_ms_t.transpose());
+    SPDLOG_ERROR("ms = {}", ms);
+    SPDLOG_ERROR("ee collision: {}", c.index.transpose());
+    SPDLOG_ERROR("position x0 t0: {}", c.position_t0.col(0).transpose());
+    SPDLOG_ERROR("position x1 t0: {}", c.position_t0.col(1).transpose());
+    SPDLOG_ERROR("position x2 t0: {}", c.position_t0.col(2).transpose());
+    SPDLOG_ERROR("position x3 t0: {}", c.position_t0.col(3).transpose());
+    SPDLOG_ERROR("position x0 t1: {}", c.position_t1.col(0).transpose());
+    SPDLOG_ERROR("position x1 t1: {}", c.position_t1.col(1).transpose());
+    SPDLOG_ERROR("position x2 t1: {}", c.position_t1.col(2).transpose());
+    SPDLOG_ERROR("position x3 t1: {}", c.position_t1.col(3).transpose());
+
+    std::exit(1);
     return std::nullopt;
   }
 

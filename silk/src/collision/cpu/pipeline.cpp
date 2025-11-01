@@ -85,8 +85,8 @@ bool mesh_self_collision_filter(const MeshCollider& a, const MeshCollider& b) {
       b.type == MeshColliderType::Triangle) {
     bool is_neighbor = (a.index(0) == b.index(0) || a.index(0) == b.index(1) ||
                         a.index(0) == b.index(2));
-    bool is_both_pinned =
-        (a.inv_mass(0) + b.inv_mass(0) + b.inv_mass(1) + b.inv_mass(2) == 0.0f);
+    bool is_both_pinned = (a.inv_mass(0) == 0.0f && b.inv_mass(0) == 0.0f &&
+                           b.inv_mass(1) == 0.0f && b.inv_mass(2) == 0.0f);
     return (!is_neighbor && !is_both_pinned);
   }
 
@@ -94,16 +94,16 @@ bool mesh_self_collision_filter(const MeshCollider& a, const MeshCollider& b) {
       b.type == MeshColliderType::Point) {
     bool is_neighbor = (b.index(0) == a.index(0) || b.index(0) == a.index(1) ||
                         b.index(0) == a.index(2));
-    bool is_both_pinned =
-        (a.inv_mass(0) + a.inv_mass(1) + a.inv_mass(2) + b.inv_mass(0) == 0.0f);
+    bool is_both_pinned = (a.inv_mass(0) == 0.0f && b.inv_mass(0) == 0.0f &&
+                           b.inv_mass(1) == 0.0f && b.inv_mass(2) == 0.0f);
     return (!is_neighbor && !is_both_pinned);
   }
 
   if (a.type == MeshColliderType::Edge && b.type == MeshColliderType::Edge) {
     bool is_neighbor = (a.index(0) == b.index(0) || a.index(0) == b.index(1) ||
                         a.index(1) == b.index(0) || a.index(1) == b.index(1));
-    bool is_both_pinned =
-        (a.inv_mass(0) + a.inv_mass(1) + b.inv_mass(0) + b.inv_mass(1) == 0.0f);
+    bool is_both_pinned = (a.inv_mass(0) == 0.0f && b.inv_mass(0) == 0.0f &&
+                           b.inv_mass(1) == 0.0f && b.inv_mass(2) == 0.0f);
     return (!is_neighbor && !is_both_pinned);
   }
 
@@ -148,9 +148,28 @@ std::vector<Collision> CpuCollisionPipeline::find_collision(
 
     // Stage 2: Mesh broadphase using hierarchical KD-tree traversal.
     mesh_ccache.clear();
+
     KDTree<MeshCollider>::test_tree_collision(
         oa->mesh_collider_tree, ob->mesh_collider_tree,
         mesh_inter_collision_filter, mesh_ccache);
+
+    // auto& ca = oa->mesh_collider_tree.get_colliders();
+    // std::vector<int> pa(ca.size());
+    // for (int i = 0; i < ca.size(); ++i) {
+    //   pa[i] = i;
+    // }
+    // auto& cb = ob->mesh_collider_tree.get_colliders();
+    // std::vector<int> pb(cb.size());
+    // for (int i = 0; i < cb.size(); ++i) {
+    //   pb[i] = i;
+    // }
+    // int axis =
+    //     sap_optimal_axis(ca, pa.data(), pa.size(), cb, pb.data(), pb.size());
+    // sap_sort_proxies(ca, pa.data(), pa.size(), axis);
+    // sap_sort_proxies(cb, pb.data(), pb.size(), axis);
+    // sap_sorted_group_group_collision<MeshCollider>(
+    //     ca, pa.data(), pa.size(), cb, pb.data(), pb.size(), axis,
+    //     mesh_inter_collision_filter, mesh_ccache);
 
     // Stage 3: Parallel narrowphase using continuous collision detection.
     int ccache_num = mesh_ccache.size();
@@ -181,6 +200,17 @@ std::vector<Collision> CpuCollisionPipeline::find_collision(
     mesh_ccache.clear();
     o.mesh_collider_tree.test_self_collision(mesh_self_collision_filter,
                                              mesh_ccache);
+
+    // auto& cd = o.mesh_collider_tree.get_colliders();
+    // std::vector<int> pcd(cd.size());
+    // for (int i = 0; i < cd.size(); ++i) {
+    //   pcd[i] = i;
+    // }
+    // int axis = sap_optimal_axis(cd, pcd.data(), pcd.size());
+    // sap_sort_proxies(cd, pcd.data(), pcd.size(), axis);
+    // sap_sorted_group_self_collision<MeshCollider>(
+    //     cd, pcd.data(), pcd.size(), axis, mesh_self_collision_filter,
+    //     mesh_ccache);
 
     int ccache_num = mesh_ccache.size();
     tbb::parallel_for(0, ccache_num, [&](int i) {
