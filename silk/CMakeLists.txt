@@ -54,6 +54,12 @@ target_link_libraries(
         SuiteSparse::CHOLMOD
 )
 
+# Link GPU solver if enabled
+if(SILK_BUILD_GPU)
+    target_compile_definitions(silk PRIVATE SILK_GPU_ENABLED)
+    target_link_libraries(silk PRIVATE silk::gpu_solver)
+endif()
+
 # -------------------------------------------------
 # Installation rules
 # -------------------------------------------------

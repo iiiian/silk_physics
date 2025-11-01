@@ -83,6 +83,15 @@ struct ClothConfig {
 };
 
 /**
+ * @brief Solver backend selection
+ */
+enum class SolverBackend {
+  CPU,   ///< Use CPU solver (TBB parallel, default)
+  GPU,   ///< Use GPU solver (CUDA acceleration)
+  Auto   ///< Automatically select based on availability and mesh size
+};
+
+/**
  * @brief Global simulation parameters.
  */
 struct GlobalConfig {
@@ -100,6 +109,9 @@ struct GlobalConfig {
 
   /// Time step size in seconds
   float dt = 1.0f / 60.0f;
+
+  /// Solver backend selection (CPU, GPU, or Auto)
+  SolverBackend solver_backend = SolverBackend::CPU;
 };
 
 /**

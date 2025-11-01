@@ -8,50 +8,129 @@
 
 #include "collision/cpu/object_collider.hpp"
 #include "ecs.hpp"
+#include "logger.hpp"
 #include "mesh.hpp"
 #include "object_state.hpp"
 #include "obstacle_position.hpp"
 #include "pin.hpp"
 #include "solver/cpu/pipeline.hpp"
 
+#ifdef SILK_GPU_ENABLED
+#include "solver/gpu/pipeline.hpp"
+#endif
+
 namespace silk {
 
 class World::WorldImpl {
  private:
   Registry registry_;
-  CpuSolverPipeline solver_pipeline_;
+  CpuSolverPipeline cpu_solver_pipeline_;
+#ifdef SILK_GPU_ENABLED
+  gpu::GpuSolverPipeline gpu_solver_pipeline_;
+  bool use_gpu_ = false;
+#endif
 
  public:
   // Global API
   Result set_global_config(GlobalConfig config) {
     auto& c = config;
-    solver_pipeline_.const_acceleration = {c.acceleration_x, c.acceleration_y,
-                                           c.acceleration_z};
-    // solver_.max_inner_iteration = c.max_iteration;
-    solver_pipeline_.dt = c.dt;
-    solver_pipeline_.max_outer_iteration = c.max_outer_iteration;
-    solver_pipeline_.max_inner_iteration = c.max_inner_iteration;
+
+#ifdef SILK_GPU_ENABLED
+    // Determine which backend to use
+    switch (c.solver_backend) {
+      case SolverBackend::CPU:
+        use_gpu_ = false;
+        SILK_INFO("Using CPU solver backend");
+        break;
+      case SolverBackend::GPU:
+        use_gpu_ = true;
+        SILK_INFO("Using GPU solver backend");
+        break;
+      case SolverBackend::Auto:
+        // Auto-select: use GPU if available and mesh is large enough
+        // For now, default to CPU in Auto mode
+        use_gpu_ = false;
+        SILK_INFO("Auto mode: selecting CPU solver backend");
+        break;
+    }
+
+    if (use_gpu_) {
+      gpu_solver_pipeline_.const_acceleration = {c.acceleration_x,
+                                                  c.acceleration_y,
+                                                  c.acceleration_z};
+      gpu_solver_pipeline_.dt = c.dt;
+      gpu_solver_pipeline_.max_outer_iteration = c.max_outer_iteration;
+      gpu_solver_pipeline_.max_inner_iteration = c.max_inner_iteration;
+    } else {
+      cpu_solver_pipeline_.const_acceleration = {c.acceleration_x,
+                                                  c.acceleration_y,
+                                                  c.acceleration_z};
+      cpu_solver_pipeline_.dt = c.dt;
+      cpu_solver_pipeline_.max_outer_iteration = c.max_outer_iteration;
+      cpu_solver_pipeline_.max_inner_iteration = c.max_inner_iteration;
+    }
+#else
+    // GPU not available, always use CPU
+    if (c.solver_backend == SolverBackend::GPU) {
+      SILK_WARN("GPU solver requested but not available (not built with "
+                "SILK_BUILD_GPU=ON). Using CPU solver.");
+    }
+    cpu_solver_pipeline_.const_acceleration = {c.acceleration_x,
+                                                c.acceleration_y,
+                                                c.acceleration_z};
+    cpu_solver_pipeline_.dt = c.dt;
+    cpu_solver_pipeline_.max_outer_iteration = c.max_outer_iteration;
+    cpu_solver_pipeline_.max_inner_iteration = c.max_inner_iteration;
+#endif
 
     return Result::ok();
   }
 
   void clear() {
-    solver_pipeline_.clear(registry_);
+#ifdef SILK_GPU_ENABLED
+    if (use_gpu_) {
+      gpu_solver_pipeline_.clear(registry_);
+    } else {
+      cpu_solver_pipeline_.clear(registry_);
+    }
+#else
+    cpu_solver_pipeline_.clear(registry_);
+#endif
     registry_.clear();
   }
 
   // Solver API
 
   Result solver_step() {
-    if (!solver_pipeline_.step(registry_)) {
+#ifdef SILK_GPU_ENABLED
+    if (use_gpu_) {
+      if (!gpu_solver_pipeline_.step(registry_)) {
+        return Result::error(ErrorCode::CholeskyDecompositionFail);
+      }
+    } else {
+      if (!cpu_solver_pipeline_.step(registry_)) {
+        return Result::error(ErrorCode::CholeskyDecompositionFail);
+      }
+    }
+#else
+    if (!cpu_solver_pipeline_.step(registry_)) {
       return Result::error(ErrorCode::CholeskyDecompositionFail);
     }
+#endif
 
     return Result::ok();
   }
 
   Result solver_reset() {
-    solver_pipeline_.reset(registry_);
+#ifdef SILK_GPU_ENABLED
+    if (use_gpu_) {
+      gpu_solver_pipeline_.reset(registry_);
+    } else {
+      cpu_solver_pipeline_.reset(registry_);
+    }
+#else
+    cpu_solver_pipeline_.reset(registry_);
+#endif
     return Result::ok();
   }
 
