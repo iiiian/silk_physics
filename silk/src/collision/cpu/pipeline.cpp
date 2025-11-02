@@ -119,7 +119,6 @@ std::vector<Collision> CpuCollisionPipeline::find_collision(
   scene_vf_err_ = get_numerical_error(abs_max, true);
 
   tbb::enumerable_thread_specific<std::vector<Collision>> thread_collisions;
-  CollisionCache<MeshCollider> mesh_ccache;
   std::vector<CpuObjectCollider>& object_colliders =
       registry.get_all<CpuObjectCollider>();
 
@@ -147,15 +146,15 @@ std::vector<Collision> CpuCollisionPipeline::find_collision(
     auto& ob = ccache.second;
 
     // Stage 2: Mesh broadphase using hierarchical KD-tree traversal.
-    mesh_ccache.clear();
+    mesh_ccache_.clear();
     KDTree<MeshCollider>::test_tree_collision(
         oa->mesh_collider_tree, ob->mesh_collider_tree,
-        mesh_inter_collision_filter, mesh_ccache);
+        mesh_inter_collision_filter, mesh_ccache_);
 
     // Stage 3: Parallel narrowphase using continuous collision detection.
-    int ccache_num = mesh_ccache.size();
+    int ccache_num = mesh_ccache_.size();
     tbb::parallel_for(0, ccache_num, [&](int i) {
-      auto& pair = mesh_ccache[i];
+      auto& pair = mesh_ccache_[i];
       auto* ma = pair.first;
       auto* mb = pair.second;
 
@@ -178,13 +177,13 @@ std::vector<Collision> CpuCollisionPipeline::find_collision(
     }
 
     // Self-collision broadphase using internal KD-tree traversal.
-    mesh_ccache.clear();
+    mesh_ccache_.clear();
     o.mesh_collider_tree.test_self_collision(mesh_self_collision_filter,
-                                             mesh_ccache);
+                                             mesh_ccache_);
 
-    int ccache_num = mesh_ccache.size();
+    int ccache_num = mesh_ccache_.size();
     tbb::parallel_for(0, ccache_num, [&](int i) {
-      auto& pair = mesh_ccache[i];
+      auto& pair = mesh_ccache_[i];
       auto* ma = pair.first;
       auto* mb = pair.second;
 
