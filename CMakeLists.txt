@@ -20,9 +20,14 @@ if(SILK_BUILD_GPU)
         set(CMAKE_CUDA_STANDARD_REQUIRED ON)
     endif()
 
+    # Global CUDA flags to avoid GCC intrinsic header issues
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-mno-avx512f,-mno-avx512cd,-mno-avx512er,-mno-avx512pf,-mno-avx512vl,-mno-avx512bw,-mno-avx512dq,-mno-amx-tile,-mno-amx-int8,-mno-amx-bf16")
+
     message(STATUS "CUDA support enabled")
     message(STATUS "  CUDA Version: ${CUDAToolkit_VERSION}")
     message(STATUS "  CUDA Toolkit Root: ${CUDAToolkit_TARGET_DIR}")
+    message(STATUS "  CUDA Flags: ${CMAKE_CUDA_FLAGS}")
 endif()
 
 set(_silk_fetch_dependencies_default ON)
