@@ -29,6 +29,7 @@ target_include_directories(silk_gpu_solver
         $<INSTALL_INTERFACE:include>
     PRIVATE
         ${CMAKE_SOURCE_DIR}/silk/src
+        ${CMAKE_SOURCE_DIR}/extern/pdqsort
 )
 
 # Link dependencies
