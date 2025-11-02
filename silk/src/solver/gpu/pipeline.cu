@@ -112,7 +112,7 @@ bool GpuSolverPipeline::step(Registry& registry) {
         // Get GPU context for this entity
         if (entity_idx >= gpu_contexts_.size() ||
             !gpu_contexts_[entity_idx]) {
-          SILK_ERROR("GPU context not initialized for entity {}", entity_idx);
+          SPDLOG_ERROR("GPU context not initialized for entity {}", entity_idx);
           return false;
         }
 
@@ -126,7 +126,7 @@ bool GpuSolverPipeline::step(Registry& registry) {
                                           *cpu_context, gpu_ctx,
                                           next_state(seq), outer_rhs(seq),
                                           solution(seq))) {
-          SILK_ERROR("GPU inner loop failed for entity");
+          SPDLOG_ERROR("GPU inner loop failed for entity");
           return false;
         }
       }
@@ -257,7 +257,7 @@ bool GpuSolverPipeline::init(Registry& registry, ObjectState& global_state) {
 
   // --- Initialize GPU contexts for all cloth entities ---
   if (gpu_contexts_.empty()) {
-    SILK_INFO("Initializing GPU contexts for cloth entities");
+    SPDLOG_INFO("Initializing GPU contexts for cloth entities");
     int entity_count = 0;
     for (Entity& e : registry.get_all_entities()) {
       auto cloth_config = registry.get<ClothConfig>(e);
@@ -273,15 +273,15 @@ bool GpuSolverPipeline::init(Registry& registry, ObjectState& global_state) {
       auto cloth_config = registry.get<ClothConfig>(e);
       if (cloth_config) {
         if (!init_gpu_context_for_entity(e, registry)) {
-          SILK_ERROR("Failed to initialize GPU context for entity {}",
-                     entity_idx);
+          SPDLOG_ERROR("Failed to initialize GPU context for entity {}",
+                       entity_idx);
           return false;
         }
         entity_idx++;
       }
     }
 
-    SILK_INFO("GPU contexts initialized for {} cloth entities", entity_count);
+    SPDLOG_INFO("GPU contexts initialized for {} cloth entities", entity_count);
   }
 
   return true;
@@ -313,15 +313,15 @@ bool GpuSolverPipeline::init_gpu_context_for_entity(Entity& entity,
       GpuClothSolverContext::create(*config, *topology, mesh->F, dt);
 
   if (!gpu_ctx) {
-    SILK_ERROR("Failed to create GPU context");
+    SPDLOG_ERROR("Failed to create GPU context");
     return false;
   }
 
   gpu_contexts_[entity_idx] =
       std::make_unique<GpuClothSolverContext>(std::move(*gpu_ctx));
 
-  SILK_INFO("GPU context created for entity {}: {} faces, {} vertices",
-            entity_idx, mesh->F.rows(), mesh->V.rows());
+  SPDLOG_INFO("GPU context created for entity {}: {} faces, {} vertices",
+              entity_idx, mesh->F.rows(), mesh->V.rows());
 
   return true;
 }

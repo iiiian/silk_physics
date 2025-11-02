@@ -22,7 +22,7 @@ static void check_cuda(cudaError_t result, char const* const func,
                             std::to_string(static_cast<unsigned int>(result)) +
                             " \"" + func +
                             "\" : " + cudaGetErrorString(result);
-    SILK_ERROR(error_msg);
+    SPDLOG_ERROR(error_msg);
     throw std::runtime_error(error_msg);
   }
 }
@@ -41,10 +41,10 @@ std::optional<GpuClothSolverContext> GpuClothSolverContext::create(
   ctx.ops_num = topology.jacobian_ops.size();
   ctx.elastic_stiffness = config.elastic_stiffness;
 
-  SILK_INFO("Creating GPU cloth solver context:");
-  SILK_INFO("  state_num = {}", ctx.state_num);
-  SILK_INFO("  ops_num (faces) = {}", ctx.ops_num);
-  SILK_INFO("  dt = {}", ctx.dt);
+  SPDLOG_INFO("Creating GPU cloth solver context:");
+  SPDLOG_INFO("  state_num = {}", ctx.state_num);
+  SPDLOG_INFO("  ops_num (faces) = {}", ctx.ops_num);
+  SPDLOG_INFO("  dt = {}", ctx.dt);
 
   try {
     // --- 1. Allocate Device Memory ---
@@ -62,7 +62,7 @@ std::optional<GpuClothSolverContext> GpuClothSolverContext::create(
     CHECK_CUDA_ERROR(
         cudaMalloc(&ctx.d_solution, ctx.state_num * sizeof(float)));
 
-    SILK_INFO("  Device memory allocated successfully");
+    SPDLOG_INFO("  Device memory allocated successfully");
 
     // --- 2. Upload Static Topology Data ---
 
@@ -100,7 +100,7 @@ std::optional<GpuClothSolverContext> GpuClothSolverContext::create(
                                  ctx.ops_num * sizeof(float),
                                  cudaMemcpyHostToDevice));
 
-    SILK_INFO("  Static topology uploaded to device");
+    SPDLOG_INFO("  Static topology uploaded to device");
 
     // --- 3. Initialize dynamic buffers to zero ---
     CHECK_CUDA_ERROR(cudaMemset(ctx.d_state, 0, ctx.state_num * sizeof(float)));
@@ -113,12 +113,12 @@ std::optional<GpuClothSolverContext> GpuClothSolverContext::create(
     CHECK_CUDA_ERROR(
         cudaMemset(ctx.d_solution, 0, ctx.state_num * sizeof(float)));
 
-    SILK_INFO("GPU cloth solver context created successfully");
+    SPDLOG_INFO("GPU cloth solver context created successfully");
 
     return ctx;
 
   } catch (const std::exception& e) {
-    SILK_ERROR("Failed to create GPU cloth solver context: {}", e.what());
+    SPDLOG_ERROR("Failed to create GPU cloth solver context: {}", e.what());
     ctx.free_device_memory();
     return std::nullopt;
   }

@@ -45,7 +45,7 @@ bool compute_cloth_inner_loop_gpu(
     cholmod_raii::CholmodDense cholmod_solution =
         cholmod_solve(CHOLMOD_A, L, &rhs_view, cholmod_raii::common);
     if (cholmod_solution.is_empty()) {
-      SILK_ERROR("GPU inner loop: CHOLMOD solve failed");
+      SPDLOG_ERROR("GPU inner loop: CHOLMOD solve failed");
       return false;
     }
 
@@ -54,7 +54,7 @@ bool compute_cloth_inner_loop_gpu(
     return true;
 
   } catch (const std::exception& e) {
-    SILK_ERROR("GPU inner loop failed: {}", e.what());
+    SPDLOG_ERROR("GPU inner loop failed: {}", e.what());
     return false;
   }
 }

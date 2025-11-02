@@ -40,17 +40,17 @@ class World::WorldImpl {
     switch (c.solver_backend) {
       case SolverBackend::CPU:
         use_gpu_ = false;
-        SILK_INFO("Using CPU solver backend");
+        SPDLOG_INFO("Using CPU solver backend");
         break;
       case SolverBackend::GPU:
         use_gpu_ = true;
-        SILK_INFO("Using GPU solver backend");
+        SPDLOG_INFO("Using GPU solver backend");
         break;
       case SolverBackend::Auto:
         // Auto-select: use GPU if available and mesh is large enough
         // For now, default to CPU in Auto mode
         use_gpu_ = false;
-        SILK_INFO("Auto mode: selecting CPU solver backend");
+        SPDLOG_INFO("Auto mode: selecting CPU solver backend");
         break;
     }
 
@@ -72,8 +72,8 @@ class World::WorldImpl {
 #else
     // GPU not available, always use CPU
     if (c.solver_backend == SolverBackend::GPU) {
-      SILK_WARN("GPU solver requested but not available (not built with "
-                "SILK_BUILD_GPU=ON). Using CPU solver.");
+      SPDLOG_WARN("GPU solver requested but not available (not built with "
+                  "SILK_BUILD_GPU=ON). Using CPU solver.");
     }
     cpu_solver_pipeline_.const_acceleration = {c.acceleration_x,
                                                 c.acceleration_y,
