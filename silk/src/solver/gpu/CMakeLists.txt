@@ -21,6 +21,22 @@ set_target_properties(silk_gpu_solver PROPERTIES
     POSITION_INDEPENDENT_CODE ON
 )
 
+# Add CUDA compiler flags to avoid GCC intrinsic header issues
+target_compile_options(silk_gpu_solver PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:
+        -Xcompiler=-mno-avx512f
+        -Xcompiler=-mno-avx512cd
+        -Xcompiler=-mno-avx512er
+        -Xcompiler=-mno-avx512pf
+        -Xcompiler=-mno-avx512vl
+        -Xcompiler=-mno-avx512bw
+        -Xcompiler=-mno-avx512dq
+        -Xcompiler=-mno-amx-tile
+        -Xcompiler=-mno-amx-int8
+        -Xcompiler=-mno-amx-bf16
+    >
+)
+
 # Include directories
 target_include_directories(silk_gpu_solver
     PUBLIC
