@@ -24,16 +24,8 @@ set_target_properties(silk_gpu_solver PROPERTIES
 # Add CUDA compiler flags to avoid GCC intrinsic header issues
 target_compile_options(silk_gpu_solver PRIVATE
     $<$<COMPILE_LANGUAGE:CUDA>:
-        -Xcompiler=-mno-avx512f
-        -Xcompiler=-mno-avx512cd
-        -Xcompiler=-mno-avx512er
-        -Xcompiler=-mno-avx512pf
-        -Xcompiler=-mno-avx512vl
-        -Xcompiler=-mno-avx512bw
-        -Xcompiler=-mno-avx512dq
-        -Xcompiler=-mno-amx-tile
-        -Xcompiler=-mno-amx-int8
-        -Xcompiler=-mno-amx-bf16
+        --expt-relaxed-constexpr
+        -Xcompiler=-mno-avx512f,-mno-avx512cd,-mno-avx512er,-mno-avx512pf,-mno-avx512vl,-mno-avx512bw,-mno-avx512dq,-mno-amx-tile,-mno-amx-int8,-mno-amx-bf16
     >
 )
 
@@ -74,6 +66,14 @@ add_executable(test_gpu_solver test_gpu_solver.cu)
 
 set_target_properties(test_gpu_solver PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
+)
+
+# Add same CUDA flags to test executable
+target_compile_options(test_gpu_solver PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:
+        --expt-relaxed-constexpr
+        -Xcompiler=-mno-avx512f,-mno-avx512cd,-mno-avx512er,-mno-avx512pf,-mno-avx512vl,-mno-avx512bw,-mno-avx512dq,-mno-amx-tile,-mno-amx-int8,-mno-amx-bf16
+    >
 )
 
 target_link_libraries(test_gpu_solver
