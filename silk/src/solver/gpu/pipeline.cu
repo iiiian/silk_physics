@@ -302,7 +302,7 @@ bool GpuSolverPipeline::init_gpu_context_for_entity(Entity& entity,
   for (Entity& e : registry.get_all_entities()) {
     auto cloth_config = registry.get<ClothConfig>(e);
     if (cloth_config) {
-      if (e.self == entity.self) {
+      if (e.self.value == entity.self.value) {
         break;
       }
       entity_idx++;
