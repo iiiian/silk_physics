@@ -170,18 +170,12 @@ std::optional<std::pair<float, float>> exact_edge_edge_uv(
 // If primitives are separating, return std::nullopt.
 // Uses restitution and a simplified friction model where kinetic friction
 // equals the maximum static friction.
-std::optional<Eigen::Vector3f> velocity_diff(const Eigen::Vector3f& v_relative,
-                                             const Eigen::Vector3f& n, float ms,
-                                             float restitution,
-                                             float friction) {
+Eigen::Vector3f velocity_diff(const Eigen::Vector3f& v_relative,
+                              const Eigen::Vector3f& n, float ms,
+                              float restitution, float friction) {
   float v_normal_norm = v_relative.dot(n);
   Eigen::Vector3f v_normal = v_normal_norm * n;
   Eigen::Vector3f v_parallel = v_relative - v_normal;
-
-  if (v_normal_norm < 0.0f) {
-    SPDLOG_DEBUG("leaving, n velocity norm {}", v_normal_norm);
-    return std::nullopt;
-  }
 
   float v_diff_norm_norm;
   // Two primitives are approaching each other normally.
@@ -281,10 +275,8 @@ std::optional<Collision> point_triangle_collision(
   float friction = 0.5f * (oa.friction + ob.friction);
 
   // Total velocity change after collision.
-  auto v_diff = velocity_diff(v_relative, n, ms, restitution, friction);
-  if (!v_diff) {
-    return std::nullopt;
-  }
+  Eigen::Vector3f v_diff =
+      velocity_diff(v_relative, n, ms, restitution, friction);
 
   // Compute impulse weights.
   Eigen::Array4f para = {1.0f, 1.0f - b1 - b2, b1, b2};
@@ -296,7 +288,7 @@ std::optional<Collision> point_triangle_collision(
   weight(0) *= -1.0f;
 
   // Compute reflected velocity.
-  c.velocity_t1 = c.velocity_t0 + v_diff.value() * weight.transpose();
+  c.velocity_t1 = c.velocity_t0 + v_diff * weight.transpose();
 
   c.type = CollisionType::PointTriangle;
   c.entity_handle_a = oa.entity_handle;
@@ -413,10 +405,8 @@ std::optional<Collision> edge_edge_collision(
   float friction = 0.5f * (oa.friction + ob.friction);
 
   // Total velocity change after collision.
-  auto v_diff = velocity_diff(v_relative, n, ms, restitution, friction);
-  if (!v_diff) {
-    return std::nullopt;
-  }
+  Eigen::Vector3f v_diff =
+      velocity_diff(v_relative, n, ms, restitution, friction);
 
   // Compute impulse weights.
   Eigen::Array4f para = {1.0f - para_a, para_a, 1.0f - para_b, para_b};
@@ -428,7 +418,7 @@ std::optional<Collision> edge_edge_collision(
   weight(0) *= -1.0f;
   weight(1) *= -1.0f;
 
-  c.velocity_t1 = c.velocity_t0 + v_diff.value() * weight.transpose();
+  c.velocity_t1 = c.velocity_t0 + v_diff * weight.transpose();
 
   c.type = CollisionType::EdgeEdge;
   c.entity_handle_a = oa.entity_handle;
