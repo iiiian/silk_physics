@@ -26,6 +26,9 @@ add_library(silk ${SILK_SOURCES})
 add_library(silk::silk ALIAS silk)
 
 set_target_properties(silk PROPERTIES VERSION 0.1.0)
+if(SILK_ENABLE_CUDA)
+    set_target_properties(silk PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+endif()
 
 include(${CMAKE_SOURCE_DIR}/cmake/SilkDebugFlags.cmake)
 silk_debug_warnings(silk)
@@ -36,6 +39,13 @@ target_include_directories(
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
     PRIVATE ${CMAKE_SOURCE_DIR}/extern/pdqsort ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+# Define SILK_WITH_CUDA macro if cuda is enabled.
+target_compile_definitions(
+    silk
+    PUBLIC
+        $<$<BOOL:${SILK_ENABLE_CUDA}>:SILK_WITH_CUDA=1>
 )
 
 target_link_libraries(
@@ -53,6 +63,12 @@ target_link_libraries(
         SuiteSparse::CCOLAMD
         SuiteSparse::CHOLMOD
 )
+
+if(SILK_ENABLE_CUDA)
+    target_link_libraries(silk PRIVATE CUDA::cudart)
+    # Add CUDA sources here in the future, e.g.:
+    # target_sources(silk PRIVATE src/solver/cuda/solver_kernels.cu)
+endif()
 
 # -------------------------------------------------
 # Installation rules
