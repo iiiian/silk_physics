@@ -65,7 +65,7 @@ target_link_libraries(
 )
 
 if(SILK_ENABLE_CUDA)
-    target_link_libraries(silk PRIVATE CUDA::cudart)
+  target_link_libraries(silk PRIVATE CUDA::cudart cuBQL)
     # Add CUDA sources here in the future, e.g.:
     # target_sources(silk PRIVATE src/solver/cuda/solver_kernels.cu)
 endif()

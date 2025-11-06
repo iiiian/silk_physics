@@ -84,7 +84,6 @@ FetchContent_Declare(
     GIT_TAG 43a1489a0f5e15420e4be7225df86e819884b6fa # version 1.8.8
 )
 
-
 FetchContent_MakeAvailable(
     Eigen3
     Libigl
@@ -101,6 +100,10 @@ elseif (TARGET igl::igl_core)
   set(SILK_IGL_CORE igl::igl_core)
 else()
   message(FATAL_ERROR "Could not find libigl core target")
+endif()
+
+if (SILK_ENABLE_CUDA)
+    add_subdirectory(extern/cuBQL)
 endif()
 
 if(SILK_BUILD_DEMO)

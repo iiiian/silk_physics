@@ -28,6 +28,10 @@ find_package(COLAMD REQUIRED)
 find_package(CCOLAMD REQUIRED)
 find_package(CHOLMOD REQUIRED)
 
+if (SILK_ENABLE_CUDA)
+    add_subdirectory(extern/cuBQL)
+endif()
+
 if(SILK_BUILD_DEMO)
     find_package(argparse REQUIRED)
     find_package(nlohmann_json REQUIRED)
