@@ -10,3 +10,6 @@
 [submodule "extern/polyscope"]
 	path = extern/polyscope
 	url = https://github.com/iiiian/polyscope.git
+[submodule "extern/cuBQL"]
+	path = extern/cuBQL
+	url = https://github.com/ingowald/cuBQL.git
