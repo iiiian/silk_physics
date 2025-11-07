@@ -28,3 +28,4 @@ vcpkg_installed
 
 # Clion
 .idea
+.tags

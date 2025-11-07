@@ -19,7 +19,7 @@
 
 namespace silk::gpu {
 
-BVHContext assemble_bvh_colliders(const TriMesh& mesh, float bbox_padding,
+BVHWrapper assemble_edge_bvh(const TriMesh& mesh, float bbox_padding,
                             std::function<float(int)> get_inv_mass) {
   auto& m = mesh;
 
@@ -46,6 +46,13 @@ BVHContext assemble_bvh_colliders(const TriMesh& mesh, float bbox_padding,
     edge_bboxes[i].lower = cuBQL::vec3f(min.x, min.y, min.z);
     edge_bboxes[i].upper = cuBQL::vec3f(max.x, max.y, max.z);
   }
+
+  return BVHWrapper(edge_bboxes, edge_colliders);
+}
+
+BVHWrapper assemble_triangle_bvh(const TriMesh& mesh, float bbox_padding,
+                            std::function<float(int)> get_inv_mass) {
+  auto& m = mesh;
 
   int triangle_num = m.F.rows();
   std::vector<cuBQL::box_t<float, 3>> triangle_bboxes(triangle_num);
@@ -74,7 +81,7 @@ BVHContext assemble_bvh_colliders(const TriMesh& mesh, float bbox_padding,
     triangle_bboxes[i].upper = cuBQL::vec3f(max.x, max.y, max.z);
   }
 
-  return make_bvh_context(edge_bboxes, edge_colliders, triangle_bboxes, triangle_colliders);
+  return BVHWrapper(triangle_bboxes, triangle_colliders);
 }
 
 GpuObjectCollider::GpuObjectCollider(Handle entity_handle,
@@ -110,9 +117,8 @@ GpuObjectCollider::GpuObjectCollider(Handle entity_handle,
     return 1.0f / mass(index);
   };
 
-  bvh_context = make_bvh_context(mesh, bbox_padding, get_inv_mass);
-  cuBQL::gpuBuilder(edge_bvh, bvh_context.edge_bboxes, bvh_context.edge_num);
-  cuBQL::gpuBuilder(triangle_bvh, bvh_context.triangle_bboxes, bvh_context.triangle_num);
+  edge_bvh = assemble_edge_bvh(mesh, bbox_padding, get_inv_mass);
+  triangle_bvh = assemble_triangle_bvh(mesh, bbox_padding, get_inv_mass);
 }
 
 GpuObjectCollider::GpuObjectCollider(Handle entity_handle,
@@ -141,9 +147,11 @@ GpuObjectCollider::GpuObjectCollider(Handle entity_handle,
   // Obstacles have infinite mass (zero inverse mass).
   auto get_inv_mass = [](int index) { return 0.0f; };
 
-  bvh_context = make_bvh_context(mesh, bbox_padding, get_inv_mass);
-  cuBQL::gpuBuilder(edge_bvh, bvh_context.edge_bboxes, bvh_context.edge_num);
-  cuBQL::gpuBuilder(triangle_bvh, bvh_context.triangle_bboxes, bvh_context.triangle_num);
+
+  edge_bvh = assemble_edge_bvh(mesh, bbox_padding, get_inv_mass);
+  edge_bvh.build();
+  triangle_bvh = assemble_triangle_bvh(mesh, bbox_padding, get_inv_mass);
+  triangle_bvh.build();
 }
 
 void GpuObjectCollider::update(const CollisionConfig& config,

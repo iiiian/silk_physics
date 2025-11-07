@@ -6,7 +6,8 @@
 #include <silk/silk.hpp>
 #include <vector>
 
-#include "collision/gpu/bvh_context.hpp"
+#include "collision/gpu/bvh_wrapper.hpp"
+#include "collision/gpu/collision_primitive.hpp"
 #include "handle.hpp"
 #include "mesh.hpp"
 #include "object_state.hpp"
@@ -33,9 +34,8 @@ class GpuObjectCollider {
   float friction;
 
   // Broadphase collision culling data struture
-  BVHContext bvh_context;
-  cuBQL::BinaryBVH<float, 3> edge_bvh;
-  cuBQL::BinaryBVH<float, 3> triangle_bvh;
+  BVHWrapper<EdgeCollider> edge_bvh;
+  BVHWrapper<TriangleCollider> triangle_bvh;
 
  public:
   GpuObjectCollider(Handle entity_handle, const CollisionConfig& config,
