@@ -1,5 +1,9 @@
 include_guard(GLOBAL)
 
+if (SILK_ENABLE_CUDA)
+  find_package(CUDAToolkit REQUIRED)
+endif()
+
 find_package(eigen3 REQUIRED)
 
 find_package(libigl REQUIRED)
@@ -23,9 +27,6 @@ find_package(CAMD REQUIRED)
 find_package(COLAMD REQUIRED)
 find_package(CCOLAMD REQUIRED)
 find_package(CHOLMOD REQUIRED)
-
-set(TIGHT_INCLUSION_WITH_DOUBLE_PRECISION OFF)
-add_subdirectory(extern/tight-inclusion)
 
 if(SILK_BUILD_DEMO)
     find_package(argparse REQUIRED)

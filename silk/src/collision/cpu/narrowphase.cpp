@@ -2,9 +2,8 @@
 
 #include <Eigen/Geometry>
 #include <cassert>
-#include <tight_inclusion/ccd.hpp>
-#include <tight_inclusion/interval_root_finder.hpp>
 
+#include "collision/cpu/ccd.hpp"
 #include "compiler_builtin.hpp"
 #include "logger.hpp"
 
@@ -171,18 +170,12 @@ std::optional<std::pair<float, float>> exact_edge_edge_uv(
 // If primitives are separating, return std::nullopt.
 // Uses restitution and a simplified friction model where kinetic friction
 // equals the maximum static friction.
-std::optional<Eigen::Vector3f> velocity_diff(const Eigen::Vector3f& v_relative,
-                                             const Eigen::Vector3f& n, float ms,
-                                             float restitution,
-                                             float friction) {
+Eigen::Vector3f velocity_diff(const Eigen::Vector3f& v_relative,
+                              const Eigen::Vector3f& n, float ms,
+                              float restitution, float friction) {
   float v_normal_norm = v_relative.dot(n);
   Eigen::Vector3f v_normal = v_normal_norm * n;
   Eigen::Vector3f v_parallel = v_relative - v_normal;
-
-  if (v_normal_norm < 0.0f) {
-    SPDLOG_DEBUG("leaving, n velocity norm {}", v_normal_norm);
-    return std::nullopt;
-  }
 
   float v_diff_norm_norm;
   // Two primitives are approaching each other normally.
@@ -223,7 +216,7 @@ std::optional<Collision> point_triangle_collision(
   c.position_t1.block(0, 1, 3, 3) = mb.position_t1.block(0, 0, 3, 3);
 
   // CCD test.
-  std::optional<ticcd::CCDResult> ccd_result = ticcd::vertexFaceCCD(
+  std::optional<CCDResult> ccd_result = vertex_face_ccd(
       c.position_t0.col(0),  // Point at t0.
       c.position_t0.col(1),  // Triangle vertex 0 at t0.
       c.position_t0.col(2),  // Triangle vertex 1 at t0.
@@ -235,7 +228,6 @@ std::optional<Collision> point_triangle_collision(
       scene_vf_err,          // Floating-point error for the whole scene.
       ms,                    // Minimal separation.
       tolerance,             // TICCD solving precision.
-      1.0f,                  // Maximum time; uses normalized interval [0, 1].
       max_iter,              // Maximum TICCD iterations; set -1 to disable.
       true                   // Enable TOI refinement if TOI = 0.
   );
@@ -244,16 +236,9 @@ std::optional<Collision> point_triangle_collision(
     return std::nullopt;
   }
 
-  // This means two collision primitives are so close that tight inclusion CCD
-  // fails to resolve TOI. It indicates the failure of other parts of the engine
-  // and we have no way to recover it. So just pretend this collision doesn't
-  // exist and hope that the solver can resume to a valid state magically.
-  if (ccd_result->use_small_ms && ccd_result->small_ms_t(0) == 0.0f) {
-    spdlog::error("Ignore potential collision. Reason: zero toi");
-    return std::nullopt;
-  }
-
-  float toi = ccd_result->t(0);
+  float toi =
+      (ccd_result->use_small_ms) ? ccd_result->small_ms_t(0) : ccd_result->t(0);
+  toi = std::max(toi, min_toi);
 
   c.velocity_t0 = c.position_t1 - c.position_t0;
   Eigen::Matrix<float, 3, 4> p_colli = c.position_t0 + toi * c.velocity_t0;
@@ -290,10 +275,8 @@ std::optional<Collision> point_triangle_collision(
   float friction = 0.5f * (oa.friction + ob.friction);
 
   // Total velocity change after collision.
-  auto v_diff = velocity_diff(v_relative, n, ms, restitution, friction);
-  if (!v_diff) {
-    return std::nullopt;
-  }
+  Eigen::Vector3f v_diff =
+      velocity_diff(v_relative, n, ms, restitution, friction);
 
   // Compute impulse weights.
   Eigen::Array4f para = {1.0f, 1.0f - b1 - b2, b1, b2};
@@ -305,19 +288,7 @@ std::optional<Collision> point_triangle_collision(
   weight(0) *= -1.0f;
 
   // Compute reflected velocity.
-  c.velocity_t1 = c.velocity_t0 + v_diff.value() * weight.transpose();
-
-  // If use_small_ms is true, then at t = 0 the primitives are either very close
-  // or within the minimal separation distance. To avoid the solver getting
-  // stuck with zero TOI, enforce a small TOI min_toi. Likewise, even when CCD
-  // does not use small_ms, ensure TOI is at least min_toi.
-  if (ccd_result->use_small_ms || toi < min_toi) {
-    c.toi = min_toi;
-    c.use_small_ms = true;
-  } else {
-    c.toi = toi;
-    c.use_small_ms = false;
-  }
+  c.velocity_t1 = c.velocity_t0 + v_diff * weight.transpose();
 
   c.type = CollisionType::PointTriangle;
   c.entity_handle_a = oa.entity_handle;
@@ -326,8 +297,10 @@ std::optional<Collision> point_triangle_collision(
   c.state_offset_b = ob.state_offset;
   c.index(0) = ma.index(0);
   c.index(Eigen::seqN(1, 3)) = mb.index;
+  c.toi = toi;
   c.minimal_separation = ms;
   c.stiffness = base_stiffness;
+  c.use_small_ms = ccd_result->use_small_ms;
   c.inv_mass = inv_mass;
 
   SPDLOG_DEBUG("pt collision: {}", c.index.transpose());
@@ -369,37 +342,29 @@ std::optional<Collision> edge_edge_collision(
   c.position_t1.block(0, 2, 3, 2) = mb.position_t1.block(0, 0, 3, 2);
 
   // CCD test.
-  std::optional<ticcd::CCDResult> ccd_result = ticcd::edgeEdgeCCD(
-      c.position_t0.col(0),  // Edge A vertex 0 at t0.
-      c.position_t0.col(1),  // Edge A vertex 1 at t0.
-      c.position_t0.col(2),  // Edge B vertex 0 at t0.
-      c.position_t0.col(3),  // Edge B vertex 1 at t0.
-      c.position_t1.col(0),  // Edge A vertex 0 at t1.
-      c.position_t1.col(1),  // Edge A vertex 1 at t1.
-      c.position_t1.col(2),  // Edge B vertex 0 at t1.
-      c.position_t1.col(3),  // Edge B vertex 1 at t1.
-      scene_ee_err,          // Floating-point error for the whole scene.
-      ms,                    // Minimal separation.
-      tolerance,             // TICCD solving precision.
-      1.0f,                  // Maximum time; uses normalized interval [0, 1].
-      max_iter,              // Maximum TICCD iterations; set -1 to disable.
-      true                   // Enable TOI refinement if TOI = 0.
-  );
+  std::optional<CCDResult> ccd_result =
+      edge_edge_ccd(c.position_t0.col(0),  // Edge A vertex 0 at t0.
+                    c.position_t0.col(1),  // Edge A vertex 1 at t0.
+                    c.position_t0.col(2),  // Edge B vertex 0 at t0.
+                    c.position_t0.col(3),  // Edge B vertex 1 at t0.
+                    c.position_t1.col(0),  // Edge A vertex 0 at t1.
+                    c.position_t1.col(1),  // Edge A vertex 1 at t1.
+                    c.position_t1.col(2),  // Edge B vertex 0 at t1.
+                    c.position_t1.col(3),  // Edge B vertex 1 at t1.
+                    scene_ee_err,  // Floating-point error for the whole scene.
+                    ms,            // Minimal separation.
+                    tolerance,     // TICCD solving precision.
+                    max_iter,  // Maximum TICCD iterations; set -1 to disable.
+                    true       // Enable TOI refinement if TOI = 0.
+      );
 
   if (!ccd_result) {
     return std::nullopt;
   }
 
-  // This means two collision primitives are so close that tight inclusion CCD
-  // fails to resolve TOI. It indicates the failure of other parts of the engine
-  // and we have no way to recover it. So just pretend this collision doesn't
-  // exist and hope that the solver can resume to a valid state magically.
-  if (ccd_result->use_small_ms && ccd_result->small_ms_t(0) == 0.0f) {
-    spdlog::error("Ignore potential collision. Reason: zero toi");
-    return std::nullopt;
-  }
-
-  float toi = ccd_result->t(0);
+  float toi =
+      (ccd_result->use_small_ms) ? ccd_result->small_ms_t(0) : ccd_result->t(0);
+  toi = std::max(toi, min_toi);
 
   c.velocity_t0 = c.position_t1 - c.position_t0;
   Eigen::Matrix<float, 3, 4> p_colli = c.position_t0 + toi * c.velocity_t0;
@@ -440,10 +405,8 @@ std::optional<Collision> edge_edge_collision(
   float friction = 0.5f * (oa.friction + ob.friction);
 
   // Total velocity change after collision.
-  auto v_diff = velocity_diff(v_relative, n, ms, restitution, friction);
-  if (!v_diff) {
-    return std::nullopt;
-  }
+  Eigen::Vector3f v_diff =
+      velocity_diff(v_relative, n, ms, restitution, friction);
 
   // Compute impulse weights.
   Eigen::Array4f para = {1.0f - para_a, para_a, 1.0f - para_b, para_b};
@@ -455,19 +418,7 @@ std::optional<Collision> edge_edge_collision(
   weight(0) *= -1.0f;
   weight(1) *= -1.0f;
 
-  c.velocity_t1 = c.velocity_t0 + v_diff.value() * weight.transpose();
-
-  // If use_small_ms is true, then at t = 0 the primitives are either very close
-  // or within the minimal separation distance. To avoid the solver getting
-  // stuck with zero TOI, enforce a small TOI min_toi. Likewise, even when CCD
-  // does not use small_ms, ensure TOI is at least min_toi.
-  if (ccd_result->use_small_ms || toi < min_toi) {
-    c.toi = min_toi;
-    c.use_small_ms = true;
-  } else {
-    c.toi = toi;
-    c.use_small_ms = false;
-  }
+  c.velocity_t1 = c.velocity_t0 + v_diff * weight.transpose();
 
   c.type = CollisionType::EdgeEdge;
   c.entity_handle_a = oa.entity_handle;
@@ -476,8 +427,10 @@ std::optional<Collision> edge_edge_collision(
   c.state_offset_b = ob.state_offset;
   c.index(Eigen::seqN(0, 2)) = ma.index(Eigen::seqN(0, 2));
   c.index(Eigen::seqN(2, 2)) = mb.index(Eigen::seqN(0, 2));
+  c.toi = toi;
   c.minimal_separation = ms;
   c.stiffness = base_stiffness;
+  c.use_small_ms = ccd_result->use_small_ms;
   c.inv_mass = inv_mass;
 
   SPDLOG_DEBUG("ee collision: {}", c.index.transpose());
@@ -562,9 +515,9 @@ void partial_ccd_update(const Eigen::VectorXf& global_state_t0,
   }
 
   // CCD with low maximum iterations.
-  std::optional<ticcd::CCDResult> ccd_result;
+  std::optional<CCDResult> ccd_result;
   if (c.type == CollisionType::PointTriangle) {
-    ccd_result = ticcd::vertexFaceCCD(
+    ccd_result = vertex_face_ccd(
         c.position_t0.col(0),  // Point at t0.
         c.position_t0.col(1),  // Triangle vertex 0 at t0.
         c.position_t0.col(2),  // Triangle vertex 1 at t0.
@@ -576,12 +529,11 @@ void partial_ccd_update(const Eigen::VectorXf& global_state_t0,
         scene_vf_err,          // Floating-point error for the whole scene.
         c.minimal_separation,  // Minimal separation.
         tolerance,             // TICCD solving precision.
-        1.0f,                  // Maximum time; uses normalized interval [0, 1].
         max_iter,              // Maximum TICCD iterations; set -1 to disable.
         false                  // No TOI refinement if TOI = 0.
     );
   } else {
-    ccd_result = ticcd::edgeEdgeCCD(
+    ccd_result = edge_edge_ccd(
         c.position_t0.col(0),  // Edge A vertex 0 at t0.
         c.position_t0.col(1),  // Edge A vertex 1 at t0.
         c.position_t0.col(2),  // Edge B vertex 0 at t0.
@@ -593,7 +545,6 @@ void partial_ccd_update(const Eigen::VectorXf& global_state_t0,
         scene_ee_err,          // Floating-point error for the whole scene.
         c.minimal_separation,  // Minimal separation.
         tolerance,             // TICCD solving precision.
-        1.0f,                  // Maximum time; uses normalized interval [0, 1].
         max_iter,              // Maximum TICCD iterations; set -1 to disable.
         false                  // No TOI refinement if TOI = 0.
     );
