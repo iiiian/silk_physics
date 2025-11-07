@@ -5,11 +5,11 @@
 
 #include <Eigen/Core>
 #include <cassert>
-#include <tight_inclusion/interval_root_finder.hpp>
 #include <vector>
 
 #include "collision/cpu/broadphase.hpp"
 #include "collision/cpu/collision.hpp"
+#include "collision/cpu/interval_root_finder.hpp"
 #include "collision/cpu/mesh_collider.hpp"
 #include "collision/cpu/narrowphase.hpp"
 #include "collision/cpu/object_collider.hpp"
@@ -115,11 +115,10 @@ std::vector<Collision> CpuCollisionPipeline::find_collision(
   // Compute scene-dependent numerical error bounds for CCD robustness.
   Eigen::Vector3f abs_max =
       scene_bbox.min.cwiseAbs().cwiseMax(scene_bbox.max.cwiseAbs());
-  scene_ee_err_ = ticcd::get_numerical_error(abs_max, false, true);
-  scene_vf_err_ = ticcd::get_numerical_error(abs_max, true, true);
+  scene_ee_err_ = get_numerical_error(abs_max, false);
+  scene_vf_err_ = get_numerical_error(abs_max, true);
 
   tbb::enumerable_thread_specific<std::vector<Collision>> thread_collisions;
-  CollisionCache<MeshCollider> mesh_ccache;
   std::vector<CpuObjectCollider>& object_colliders =
       registry.get_all<CpuObjectCollider>();
 
@@ -147,15 +146,15 @@ std::vector<Collision> CpuCollisionPipeline::find_collision(
     auto& ob = ccache.second;
 
     // Stage 2: Mesh broadphase using hierarchical KD-tree traversal.
-    mesh_ccache.clear();
+    mesh_ccache_.clear();
     KDTree<MeshCollider>::test_tree_collision(
         oa->mesh_collider_tree, ob->mesh_collider_tree,
-        mesh_inter_collision_filter, mesh_ccache);
+        mesh_inter_collision_filter, mesh_ccache_);
 
     // Stage 3: Parallel narrowphase using continuous collision detection.
-    int ccache_num = mesh_ccache.size();
+    int ccache_num = mesh_ccache_.size();
     tbb::parallel_for(0, ccache_num, [&](int i) {
-      auto& pair = mesh_ccache[i];
+      auto& pair = mesh_ccache_[i];
       auto* ma = pair.first;
       auto* mb = pair.second;
 
@@ -178,13 +177,13 @@ std::vector<Collision> CpuCollisionPipeline::find_collision(
     }
 
     // Self-collision broadphase using internal KD-tree traversal.
-    mesh_ccache.clear();
+    mesh_ccache_.clear();
     o.mesh_collider_tree.test_self_collision(mesh_self_collision_filter,
-                                             mesh_ccache);
+                                             mesh_ccache_);
 
-    int ccache_num = mesh_ccache.size();
+    int ccache_num = mesh_ccache_.size();
     tbb::parallel_for(0, ccache_num, [&](int i) {
-      auto& pair = mesh_ccache[i];
+      auto& pair = mesh_ccache_[i];
       auto* ma = pair.first;
       auto* mb = pair.second;
 

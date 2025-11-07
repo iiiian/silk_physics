@@ -12,6 +12,9 @@ file(GLOB SILK_SOURCES
     src/collision/cpu/narrowphase.cpp
     src/collision/cpu/object_collider.cpp
     src/collision/cpu/pipeline.cpp
+    src/collision/cpu/interval.cpp
+    src/collision/cpu/interval_root_finder.cpp
+    src/collision/cpu/ccd.cpp
     src/ecs.cpp
     src/mesh.cpp
     src/result.cpp
@@ -64,6 +67,9 @@ target_compile_options(silk PRIVATE
 )
 
 set_target_properties(silk PROPERTIES VERSION 0.1.0)
+if(SILK_ENABLE_CUDA)
+    set_target_properties(silk PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+endif()
 
 include(${CMAKE_SOURCE_DIR}/cmake/SilkDebugFlags.cmake)
 silk_debug_warnings(silk)
@@ -76,6 +82,13 @@ target_include_directories(
     PRIVATE ${CMAKE_SOURCE_DIR}/extern/pdqsort ${CMAKE_CURRENT_LIST_DIR}/src
 )
 
+# Define SILK_WITH_CUDA macro if cuda is enabled.
+target_compile_definitions(
+    silk
+    PUBLIC
+        $<$<BOOL:${SILK_ENABLE_CUDA}>:SILK_WITH_CUDA=1>
+)
+
 target_link_libraries(
     silk
     PRIVATE
@@ -83,7 +96,6 @@ target_link_libraries(
         ${SILK_IGL_CORE}
         spdlog::spdlog
         TBB::tbb
-        tight_inclusion::tight_inclusion
         # dependencies for SuiteSparse cholmod
         SuiteSparse::SuiteSparseConfig
         SuiteSparse::AMD
@@ -95,6 +107,12 @@ target_link_libraries(
         CUDA::cudart
         Spectra::Spectra
 )
+
+if(SILK_ENABLE_CUDA)
+    target_link_libraries(silk PRIVATE CUDA::cudart)
+    # Add CUDA sources here in the future, e.g.:
+    # target_sources(silk PRIVATE src/solver/cuda/solver_kernels.cu)
+endif()
 
 # -------------------------------------------------
 # Installation rules
