@@ -15,7 +15,7 @@
 #include "pin.hpp"
 #include "solver/cpu/pipeline.hpp"
 
-#ifdef SILK_GPU_ENABLED
+#ifdef SILK_WITH_CUDA
 #include "solver/gpu/pipeline.hpp"
 #endif
 
@@ -25,7 +25,7 @@ class World::WorldImpl {
  private:
   Registry registry_;
   CpuSolverPipeline cpu_solver_pipeline_;
-#ifdef SILK_GPU_ENABLED
+#ifdef SILK_WITH_CUDA
   gpu::GpuSolverPipeline gpu_solver_pipeline_;
   bool use_gpu_ = false;
 #endif
@@ -35,7 +35,7 @@ class World::WorldImpl {
   Result set_global_config(GlobalConfig config) {
     auto& c = config;
 
-#ifdef SILK_GPU_ENABLED
+#ifdef SILK_WITH_CUDA
     // Determine which backend to use
     switch (c.solver_backend) {
       case SolverBackend::CPU:
@@ -87,7 +87,7 @@ class World::WorldImpl {
   }
 
   void clear() {
-#ifdef SILK_GPU_ENABLED
+#ifdef SILK_WITH_CUDA
     if (use_gpu_) {
       gpu_solver_pipeline_.clear(registry_);
     } else {
@@ -102,7 +102,7 @@ class World::WorldImpl {
   // Solver API
 
   Result solver_step() {
-#ifdef SILK_GPU_ENABLED
+#ifdef SILK_WITH_CUDA
     if (use_gpu_) {
       if (!gpu_solver_pipeline_.step(registry_)) {
         return Result::error(ErrorCode::CholeskyDecompositionFail);
@@ -122,7 +122,7 @@ class World::WorldImpl {
   }
 
   Result solver_reset() {
-#ifdef SILK_GPU_ENABLED
+#ifdef SILK_WITH_CUDA
     if (use_gpu_) {
       gpu_solver_pipeline_.reset(registry_);
     } else {

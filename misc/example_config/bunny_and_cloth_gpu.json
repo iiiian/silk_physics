@@ -8,7 +8,7 @@
             0.0,
             -9.8
         ],
-        "total_steps": 300,
+        "total_steps": 70,
         "solver_backend": "GPU"
     },
     "objects": [

@@ -364,6 +364,7 @@ silk::GlobalConfig make_global_config(const config::Global& global_cfg) {
 }
 
 void headless_run(const SimConfig& sim_config, const std::string& out_path) {
+  spdlog::info("gpu bool : {}", sim_config.global.solver_backend == "GPU");
   silk::World world;
 
   std::vector<pIObject> objects;

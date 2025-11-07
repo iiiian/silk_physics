@@ -117,7 +117,7 @@ User runs:
 **In `world.cpp`:**
 
 ```cpp
-#ifdef SILK_GPU_ENABLED
+#ifdef SILK_WITH_CUDA
   switch (config.solver_backend) {
     case SolverBackend::CPU:
       use_gpu_ = false;
@@ -197,7 +197,7 @@ User runs:
 
 **File:** `silk/src/world.cpp`
 
-- Uses preprocessor `#ifdef SILK_GPU_ENABLED`
+- Uses preprocessor `#ifdef SILK_WITH_CUDA`
 - Stores both `cpu_solver_pipeline_` and `gpu_solver_pipeline_`
 - Runtime flag `use_gpu_` determines which to use
 - Graceful fallback if GPU requested but unavailable
@@ -215,7 +215,7 @@ User runs:
 **Files:** `CMakeLists.txt`, `silk/CMakeLists.txt`
 
 - `SILK_BUILD_GPU` option enables CUDA compilation
-- Defines `SILK_GPU_ENABLED` preprocessor macro
+- Defines `SILK_WITH_CUDA` preprocessor macro
 - Links `silk_gpu_solver` library when enabled
 - Demo automatically supports GPU if built with flag
 
@@ -270,9 +270,9 @@ User runs:
 - **Cause:** GPU subdirectory not built
 - **Solution:** Ensure `SILK_BUILD_GPU=ON` is set in CMake
 
-**Problem:** `SILK_GPU_ENABLED not defined`
+**Problem:** `SILK_WITH_CUDA not defined`
 - **Cause:** Macro not propagated to world.cpp
-- **Solution:** Check `target_compile_definitions(silk PRIVATE SILK_GPU_ENABLED)`
+- **Solution:** Check `target_compile_definitions(silk PRIVATE SILK_WITH_CUDA)`
 
 ### Runtime Issues
 
