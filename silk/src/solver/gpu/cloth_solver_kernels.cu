@@ -5,7 +5,7 @@
 
 // --- Eigen CUDA Setup ---
 #define EIGEN_NO_MALLOC  // Disables all dynamic memory allocation
-#define EIGEN_USE_GPU    // Enables __host__ __device__ annotations
+// #define EIGEN_USE_GPU    // Enables __host__ __device__ annotations
 
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>

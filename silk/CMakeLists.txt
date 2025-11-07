@@ -54,10 +54,11 @@ target_link_libraries(
         SuiteSparse::CHOLMOD
 )
 
-# Link GPU solver if enabled
+# Add GPU compilation flag and linking if enabled
 if(SILK_BUILD_GPU)
     target_compile_definitions(silk PRIVATE SILK_GPU_ENABLED)
-    target_link_libraries(silk PRIVATE silk::gpu_solver)
+    # Link GPU solver - this works because silk_gpu_solver doesn't link back to silk
+    target_link_libraries(silk PRIVATE silk_gpu_solver)
 endif()
 
 # -------------------------------------------------
