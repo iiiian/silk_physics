@@ -4,7 +4,9 @@
 #include <vector>
 
 #include "collision/cpu/bbox.hpp"
+#include "collision/cpu/broadphase.hpp"
 #include "collision/cpu/collision.hpp"
+#include "collision/cpu/mesh_collider.hpp"
 #include "ecs.hpp"
 
 namespace silk {
@@ -54,6 +56,8 @@ class CpuCollisionPipeline {
   Eigen::Array3f scene_ee_err_;
   /** @brief Numerical error tolerance for vertex-face CCD queries. */
   Eigen::Array3f scene_vf_err_;
+
+  CollisionCache<MeshCollider> mesh_ccache_;
 };
 
 }  // namespace silk

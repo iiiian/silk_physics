@@ -170,18 +170,12 @@ std::optional<std::pair<float, float>> exact_edge_edge_uv(
 // If primitives are separating, return std::nullopt.
 // Uses restitution and a simplified friction model where kinetic friction
 // equals the maximum static friction.
-std::optional<Eigen::Vector3f> velocity_diff(const Eigen::Vector3f& v_relative,
-                                             const Eigen::Vector3f& n, float ms,
-                                             float restitution,
-                                             float friction) {
+Eigen::Vector3f velocity_diff(const Eigen::Vector3f& v_relative,
+                              const Eigen::Vector3f& n, float ms,
+                              float restitution, float friction) {
   float v_normal_norm = v_relative.dot(n);
   Eigen::Vector3f v_normal = v_normal_norm * n;
   Eigen::Vector3f v_parallel = v_relative - v_normal;
-
-  if (v_normal_norm < 0.0f) {
-    SPDLOG_DEBUG("leaving, n velocity norm {}", v_normal_norm);
-    return std::nullopt;
-  }
 
   float v_diff_norm_norm;
   // Two primitives are approaching each other normally.
@@ -242,16 +236,9 @@ std::optional<Collision> point_triangle_collision(
     return std::nullopt;
   }
 
-  // This means two collision primitives are so close that tight inclusion CCD
-  // fails to resolve TOI. It indicates the failure of other parts of the engine
-  // and we have no way to recover it. So just pretend this collision doesn't
-  // exist and hope that the solver can resume to a valid state magically.
-  if (ccd_result->use_small_ms && ccd_result->small_ms_t(0) == 0.0f) {
-    spdlog::error("Ignore potential collision. Reason: zero toi");
-    return std::nullopt;
-  }
-
-  float toi = ccd_result->t(0);
+  float toi =
+      (ccd_result->use_small_ms) ? ccd_result->small_ms_t(0) : ccd_result->t(0);
+  toi = std::max(toi, min_toi);
 
   c.velocity_t0 = c.position_t1 - c.position_t0;
   Eigen::Matrix<float, 3, 4> p_colli = c.position_t0 + toi * c.velocity_t0;
@@ -288,10 +275,8 @@ std::optional<Collision> point_triangle_collision(
   float friction = 0.5f * (oa.friction + ob.friction);
 
   // Total velocity change after collision.
-  auto v_diff = velocity_diff(v_relative, n, ms, restitution, friction);
-  if (!v_diff) {
-    return std::nullopt;
-  }
+  Eigen::Vector3f v_diff =
+      velocity_diff(v_relative, n, ms, restitution, friction);
 
   // Compute impulse weights.
   Eigen::Array4f para = {1.0f, 1.0f - b1 - b2, b1, b2};
@@ -303,19 +288,7 @@ std::optional<Collision> point_triangle_collision(
   weight(0) *= -1.0f;
 
   // Compute reflected velocity.
-  c.velocity_t1 = c.velocity_t0 + v_diff.value() * weight.transpose();
-
-  // If use_small_ms is true, then at t = 0 the primitives are either very close
-  // or within the minimal separation distance. To avoid the solver getting
-  // stuck with zero TOI, enforce a small TOI min_toi. Likewise, even when CCD
-  // does not use small_ms, ensure TOI is at least min_toi.
-  if (ccd_result->use_small_ms || toi < min_toi) {
-    c.toi = min_toi;
-    c.use_small_ms = true;
-  } else {
-    c.toi = toi;
-    c.use_small_ms = false;
-  }
+  c.velocity_t1 = c.velocity_t0 + v_diff * weight.transpose();
 
   c.type = CollisionType::PointTriangle;
   c.entity_handle_a = oa.entity_handle;
@@ -324,8 +297,10 @@ std::optional<Collision> point_triangle_collision(
   c.state_offset_b = ob.state_offset;
   c.index(0) = ma.index(0);
   c.index(Eigen::seqN(1, 3)) = mb.index;
+  c.toi = toi;
   c.minimal_separation = ms;
   c.stiffness = base_stiffness;
+  c.use_small_ms = ccd_result->use_small_ms;
   c.inv_mass = inv_mass;
 
   SPDLOG_DEBUG("pt collision: {}", c.index.transpose());
@@ -387,16 +362,9 @@ std::optional<Collision> edge_edge_collision(
     return std::nullopt;
   }
 
-  // This means two collision primitives are so close that tight inclusion CCD
-  // fails to resolve TOI. It indicates the failure of other parts of the engine
-  // and we have no way to recover it. So just pretend this collision doesn't
-  // exist and hope that the solver can resume to a valid state magically.
-  if (ccd_result->use_small_ms && ccd_result->small_ms_t(0) == 0.0f) {
-    spdlog::error("Ignore potential collision. Reason: zero toi");
-    return std::nullopt;
-  }
-
-  float toi = ccd_result->t(0);
+  float toi =
+      (ccd_result->use_small_ms) ? ccd_result->small_ms_t(0) : ccd_result->t(0);
+  toi = std::max(toi, min_toi);
 
   c.velocity_t0 = c.position_t1 - c.position_t0;
   Eigen::Matrix<float, 3, 4> p_colli = c.position_t0 + toi * c.velocity_t0;
@@ -437,10 +405,8 @@ std::optional<Collision> edge_edge_collision(
   float friction = 0.5f * (oa.friction + ob.friction);
 
   // Total velocity change after collision.
-  auto v_diff = velocity_diff(v_relative, n, ms, restitution, friction);
-  if (!v_diff) {
-    return std::nullopt;
-  }
+  Eigen::Vector3f v_diff =
+      velocity_diff(v_relative, n, ms, restitution, friction);
 
   // Compute impulse weights.
   Eigen::Array4f para = {1.0f - para_a, para_a, 1.0f - para_b, para_b};
@@ -452,19 +418,7 @@ std::optional<Collision> edge_edge_collision(
   weight(0) *= -1.0f;
   weight(1) *= -1.0f;
 
-  c.velocity_t1 = c.velocity_t0 + v_diff.value() * weight.transpose();
-
-  // If use_small_ms is true, then at t = 0 the primitives are either very close
-  // or within the minimal separation distance. To avoid the solver getting
-  // stuck with zero TOI, enforce a small TOI min_toi. Likewise, even when CCD
-  // does not use small_ms, ensure TOI is at least min_toi.
-  if (ccd_result->use_small_ms || toi < min_toi) {
-    c.toi = min_toi;
-    c.use_small_ms = true;
-  } else {
-    c.toi = toi;
-    c.use_small_ms = false;
-  }
+  c.velocity_t1 = c.velocity_t0 + v_diff * weight.transpose();
 
   c.type = CollisionType::EdgeEdge;
   c.entity_handle_a = oa.entity_handle;
@@ -473,8 +427,10 @@ std::optional<Collision> edge_edge_collision(
   c.state_offset_b = ob.state_offset;
   c.index(Eigen::seqN(0, 2)) = ma.index(Eigen::seqN(0, 2));
   c.index(Eigen::seqN(2, 2)) = mb.index(Eigen::seqN(0, 2));
+  c.toi = toi;
   c.minimal_separation = ms;
   c.stiffness = base_stiffness;
+  c.use_small_ms = ccd_result->use_small_ms;
   c.inv_mass = inv_mass;
 
   SPDLOG_DEBUG("ee collision: {}", c.index.transpose());

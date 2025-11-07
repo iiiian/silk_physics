@@ -7,6 +7,10 @@ include_guard(GLOBAL)
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
 
+if (SILK_ENABLE_CUDA)
+  find_package(CUDAToolkit REQUIRED)
+endif()
+
 # ---------------------------------------------------------------
 # Other dependencies
 # ---------------------------------------------------------------

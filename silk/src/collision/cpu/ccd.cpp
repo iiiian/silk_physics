@@ -159,7 +159,7 @@ std::optional<CCDResult> CCD(
   }
 
   // Avoid returning t=0 by refining minimum separation if needed.
-  constexpr int MS_REFINE_ITER = 2;
+  constexpr int MS_REFINE_ITER = 1;
   for (int i = 0; i < MS_REFINE_ITER; ++i) {
     ms *= 0.5f;
     auto refine_result = interval_root_finder_BFS<is_vertex_face>(

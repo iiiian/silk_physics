@@ -41,11 +41,19 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 # Options
 # ---------------------------------------------------------------
 
+option(SILK_ENABLE_CUDA "Build with CUDA" OFF)
 option(SILK_BUILD_DEMO "Build the GUI demo application" ON)
 option(SILK_BUILD_TEST "Build tests" ON)
 option(SILK_FETCH_DEPENDENCIES "Download dependencies using CMake FetchContent" ${_silk_fetch_dependencies_default})
 
 # ---------------------------------------------------------------
+
+if(SILK_ENABLE_CUDA)
+    enable_language(CUDA)
+    set(CMAKE_CUDA_STANDARD 17)
+    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+    set(CMAKE_CUDA_ARCHITECTURES all-major)
+endif()
 
 if(SILK_FETCH_DEPENDENCIES)
     include(DependenciesFetchContent)

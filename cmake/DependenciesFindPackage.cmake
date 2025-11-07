@@ -1,5 +1,9 @@
 include_guard(GLOBAL)
 
+if (SILK_ENABLE_CUDA)
+  find_package(CUDAToolkit REQUIRED)
+endif()
+
 find_package(eigen3 REQUIRED)
 
 find_package(libigl REQUIRED)
