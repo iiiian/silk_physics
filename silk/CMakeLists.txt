@@ -2,10 +2,6 @@
 # Library config
 # -------------------------------------------------
 
-# Enable CUDA support
-enable_language(CUDA)
-find_package(CUDAToolkit REQUIRED)
-
 file(GLOB SILK_SOURCES
     src/cloth_topology.cpp
     src/collision/cpu/bbox.cpp
@@ -24,12 +20,7 @@ file(GLOB SILK_SOURCES
     src/solver/cpu/obstacle_solver_utils.cpp
     src/solver/cpu/pipeline.cpp
     src/world.cpp
-)
-
-#***
-list(APPEND SILK_SOURCES
     src/solver/cpu/u_constructor.cpp
-    src/solver/gpu/inexact_solver.cu
 )
 
 # GPU solver sources (CUDA)
@@ -38,33 +29,12 @@ file(GLOB SILK_GPU_SOURCES
     src/solver/gpu/cloth_solver_context.cu
     src/solver/gpu/cloth_solver_utils.cu
     src/solver/gpu/pipeline.cu
+    src/solver/gpu/inexact_solver.cu
 )
 
 
-add_library(silk ${SILK_SOURCES} ${SILK_GPU_SOURCES})
+add_library(silk ${SILK_SOURCES})
 add_library(silk::silk ALIAS silk)
-
-#***
-target_include_directories(silk PRIVATE
-  ${spectra_SOURCE_DIR}/include
-)
-
-# Set CUDA properties
-set_target_properties(silk PROPERTIES
-    CUDA_SEPARABLE_COMPILATION ON
-    CUDA_ARCHITECTURES "60;70;75;80;86"
-)
-
-# Add CUDA compiler flags to suppress warnings and avoid x86 intrinsic issues
-target_compile_options(silk PRIVATE
-    $<$<COMPILE_LANGUAGE:CUDA>:
-        --expt-relaxed-constexpr
-        -Xcompiler=-Wno-unknown-pragmas
-        --diag-suppress=68
-        --diag-suppress=128
-        --diag-suppress=2417
-    >
-)
 
 set_target_properties(silk PROPERTIES VERSION 0.1.0)
 if(SILK_ENABLE_CUDA)
@@ -103,15 +73,12 @@ target_link_libraries(
         SuiteSparse::COLAMD
         SuiteSparse::CCOLAMD
         SuiteSparse::CHOLMOD
-        # CUDA dependencies
-        CUDA::cudart
         Spectra::Spectra
 )
 
 if(SILK_ENABLE_CUDA)
     target_link_libraries(silk PRIVATE CUDA::cudart)
-    # Add CUDA sources here in the future, e.g.:
-    # target_sources(silk PRIVATE src/solver/cuda/solver_kernels.cu)
+    target_sources(silk PRIVATE ${SILK_GPU_SOURCES})
 endif()
 
 # -------------------------------------------------

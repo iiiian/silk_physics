@@ -64,7 +64,6 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/yixuan/spectra.git
   GIT_TAG 6841bcbacaa0f0a8446210314e682057a084be4e # release 1.2.0
 )
-FetchContent_MakeAvailable(Spectra)
 
 FetchContent_Declare(
     nlohmann_json
@@ -101,6 +100,8 @@ FetchContent_MakeAvailable(
     tbb
     Spectra
 )
+
+add_library(Spectra::Spectra ALIAS Spectra)
 
 # The original libigl export library as igl::core, but vcpkg patch it to igl::igl_core.
 # So we check which one is available. 
