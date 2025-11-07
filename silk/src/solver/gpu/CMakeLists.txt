@@ -7,7 +7,7 @@ set(GPU_SOLVER_SOURCES
     cloth_solver_kernels.cu
     gpu_cloth_solver_context.cu
     cloth_solver_utils.cu
-    pipeline.cu
+    pipeline.cpp
 )
 
 # Create GPU solver library
