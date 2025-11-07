@@ -23,6 +23,12 @@ file(GLOB SILK_SOURCES
     src/world.cpp
 )
 
+#***
+list(APPEND SILK_SOURCES
+    src/solver/cpu/u_constructor.cpp
+    src/solver/gpu/inexact_solver.cu
+)
+
 # GPU solver sources (CUDA)
 file(GLOB SILK_GPU_SOURCES
     src/solver/gpu/jacobi_solver.cu
@@ -31,8 +37,14 @@ file(GLOB SILK_GPU_SOURCES
     src/solver/gpu/pipeline.cu
 )
 
+
 add_library(silk ${SILK_SOURCES} ${SILK_GPU_SOURCES})
 add_library(silk::silk ALIAS silk)
+
+#***
+target_include_directories(silk PRIVATE
+  ${spectra_SOURCE_DIR}/include
+)
 
 # Set CUDA properties
 set_target_properties(silk PROPERTIES
@@ -81,6 +93,7 @@ target_link_libraries(
         SuiteSparse::CHOLMOD
         # CUDA dependencies
         CUDA::cudart
+        Spectra::Spectra
 )
 
 # -------------------------------------------------

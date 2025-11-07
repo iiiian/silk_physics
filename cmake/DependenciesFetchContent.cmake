@@ -54,6 +54,14 @@ FetchContent_Declare(
     GIT_TAG 6f468b0385b2104a9f485e49bb55508d0024e32d
 )
 
+#include Spectra
+FetchContent_Declare(
+  Spectra
+  GIT_REPOSITORY https://github.com/yixuan/spectra.git
+  GIT_TAG 6841bcbacaa0f0a8446210314e682057a084be4e # release 1.2.0
+)
+FetchContent_MakeAvailable(Spectra)
+
 FetchContent_Declare(
     nlohmann_json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
@@ -87,6 +95,7 @@ FetchContent_MakeAvailable(
     SuiteSparse
     spdlog
     tbb
+    Spectra
 )
 
 # The original libigl export library as igl::core, but vcpkg patch it to igl::igl_core.

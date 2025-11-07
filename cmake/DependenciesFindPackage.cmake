@@ -15,6 +15,7 @@ endif()
 
 find_package(spdlog REQUIRED)
 find_package(tbb REQUIRED)
+find_package(Spectra REQUIRED)
 
 # suite sparse
 find_package(SuiteSparse_config REQUIRED)
@@ -23,6 +24,7 @@ find_package(CAMD REQUIRED)
 find_package(COLAMD REQUIRED)
 find_package(CCOLAMD REQUIRED)
 find_package(CHOLMOD REQUIRED)
+
 
 set(TIGHT_INCLUSION_WITH_DOUBLE_PRECISION OFF)
 add_subdirectory(extern/tight-inclusion)
