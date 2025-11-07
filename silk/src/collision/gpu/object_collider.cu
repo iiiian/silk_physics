@@ -1,5 +1,4 @@
-#include "collision/cpu/object_collider.hpp"
-
+#include <cuBQL/builder/cuda.h>
 #include <tbb/enumerable_thread_specific.h>
 #include <tbb/parallel_for.h>
 
@@ -7,101 +6,78 @@
 #include <functional>
 #include <silk/silk.hpp>
 #include <unordered_set>
+#include <vector>
+#include <cuda.h>
 
+#include "collision/gpu/bvh_context.hpp"
+#include "collision/gpu/object_collider.hpp"
 #include "handle.hpp"
 #include "mesh.hpp"
 #include "obstacle_position.hpp"
 #include "pin.hpp"
+#include "logger.hpp"
 
-namespace silk {
+namespace silk::gpu {
 
-/**
- * Creates all mesh colliders (vertices, edges, faces) for collision detection.
- *
- * @param mesh Triangle mesh to convert into collision primitives
- * @param bbox_padding Amount to expand bounding boxes for collision tolerance
- * @param get_inv_mass Function returning inverse mass for each vertex index
- * @return Vector of mesh colliders ready for spatial partitioning
- *
- * Creates three types of colliders for comprehensive collision detection:
- * - Point colliders for vertex-vertex and vertex-face interactions
- * - Edge colliders for edge-edge interactions
- * - Triangle colliders for continuous collision detection against faces
- */
-std::vector<MeshCollider> make_mesh_colliders(
-    const TriMesh& mesh, float bbox_padding,
-    std::function<float(int)> get_inv_mass) {
+BVHContext assemble_bvh_colliders(const TriMesh& mesh, float bbox_padding,
+                            std::function<float(int)> get_inv_mass) {
   auto& m = mesh;
 
-  int vert_num = m.V.rows();
   int edge_num = m.E.rows();
-  int face_num = m.F.rows();
+  std::vector<cuBQL::box_t<float, 3>> edge_bboxes(edge_num);
+  std::vector<EdgeCollider> edge_colliders(edge_num);
 
-  std::vector<MeshCollider> mesh_colliders;
-
-  // Create point colliders for vertex-level collision detection.
-  for (int i = 0; i < vert_num; ++i) {
-    MeshCollider mc;
-    mc.type = MeshColliderType::Point;
-    mc.index(0) = i;
-    mc.inv_mass(0) = get_inv_mass(i);
-    mc.position_t0.col(0) = m.V.row(i);
-    mc.position_t1.col(0) = m.V.row(i);
-    mc.bbox.min = m.V.row(i);
-    mc.bbox.max = m.V.row(i);
-    mc.bbox.pad_inplace(bbox_padding);
-
-    mesh_colliders.emplace_back(std::move(mc));
-  }
-
-  // Create edge colliders for edge-edge collision detection.
   for (int i = 0; i < edge_num; ++i) {
-    MeshCollider mc;
-    auto& p0 = mc.position_t0;
-    auto& p1 = mc.position_t1;
-    mc.type = MeshColliderType::Edge;
-    mc.index(Eigen::seqN(0, 2)) = m.E.row(i);
-    mc.inv_mass(0) = get_inv_mass(mc.index(0));
-    mc.inv_mass(1) = get_inv_mass(mc.index(1));
+    auto& c = edge_colliders[i];
+    auto& p0 = c.position_t0;
+    auto& p1 = c.position_t1;
+    c.index = m.E.row(i);
+    c.inv_mass(0) = get_inv_mass(c.index(0));
+    c.inv_mass(1) = get_inv_mass(c.index(1));
     p0.col(0) = m.V.row(mc.index(0));
     p0.col(1) = m.V.row(mc.index(1));
     p1.col(0) = m.V.row(mc.index(0));
     p1.col(1) = m.V.row(mc.index(1));
-    mc.bbox.min = p0.col(0).cwiseMin(p0.col(1));
-    mc.bbox.max = p0.col(0).cwiseMax(p0.col(1));
-    mc.bbox.pad_inplace(bbox_padding);
 
-    mesh_colliders.emplace_back(std::move(mc));
+    Eigen::Vector3f min = p0.col(0).cwiseMin(p0.col(1));
+    min = min.array() - bbox_padding;
+    Eigen::Vector3f max = p0.col(0).cwiseMax(p0.col(1));
+    max = max.array() + bbox_padding;
+    edge_bboxes[i].lower = cuBQL::vec3f(min.x, min.y, min.z);
+    edge_bboxes[i].upper = cuBQL::vec3f(max.x, max.y, max.z);
   }
 
-  // Create triangle colliders for continuous collision detection.
-  for (int i = 0; i < face_num; ++i) {
-    MeshCollider mc;
-    auto& p0 = mc.position_t0;
-    auto& p1 = mc.position_t1;
+  int triangle_num = m.F.rows();
+  std::vector<cuBQL::box_t<float, 3>> triangle_bboxes(triangle_num);
+  std::vector<TriangleCollider> triangle_colliders(triangle_num);
 
-    mc.type = MeshColliderType::Triangle;
-    mc.index = m.F.row(i);
-    mc.inv_mass(0) = get_inv_mass(mc.index(0));
-    mc.inv_mass(1) = get_inv_mass(mc.index(1));
-    mc.inv_mass(2) = get_inv_mass(mc.index(2));
+  for (int i = 0; i < triangle_num; ++i) {
+    auto& c = triangle_colliders[i];
+    auto& p0 = c.position_t0;
+    auto& p1 = c.position_t1;
+    c.index = m.F.row(i);
+    c.inv_mass(0) = get_inv_mass(c.index(0));
+    c.inv_mass(1) = get_inv_mass(c.index(1));
+    c.inv_mass(2) = get_inv_mass(c.index(2));
     p0.col(0) = m.V.row(mc.index(0));
     p0.col(1) = m.V.row(mc.index(1));
     p0.col(2) = m.V.row(mc.index(2));
     p1.col(0) = m.V.row(mc.index(0));
     p1.col(1) = m.V.row(mc.index(1));
     p1.col(2) = m.V.row(mc.index(2));
-    mc.bbox.min = p0.rowwise().minCoeff().cwiseMin(p1.rowwise().minCoeff());
-    mc.bbox.max = p0.rowwise().maxCoeff().cwiseMax(p1.rowwise().maxCoeff());
-    mc.bbox.pad_inplace(bbox_padding);
 
-    mesh_colliders.emplace_back(std::move(mc));
+    Eigen::Vector3f min = p0.col(0).cwiseMin(p0.col(1)).cwiseMin(p0.col(2));
+    min = min.array() - bbox_padding;
+    Eigen::Vector3f max = p0.col(0).cwiseMax(p0.col(1)).cwiseMax(p0.col(2));
+    max = max.array() + bbox_padding;
+    triangle_bboxes[i].lower = cuBQL::vec3f(min.x, min.y, min.z);
+    triangle_bboxes[i].upper = cuBQL::vec3f(max.x, max.y, max.z);
   }
 
-  return mesh_colliders;
+  return make_bvh_context(edge_bboxes, edge_colliders, triangle_bboxes, triangle_colliders);
 }
 
-CpuObjectCollider::CpuObjectCollider(Handle entity_handle,
+GpuObjectCollider::GpuObjectCollider(Handle entity_handle,
                                      const CollisionConfig& config,
                                      const TriMesh& mesh, const Pin& pin,
                                      const Eigen::VectorXf& mass,
@@ -134,11 +110,12 @@ CpuObjectCollider::CpuObjectCollider(Handle entity_handle,
     return 1.0f / mass(index);
   };
 
-  mesh_collider_tree.init(
-      make_mesh_colliders(mesh, bbox_padding, get_inv_mass));
+  bvh_context = make_bvh_context(mesh, bbox_padding, get_inv_mass);
+  cuBQL::gpuBuilder(edge_bvh, bvh_context.edge_bboxes, bvh_context.edge_num);
+  cuBQL::gpuBuilder(triangle_bvh, bvh_context.triangle_bboxes, bvh_context.triangle_num);
 }
 
-CpuObjectCollider::CpuObjectCollider(Handle entity_handle,
+GpuObjectCollider::GpuObjectCollider(Handle entity_handle,
                                      const CollisionConfig& config,
                                      const TriMesh& mesh) {
   auto& c = config;
@@ -163,11 +140,13 @@ CpuObjectCollider::CpuObjectCollider(Handle entity_handle,
 
   // Obstacles have infinite mass (zero inverse mass).
   auto get_inv_mass = [](int index) { return 0.0f; };
-  mesh_collider_tree.init(
-      make_mesh_colliders(mesh, bbox_padding, get_inv_mass));
+
+  bvh_context = make_bvh_context(mesh, bbox_padding, get_inv_mass);
+  cuBQL::gpuBuilder(edge_bvh, bvh_context.edge_bboxes, bvh_context.edge_num);
+  cuBQL::gpuBuilder(triangle_bvh, bvh_context.triangle_bboxes, bvh_context.triangle_num);
 }
 
-void CpuObjectCollider::update(const CollisionConfig& config,
+void GpuObjectCollider::update(const CollisionConfig& config,
                                const ObjectState& object_state,
                                const Eigen::VectorXf global_curr_state,
                                const Eigen::VectorXf global_prev_state) {
@@ -253,7 +232,7 @@ void CpuObjectCollider::update(const CollisionConfig& config,
   mesh_collider_tree.update(bbox);
 }
 
-void CpuObjectCollider::update(const CollisionConfig& config,
+void GpuObjectCollider::update(const CollisionConfig& config,
                                const ObstaclePosition& obstacle_position) {
   const CollisionConfig& c = config;
   const ObstaclePosition& p = obstacle_position;
@@ -342,4 +321,4 @@ void CpuObjectCollider::update(const CollisionConfig& config,
   mesh_collider_tree.update(bbox);
 }
 
-}  // namespace silk
+} // namespace silk::gpu
