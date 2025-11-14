@@ -8,8 +8,7 @@
  * elastic RHS computation step in the projective dynamics cloth solver.
  */
 
-namespace silk {
-namespace gpu {
+namespace silk::gpu {
 
 /**
  * @brief Launch the elastic RHS computation kernel
@@ -31,13 +30,10 @@ namespace gpu {
  *
  * @throws std::runtime_error if kernel launch fails
  */
-void launch_compute_elastic_rhs_kernel(int ops_num, const int* d_F,
-                                       const float* d_state,
-                                       const float* d_jacobian_ops,
-                                       const float* d_areas,
-                                       float elastic_stiffness,
-                                       float* d_elastic_rhs,
-                                       int block_size = 256);
+void launch_compute_elastic_rhs_kernel(
+    int ops_num, const int* d_F, const float* d_state,
+    const float* d_jacobian_ops, const float* d_areas, float elastic_stiffness,
+    float* d_elastic_rhs, int block_size = 256);
 
 /**
  * @brief Launch the vector addition kernel
@@ -54,7 +50,6 @@ void launch_compute_elastic_rhs_kernel(int ops_num, const int* d_F,
  * @throws std::runtime_error if kernel launch fails
  */
 void launch_add_vectors_kernel(int n, const float* a, const float* b,
-                                float* result, int block_size = 256);
+                               float* result, int block_size = 256);
 
-}  // namespace gpu
-}  // namespace silk
+}  // namespace silk::gpu

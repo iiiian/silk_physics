@@ -27,6 +27,7 @@ file(GLOB SILK_GPU_SOURCE
     src/solver/gpu/gpu_cloth_solver_context.cu
     src/solver/gpu/cloth_solver_utils.cu
     src/solver/gpu/pipeline.cpp
+    src/solver/gpu/svd.cu
 )
 
 add_library(silk ${SILK_SOURCES})
