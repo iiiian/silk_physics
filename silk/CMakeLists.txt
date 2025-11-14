@@ -22,6 +22,15 @@ file(GLOB SILK_SOURCES
     src/world.cpp
 )
 
+file(GLOB SILK_GPU_SOURCE
+    src/solver/gpu/cloth_solver_kernels.cu
+    src/solver/gpu/gpu_cloth_solver_context.cu
+    src/solver/gpu/cloth_solver_utils.cu
+    src/solver/gpu/pipeline.cpp
+    src/solver/gpu/inexact_solver.cu
+    src/solver/cpu/u_constructor.cpp
+)
+
 add_library(silk ${SILK_SOURCES})
 add_library(silk::silk ALIAS silk)
 
@@ -65,9 +74,8 @@ target_link_libraries(
 )
 
 if(SILK_ENABLE_CUDA)
-    target_link_libraries(silk PRIVATE CUDA::cudart)
-    # Add CUDA sources here in the future, e.g.:
-    # target_sources(silk PRIVATE src/solver/cuda/solver_kernels.cu)
+    target_link_libraries(silk PRIVATE CUDA::cudart Spectra::Spectra)
+    target_sources(silk PRIVATE ${SILK_GPU_SOURCE})
 endif()
 
 # -------------------------------------------------

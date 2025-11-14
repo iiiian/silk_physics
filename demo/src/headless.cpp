@@ -350,10 +350,21 @@ silk::GlobalConfig make_global_config(const config::Global& global_cfg) {
   cfg.acceleration_x = static_cast<float>(global_cfg.acceleration[0]);
   cfg.acceleration_y = static_cast<float>(global_cfg.acceleration[1]);
   cfg.acceleration_z = static_cast<float>(global_cfg.acceleration[2]);
+
+  // Parse solver backend string
+  if (global_cfg.solver_backend == "GPU") {
+    cfg.solver_backend = silk::SolverBackend::GPU;
+  } else if (global_cfg.solver_backend == "Auto") {
+    cfg.solver_backend = silk::SolverBackend::Auto;
+  } else {
+    cfg.solver_backend = silk::SolverBackend::CPU;
+  }
+
   return cfg;
 }
 
 void headless_run(const SimConfig& sim_config, const std::string& out_path) {
+  spdlog::info("gpu bool : {}", sim_config.global.solver_backend == "GPU");
   silk::World world;
 
   std::vector<pIObject> objects;

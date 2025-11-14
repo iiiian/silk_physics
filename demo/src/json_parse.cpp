@@ -371,6 +371,17 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
       g.total_steps = static_cast<int>(v);
       return true;
     }
+    if (k == "solver_backend") {
+      std::string v;
+      if (!parse_string(cur, v)) {
+        ui_error(
+            "Fail to parse global config. Incorrect json field "
+            "'solver_backend'");
+        return false;
+      }
+      g.solver_backend = v;
+      return true;
+    }
     // skip unknown
     return jx::skip_value(cur);
   });
