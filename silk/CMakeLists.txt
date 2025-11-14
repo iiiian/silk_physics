@@ -27,6 +27,8 @@ file(GLOB SILK_GPU_SOURCE
     src/solver/gpu/gpu_cloth_solver_context.cu
     src/solver/gpu/cloth_solver_utils.cu
     src/solver/gpu/pipeline.cpp
+    src/solver/gpu/inexact_solver.cu
+    src/solver/cpu/u_constructor.cpp
 )
 
 add_library(silk ${SILK_SOURCES})
@@ -72,7 +74,7 @@ target_link_libraries(
 )
 
 if(SILK_ENABLE_CUDA)
-    target_link_libraries(silk PRIVATE CUDA::cudart)
+    target_link_libraries(silk PRIVATE CUDA::cudart Spectra::Spectra)
     target_sources(silk PRIVATE ${SILK_GPU_SOURCE})
 endif()
 
