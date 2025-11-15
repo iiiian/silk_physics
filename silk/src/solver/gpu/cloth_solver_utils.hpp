@@ -17,8 +17,7 @@
 #include "silk/silk.hpp"
 #include "solver/cpu/cloth_solver_context.hpp"
 
-namespace silk {
-namespace gpu {
+namespace silk::gpu {
 
 /**
  * @brief GPU-accelerated inner loop of projective dynamics cloth solver
@@ -53,5 +52,4 @@ bool compute_cloth_inner_loop_gpu(
     Eigen::Ref<const Eigen::VectorXf> outer_rhs,
     Eigen::Ref<Eigen::VectorXf> solution);
 
-}  // namespace gpu
-}  // namespace silk
+}  // namespace silk::gpu

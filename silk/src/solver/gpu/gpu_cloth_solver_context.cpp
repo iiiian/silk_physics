@@ -1,15 +1,14 @@
 #include "gpu_cloth_solver_context.hpp"
 
-#include <cuda_runtime.h>
+#include <cuda_runtime_api.h>
 
 #include <iostream>
 #include <stdexcept>
 
-#include "cloth_solver_kernels.cuh"
+#include "cloth_solver_kernels.hpp"
 #include "logger.hpp"
 
-namespace silk {
-namespace gpu {
+namespace silk::gpu {
 
 // --- CUDA Error Checking Macro ---
 #define CHECK_CUDA_ERROR(val) check_cuda((val), #val, __FILE__, __LINE__)
@@ -17,11 +16,10 @@ namespace gpu {
 static void check_cuda(cudaError_t result, char const* const func,
                        const char* const file, int const line) {
   if (result != cudaSuccess) {
-    std::string error_msg = std::string("CUDA Error at ") + file + ":" +
-                            std::to_string(line) + " code=" +
-                            std::to_string(static_cast<unsigned int>(result)) +
-                            " \"" + func +
-                            "\" : " + cudaGetErrorString(result);
+    std::string error_msg =
+        std::string("CUDA Error at ") + file + ":" + std::to_string(line) +
+        " code=" + std::to_string(static_cast<unsigned int>(result)) + " \"" +
+        func + "\" : " + cudaGetErrorString(result);
     SPDLOG_ERROR(error_msg);
     throw std::runtime_error(error_msg);
   }
@@ -48,19 +46,22 @@ std::optional<GpuClothSolverContext> GpuClothSolverContext::create(
 
   try {
     // --- 1. Allocate Device Memory ---
-    CHECK_CUDA_ERROR(cudaMalloc(&ctx.d_F, ctx.ops_num * 3 * sizeof(int)));
-    CHECK_CUDA_ERROR(cudaMalloc(&ctx.d_state, ctx.state_num * sizeof(float)));
     CHECK_CUDA_ERROR(
-        cudaMalloc(&ctx.d_jacobian_ops, ctx.ops_num * 54 * sizeof(float)));
-    CHECK_CUDA_ERROR(cudaMalloc(&ctx.d_areas, ctx.ops_num * sizeof(float)));
+        cudaMalloc((void**)&ctx.d_F, ctx.ops_num * 3 * sizeof(int)));
     CHECK_CUDA_ERROR(
-        cudaMalloc(&ctx.d_outer_rhs, ctx.state_num * sizeof(float)));
+        cudaMalloc((void**)&ctx.d_state, ctx.state_num * sizeof(float)));
+    CHECK_CUDA_ERROR(cudaMalloc((void**)&ctx.d_jacobian_ops,
+                                ctx.ops_num * 54 * sizeof(float)));
     CHECK_CUDA_ERROR(
-        cudaMalloc(&ctx.d_elastic_rhs, ctx.state_num * sizeof(float)));
+        cudaMalloc((void**)&ctx.d_areas, ctx.ops_num * sizeof(float)));
     CHECK_CUDA_ERROR(
-        cudaMalloc(&ctx.d_final_rhs, ctx.state_num * sizeof(float)));
+        cudaMalloc((void**)&ctx.d_outer_rhs, ctx.state_num * sizeof(float)));
     CHECK_CUDA_ERROR(
-        cudaMalloc(&ctx.d_solution, ctx.state_num * sizeof(float)));
+        cudaMalloc((void**)&ctx.d_elastic_rhs, ctx.state_num * sizeof(float)));
+    CHECK_CUDA_ERROR(
+        cudaMalloc((void**)&ctx.d_final_rhs, ctx.state_num * sizeof(float)));
+    CHECK_CUDA_ERROR(
+        cudaMalloc((void**)&ctx.d_solution, ctx.state_num * sizeof(float)));
 
     SPDLOG_INFO("  Device memory allocated successfully");
 
@@ -74,8 +75,8 @@ std::optional<GpuClothSolverContext> GpuClothSolverContext::create(
       h_F[i * 3 + 2] = F(i, 2);
     }
     CHECK_CUDA_ERROR(cudaMemcpy(ctx.d_F, h_F.data(),
-                                 ctx.ops_num * 3 * sizeof(int),
-                                 cudaMemcpyHostToDevice));
+                                ctx.ops_num * 3 * sizeof(int),
+                                cudaMemcpyHostToDevice));
 
     // Jacobian operators (6x9 matrices stored row-major)
     std::vector<float> h_jacobian_ops(ctx.ops_num * 54);
@@ -88,8 +89,8 @@ std::optional<GpuClothSolverContext> GpuClothSolverContext::create(
       }
     }
     CHECK_CUDA_ERROR(cudaMemcpy(ctx.d_jacobian_ops, h_jacobian_ops.data(),
-                                 ctx.ops_num * 54 * sizeof(float),
-                                 cudaMemcpyHostToDevice));
+                                ctx.ops_num * 54 * sizeof(float),
+                                cudaMemcpyHostToDevice));
 
     // Per-face areas
     std::vector<float> h_areas(ctx.ops_num);
@@ -97,8 +98,8 @@ std::optional<GpuClothSolverContext> GpuClothSolverContext::create(
       h_areas[i] = topology.area(i);
     }
     CHECK_CUDA_ERROR(cudaMemcpy(ctx.d_areas, h_areas.data(),
-                                 ctx.ops_num * sizeof(float),
-                                 cudaMemcpyHostToDevice));
+                                ctx.ops_num * sizeof(float),
+                                cudaMemcpyHostToDevice));
 
     SPDLOG_INFO("  Static topology uploaded to device");
 
@@ -131,9 +132,8 @@ void GpuClothSolverContext::upload_state(const Eigen::VectorXf& state) {
                              std::to_string(state.size()));
   }
 
-  CHECK_CUDA_ERROR(cudaMemcpy(d_state, state.data(),
-                               state_num * sizeof(float),
-                               cudaMemcpyHostToDevice));
+  CHECK_CUDA_ERROR(cudaMemcpy(d_state, state.data(), state_num * sizeof(float),
+                              cudaMemcpyHostToDevice));
 }
 
 void GpuClothSolverContext::upload_outer_rhs(const Eigen::VectorXf& outer_rhs) {
@@ -144,8 +144,8 @@ void GpuClothSolverContext::upload_outer_rhs(const Eigen::VectorXf& outer_rhs) {
   }
 
   CHECK_CUDA_ERROR(cudaMemcpy(d_outer_rhs, outer_rhs.data(),
-                               state_num * sizeof(float),
-                               cudaMemcpyHostToDevice));
+                              state_num * sizeof(float),
+                              cudaMemcpyHostToDevice));
 }
 
 void GpuClothSolverContext::download_solution(
@@ -157,8 +157,8 @@ void GpuClothSolverContext::download_solution(
   }
 
   CHECK_CUDA_ERROR(cudaMemcpy(solution.data(), d_final_rhs,
-                               state_num * sizeof(float),
-                               cudaMemcpyDeviceToHost));
+                              state_num * sizeof(float),
+                              cudaMemcpyDeviceToHost));
 }
 
 void GpuClothSolverContext::compute_elastic_rhs() {
@@ -198,7 +198,8 @@ void GpuClothSolverContext::free_device_memory() {
 
 GpuClothSolverContext::~GpuClothSolverContext() { free_device_memory(); }
 
-GpuClothSolverContext::GpuClothSolverContext(GpuClothSolverContext&& other) noexcept
+GpuClothSolverContext::GpuClothSolverContext(
+    GpuClothSolverContext&& other) noexcept
     : dt(other.dt),
       state_num(other.state_num),
       ops_num(other.ops_num),
@@ -252,5 +253,4 @@ GpuClothSolverContext& GpuClothSolverContext::operator=(
   return *this;
 }
 
-}  // namespace gpu
-}  // namespace silk
+}  // namespace silk::gpu

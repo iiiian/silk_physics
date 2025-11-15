@@ -1,6 +1,6 @@
 #include <cuda_runtime.h>
 
-#include "cloth_solver_kernels.cuh"
+#include "cloth_solver_kernels.hpp"
 #include "solver/gpu/svd.cuh"
 
 namespace silk::gpu {

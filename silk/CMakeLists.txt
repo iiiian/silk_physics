@@ -24,8 +24,8 @@ file(GLOB SILK_SOURCES
 
 file(GLOB SILK_GPU_SOURCE
     src/solver/gpu/cloth_solver_kernels.cu
-    src/solver/gpu/gpu_cloth_solver_context.cu
-    src/solver/gpu/cloth_solver_utils.cu
+    src/solver/gpu/gpu_cloth_solver_context.cpp
+    src/solver/gpu/cloth_solver_utils.cpp
     src/solver/gpu/pipeline.cpp
     src/solver/gpu/svd.cu
 )

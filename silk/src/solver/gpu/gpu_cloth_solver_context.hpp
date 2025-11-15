@@ -10,8 +10,7 @@
 #include "pin.hpp"
 #include "silk/silk.hpp"
 
-namespace silk {
-namespace gpu {
+namespace silk::gpu {
 
 /**
  * @brief GPU-specific data for cloth solver
@@ -39,14 +38,14 @@ class GpuClothSolverContext {
   float elastic_stiffness;  ///< Material stiffness parameter
 
   // --- Device memory pointers ---
-  int* d_F;                  ///< Face indices [ops_num * 3]
-  float* d_state;            ///< Current vertex positions [state_num]
-  float* d_jacobian_ops;     ///< 6x9 Jacobian matrices [ops_num * 54]
-  float* d_areas;            ///< Per-face rest areas [ops_num]
-  float* d_outer_rhs;        ///< Outer loop RHS [state_num]
-  float* d_elastic_rhs;      ///< Elastic force accumulator [state_num]
-  float* d_final_rhs;        ///< Combined RHS [state_num]
-  float* d_solution;         ///< Linear solve output [state_num]
+  int* d_F;               ///< Face indices [ops_num * 3]
+  float* d_state;         ///< Current vertex positions [state_num]
+  float* d_jacobian_ops;  ///< 6x9 Jacobian matrices [ops_num * 54]
+  float* d_areas;         ///< Per-face rest areas [ops_num]
+  float* d_outer_rhs;     ///< Outer loop RHS [state_num]
+  float* d_elastic_rhs;   ///< Elastic force accumulator [state_num]
+  float* d_final_rhs;     ///< Combined RHS [state_num]
+  float* d_solution;      ///< Linear solve output [state_num]
 
  public:
   /**
@@ -125,5 +124,4 @@ class GpuClothSolverContext {
   void free_device_memory();
 };
 
-}  // namespace gpu
-}  // namespace silk
+}  // namespace silk::gpu
