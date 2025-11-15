@@ -53,7 +53,8 @@ target_include_directories(
 target_compile_definitions(
     silk
     PUBLIC
-        $<$<BOOL:${SILK_ENABLE_CUDA}>:SILK_WITH_CUDA=1>
+        # $<$<BOOL:${SILK_ENABLE_CUDA}>:SILK_WITH_CUDA=1>
+    SILK_WITH_CUDA=1
 )
 
 target_link_libraries(

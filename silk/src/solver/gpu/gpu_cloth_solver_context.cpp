@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "cloth_solver_kernels.hpp"
+#include "cudaUtils.cpp"
 #include "logger.hpp"
 
 namespace silk::gpu {
@@ -46,12 +47,16 @@ std::optional<GpuClothSolverContext> GpuClothSolverContext::create(
 
   try {
     // --- 1. Allocate Device Memory ---
+    // cudaError_t bool_success = cudaMalloc((void**)&ctx.d_jacobian_ops,
+    //                                       ctx.ops_num * 54 * sizeof(float));
+    // SPDLOG_INFO("  Jacobian ops malloc success: {}",
+    //             cudaGetErrorString(bool_success));
+    CHECK_CUDA_ERROR(cudaMalloc((void**)&ctx.d_jacobian_ops,
+                                ctx.ops_num * 54 * sizeof(float)));
     CHECK_CUDA_ERROR(
         cudaMalloc((void**)&ctx.d_F, ctx.ops_num * 3 * sizeof(int)));
     CHECK_CUDA_ERROR(
         cudaMalloc((void**)&ctx.d_state, ctx.state_num * sizeof(float)));
-    CHECK_CUDA_ERROR(cudaMalloc((void**)&ctx.d_jacobian_ops,
-                                ctx.ops_num * 54 * sizeof(float)));
     CHECK_CUDA_ERROR(
         cudaMalloc((void**)&ctx.d_areas, ctx.ops_num * sizeof(float)));
     CHECK_CUDA_ERROR(
