@@ -2,24 +2,25 @@
 # Library config
 # -------------------------------------------------
 
-file(GLOB SILK_SOURCES 
-    src/cloth_topology.cpp
-    src/collision/cpu/bbox.cpp
-    src/collision/cpu/narrowphase.cpp
-    src/collision/cpu/object_collider.cpp
-    src/collision/cpu/pipeline.cpp
-    src/collision/cpu/interval.cpp
-    src/collision/cpu/interval_root_finder.cpp
-    src/collision/cpu/ccd.cpp
-    src/ecs.cpp
-    src/mesh.cpp
-    src/result.cpp
-    src/solver/cpu/cholmod_utils.cpp
-    src/solver/cpu/cloth_solver_context.cpp
-    src/solver/cpu/cloth_solver_utils.cpp
-    src/solver/cpu/obstacle_solver_utils.cpp
-    src/solver/cpu/pipeline.cpp
-    src/world.cpp
+file(GLOB_RECURSE SILK_SOURCES 
+    src/backend/cpu/collision/bbox.cpp
+    src/backend/cpu/collision/ccd.cpp
+    src/backend/cpu/collision/interval.cpp
+    src/backend/cpu/collision/interval_root_finder.cpp
+    src/backend/cpu/collision/narrowphase.cpp
+    src/backend/cpu/collision/object_collider.cpp
+    src/backend/cpu/collision/pipeline.cpp
+    src/backend/cpu/cpu_backend.cpp
+    src/backend/cpu/ecs.cpp
+    src/backend/cpu/solver/cholmod_utils.cpp
+    src/backend/cpu/solver/cloth_solver_context.cpp
+    src/backend/cpu/solver/cloth_solver_utils.cpp
+    src/backend/cpu/solver/obstacle_solver_utils.cpp
+    src/backend/cpu/solver/pipeline.cpp
+    src/common/cloth_topology.cpp
+    src/common/mesh.cpp
+    src/common/result.cpp
+    src/common/world.cpp
 )
 
 add_library(silk ${SILK_SOURCES})
@@ -38,7 +39,9 @@ target_include_directories(
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
-    PRIVATE ${CMAKE_SOURCE_DIR}/extern/pdqsort ${CMAKE_CURRENT_LIST_DIR}/src
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/extern/pdqsort
+        ${CMAKE_CURRENT_LIST_DIR}/src
 )
 
 # Define SILK_WITH_CUDA macro if cuda is enabled.

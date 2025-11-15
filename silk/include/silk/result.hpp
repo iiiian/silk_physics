@@ -33,7 +33,8 @@ enum class ErrorCode {
   IncorrectPositionNum,
   CholeskyDecompositionFail,
   NeedInitSolverFirst,
-  IterativeSolveFail
+  IterativeSolveFail,
+  NoCudaSupport
 };
 
 /**
