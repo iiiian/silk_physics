@@ -6,25 +6,25 @@
 #include <stdexcept>
 
 #include "cloth_solver_kernels.hpp"
-#include "cudaUtils.cpp"
+#include "cuda_utils.cpp"
 #include "logger.hpp"
 
 namespace silk::gpu {
 
 // --- CUDA Error Checking Macro ---
-#define CHECK_CUDA_ERROR(val) check_cuda((val), #val, __FILE__, __LINE__)
+// #define CHECK_CUDA_ERROR(val) check_cuda((val), #val, __FILE__, __LINE__)
 
-static void check_cuda(cudaError_t result, char const* const func,
-                       const char* const file, int const line) {
-  if (result != cudaSuccess) {
-    std::string error_msg =
-        std::string("CUDA Error at ") + file + ":" + std::to_string(line) +
-        " code=" + std::to_string(static_cast<unsigned int>(result)) + " \"" +
-        func + "\" : " + cudaGetErrorString(result);
-    SPDLOG_ERROR(error_msg);
-    throw std::runtime_error(error_msg);
-  }
-}
+// static void check_cuda(cudaError_t result, char const* const func,
+//                        const char* const file, int const line) {
+//   if (result != cudaSuccess) {
+//     std::string error_msg =
+//         std::string("CUDA Error at ") + file + ":" + std::to_string(line) +
+//         " code=" + std::to_string(static_cast<unsigned int>(result)) + " \""
+//         + func + "\" : " + cudaGetErrorString(result);
+//     SPDLOG_ERROR(error_msg);
+//     throw std::runtime_error(error_msg);
+//   }
+// }
 
 // ====================================================================
 // GpuClothSolverContext Implementation
