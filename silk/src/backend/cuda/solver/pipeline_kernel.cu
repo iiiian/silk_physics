@@ -69,8 +69,6 @@ float compute_L2_distance(int num, const float* d_a, const float* d_b,
 
   float* d_sum = nullptr;
   CHECK_CUDA(cudaMalloc((void**)&d_sum, sizeof(float)));
-  auto env =
-      ::cuda::execution::require(::cuda::execution::determinism::run_to_run);
   // CUB DeviceReduce requires a two-phase API with temp storage in this CUDA
   // version.
   void* d_temp = nullptr;
