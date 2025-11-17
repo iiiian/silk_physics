@@ -17,4 +17,7 @@ void enforce_barrier_constrain(const BarrierConstrain& barrer, float* state);
 void vec_mix(int num, float nr, const float* d_a, const float* d_b,
              float* d_out);
 
+void update_velocity(int state_num, float dt, const float* d_curr_state,
+                     const float* d_next_state, float* state_velocity);
+
 }  // namespace silk::cuda

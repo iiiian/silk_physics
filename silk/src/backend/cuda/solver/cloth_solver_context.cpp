@@ -69,7 +69,7 @@ ClothSolverContext::ClothSolverContext(const ClothConfig& config,
     h_mass(3 * i + 2) = val;
   }
   this->d_mass = host_eigen_to_device(h_mass);
-  this->d_mass = host_eigen_to_device(t.area);
+  this->d_area = host_eigen_to_device(t.area);
   this->d_D = host_eigen_to_device(D);
   this->d_DB = host_eigen_to_device(D);
   this->d_R = CSRMatrix{R};
@@ -106,6 +106,7 @@ void ClothSolverContext::swap(ClothSolverContext& other) noexcept {
 
   std::swap(dt, other.dt);
   std::swap(state_num, other.state_num);
+  std::swap(face_num, other.face_num);
   std::swap(h_mass, other.h_mass);
   std::swap(d_mass, other.d_mass);
   std::swap(d_area, other.d_area);

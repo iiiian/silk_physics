@@ -72,6 +72,7 @@ float compute_L2_distance(int num, const float* d_a, const float* d_b,
   auto env = cuda::execution::require(cuda::execution::determinism::run_to_run);
   CHECK_CUDA(cub::DeviceReduce::Sum(d_buffer, d_sum, num, env));
   cudaDeviceSynchronize();
+  CHECK_CUDA(cudaGetLastError());
 
   float h_sum = 0.0f;
   CHECK_CUDA(cudaMemcpy(&h_sum, d_sum, sizeof(float), cudaMemcpyDeviceToHost));
@@ -81,7 +82,7 @@ float compute_L2_distance(int num, const float* d_a, const float* d_b,
 
 __global__ void enforce_barrier_constrain_kernel(const BarrierConstrain& barrer,
                                                  float* state) {
-  int tid = blockIdx.x + blockDim.x + gridDim.x;
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid < barrer.constrain_num) {
     int idx = barrer.d_index[idx];
     assert(barrer.d_lhs[idx] != 0.0f);
@@ -108,7 +109,7 @@ void enforce_barrier_constrain(const BarrierConstrain& barrer, float* state) {
 
 __global__ void vec_mix_kernel(int num, float nr, const float* d_a,
                                const float* d_b, float* d_out) {
-  int tid = blockIdx.x * blockDim.x + gridDim.x;
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid < num) {
     d_out[tid] = nr * d_a[tid] + (1.0f - nr) * d_b[tid];
   }
@@ -126,6 +127,26 @@ void vec_mix(int num, float nr, const float* d_a, const float* d_b,
   int grid_size = (num + block_size - 1) / block_size;
 
   vec_mix_kernel<<<grid_size, block_size>>>(num, nr, d_a, d_b, d_out);
+}
+
+__global__ void update_velocity_kernel(int state_num, float dt, const float* d_curr_state,
+                     const float* d_next_state, float* d_state_velocity){
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid < num) {
+    d_state_velocity[tid] = (d_next_state[tid]-d_curr_state[tid])/dt;
+  }
+}
+
+void update_velocity(int state_num, float dt, const float* d_curr_state,
+                     const float* d_next_state, float* d_state_velocity){
+
+  int block_size;
+  int min_grid_size;
+  cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
+                                     vec_mix_kernel, 0, 0);
+  int grid_size = (num + block_size - 1) / block_size;
+
+  update_velocity_kernel<<<grid_size,block_size>>>(state_num, dt, d_curr_state, d_next_state, d_state_velocity);
 }
 
 }  // namespace silk::cuda

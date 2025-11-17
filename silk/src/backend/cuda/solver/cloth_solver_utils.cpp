@@ -114,22 +114,18 @@ void batch_compute_cloth_invariant_rhs(Registry& registry, float* d_rhs) {
 
 bool compute_cloth_outer_loop(const float* d_state,
                               const float* d_state_velocity,
-                              Eigen::Ref<const Eigen::VectorXf> barrier_lhs,
-                              Eigen::Ref<const Eigen::VectorXf> barrier_rhs,
+                              const float* d_barrier_lhs,
+                              const float* d_barrier_rhs,
                               const Eigen::Vector3f& state_acceleration,
                               ClothSolverContext& solver_context,
                               float* d_rhs) {
   auto& s = solver_context;
 
   // Barrier constraint update
-  float* d_barrier_lhs = host_eigen_to_device(barrier_lhs);
-  float* d_barrier_rhs = host_eigen_to_device(barrier_rhs);
   vector_add(s.state_num, s.d_D, d_barrier_lhs, s.d_DB);
   compute_outer_rhs(s.state_num, s.dt, state_acceleration(0),
                     state_acceleration(1), state_acceleration(2), s.d_mass,
                     d_state, d_state_velocity, d_barrier_rhs, d_rhs);
-  cudaDeviceSynchronize();
-  CHECK_CUDA(cudaGetLastError());
   CHECK_CUDA(cudaFree(d_barrier_rhs));
   CHECK_CUDA(cudaFree(d_barrier_lhs));
 
@@ -156,20 +152,23 @@ bool batch_compute_cloth_outer_loop(Registry& registry, const float* d_state,
       }
     }
   }
+  cudaDeviceSynchronize();
+  CHECK_CUDA(cudaGetLastError());
 
   return true;
 }
 
 bool compute_cloth_inner_loop(const ClothConfig& config,
                               const ClothSolverContext& solver_context,
-                              const float* d_state, const float* d_outer_rhs,
-                              float* d_solution) {
+                              const float* d_outer_rhs, float* d_state,
+                              float* d_buffer) {
   auto& s = solver_context;
 
-  CHECK_CUDA(cudaMemset(s.d_inner_rhs, 0, s.state_num * sizeof(float)));
-  cudaDeviceSynchronize();
+  CHECK_CUDA(cudaMemcpy(d_buffer, d_outer_rhs, s.state_num * sizeof(float),
+                        cudaMemcpyDeviceToDevice));
   compute_elastic_rhs(s.face_num, config.elastic_stiffness, s.d_F, d_state,
-                      s.d_jacobian_ops, s.d_area, s.d_inner_rhs);
+                      s.d_jacobian_ops, s.d_area, d_buffer);
+
   cudaDeviceSynchronize();
   CHECK_CUDA(cudaGetLastError());
 
@@ -178,9 +177,9 @@ bool compute_cloth_inner_loop(const ClothConfig& config,
   return true;
 }
 
-bool batch_compute_cloth_inner_loop(Registry& registry, const float* d_state,
-                                    const float* d_outer_rhs,
-                                    float* d_solution) {
+bool batch_compute_cloth_inner_loop(Registry& registry,
+                                    const float* d_outer_rhs, float* d_state,
+                                    float* d_buffer) {
   for (Entity& e : registry.get_all_entities()) {
     auto config = registry.get<ClothConfig>(e);
     auto mesh = registry.get<TriMesh>(e);
@@ -192,11 +191,14 @@ bool batch_compute_cloth_inner_loop(Registry& registry, const float* d_state,
     }
 
     int offset = state->state_offset;
-    if (!compute_cloth_inner_loop(*config, *solver_context, d_state + offset,
-                                  d_outer_rhs + offset, d_solution + offset)) {
+    if (!compute_cloth_inner_loop(*config, *solver_context,
+                                  d_outer_rhs + offset, d_state + offset,
+                                  d_buffer + offset)) {
       return false;
     }
   }
+  cudaDeviceSynchronize();
+  CHECK_CUDA(cudaGetLastError());
 
   return true;
 }

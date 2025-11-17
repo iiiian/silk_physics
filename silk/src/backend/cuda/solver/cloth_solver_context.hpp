@@ -32,7 +32,6 @@ class ClothSolverContext {
   int* d_F = nullptr;
   float* d_jacobian_ops = nullptr;
   float* d_C0 = nullptr;
-  float* d_inner_rhs = nullptr;
 
  public:
   ClothSolverContext() = default;

@@ -10,6 +10,7 @@
 #include "backend/cuda/collision/collision.hpp"
 #include "backend/cuda/collision/object_collider.hpp"
 #include "backend/cuda/cuda_utils.hpp"
+#include "backend/cuda/device_vector.hpp"
 #include "backend/cuda/ecs.hpp"
 #include "backend/cuda/object_state.hpp"
 #include "backend/cuda/obstacle_position.hpp"
@@ -53,25 +54,17 @@ bool SolverPipeline::step(Registry& registry) {
 
   float* d_curr_state = global_state.d_curr_state;
   float* d_state_velocity = global_state.d_state_velocity;
-  float* d_next_state = nullptr;
-  CHECK_CUDA(cudaMalloc((void**)d_next_state, state_num * sizeof(float)));
-  // float* d_solution = nullptr;
-  // CHECK_CUDA(cudaMalloc((void**)d_solution, state_num * sizeof(float)));
-  float* d_buffer = nullptr;
-  CHECK_CUDA(cudaMalloc((void**)d_buffer, state_num * sizeof(float)));
-
+  DVector<float> d_next_state{state_num};
+  DVector<float> d_buffer{state_num};
   Eigen::VectorXf h_curr_state = Eigen::VectorXf::Zero(state_num);
   Eigen::VectorXf h_next_state = Eigen::VectorXf::Zero(state_num);
-
-  Bbox scene_bbox = compute_scene_bbox(registry);
-  float remaining_step = 1.0f;
   std::vector<Collision> collisions;
-  float* init_rhs = nullptr;
-  CHECK_CUDA(cudaMalloc((void**)&init_rhs, state_num * sizeof(float)));
-  batch_compute_cloth_invariant_rhs(registry, init_rhs);
-  float* outer_rhs = nullptr;
-  CHECK_CUDA(cudaMalloc((void**)&outer_rhs, state_num * sizeof(float)));
   BarrierConstrain barrier{state_num};
+  float remaining_step = 1.0f;
+  Bbox scene_bbox = compute_scene_bbox(registry);
+  DVector<float> init_rhs{state_num};
+  batch_compute_cloth_invariant_rhs(registry, init_rhs);
+  DVector<float> outer_rhs{state_num};
 
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
     SPDLOG_DEBUG("Outer iter {}", outer_it);
@@ -86,8 +79,6 @@ bool SolverPipeline::step(Registry& registry) {
     predict(state_num, dt, const_acceleration(0), const_acceleration(1),
             const_acceleration(2), d_curr_state, d_state_velocity,
             d_next_state);
-    // Eigen::VectorXf next_state =
-    //     curr_state + dt * state_velocity + (dt * dt) * acceleration;
 
     if (!batch_compute_cloth_outer_loop(registry, d_curr_state,
                                         d_state_velocity, barrier,
@@ -126,6 +117,8 @@ bool SolverPipeline::step(Registry& registry) {
     // which could otherwise cause zero-TOI contacts in later steps.
     if (!collisions.empty()) {
       enforce_barrier_constrain(barrier, d_next_state);
+      cudaDeviceSynchronize();
+      CHECK_CUDA(cudaGetLastError());
     }
 
     // Full collision update.
@@ -157,7 +150,9 @@ bool SolverPipeline::step(Registry& registry) {
       SPDLOG_DEBUG("earliest toi {}", earliest_toi);
     }
 
-    // d_state_velocity = (h_next_state - h_curr_state) / dt;
+    update_velocity(state_num, dt, d_curr_state, d_next_state, state_velocity);
+    cudaDeviceSynchronize();
+    CHECK_CUDA(cudaGetLastError());
 
     if (earliest_toi >= remaining_step) {
       SPDLOG_DEBUG(
@@ -165,6 +160,8 @@ bool SolverPipeline::step(Registry& registry) {
           earliest_toi, remaining_step);
       vec_mix(state_num, 1.0f - remaining_step, d_curr_state, d_next_state,
               d_curr_state);
+      cudaDeviceSynchronize();
+      CHECK_CUDA(cudaGetLastError());
       break;
     }
 
@@ -175,13 +172,18 @@ bool SolverPipeline::step(Registry& registry) {
     for (auto& c : collisions) {
       c.toi -= earliest_toi;
     }
+    cudaDeviceSynchronize();
+    CHECK_CUDA(cudaGetLastError());
   }
 
   // Write solution back to registry
   for (auto& state : registry.get_all<ObjectState>()) {
-    auto seq = Eigen::seqN(state.state_offset, state.state_num);
-    state.curr_state = curr_state(seq);
-    state.state_velocity = state_velocity(seq);
+    int offset = state.state_offset;
+    int num = state.state_num;
+    CHECK_CUDA(cudaMemcpy(state.curr_state, curr_state + offset,
+                          num * sizeof(float), cudaMemcpyDeviceToDevice));
+    CHECK_CUDA(cudaMemcpy(state.state_velocity, state_velocity + offset,
+                          num * sizeof(float), cudaMemcpyDeviceToDevice));
   }
 
   return true;
@@ -240,10 +242,10 @@ bool SolverPipeline::init(Registry& registry, ObjectState& global_state) {
     gather_and_damp_velocity(
         damp_factor, state_num, state->d_state_velocity,
         global_state.d_state_velocity + state->state_offset);
-    cudaDeviceSynchronize();
-    CHECK_CUDA(cudaGetLastError());
   }
 
+  cudaDeviceSynchronize();
+  CHECK_CUDA(cudaGetLastError());
   return true;
 }
 
@@ -328,8 +330,7 @@ void SolverPipeline::compute_barrier_constrain(
   assert(constrain_num != 0);
   barrier.constrain_num = constrain_num;
   CHECK_CUDA(cudaMemcpy(barrier.d_index, index.data(),
-                        3 * constrain_num * sizeof(int),
-                        cudaMemcpyHostToDevice));
+                        constrain_num * sizeof(int), cudaMemcpyHostToDevice));
   CHECK_CUDA(cudaMemcpy(barrier.d_lhs, lhs.data(), state_num * sizeof(float),
                         cudaMemcpyHostToDevice));
   CHECK_CUDA(cudaMemcpy(barrier.d_rhs, rhs.data(), state_num * sizeof(float),
