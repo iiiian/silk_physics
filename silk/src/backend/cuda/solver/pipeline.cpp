@@ -91,7 +91,7 @@ bool SolverPipeline::step(Registry& registry) {
       SPDLOG_DEBUG("Inner iter {}", inner_it);
 
       Eigen::VectorXf solution(state_num);
-      if (!batch_compute_cloth_inner_loop(registry, d_next_state, outer_rhs,
+      if (!batch_compute_cloth_inner_loop(registry, outer_rhs, d_next_state,
                                           d_buffer)) {
         return false;
       }
@@ -275,7 +275,7 @@ void SolverPipeline::compute_barrier_constrain(
   int constrain_num = 0;
   Eigen::VectorXf lhs = Eigen::VectorXf::Zero(state_num);
   Eigen::VectorXf rhs = Eigen::VectorXf::Zero(state_num);
-  Eigen::VectorXf index = Eigen::VectorXf::Zero(state_num);
+  Eigen::VectorXi index = Eigen::VectorXi::Zero(state_num);
 
   for (auto& c : collisions) {
     // Zero stiffness is not expected currently; kept for future

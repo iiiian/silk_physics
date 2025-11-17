@@ -1,4 +1,4 @@
-#include <cub/cub.h>
+#include <cccl/cub/cub.cuh>
 #include <cuda_runtime.h>
 
 #include <cassert>
@@ -68,14 +68,21 @@ float compute_L2_distance(int num, const float* d_a, const float* d_b,
   cudaDeviceSynchronize();
 
   float* d_sum = nullptr;
-  CHECK_CUDA(cudaMalloc(&d_sum, sizeof(float)));
-  auto env = cuda::execution::require(cuda::execution::determinism::run_to_run);
-  CHECK_CUDA(cub::DeviceReduce::Sum(d_buffer, d_sum, num, env));
+  CHECK_CUDA(cudaMalloc((void**)&d_sum, sizeof(float)));
+  auto env = ::cuda::execution::require(::cuda::execution::determinism::run_to_run);
+  // CUB DeviceReduce requires a two-phase API with temp storage in this CUDA version.
+  void* d_temp = nullptr;
+  size_t temp_bytes = 0;
+  cub::DeviceReduce::Sum(nullptr, temp_bytes, d_buffer, d_sum, num);
+  CHECK_CUDA(cudaMalloc(&d_temp, temp_bytes));
+  cub::DeviceReduce::Sum(d_temp, temp_bytes, d_buffer, d_sum, num);
   cudaDeviceSynchronize();
   CHECK_CUDA(cudaGetLastError());
 
   float h_sum = 0.0f;
   CHECK_CUDA(cudaMemcpy(&h_sum, d_sum, sizeof(float), cudaMemcpyDeviceToHost));
+  CHECK_CUDA(cudaFree(d_temp));
+  CHECK_CUDA(cudaFree(d_sum));
 
   return sqrt(h_sum);
 }
@@ -84,7 +91,7 @@ __global__ void enforce_barrier_constrain_kernel(const BarrierConstrain& barrer,
                                                  float* state) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid < barrer.constrain_num) {
-    int idx = barrer.d_index[idx];
+    int idx = barrer.d_index[tid];
     assert(barrer.d_lhs[idx] != 0.0f);
     state[idx] = barrer.d_rhs[idx] / barrer.d_lhs[idx];
   }
@@ -132,7 +139,7 @@ void vec_mix(int num, float nr, const float* d_a, const float* d_b,
 __global__ void update_velocity_kernel(int state_num, float dt, const float* d_curr_state,
                      const float* d_next_state, float* d_state_velocity){
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  if (tid < num) {
+  if (tid < state_num) {
     d_state_velocity[tid] = (d_next_state[tid]-d_curr_state[tid])/dt;
   }
 }
@@ -143,8 +150,8 @@ void update_velocity(int state_num, float dt, const float* d_curr_state,
   int block_size;
   int min_grid_size;
   cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
-                                     vec_mix_kernel, 0, 0);
-  int grid_size = (num + block_size - 1) / block_size;
+                                     update_velocity_kernel, 0, 0);
+  int grid_size = (state_num + block_size - 1) / block_size;
 
   update_velocity_kernel<<<grid_size,block_size>>>(state_num, dt, d_curr_state, d_next_state, d_state_velocity);
 }

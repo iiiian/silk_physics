@@ -126,8 +126,6 @@ bool compute_cloth_outer_loop(const float* d_state,
   compute_outer_rhs(s.state_num, s.dt, state_acceleration(0),
                     state_acceleration(1), state_acceleration(2), s.d_mass,
                     d_state, d_state_velocity, d_barrier_rhs, d_rhs);
-  CHECK_CUDA(cudaFree(d_barrier_rhs));
-  CHECK_CUDA(cudaFree(d_barrier_lhs));
 
   return true;
 }
@@ -143,10 +141,10 @@ bool batch_compute_cloth_outer_loop(Registry& registry, const float* d_state,
 
     if (obj_state && solver_ctx) {
       int offset = obj_state->state_offset;
-      auto seq = Eigen::seqN(offset, obj_state->state_num);
+      const float* d_lhs = barrier_constrain.d_lhs + offset;
+      const float* d_rhs_ptr = barrier_constrain.d_rhs + offset;
       if (!compute_cloth_outer_loop(
-              d_state + offset, d_state_velocity + offset,
-              barrier_constrain.lhs(seq), barrier_constrain.rhs(seq),
+              d_state + offset, d_state_velocity + offset, d_lhs, d_rhs_ptr,
               state_acceleration, *solver_ctx, d_rhs + offset)) {
         return false;
       }

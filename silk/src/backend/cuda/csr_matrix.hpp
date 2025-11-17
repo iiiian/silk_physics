@@ -17,7 +17,7 @@ class CSRMatrix {
 
  public:
   CSRMatrix() = default;
-  CSRMatrix(const Eigen::SparseMatrix<float>& m);
+  CSRMatrix(const Eigen::SparseMatrix<float, Eigen::RowMajor>& m);
   CSRMatrix(cusparseSpMatDescr_t desc);
   CSRMatrix(const CSRMatrix& other) = delete;
   CSRMatrix(CSRMatrix&& other) noexcept;

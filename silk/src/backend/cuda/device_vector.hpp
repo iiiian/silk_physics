@@ -11,13 +11,13 @@ namespace silk::cuda {
 template <typename T>
 class DVector {
  public:
-  T* data = nulldata;
+  T* data = nullptr;
 
  public:
   DVector() = default;
 
   DVector(size_t size) {
-    CHECK_CUDA(cudaMalloc((void**)data, size * sizeof(T)));
+    CHECK_CUDA(cudaMalloc((void**)&data, size * sizeof(T)));
   }
 
   DVector(const DVector& other) = delete;
@@ -41,6 +41,7 @@ class DVector {
       return;
     }
     std::swap(data, other.data);
-  };
+  }
+};
 
 }  // namespace silk::cuda

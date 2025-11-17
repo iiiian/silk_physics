@@ -40,18 +40,18 @@ ClothSolverContext::ClothSolverContext(const ClothConfig& config,
   }
 
   // Create diagonal part D and off-diagonal part R.
-  Eigen::SparseMatrix<float> R(state_num, state_num);
-  Eigen::VectorXf D(state_num, 1);
+  Eigen::SparseMatrix<float, Eigen::RowMajor> R(state_num, state_num);
+  Eigen::VectorXf D(state_num);
   for (auto& triplet : H_triplets) {
     if (triplet.row() == triplet.col()) {
-      D(triplet.row()) = triplet.col();
+      D(triplet.row()) = triplet.value();
     } else {
       R.coeffRef(triplet.row(), triplet.col()) = triplet.value();
     }
   }
   R.makeCompressed();
 
-  Eigen::SparseMatrix<float> RR = R * R;
+  Eigen::SparseMatrix<float, Eigen::RowMajor> RR = R * R;
 
   std::vector<float> jacobian_ops(t.jacobian_ops.size() * 54);
   for (int i = 0; i < t.jacobian_ops.size(); ++i) {

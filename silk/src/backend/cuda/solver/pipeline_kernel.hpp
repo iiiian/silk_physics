@@ -1,6 +1,5 @@
 #pragma once
 
-#include <backend/cuda/collision/collision.hpp>
 #include <backend/cuda/solver/barrier_constrain.hpp>
 
 namespace silk::cuda {

@@ -35,10 +35,14 @@ set(SILK_CUDA_SOURCES
     src/backend/cuda/cuda_backend.cpp
     src/backend/cuda/ecs.cpp
     src/backend/cuda/object_state.cpp
+    src/backend/cuda/solver/barrier_constrain.cpp
     src/backend/cuda/solver/cloth_solver_context.cpp
     src/backend/cuda/solver/cloth_solver_utils.cpp
     src/backend/cuda/solver/obstacle_solver_utils.cpp
     src/backend/cuda/solver/pipeline.cpp
+    src/backend/cuda/solver/cloth_solver_kernel.cu
+    src/backend/cuda/solver/pipeline_kernel.cu
+    src/backend/cuda/solver/svd.cu
 )
 
 add_library(silk ${SILK_SOURCES})
@@ -87,7 +91,7 @@ target_link_libraries(
 
 if(SILK_ENABLE_CUDA)
     target_link_libraries(silk PRIVATE CUDA::cudart)
-  target_sources(silk PRIVATE ${SILK_CUDA_SOURCES})
+    target_sources(silk PRIVATE ${SILK_CUDA_SOURCES})
 endif()
 
 # -------------------------------------------------

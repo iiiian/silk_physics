@@ -1,3 +1,4 @@
+#pragma once
 #include <cuda_runtime_api.h>
 #include <cusparse.h>
 
@@ -43,9 +44,9 @@ T* host_vector_to_device(const T* vec, int num) {
     return nullptr;
   }
 
-  T* ptr;
-  CUDA_CHECK(cudaMalloc(&ptr, size));
-  CUDA_CHECK(cudaMemcpy(ptr, vec, size, cudaMemcpyHostToDevice));
+  T* ptr = nullptr;
+  CHECK_CUDA(cudaMalloc((void**)&ptr, size));
+  CHECK_CUDA(cudaMemcpy(ptr, vec, size, cudaMemcpyHostToDevice));
 
   return ptr;
 }
@@ -57,9 +58,9 @@ T* host_vector_to_device(const std::vector<T>& vec) {
     return nullptr;
   }
 
-  T* ptr;
-  CUDA_CHECK(cudaMalloc(&ptr, size));
-  CUDA_CHECK(cudaMemcpy(ptr, vec.data(), size, cudaMemcpyHostToDevice));
+  T* ptr = nullptr;
+  CHECK_CUDA(cudaMalloc((void**)&ptr, size));
+  CHECK_CUDA(cudaMemcpy(ptr, vec.data(), size, cudaMemcpyHostToDevice));
 
   return ptr;
 }
@@ -81,8 +82,8 @@ auto host_eigen_to_device(const Eigen::DenseBase<Derived>& expr) ->
   Scalar* d_ptr = nullptr;
   size_t bytes = n * sizeof(Scalar);
 
-  CUDA_CHECK(cudaMalloc(&d_ptr, bytes));
-  CUDA_CHECK(cudaMemcpy(d_ptr, tmp.data(), bytes, cudaMemcpyHostToDevice));
+  CHECK_CUDA(cudaMalloc((void**)&d_ptr, bytes));
+  CHECK_CUDA(cudaMemcpy(d_ptr, tmp.data(), bytes, cudaMemcpyHostToDevice));
 
   return d_ptr;
 }
