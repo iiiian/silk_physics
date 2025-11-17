@@ -3,10 +3,10 @@
 #include <array>
 #include <optional>
 
-#include "backend/cpu/collision/ccd.hpp"
-#include "backend/cpu/collision/interval.hpp"
+#include "backend/cuda/collision/ccd.hpp"
+#include "backend/cuda/collision/interval.hpp"
 
-namespace silk::cpu {
+namespace silk::cuda {
 
 /// @brief Interval root finding (BFS) over (t,u,v) for CCD.
 /// @param[in] a_t0 Vertex a at t=0.
@@ -44,4 +44,4 @@ std::optional<CCDResult> interval_root_finder_BFS(
 Eigen::Array3f get_numerical_error(const Eigen::Vector3f &abs_max,
                                    bool is_vertex_face);
 
-}  // namespace silk::cpu
+}  // namespace silk::cuda

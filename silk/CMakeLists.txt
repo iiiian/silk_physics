@@ -2,7 +2,7 @@
 # Library config
 # -------------------------------------------------
 
-file(GLOB_RECURSE SILK_SOURCES 
+set(SILK_SOURCES 
     src/backend/cpu/collision/bbox.cpp
     src/backend/cpu/collision/ccd.cpp
     src/backend/cpu/collision/interval.cpp
@@ -21,6 +21,24 @@ file(GLOB_RECURSE SILK_SOURCES
     src/common/mesh.cpp
     src/common/result.cpp
     src/common/world.cpp
+)
+
+set(SILK_CUDA_SOURCES
+    src/backend/cuda/collision/bbox.cpp
+    src/backend/cuda/collision/ccd.cpp
+    src/backend/cuda/collision/interval.cpp
+    src/backend/cuda/collision/interval_root_finder.cpp
+    src/backend/cuda/collision/narrowphase.cpp
+    src/backend/cuda/collision/object_collider.cpp
+    src/backend/cuda/collision/pipeline.cpp
+    src/backend/cuda/csr_matrix.cpp
+    src/backend/cuda/cuda_backend.cpp
+    src/backend/cuda/ecs.cpp
+    src/backend/cuda/object_state.cpp
+    src/backend/cuda/solver/cloth_solver_context.cpp
+    src/backend/cuda/solver/cloth_solver_utils.cpp
+    src/backend/cuda/solver/obstacle_solver_utils.cpp
+    src/backend/cuda/solver/pipeline.cpp
 )
 
 add_library(silk ${SILK_SOURCES})
@@ -69,8 +87,7 @@ target_link_libraries(
 
 if(SILK_ENABLE_CUDA)
     target_link_libraries(silk PRIVATE CUDA::cudart)
-    # Add CUDA sources here in the future, e.g.:
-    # target_sources(silk PRIVATE src/solver/cuda/solver_kernels.cu)
+  target_sources(silk PRIVATE ${SILK_CUDA_SOURCES})
 endif()
 
 # -------------------------------------------------

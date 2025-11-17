@@ -1,20 +1,23 @@
-#include "backend/cpu/cpu_backend.hpp"
+#include "backend/cuda/cuda_backend.hpp"
+
+#include <cuda_runtime_api.h>
 
 #include <Eigen/Core>
 #include <cassert>
 #include <cstring>
 
-#include "backend/cpu/collision/object_collider.hpp"
-#include "backend/cpu/ecs.hpp"
-#include "backend/cpu/object_state.hpp"
-#include "backend/cpu/obstacle_position.hpp"
-#include "backend/cpu/solver/pipeline.hpp"
+#include "backend/cuda/collision/object_collider.hpp"
+#include "backend/cuda/cuda_utils.hpp"
+#include "backend/cuda/ecs.hpp"
+#include "backend/cuda/object_state.hpp"
+#include "backend/cuda/obstacle_position.hpp"
+#include "backend/cuda/solver/pipeline.hpp"
 #include "common/mesh.hpp"
 #include "common/pin.hpp"
 
-namespace silk::cpu {
+namespace silk::cuda {
 
-Result CpuBackend::set_global_config(GlobalConfig config) {
+Result CudaBackend::set_global_config(GlobalConfig config) {
   auto& c = config;
   solver_pipeline_.const_acceleration = {c.acceleration_x, c.acceleration_y,
                                          c.acceleration_z};
@@ -24,27 +27,27 @@ Result CpuBackend::set_global_config(GlobalConfig config) {
   return Result::ok();
 }
 
-void CpuBackend::clear() {
+void CudaBackend::clear() {
   solver_pipeline_.clear(registry_);
   registry_.clear();
 }
 
-Result CpuBackend::solver_step() {
+Result CudaBackend::solver_step() {
   if (!solver_pipeline_.step(registry_)) {
-    return Result::error(ErrorCode::CholeskyDecompositionFail);
+    return Result::error(ErrorCode::Unknown);
   }
   return Result::ok();
 }
 
-Result CpuBackend::solver_reset() {
+Result CudaBackend::solver_reset() {
   solver_pipeline_.reset(registry_);
   return Result::ok();
 }
 
-Result CpuBackend::add_cloth(ClothConfig cloth_config,
-                             CollisionConfig collision_config,
-                             MeshConfig mesh_config, ConstSpan<int> pin_index,
-                             uint32_t& handle) {
+Result CudaBackend::add_cloth(ClothConfig cloth_config,
+                              CollisionConfig collision_config,
+                              MeshConfig mesh_config, ConstSpan<int> pin_index,
+                              uint32_t& handle) {
   auto tri_mesh = make_cloth_mesh(mesh_config);
   if (!tri_mesh) {
     handle = 0;
@@ -75,7 +78,7 @@ Result CpuBackend::add_cloth(ClothConfig cloth_config,
   return Result::ok();
 }
 
-Result CpuBackend::remove_cloth(uint32_t handle) {
+Result CudaBackend::remove_cloth(uint32_t handle) {
   auto entity = registry_.get_entity(Handle(handle));
   if (!entity) {
     return Result::error(ErrorCode::InvalidHandle);
@@ -88,8 +91,8 @@ Result CpuBackend::remove_cloth(uint32_t handle) {
   return Result::ok();
 }
 
-Result CpuBackend::get_cloth_position(uint32_t handle,
-                                      Span<float> position) const {
+Result CudaBackend::get_cloth_position(uint32_t handle,
+                                       Span<float> position) const {
   const Entity* e = registry_.get_entity(Handle(handle));
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
@@ -99,8 +102,9 @@ Result CpuBackend::get_cloth_position(uint32_t handle,
     if (position.size < obj_state->state_num) {
       return Result::error(ErrorCode::IncorrectPositionNum);
     }
-    memcpy(position.data, obj_state->curr_state.data(),
-           obj_state->state_num * sizeof(float));
+    CHECK_CUDA(cudaMemcpy(position.data, obj_state->d_curr_state,
+                          obj_state->state_num * sizeof(float),
+                          cudaMemcpyDeviceToHost));
     return Result::ok();
   }
   auto mesh = registry_.get<TriMesh>(e);
@@ -115,7 +119,7 @@ Result CpuBackend::get_cloth_position(uint32_t handle,
   return Result::error(ErrorCode::InvalidHandle);
 }
 
-Result CpuBackend::set_cloth_config(uint32_t handle, ClothConfig config) {
+Result CudaBackend::set_cloth_config(uint32_t handle, ClothConfig config) {
   Entity* e = registry_.get_entity(Handle(handle));
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
@@ -130,8 +134,8 @@ Result CpuBackend::set_cloth_config(uint32_t handle, ClothConfig config) {
   return Result::ok();
 }
 
-Result CpuBackend::set_cloth_collision_config(uint32_t handle,
-                                              CollisionConfig config) {
+Result CudaBackend::set_cloth_collision_config(uint32_t handle,
+                                               CollisionConfig config) {
   Entity* e = registry_.get_entity(Handle(handle));
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
@@ -146,8 +150,8 @@ Result CpuBackend::set_cloth_collision_config(uint32_t handle,
   return Result::ok();
 }
 
-Result CpuBackend::set_cloth_pin_index(uint32_t handle,
-                                       ConstSpan<int> pin_index) {
+Result CudaBackend::set_cloth_pin_index(uint32_t handle,
+                                        ConstSpan<int> pin_index) {
   Entity* e = registry_.get_entity(Handle(handle));
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
@@ -176,8 +180,8 @@ Result CpuBackend::set_cloth_pin_index(uint32_t handle,
   return Result::ok();
 }
 
-Result CpuBackend::set_cloth_pin_position(uint32_t handle,
-                                          ConstSpan<float> position) {
+Result CudaBackend::set_cloth_pin_position(uint32_t handle,
+                                           ConstSpan<float> position) {
   Entity* e = registry_.get_entity(Handle(handle));
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
@@ -196,8 +200,8 @@ Result CpuBackend::set_cloth_pin_position(uint32_t handle,
   return Result::ok();
 }
 
-Result CpuBackend::add_obstacle(CollisionConfig collision_config,
-                                MeshConfig mesh_config, uint32_t& handle) {
+Result CudaBackend::add_obstacle(CollisionConfig collision_config,
+                                 MeshConfig mesh_config, uint32_t& handle) {
   auto tri_mesh = make_obstacle_mesh(mesh_config);
   if (!tri_mesh) {
     handle = 0;
@@ -221,7 +225,7 @@ Result CpuBackend::add_obstacle(CollisionConfig collision_config,
   return Result::ok();
 }
 
-Result CpuBackend::remove_obstacle(uint32_t handle) {
+Result CudaBackend::remove_obstacle(uint32_t handle) {
   auto entity = registry_.get_entity(Handle(handle));
   if (!entity) {
     return Result::error(ErrorCode::InvalidHandle);
@@ -234,8 +238,8 @@ Result CpuBackend::remove_obstacle(uint32_t handle) {
   return Result::ok();
 }
 
-Result CpuBackend::set_obstacle_collision_config(uint32_t handle,
-                                                 CollisionConfig config) {
+Result CudaBackend::set_obstacle_collision_config(uint32_t handle,
+                                                  CollisionConfig config) {
   Entity* e = registry_.get_entity(Handle(handle));
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
@@ -250,8 +254,8 @@ Result CpuBackend::set_obstacle_collision_config(uint32_t handle,
   return Result::ok();
 }
 
-Result CpuBackend::set_obstacle_position(uint32_t handle,
-                                         ConstSpan<float> position) {
+Result CudaBackend::set_obstacle_position(uint32_t handle,
+                                          ConstSpan<float> position) {
   Entity* e = registry_.get_entity(Handle(handle));
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
@@ -271,4 +275,4 @@ Result CpuBackend::set_obstacle_position(uint32_t handle,
   return Result::ok();
 }
 
-}  // namespace silk::cpu
+}  // namespace silk::cuda

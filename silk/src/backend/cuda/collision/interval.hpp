@@ -2,7 +2,7 @@
 
 #include <Eigen/Core>
 
-namespace silk::cpu {
+namespace silk::cuda {
 
 /**
  * @brief Closed numeric interval [lower, upper].
@@ -26,4 +26,4 @@ class Interval {
   std::pair<Interval, Interval> bisect() const;
 };
 
-}  // namespace silk::cpu
+}  // namespace silk::cuda
