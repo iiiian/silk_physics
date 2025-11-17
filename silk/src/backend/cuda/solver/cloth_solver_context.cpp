@@ -2,6 +2,7 @@
 
 #include <Eigen/Core>
 
+#include "backend/cuda/copy_vector_like.hpp"
 #include "backend/cuda/cuda_utils.hpp"
 #include "common/cloth_topology.hpp"
 #include "common/eigen_utils.hpp"

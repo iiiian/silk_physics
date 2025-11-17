@@ -54,17 +54,17 @@ bool SolverPipeline::step(Registry& registry) {
 
   float* d_curr_state = global_state.d_curr_state;
   float* d_state_velocity = global_state.d_state_velocity;
-  DVector<float> d_next_state{state_num};
-  DVector<float> d_buffer{state_num};
+  DVector<float> d_next_state{static_cast<size_t>(state_num)};
+  DVector<float> d_buffer{static_cast<size_t>(state_num)};
   Eigen::VectorXf h_curr_state = Eigen::VectorXf::Zero(state_num);
   Eigen::VectorXf h_next_state = Eigen::VectorXf::Zero(state_num);
   std::vector<Collision> collisions;
   BarrierConstrain barrier{state_num};
   float remaining_step = 1.0f;
   Bbox scene_bbox = compute_scene_bbox(registry);
-  DVector<float> init_rhs{state_num};
+  DVector<float> init_rhs{static_cast<size_t>(state_num)};
   batch_compute_cloth_invariant_rhs(registry, init_rhs);
-  DVector<float> outer_rhs{state_num};
+  DVector<float> outer_rhs{static_cast<size_t>(state_num)};
 
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
     SPDLOG_DEBUG("Outer iter {}", outer_it);
@@ -150,7 +150,8 @@ bool SolverPipeline::step(Registry& registry) {
       SPDLOG_DEBUG("earliest toi {}", earliest_toi);
     }
 
-    update_velocity(state_num, dt, d_curr_state, d_next_state, state_velocity);
+    update_velocity(state_num, dt, d_curr_state, d_next_state,
+                    d_state_velocity);
     cudaDeviceSynchronize();
     CHECK_CUDA(cudaGetLastError());
 
@@ -180,9 +181,9 @@ bool SolverPipeline::step(Registry& registry) {
   for (auto& state : registry.get_all<ObjectState>()) {
     int offset = state.state_offset;
     int num = state.state_num;
-    CHECK_CUDA(cudaMemcpy(state.curr_state, curr_state + offset,
+    CHECK_CUDA(cudaMemcpy(state.d_curr_state, d_curr_state + offset,
                           num * sizeof(float), cudaMemcpyDeviceToDevice));
-    CHECK_CUDA(cudaMemcpy(state.state_velocity, state_velocity + offset,
+    CHECK_CUDA(cudaMemcpy(state.d_state_velocity, d_state_velocity + offset,
                           num * sizeof(float), cudaMemcpyDeviceToDevice));
   }
 

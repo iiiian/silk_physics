@@ -1,5 +1,3 @@
-#pragma once
-
 #include "backend/cuda/solver/barrier_constrain.hpp"
 
 #include "backend/cuda/cuda_utils.hpp"

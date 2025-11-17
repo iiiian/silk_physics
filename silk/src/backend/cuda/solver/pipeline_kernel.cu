@@ -1,7 +1,7 @@
-#include <cccl/cub/cub.cuh>
 #include <cuda_runtime.h>
 
 #include <cassert>
+#include <cccl/cub/cub.cuh>
 
 #include "backend/cuda/cuda_utils.hpp"
 #include "backend/cuda/solver/barrier_constrain.hpp"
@@ -69,8 +69,10 @@ float compute_L2_distance(int num, const float* d_a, const float* d_b,
 
   float* d_sum = nullptr;
   CHECK_CUDA(cudaMalloc((void**)&d_sum, sizeof(float)));
-  auto env = ::cuda::execution::require(::cuda::execution::determinism::run_to_run);
-  // CUB DeviceReduce requires a two-phase API with temp storage in this CUDA version.
+  auto env =
+      ::cuda::execution::require(::cuda::execution::determinism::run_to_run);
+  // CUB DeviceReduce requires a two-phase API with temp storage in this CUDA
+  // version.
   void* d_temp = nullptr;
   size_t temp_bytes = 0;
   cub::DeviceReduce::Sum(nullptr, temp_bytes, d_buffer, d_sum, num);
@@ -136,24 +138,46 @@ void vec_mix(int num, float nr, const float* d_a, const float* d_b,
   vec_mix_kernel<<<grid_size, block_size>>>(num, nr, d_a, d_b, d_out);
 }
 
-__global__ void update_velocity_kernel(int state_num, float dt, const float* d_curr_state,
-                     const float* d_next_state, float* d_state_velocity){
+__global__ void update_velocity_kernel(int state_num, float dt,
+                                       const float* d_curr_state,
+                                       const float* d_next_state,
+                                       float* d_state_velocity) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid < state_num) {
-    d_state_velocity[tid] = (d_next_state[tid]-d_curr_state[tid])/dt;
+    d_state_velocity[tid] = (d_next_state[tid] - d_curr_state[tid]) / dt;
   }
 }
 
 void update_velocity(int state_num, float dt, const float* d_curr_state,
-                     const float* d_next_state, float* d_state_velocity){
-
+                     const float* d_next_state, float* d_state_velocity) {
   int block_size;
   int min_grid_size;
   cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
                                      update_velocity_kernel, 0, 0);
   int grid_size = (state_num + block_size - 1) / block_size;
 
-  update_velocity_kernel<<<grid_size,block_size>>>(state_num, dt, d_curr_state, d_next_state, d_state_velocity);
+  update_velocity_kernel<<<grid_size, block_size>>>(
+      state_num, dt, d_curr_state, d_next_state, d_state_velocity);
+}
+
+__global__ void gather_and_damp_velocity_kernel(float damp_factor,
+                                                int state_num, const float* src,
+                                                float* dst) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid < state_num) {
+    dst[tid] = damp_factor * src[tid];
+  }
+}
+
+void gather_and_damp_velocity(float damp_factor, int state_num,
+                              const float* src, float* dst) {
+  int block_size;
+  int min_grid_size;
+  cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
+                                     gather_and_damp_velocity_kernel, 0, 0);
+  int grid_size = (state_num + block_size - 1) / block_size;
+  gather_and_damp_velocity_kernel<<<grid_size, block_size>>>(
+      damp_factor, state_num, src, dst);
 }
 
 }  // namespace silk::cuda

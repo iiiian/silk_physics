@@ -15,7 +15,4 @@ void compute_elastic_rhs(int face_num, float elastic_stiffness, const int* d_F,
                          const float* d_state, const float* d_jacobian_ops,
                          const float* d_areas, float* d_rhs);
 
-void gather_and_damp_velocity(float damp_factor, int state_num,
-                              const float* src, float* dst);
-
 }  // namespace silk::cuda

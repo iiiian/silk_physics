@@ -4,6 +4,7 @@
 
 #include <utility>
 
+#include "backend/cuda/copy_vector_like.hpp"
 #include "backend/cuda/cuda_utils.hpp"
 
 namespace silk::cuda {

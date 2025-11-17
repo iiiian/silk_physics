@@ -213,23 +213,4 @@ void compute_elastic_rhs(int face_num, float elastic_stiffness, const int* d_F,
       d_rhs);
 }
 
-__global__ void gather_and_damp_velocity_kernel(float damp_factor,
-                                                int state_num, const float* src,
-                                                float* dst) {
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  if (tid < state_num) {
-    dst[tid] = damp_factor * src[tid];
-  }
-}
-
-void gather_and_damp_velocity(float damp_factor, int state_num,
-                              const float* src, float* dst) {
-  int block_size;
-  int min_grid_size;
-  cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
-                                     compute_elastic_rhs_kernel, 0, 0);
-  int grid_size = (state_num + block_size - 1) / block_size;
-  gather_and_damp_velocity_kernel<<<grid_size, block_size>>>(
-      damp_factor, state_num, src, dst);
-}
 }  // namespace silk::cuda

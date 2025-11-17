@@ -19,4 +19,7 @@ void vec_mix(int num, float nr, const float* d_a, const float* d_b,
 void update_velocity(int state_num, float dt, const float* d_curr_state,
                      const float* d_next_state, float* state_velocity);
 
+void gather_and_damp_velocity(float damp_factor, int state_num,
+                              const float* src, float* dst);
+
 }  // namespace silk::cuda
