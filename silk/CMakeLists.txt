@@ -43,6 +43,9 @@ set(SILK_CUDA_SOURCES
     src/backend/cuda/solver/cloth_solver_kernel.cu
     src/backend/cuda/solver/pipeline_kernel.cu
     src/backend/cuda/solver/svd.cu
+    src/backend/cuda/solver/compute_subspace_u.cpp
+    src/backend/cuda/solver/inexact_solver_kernel.cu
+    src/backend/cuda/solver/inexact_solver.cpp
 )
 
 add_library(silk ${SILK_SOURCES})

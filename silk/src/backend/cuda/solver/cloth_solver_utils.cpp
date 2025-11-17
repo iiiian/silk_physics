@@ -10,6 +10,7 @@
 #include "backend/cuda/solver/barrier_constrain.hpp"
 #include "backend/cuda/solver/cloth_solver_context.hpp"
 #include "backend/cuda/solver/cloth_solver_kernel.hpp"
+#include "backend/cuda/solver/inexact_solver.hpp"
 #include "common/cloth_topology.hpp"
 #include "common/logger.hpp"
 #include "common/mesh.hpp"
@@ -143,9 +144,9 @@ bool batch_compute_cloth_outer_loop(Registry& registry, const float* d_state,
       int offset = obj_state->state_offset;
       const float* d_lhs = barrier_constrain.d_lhs + offset;
       const float* d_rhs_ptr = barrier_constrain.d_rhs + offset;
-      if (!compute_cloth_outer_loop(
-              d_state + offset, d_state_velocity + offset, d_lhs, d_rhs_ptr,
-              state_acceleration, *solver_ctx, d_rhs + offset)) {
+      if (!compute_cloth_outer_loop(d_state + offset, d_state_velocity + offset,
+                                    d_lhs, d_rhs_ptr, state_acceleration,
+                                    *solver_ctx, d_rhs + offset)) {
         return false;
       }
     }
@@ -170,7 +171,10 @@ bool compute_cloth_inner_loop(const ClothConfig& config,
   cudaDeviceSynchronize();
   CHECK_CUDA(cudaGetLastError());
 
-  // TODO: add jacobi solver and guessing here
+  inexact_solve(solver_context, d_buffer, d_state);
+  CHECK_CUDA(cudaGetLastError());
+
+  // TODO: add jacobi solver
 
   return true;
 }

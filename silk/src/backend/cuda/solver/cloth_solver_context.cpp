@@ -61,14 +61,14 @@ ClothSolverContext::ClothSolverContext(const ClothConfig& config,
            54 * sizeof(float));
   }
 
-  Eigen::SparseMatrix H{state_num, state_num};
-  H.set_from_triplets(H_triplets.begin(), H_triplets.end());
+  Eigen::SparseMatrix<float> H{state_num, state_num};
+  H.setFromTriplets(H_triplets.begin(), H_triplets.end());
   // Hard code subspace dim and assumes eigen decomposition success here for
   // now.
   // TODO: configurable subspace dim and propagate error properly.
-  auto U = compute_subspace_u(H, 30);
+  auto U = compute_subspace_u(H, 32);
   assert(U.has_value());
-  Eigen::VectorXf HX = H * mesh->V.reshaped<Eigen::RowMajor>();
+  Eigen::VectorXf HX = H * mesh.V.reshaped<Eigen::RowMajor>();
 
   this->dt = dt;
   this->state_num = state_num;
@@ -88,10 +88,11 @@ ClothSolverContext::ClothSolverContext(const ClothConfig& config,
   this->d_F = host_eigen_to_device(mesh.F);
   this->d_jacobian_ops = host_vector_to_device(jacobian_ops);
   this->d_C0 = host_eigen_to_device(t.C0);
-  this->r = 30;
+  this->r = 32;
+  this->UHU = (*U).transpose() * H * (*U).transpose();
   this->d_U = host_eigen_to_device(*U);
   this->d_HX = host_eigen_to_device(HX);
-  this->d_X = host_eigen_to_device(mesh->V.reshaped<Eigen::RowMajor>());
+  this->d_X = host_eigen_to_device(mesh.V.reshaped<Eigen::RowMajor>());
 }
 
 ClothSolverContext::ClothSolverContext(ClothSolverContext&& other) noexcept {
@@ -136,6 +137,7 @@ void ClothSolverContext::swap(ClothSolverContext& other) noexcept {
   std::swap(d_jacobian_ops, other.d_jacobian_ops);
   std::swap(d_C0, other.d_C0);
   std::swap(r, other.r);
+  std::swap(UHU, other.UHU);
   std::swap(d_U, other.d_U);
   std::swap(d_HX, other.d_HX);
   std::swap(d_X, other.d_X);

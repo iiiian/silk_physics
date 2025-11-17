@@ -34,6 +34,7 @@ class ClothSolverContext {
   float* d_C0 = nullptr;
 
   int r = 0;
+  Eigen::MatrixXf UHU;
   float* d_U = nullptr;
   float* d_HX = nullptr;
   float* d_X = nullptr;
