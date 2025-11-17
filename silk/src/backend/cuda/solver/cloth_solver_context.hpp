@@ -33,6 +33,11 @@ class ClothSolverContext {
   float* d_jacobian_ops = nullptr;
   float* d_C0 = nullptr;
 
+  int r = 0;
+  float* d_U = nullptr;
+  float* d_HX = nullptr;
+  float* d_X = nullptr;
+
  public:
   ClothSolverContext() = default;
   ClothSolverContext(const ClothConfig& config, const TriMesh& mesh,

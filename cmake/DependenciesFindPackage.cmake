@@ -19,6 +19,7 @@ endif()
 
 find_package(spdlog REQUIRED)
 find_package(tbb REQUIRED)
+find_package(Spectra REQUIRED)
 
 # suite sparse
 find_package(SuiteSparse_config REQUIRED)
