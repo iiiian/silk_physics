@@ -1,7 +1,7 @@
 #include <cuda_runtime.h>
 
 #include <cassert>
-#include <cccl/cub/cub.cuh>
+#include <cub/cub.cuh>
 
 #include "backend/cuda/cuda_utils.hpp"
 #include "backend/cuda/solver/barrier_constrain.hpp"
