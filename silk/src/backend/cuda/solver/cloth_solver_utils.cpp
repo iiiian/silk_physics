@@ -124,22 +124,6 @@ bool compute_cloth_outer_loop(const float* d_state,
                               float* d_rhs) {
   auto& s = solver_context;
 
-  if (s.state_num > 0) {
-    Eigen::VectorXf h_barrier_lhs(s.state_num);
-    Eigen::VectorXf h_barrier_rhs(s.state_num);
-    CHECK_CUDA(cudaMemcpy(h_barrier_lhs.data(), d_barrier_lhs,
-                          s.state_num * sizeof(float), cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaMemcpy(h_barrier_rhs.data(), d_barrier_rhs,
-                          s.state_num * sizeof(float), cudaMemcpyDeviceToHost));
-
-    for (int i = 0; i < s.state_num; ++i) {
-      if (h_barrier_lhs[i] != 0.0f || h_barrier_rhs[i] != 0.0f) {
-        SPDLOG_ERROR("Non zero barrier");
-        exit(1);
-      }
-    }
-  }
-
   // Barrier constraint update
   vector_add(s.state_num, s.d_D, d_barrier_lhs, s.d_DB);
   compute_outer_rhs(s.state_num, s.dt, state_acceleration(0),

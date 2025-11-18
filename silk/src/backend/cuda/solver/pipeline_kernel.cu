@@ -87,13 +87,16 @@ float compute_L2_distance(int num, const float* d_a, const float* d_b,
   return sqrt(h_sum);
 }
 
-__global__ void enforce_barrier_constrain_kernel(const BarrierConstrain& barrer,
+__global__ void enforce_barrier_constrain_kernel(int constrain_num,
+                                                 const int* d_index,
+                                                 const float* d_lhs,
+                                                 const float* d_rhs,
                                                  float* state) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  if (tid < barrer.constrain_num) {
-    int idx = barrer.d_index[tid];
-    assert(barrer.d_lhs[idx] != 0.0f);
-    state[idx] = barrer.d_rhs[idx] / barrer.d_lhs[idx];
+  if (tid < constrain_num) {
+    int idx = d_index[tid];
+    assert(d_lhs[idx] != 0.0f);
+    state[idx] = d_rhs[idx] / d_lhs[idx];
   }
 }
 
@@ -113,7 +116,8 @@ void enforce_barrier_constrain(const BarrierConstrain& barrer, float* state) {
   // Launch by number of active constraints, not full state size
   grid_size = (barrer.constrain_num + block_size - 1) / block_size;
 
-  enforce_barrier_constrain_kernel<<<grid_size, block_size>>>(barrer, state);
+  enforce_barrier_constrain_kernel<<<grid_size, block_size>>>(
+      barrer.constrain_num, barrer.d_index, barrer.d_lhs, barrer.d_rhs, state);
 }
 
 __global__ void vec_mix_kernel(int num, float nr, const float* d_a,
