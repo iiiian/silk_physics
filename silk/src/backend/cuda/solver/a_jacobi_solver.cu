@@ -62,6 +62,44 @@ __global__ void compute_residial2_kernel(int n, CSRMatrixView d_R,
   }
 }
 
+__global__ void linf_diff_kernel(int n, const float* d_a, const float* d_b,
+                                 float* d_out) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid < n) {
+    float diff = d_a[tid] - d_b[tid];
+    d_out[tid] = fabsf(diff);
+  }
+}
+
+float compute_Linf_dist(int n, const float* d_a, const float* d_b,
+                        float* d_buffer) {
+  int block_size;
+  int min_grid_size;
+  cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
+                                     linf_diff_kernel, 0, 0);
+  int grid_size = (n + block_size - 1) / block_size;
+  linf_diff_kernel<<<grid_size, block_size>>>(n, d_a, d_b, d_buffer);
+  cudaDeviceSynchronize();
+
+  float* d_max = nullptr;
+  CHECK_CUDA(cudaMalloc((void**)&d_max, sizeof(float)));
+  // CUB DeviceReduce requires a two-phase API with temp storage.
+  void* d_temp = nullptr;
+  size_t temp_bytes = 0;
+  cub::DeviceReduce::Max(nullptr, temp_bytes, d_buffer, d_max, n);
+  CHECK_CUDA(cudaMalloc(&d_temp, temp_bytes));
+  cub::DeviceReduce::Max(d_temp, temp_bytes, d_buffer, d_max, n);
+  cudaDeviceSynchronize();
+  CHECK_CUDA(cudaGetLastError());
+
+  float h_max = 0.0f;
+  CHECK_CUDA(cudaMemcpy(&h_max, d_max, sizeof(float), cudaMemcpyDeviceToHost));
+  CHECK_CUDA(cudaFree(d_temp));
+  CHECK_CUDA(cudaFree(d_max));
+
+  return h_max;
+}
+
 bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
               const CSRMatrix& d_R, const float* d_D, const float* d_rhs,
               float* d_x) {
