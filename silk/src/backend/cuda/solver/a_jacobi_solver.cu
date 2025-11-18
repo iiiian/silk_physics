@@ -74,14 +74,22 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
 
   float prev_residual = std::numeric_limits<float>::infinity();
   float residual;
-  for (int iter = 0; iter < max_iter; ++iter) {
+  constexpr int ACCUM_RUN = 4;
+  for (int iter = 0; iter < max_iter; iter += ACCUM_RUN) {
     int min_grid_size;
     int block_size;
-    cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
-                                       compute_x_kernel, 0, 0);
-    int grid_size = (n + block_size - 1) / block_size;
-    compute_x_kernel<<<grid_size, block_size>>>(n, d_R.get_view(), d_D, d_rhs,
-                                                d_x_prev, d_x_next);
+    int grid_size;
+    for (int j = 0; j < ACCUM_RUN; ++j) {
+      cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
+                                         compute_x_kernel, 0, 0);
+      grid_size = (n + block_size - 1) / block_size;
+      compute_x_kernel<<<grid_size, block_size>>>(n, d_R.get_view(), d_D, d_rhs,
+                                                  d_x_prev, d_x_next);
+
+      CHECK_CUDA(cudaDeviceSynchronize());
+      CHECK_CUDA(cudaGetLastError());
+    }
+
     CHECK_CUDA(cudaMemset(d_residual2, 0, sizeof(float)));
     CHECK_CUDA(cudaDeviceSynchronize());
     CHECK_CUDA(cudaGetLastError());
@@ -111,9 +119,9 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
                               cudaMemcpyDeviceToDevice));
       }
 
-      std::cout << "Jacobi solver terminate: iter " << iter
-                << ", curr residual " << residual << ", abs tol " << abs_tol
-                << ", rel residual diff " << rel_diff << "\n";
+      // std::cout << "Jacobi solver terminate: iter " << iter
+      //           << ", curr residual " << residual << ", abs tol " << abs_tol
+      //           << ", rel residual diff " << rel_diff << "\n";
       return true;
     }
 
