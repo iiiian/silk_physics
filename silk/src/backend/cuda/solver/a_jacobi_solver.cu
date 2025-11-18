@@ -97,6 +97,13 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
                           cudaMemcpyDeviceToHost));
 
     residual = std::sqrt(h_residual2);
+    if (residual > prev_residual) {
+      std::cout << "Jacobi solver fail. Residual increase: iter " << iter
+                << ", curr residual " << residual << ", abs tol " << abs_tol
+                << ", rel residual diff "
+                << (prev_residual - residual) / residual << "\n";
+      return false;
+    }
     if (residual < abs_tol || (prev_residual - residual) / residual < rel_tol) {
       // Ensure the latest solution lives in the user buffer d_x.
       if (d_x_next != d_x) {
