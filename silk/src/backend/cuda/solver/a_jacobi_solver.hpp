@@ -5,7 +5,7 @@
 namespace silk::cuda {
 
 bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
-              const CSRMatrix& d_R, const CSRMatrix& d_RR, const float* d_D,
-              const float* d_rhs, float* d_x);
+              const CSRMatrix& d_R, const float* d_D, const float* d_rhs,
+              float* d_x);
 
 }

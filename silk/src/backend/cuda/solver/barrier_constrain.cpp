@@ -34,6 +34,7 @@ void BarrierConstrain::swap(BarrierConstrain& other) noexcept {
   }
 
   std::swap(constrain_num, other.constrain_num);
+  std::swap(state_num, other.state_num);
   std::swap(d_index, other.d_index);
   std::swap(d_lhs, other.d_lhs);
   std::swap(d_rhs, other.d_rhs);

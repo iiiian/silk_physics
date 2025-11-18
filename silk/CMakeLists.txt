@@ -21,6 +21,7 @@ set(SILK_SOURCES
     src/common/mesh.cpp
     src/common/result.cpp
     src/common/world.cpp
+    src/common/check_cuda_support.cpp
 )
 
 set(SILK_CUDA_SOURCES

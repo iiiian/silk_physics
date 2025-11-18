@@ -110,6 +110,8 @@ void enforce_barrier_constrain(const BarrierConstrain& barrer, float* state) {
   cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
                                      enforce_barrier_constrain_kernel, 0, 0);
   int grid_size = (barrer.state_num + block_size - 1) / block_size;
+  // Launch by number of active constraints, not full state size
+  grid_size = (barrer.constrain_num + block_size - 1) / block_size;
 
   enforce_barrier_constrain_kernel<<<grid_size, block_size>>>(barrer, state);
 }
@@ -124,7 +126,7 @@ __global__ void vec_mix_kernel(int num, float nr, const float* d_a,
 
 void vec_mix(int num, float nr, const float* d_a, const float* d_b,
              float* d_out) {
-  assert(nr != 0);
+  assert(nr >= 0.0f && nr <= 1.0f);
   assert(d_a && d_b && d_out);
 
   int block_size;

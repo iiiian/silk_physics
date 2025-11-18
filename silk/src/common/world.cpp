@@ -2,6 +2,10 @@
 
 #include "backend/cpu/cpu_backend.hpp"
 #include "common/backend.hpp"
+#include "common/check_cuda_support.hpp"
+#ifdef SILK_WITH_CUDA
+#include "backend/cuda/cuda_backend.hpp"
+#endif
 #include "silk/silk.hpp"
 
 namespace silk {
@@ -24,8 +28,14 @@ Result World::set_backend(Backend backend_kind) {
       return Result::ok();
     }
     case Backend::Gpu: {
-      return Result::error(ErrorCode::NoCudaSupport,
-                           "CUDA backend not available");
+      if (!check_cuda_support()) {
+        return Result::error(ErrorCode::NoCudaSupport,
+                             "CUDA runtime/device not available");
+      }
+#ifdef SILK_WITH_CUDA
+      backend_ = std::make_unique<cuda::CudaBackend>();
+      return Result::ok();
+#endif
     }
   }
   return Result::error(ErrorCode::InvalidConfig, "Unknown backend");

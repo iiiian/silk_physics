@@ -32,9 +32,9 @@ ClothSolverContext::ClothSolverContext(const ClothConfig& config,
     H_triplets.emplace_back(3 * i + 2, 3 * i + 2, M(i));
   }
   append_triplets_from_sparse(t.JWJ, 0, 0, c.elastic_stiffness, H_triplets,
-                              Symmetry::Upper);
+                              Symmetry::NotSymmetric);
   append_triplets_from_vectorized_sparse(t.CWC, 0, 0, c.bending_stiffness,
-                                         H_triplets, Symmetry::Upper);
+                                         H_triplets, Symmetry::NotSymmetric);
   for (int i = 0; i < pin.index.size(); ++i) {
     int offset = 3 * pin.index(i);
     H_triplets.emplace_back(offset, offset, pin.pin_stiffness);
@@ -44,17 +44,16 @@ ClothSolverContext::ClothSolverContext(const ClothConfig& config,
 
   // Create diagonal part D and off-diagonal part R.
   Eigen::SparseMatrix<float, Eigen::RowMajor> R(state_num, state_num);
-  Eigen::VectorXf D(state_num);
+  Eigen::VectorXf D = Eigen::VectorXf::Zero(state_num);
   for (auto& triplet : H_triplets) {
     if (triplet.row() == triplet.col()) {
-      D(triplet.row()) = triplet.value();
+      D(triplet.row()) += triplet.value();
     } else {
-      R.coeffRef(triplet.row(), triplet.col()) = triplet.value();
+      // Accumulate off-diagonal contributions instead of overwriting.
+      R.coeffRef(triplet.row(), triplet.col()) += triplet.value();
     }
   }
   R.makeCompressed();
-
-  Eigen::SparseMatrix<float, Eigen::RowMajor> RR = R * R;
 
   std::vector<float> jacobian_ops(t.jacobian_ops.size() * 54);
   for (int i = 0; i < t.jacobian_ops.size(); ++i) {
@@ -73,6 +72,7 @@ ClothSolverContext::ClothSolverContext(const ClothConfig& config,
 
   this->dt = dt;
   this->state_num = state_num;
+  this->face_num = mesh.F.rows();
   this->h_mass.resize(state_num);
   for (int i = 0; i < t.mass.size(); ++i) {
     float val = c.density * t.mass(i);
@@ -85,12 +85,12 @@ ClothSolverContext::ClothSolverContext(const ClothConfig& config,
   this->d_D = host_eigen_to_device(D);
   this->d_DB = host_eigen_to_device(D);
   this->d_R = make_csr_from_eigen(R);
-  this->d_RR = make_csr_from_eigen(RR);
   this->d_F = host_eigen_to_device(mesh.F);
   this->d_jacobian_ops = host_vector_to_device(jacobian_ops);
-  this->d_C0 = host_eigen_to_device(t.C0);
+  this->d_C0 =
+      host_eigen_to_device((c.bending_stiffness * t.C0).reshaped<Eigen::RowMajor>());
   this->r = 32;
-  this->UHU = (*U).transpose() * H * (*U).transpose();
+  this->UHU = (*U).transpose() * H * (*U);
   this->d_U = host_eigen_to_device(*U);
   this->d_HX = host_eigen_to_device(HX);
   this->d_X = host_eigen_to_device(mesh.V.reshaped<Eigen::RowMajor>());
@@ -133,7 +133,6 @@ void ClothSolverContext::swap(ClothSolverContext& other) noexcept {
   std::swap(d_D, other.d_D);
   std::swap(d_DB, other.d_DB);
   std::swap(d_R, other.d_R);
-  std::swap(d_RR, other.d_RR);
   std::swap(d_F, other.d_F);
   std::swap(d_jacobian_ops, other.d_jacobian_ops);
   std::swap(d_C0, other.d_C0);

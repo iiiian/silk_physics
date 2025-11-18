@@ -71,9 +71,7 @@ bool SolverPipeline::step(Registry& registry) {
 
     CHECK_CUDA(cudaMemcpy(outer_rhs, init_rhs, state_num * sizeof(float),
                           cudaMemcpyDeviceToDevice));
-    if (!collisions.empty()) {
-      compute_barrier_constrain(h_curr_state, collisions, barrier);
-    }
+    compute_barrier_constrain(h_curr_state, collisions, barrier);
 
     // Prediction based on linear velocity.
     predict(state_num, dt, const_acceleration(0), const_acceleration(1),
@@ -161,6 +159,8 @@ bool SolverPipeline::step(Registry& registry) {
           earliest_toi, remaining_step);
       vec_mix(state_num, 1.0f - remaining_step, d_curr_state, d_next_state,
               d_curr_state);
+      h_curr_state = (1.0f - remaining_step) * h_curr_state +
+                     remaining_step * h_next_state;
       cudaDeviceSynchronize();
       CHECK_CUDA(cudaGetLastError());
       break;
@@ -169,6 +169,8 @@ bool SolverPipeline::step(Registry& registry) {
     SPDLOG_DEBUG("CCD rollback to toi {}", earliest_toi);
     vec_mix(state_num, 1.0f - earliest_toi, d_curr_state, d_next_state,
             d_curr_state);
+    h_curr_state =
+        (1.0f - earliest_toi) * h_curr_state + earliest_toi * h_next_state;
     remaining_step -= earliest_toi;
     for (auto& c : collisions) {
       c.toi -= earliest_toi;
@@ -217,6 +219,9 @@ bool SolverPipeline::init(Registry& registry, ObjectState& global_state) {
   // Gather all object state into a continuous global state array.
   global_state.state_offset = 0;
   global_state.state_num = state_num;
+  if (state_num == 0) {
+    return true;
+  }
   CHECK_CUDA(cudaMalloc((void**)&global_state.d_curr_state,
                         state_num * sizeof(float)));
   CHECK_CUDA(cudaMalloc((void**)&global_state.d_state_velocity,
@@ -267,16 +272,18 @@ void SolverPipeline::compute_barrier_constrain(
     BarrierConstrain& barrier) {
   assert(state.size() == barrier.state_num);
 
+  int state_num = state.size();
   if (collisions.empty()) {
     barrier.constrain_num = 0;
+    CHECK_CUDA(cudaMemset(barrier.d_lhs, 0, state_num * sizeof(float)));
+    CHECK_CUDA(cudaMemset(barrier.d_rhs, 0, state_num * sizeof(float)));
+    CHECK_CUDA(cudaDeviceSynchronize());
     return;
   }
 
-  int state_num = state.size();
   int constrain_num = 0;
   Eigen::VectorXf lhs = Eigen::VectorXf::Zero(state_num);
   Eigen::VectorXf rhs = Eigen::VectorXf::Zero(state_num);
-  Eigen::VectorXi index = Eigen::VectorXi::Zero(state_num);
 
   for (auto& c : collisions) {
     // Zero stiffness is not expected currently; kept for future
@@ -321,17 +328,31 @@ void SolverPipeline::compute_barrier_constrain(
 
       lhs(seq) += c.stiffness * Eigen::Vector3f::Ones();
       rhs(seq) += c.stiffness * reflection;
-      index(constrain_num) = offset(i);
-      index(constrain_num + 1) = offset(i) + 1;
-      index(constrain_num + 2) = offset(i) + 2;
+      // mark affected coordinate entries in lhs/rhs; indices will be
+      // compacted after accumulation based on non-zero lhs entries
       constrain_num += 3;
     }
   }
 
+  // No constraints accumulated; early exit
+  // Keep parity with CPU path: if no collisions, constrain_num stays 0 earlier
+  // but we already returned in that case. Here we assert on compacted size.
   assert(constrain_num != 0);
-  barrier.constrain_num = constrain_num;
-  CHECK_CUDA(cudaMemcpy(barrier.d_index, index.data(),
-                        constrain_num * sizeof(int), cudaMemcpyHostToDevice));
+  // Build compact index list by counting non-zeros in lhs
+  std::vector<int> h_indices;
+  h_indices.reserve(state_num);
+  for (int i = 0; i < state_num; ++i) {
+    if (lhs(i) != 0.0f) {
+      h_indices.push_back(i);
+    }
+  }
+  barrier.constrain_num = static_cast<int>(h_indices.size());
+  assert(barrier.constrain_num != 0);
+  if (barrier.constrain_num > 0) {
+    CHECK_CUDA(cudaMemcpy(barrier.d_index, h_indices.data(),
+                          barrier.constrain_num * sizeof(int),
+                          cudaMemcpyHostToDevice));
+  }
   CHECK_CUDA(cudaMemcpy(barrier.d_lhs, lhs.data(), state_num * sizeof(float),
                         cudaMemcpyHostToDevice));
   CHECK_CUDA(cudaMemcpy(barrier.d_rhs, rhs.data(), state_num * sizeof(float),

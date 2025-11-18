@@ -36,6 +36,8 @@ void ObjectState::swap(ObjectState& other) noexcept {
   if (this == &other) {
     return;
   }
+  std::swap(state_offset, other.state_offset);
+  std::swap(state_num, other.state_num);
   std::swap(d_curr_state, other.d_curr_state);
   std::swap(d_state_velocity, other.d_state_velocity);
 }

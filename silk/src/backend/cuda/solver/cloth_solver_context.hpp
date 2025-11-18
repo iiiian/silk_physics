@@ -28,7 +28,6 @@ class ClothSolverContext {
   float* d_D = nullptr;
   float* d_DB = nullptr;
   CSRMatrix d_R;
-  CSRMatrix d_RR;
   int* d_F = nullptr;
   float* d_jacobian_ops = nullptr;
   float* d_C0 = nullptr;

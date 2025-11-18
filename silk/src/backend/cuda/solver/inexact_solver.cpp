@@ -15,6 +15,9 @@ void inexact_solve(const ClothSolverContext& solver_context, const float* d_rhs,
   auto& c = solver_context;
 
   DVector<float> d_buffer{32};
+  // Zero subspace RHS buffer before accumulation and sync
+  CHECK_CUDA(cudaMemset(d_buffer, 0, 32 * sizeof(float)));
+  CHECK_CUDA(cudaDeviceSynchronize());
   compute_subspace_d32_rhs(c.state_num, c.d_U, c.d_HX, d_rhs, d_buffer);
   CHECK_CUDA(cudaDeviceSynchronize());
 

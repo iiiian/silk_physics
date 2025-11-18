@@ -1,7 +1,5 @@
 #pragma once
 
-#include "backend/cuda/ecs.hpp"
-#include "backend/cuda/solver/pipeline.hpp"
 #include "common/backend.hpp"
 #include "silk/silk.hpp"
 
@@ -9,10 +7,17 @@ namespace silk::cuda {
 
 class CudaBackend : public World::IBackend {
  private:
-  Registry registry_;
-  SolverPipeline solver_pipeline_;
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
 
  public:
+  CudaBackend();
+  ~CudaBackend() override;
+  CudaBackend(CudaBackend&&) noexcept = default;
+  CudaBackend& operator=(CudaBackend&&) noexcept = default;
+  CudaBackend(const CudaBackend&) = delete;
+  CudaBackend& operator=(const CudaBackend&) = delete;
+
   // Global API
   Result set_global_config(GlobalConfig config) override;
   void clear() override;

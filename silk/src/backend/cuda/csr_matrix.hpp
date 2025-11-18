@@ -2,9 +2,16 @@
 
 #include <cusparse.h>
 
-#include <Eigen/SparseCore>
-
 namespace silk::cuda {
+
+struct CSRMatrixView {
+  int row_num = 0;
+  int col_num = 0;
+  int non_zero_num = 0;
+  int* d_row_ptr = nullptr;
+  int* d_col_idx = nullptr;
+  float* d_values = nullptr;
+};
 
 class CSRMatrix {
  public:
@@ -24,6 +31,7 @@ class CSRMatrix {
   CSRMatrix& operator=(CSRMatrix&& other) noexcept;
   ~CSRMatrix();
 
+  CSRMatrixView get_view() const;
   cusparseSpMatDescr_t get_cusparse_desc();
   cusparseConstSpMatDescr_t get_const_cusparse_desc() const;
 

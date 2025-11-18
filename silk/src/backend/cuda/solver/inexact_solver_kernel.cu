@@ -33,11 +33,7 @@ __global__ void compute_subspace_d32_rhs_kernel(
   // Per-thread partial accumulator for 32 components
   Vec32 local{};
 
-  // Compute U^T * (rhs-HX)
-  // Each thread compute U(tid, 0...31) * (rhs(tid) - HX(tid)) and stored the
-  // result in a thread local array of size 32.
-  // Then use cub block reduction followed by device wide atomic add to
-  // accumulate final result.
+  // Compute U^T * (rhs-HX). All threads participate in BlockReduce.
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid < n) {
     float diff = d_rhs[tid] - d_HX[tid];
@@ -45,16 +41,16 @@ __global__ void compute_subspace_d32_rhs_kernel(
     for (int j = 0; j < 32; ++j) {
       local[j] += diff * d_U[tid + j * n];
     }
+  }
 
-    // Block-wide reduction of Vec
-    Vec32 block_sum = BlockReduce(temp_storage).Reduce(local, Vec32Plus{});
+  // Block-wide reduction of Vec
+  Vec32 block_sum = BlockReduce(temp_storage).Reduce(local, Vec32Plus{});
 
-    // Accumulate block contributions into srhs
-    if (threadIdx.x == 0) {
+  // Accumulate block contributions into srhs
+  if (threadIdx.x == 0) {
 #pragma unroll
-      for (int j = 0; j < 32; ++j) {
-        atomicAdd(&d_srhs[j], block_sum[j]);
-      }
+    for (int j = 0; j < 32; ++j) {
+      atomicAdd(&d_srhs[j], block_sum[j]);
     }
   }
 }
@@ -66,7 +62,7 @@ void compute_subspace_d32_rhs(int n,
                               float* d_srhs)       // 32
 {
   constexpr int BLOCK_SIZE = 256;
-  int grid_size = (n + BLOCK_SIZE + 1) / BLOCK_SIZE;
+  int grid_size = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
   compute_subspace_d32_rhs_kernel<<<grid_size, BLOCK_SIZE>>>(n, d_U, d_HX,
                                                              d_rhs, d_srhs);
 }

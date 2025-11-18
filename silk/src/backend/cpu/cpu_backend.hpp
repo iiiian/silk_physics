@@ -1,7 +1,5 @@
 #pragma once
 
-#include "backend/cpu/ecs.hpp"
-#include "backend/cpu/solver/pipeline.hpp"
 #include "common/backend.hpp"
 #include "silk/silk.hpp"
 
@@ -9,10 +7,17 @@ namespace silk::cpu {
 
 class CpuBackend : public World::IBackend {
  private:
-  Registry registry_;
-  SolverPipeline solver_pipeline_;
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
 
  public:
+  CpuBackend();
+  ~CpuBackend() override;
+  CpuBackend(CpuBackend&&) noexcept = default;
+  CpuBackend& operator=(CpuBackend&&) noexcept = default;
+  CpuBackend(const CpuBackend&) = delete;
+  CpuBackend& operator=(const CpuBackend&) = delete;
+
   // Global API
   Result set_global_config(GlobalConfig config) override;
   void clear() override;

@@ -14,30 +14,39 @@
 
 namespace silk::cpu {
 
+struct CpuBackend::Impl {
+  Registry registry_;
+  SolverPipeline solver_pipeline_;
+};
+
+CpuBackend::CpuBackend() : impl_(std::make_unique<Impl>()) {}
+
+CpuBackend::~CpuBackend() = default;
+
 Result CpuBackend::set_global_config(GlobalConfig config) {
   auto& c = config;
-  solver_pipeline_.const_acceleration = {c.acceleration_x, c.acceleration_y,
-                                         c.acceleration_z};
-  solver_pipeline_.dt = c.dt;
-  solver_pipeline_.max_outer_iteration = c.max_outer_iteration;
-  solver_pipeline_.max_inner_iteration = c.max_inner_iteration;
+  impl_->solver_pipeline_.const_acceleration = {c.acceleration_x, c.acceleration_y,
+                                                c.acceleration_z};
+  impl_->solver_pipeline_.dt = c.dt;
+  impl_->solver_pipeline_.max_outer_iteration = c.max_outer_iteration;
+  impl_->solver_pipeline_.max_inner_iteration = c.max_inner_iteration;
   return Result::ok();
 }
 
 void CpuBackend::clear() {
-  solver_pipeline_.clear(registry_);
-  registry_.clear();
+  impl_->solver_pipeline_.clear(impl_->registry_);
+  impl_->registry_.clear();
 }
 
 Result CpuBackend::solver_step() {
-  if (!solver_pipeline_.step(registry_)) {
+  if (!impl_->solver_pipeline_.step(impl_->registry_)) {
     return Result::error(ErrorCode::CholeskyDecompositionFail);
   }
   return Result::ok();
 }
 
 Result CpuBackend::solver_reset() {
-  solver_pipeline_.reset(registry_);
+  impl_->solver_pipeline_.reset(impl_->registry_);
   return Result::ok();
 }
 
@@ -60,41 +69,41 @@ Result CpuBackend::add_cloth(ClothConfig cloth_config,
     }
   }
 
-  auto [h, e] = registry_.add_entity();
+  auto [h, e] = impl_->registry_.add_entity();
   if (h.is_empty()) {
     handle = 0;
     return Result::error(ErrorCode::TooManyBody);
   }
   assert(e);
-  registry_.set<ClothConfig>(*e, std::move(cloth_config));
-  registry_.set<CollisionConfig>(*e, std::move(collision_config));
-  registry_.set<TriMesh>(*e, std::move(*tri_mesh));
-  registry_.set<Pin>(*e, std::move(p));
+  impl_->registry_.set<ClothConfig>(*e, std::move(cloth_config));
+  impl_->registry_.set<CollisionConfig>(*e, std::move(collision_config));
+  impl_->registry_.set<TriMesh>(*e, std::move(*tri_mesh));
+  impl_->registry_.set<Pin>(*e, std::move(p));
 
   handle = h.value;
   return Result::ok();
 }
 
 Result CpuBackend::remove_cloth(uint32_t handle) {
-  auto entity = registry_.get_entity(Handle(handle));
+  auto entity = impl_->registry_.get_entity(Handle(handle));
   if (!entity) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = registry_.get<ClothConfig>(*entity);
+  auto cloth_config = impl_->registry_.get<ClothConfig>(*entity);
   if (!cloth_config) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  registry_.remove_entity(Handle(handle));
+  impl_->registry_.remove_entity(Handle(handle));
   return Result::ok();
 }
 
 Result CpuBackend::get_cloth_position(uint32_t handle,
                                       Span<float> position) const {
-  const Entity* e = registry_.get_entity(Handle(handle));
+  const Entity* e = impl_->registry_.get_entity(Handle(handle));
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto obj_state = registry_.get<ObjectState>(e);
+  auto obj_state = impl_->registry_.get<ObjectState>(e);
   if (obj_state) {
     if (position.size < obj_state->state_num) {
       return Result::error(ErrorCode::IncorrectPositionNum);
@@ -103,7 +112,7 @@ Result CpuBackend::get_cloth_position(uint32_t handle,
            obj_state->state_num * sizeof(float));
     return Result::ok();
   }
-  auto mesh = registry_.get<TriMesh>(e);
+  auto mesh = impl_->registry_.get<TriMesh>(e);
   if (mesh) {
     int state_num = 3 * mesh->V.rows();
     if (position.size != state_num) {
@@ -116,31 +125,31 @@ Result CpuBackend::get_cloth_position(uint32_t handle,
 }
 
 Result CpuBackend::set_cloth_config(uint32_t handle, ClothConfig config) {
-  Entity* e = registry_.get_entity(Handle(handle));
+  Entity* e = impl_->registry_.get_entity(Handle(handle));
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = registry_.get<ClothConfig>(*e);
+  auto cloth_config = impl_->registry_.get<ClothConfig>(*e);
   if (!cloth_config) {
     return Result::error(ErrorCode::InvalidHandle);
   }
   *cloth_config = config;
-  registry_.remove<ClothSolverContext>(*e);
-  registry_.remove<ObjectCollider>(*e);
+  impl_->registry_.remove<ClothSolverContext>(*e);
+  impl_->registry_.remove<ObjectCollider>(*e);
   return Result::ok();
 }
 
 Result CpuBackend::set_cloth_collision_config(uint32_t handle,
                                               CollisionConfig config) {
-  Entity* e = registry_.get_entity(Handle(handle));
+  Entity* e = impl_->registry_.get_entity(Handle(handle));
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = registry_.get<ClothConfig>(*e);
+  auto cloth_config = impl_->registry_.get<ClothConfig>(*e);
   if (!cloth_config) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto collision_config = registry_.get<CollisionConfig>(*e);
+  auto collision_config = impl_->registry_.get<CollisionConfig>(*e);
   assert(collision_config);
   *collision_config = config;
   return Result::ok();
@@ -148,17 +157,17 @@ Result CpuBackend::set_cloth_collision_config(uint32_t handle,
 
 Result CpuBackend::set_cloth_pin_index(uint32_t handle,
                                        ConstSpan<int> pin_index) {
-  Entity* e = registry_.get_entity(Handle(handle));
+  Entity* e = impl_->registry_.get_entity(Handle(handle));
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = registry_.get<ClothConfig>(*e);
+  auto cloth_config = impl_->registry_.get<ClothConfig>(*e);
   if (!cloth_config) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto tri_mesh = registry_.get<TriMesh>(*e);
+  auto tri_mesh = impl_->registry_.get<TriMesh>(*e);
   assert(tri_mesh);
-  auto pin = registry_.get<Pin>(*e);
+  auto pin = impl_->registry_.get<Pin>(*e);
   assert(pin);
   if (pin_index.data != nullptr && pin_index.size != 0) {
     pin->index =
@@ -171,22 +180,22 @@ Result CpuBackend::set_cloth_pin_index(uint32_t handle,
     pin->index = {};
     pin->position = {};
   }
-  registry_.remove<ClothSolverContext>(*e);
-  registry_.remove<ObjectCollider>(*e);
+  impl_->registry_.remove<ClothSolverContext>(*e);
+  impl_->registry_.remove<ObjectCollider>(*e);
   return Result::ok();
 }
 
 Result CpuBackend::set_cloth_pin_position(uint32_t handle,
                                           ConstSpan<float> position) {
-  Entity* e = registry_.get_entity(Handle(handle));
+  Entity* e = impl_->registry_.get_entity(Handle(handle));
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = registry_.get<ClothConfig>(*e);
+  auto cloth_config = impl_->registry_.get<ClothConfig>(*e);
   if (!cloth_config) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto pin = registry_.get<Pin>(*e);
+  auto pin = impl_->registry_.get<Pin>(*e);
   assert(pin);
   if (3 * pin->index.size() != position.size) {
     return Result::error(ErrorCode::IncorrectPinNum);
@@ -208,43 +217,43 @@ Result CpuBackend::add_obstacle(CollisionConfig collision_config,
   p.is_static_twice = false;
   p.curr_position = tri_mesh->V.reshaped<Eigen::RowMajor>();
   p.prev_position = p.curr_position;
-  auto [h, e] = registry_.add_entity();
+  auto [h, e] = impl_->registry_.add_entity();
   if (h.is_empty()) {
     handle = 0;
     return Result::error(ErrorCode::TooManyBody);
   }
   assert(e);
-  registry_.set<CollisionConfig>(*e, std::move(collision_config));
-  registry_.set<TriMesh>(*e, std::move(*tri_mesh));
-  registry_.set<ObstaclePosition>(*e, std::move(p));
+  impl_->registry_.set<CollisionConfig>(*e, std::move(collision_config));
+  impl_->registry_.set<TriMesh>(*e, std::move(*tri_mesh));
+  impl_->registry_.set<ObstaclePosition>(*e, std::move(p));
   handle = h.value;
   return Result::ok();
 }
 
 Result CpuBackend::remove_obstacle(uint32_t handle) {
-  auto entity = registry_.get_entity(Handle(handle));
+  auto entity = impl_->registry_.get_entity(Handle(handle));
   if (!entity) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto obstacle_position = registry_.get<ObstaclePosition>(*entity);
+  auto obstacle_position = impl_->registry_.get<ObstaclePosition>(*entity);
   if (!obstacle_position) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  registry_.remove_entity(Handle(handle));
+  impl_->registry_.remove_entity(Handle(handle));
   return Result::ok();
 }
 
 Result CpuBackend::set_obstacle_collision_config(uint32_t handle,
                                                  CollisionConfig config) {
-  Entity* e = registry_.get_entity(Handle(handle));
+  Entity* e = impl_->registry_.get_entity(Handle(handle));
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto obstacle_position = registry_.get<ObstaclePosition>(*e);
+  auto obstacle_position = impl_->registry_.get<ObstaclePosition>(*e);
   if (!obstacle_position) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto collision_config = registry_.get<CollisionConfig>(*e);
+  auto collision_config = impl_->registry_.get<CollisionConfig>(*e);
   assert(collision_config);
   *collision_config = config;
   return Result::ok();
@@ -252,11 +261,11 @@ Result CpuBackend::set_obstacle_collision_config(uint32_t handle,
 
 Result CpuBackend::set_obstacle_position(uint32_t handle,
                                          ConstSpan<float> position) {
-  Entity* e = registry_.get_entity(Handle(handle));
+  Entity* e = impl_->registry_.get_entity(Handle(handle));
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto pos = registry_.get<ObstaclePosition>(*e);
+  auto pos = impl_->registry_.get<ObstaclePosition>(*e);
   if (!pos) {
     return Result::error(ErrorCode::InvalidHandle);
   }

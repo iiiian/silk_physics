@@ -2,6 +2,7 @@
 
 #include <Eigen/SparseCore>
 #include <cassert>
+#include <limits>
 
 #include "backend/cuda/copy_vector_like.hpp"
 

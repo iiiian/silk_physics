@@ -48,6 +48,18 @@ CSRMatrix::~CSRMatrix() {
   CHECK_CUDA(cudaFree(d_values));
 }
 
+CSRMatrixView CSRMatrix::get_view() const {
+  CSRMatrixView v;
+  v.row_num = row_num;
+  v.col_num = col_num;
+  v.non_zero_num = non_zero_num;
+  v.d_row_ptr = d_row_ptr;
+  v.d_col_idx = d_col_idx;
+  v.d_values = d_values;
+
+  return v;
+}
+
 cusparseSpMatDescr_t CSRMatrix::get_cusparse_desc() {
   cusparseSpMatDescr_t desc;
   CHECK_CUSPARSE(cusparseCreateCsr(

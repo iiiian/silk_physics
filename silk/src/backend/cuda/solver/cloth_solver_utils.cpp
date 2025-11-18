@@ -175,7 +175,7 @@ bool compute_cloth_inner_loop(const ClothConfig& config,
   inexact_solve(solver_context, d_buffer, d_state);
   CHECK_CUDA(cudaGetLastError());
 
-  bool success = a_jacobi(s.state_num, 100, 1e-5f, 1e-2f, s.d_R, s.d_RR, s.d_DB,
+  bool success = a_jacobi(s.state_num, 100, 1e-5f, 1e-2f, s.d_R, s.d_DB,
                           d_buffer, d_state);
   if (!success) {
     SPDLOG_ERROR("A-Jacobi solve failed.");
