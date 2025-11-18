@@ -6,6 +6,7 @@
 
 #include "backend/cuda/collision/object_collider.hpp"
 #include "backend/cuda/cuda_utils.hpp"
+#include "backend/cuda/device_vector.hpp"
 #include "backend/cuda/object_state.hpp"
 #include "backend/cuda/solver/a_jacobi_solver.hpp"
 #include "backend/cuda/solver/barrier_constrain.hpp"
@@ -123,6 +124,22 @@ bool compute_cloth_outer_loop(const float* d_state,
                               float* d_rhs) {
   auto& s = solver_context;
 
+  if (s.state_num > 0) {
+    Eigen::VectorXf h_barrier_lhs(s.state_num);
+    Eigen::VectorXf h_barrier_rhs(s.state_num);
+    CHECK_CUDA(cudaMemcpy(h_barrier_lhs.data(), d_barrier_lhs,
+                          s.state_num * sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(h_barrier_rhs.data(), d_barrier_rhs,
+                          s.state_num * sizeof(float), cudaMemcpyDeviceToHost));
+
+    for (int i = 0; i < s.state_num; ++i) {
+      if (h_barrier_lhs[i] != 0.0f || h_barrier_rhs[i] != 0.0f) {
+        SPDLOG_ERROR("Non zero barrier");
+        exit(1);
+      }
+    }
+  }
+
   // Barrier constraint update
   vector_add(s.state_num, s.d_D, d_barrier_lhs, s.d_DB);
   compute_outer_rhs(s.state_num, s.dt, state_acceleration(0),
@@ -160,14 +177,14 @@ bool batch_compute_cloth_outer_loop(Registry& registry, const float* d_state,
 
 bool compute_cloth_inner_loop(const ClothConfig& config,
                               const ClothSolverContext& solver_context,
-                              const float* d_outer_rhs, float* d_state,
-                              float* d_buffer) {
+                              const float* d_outer_rhs, float* d_state) {
   auto& s = solver_context;
 
-  CHECK_CUDA(cudaMemcpy(d_buffer, d_outer_rhs, s.state_num * sizeof(float),
+  DVector<float> d_inner_rhs(s.state_num);
+  CHECK_CUDA(cudaMemcpy(d_inner_rhs, d_outer_rhs, s.state_num * sizeof(float),
                         cudaMemcpyDeviceToDevice));
   compute_elastic_rhs(s.face_num, config.elastic_stiffness, s.d_F, d_state,
-                      s.d_jacobian_ops, s.d_area, d_buffer);
+                      s.d_jacobian_ops, s.d_area, d_inner_rhs);
 
   cudaDeviceSynchronize();
   CHECK_CUDA(cudaGetLastError());
@@ -176,7 +193,7 @@ bool compute_cloth_inner_loop(const ClothConfig& config,
   // CHECK_CUDA(cudaGetLastError());
 
   bool success = a_jacobi(s.state_num, 1000, 1e-5f, 1e-2f, s.d_R, s.d_DB,
-                          d_buffer, d_state);
+                          d_inner_rhs, d_state);
   if (!success) {
     SPDLOG_ERROR("A-Jacobi solve failed.");
     return false;
@@ -186,8 +203,7 @@ bool compute_cloth_inner_loop(const ClothConfig& config,
 }
 
 bool batch_compute_cloth_inner_loop(Registry& registry,
-                                    const float* d_outer_rhs, float* d_state,
-                                    float* d_buffer) {
+                                    const float* d_outer_rhs, float* d_state) {
   for (Entity& e : registry.get_all_entities()) {
     auto config = registry.get<ClothConfig>(e);
     auto mesh = registry.get<TriMesh>(e);
@@ -200,8 +216,7 @@ bool batch_compute_cloth_inner_loop(Registry& registry,
 
     int offset = state->state_offset;
     if (!compute_cloth_inner_loop(*config, *solver_context,
-                                  d_outer_rhs + offset, d_state + offset,
-                                  d_buffer + offset)) {
+                                  d_outer_rhs + offset, d_state + offset)) {
       return false;
     }
   }

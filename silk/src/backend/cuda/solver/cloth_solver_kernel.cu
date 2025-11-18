@@ -29,7 +29,7 @@ void vector_add(int num, const float* d_a, const float* d_b, float* d_c) {
   vector_add_kernel<<<grid_size, block_size>>>(num, d_a, d_b, d_c);
 }
 
-__global__ void compute_other_rhs_kernel(
+__global__ void compute_outer_rhs_kernel(
     int state_num, float dt, float acc_x, float acc_y, float acc_z,
     const float* d_mass, const float* d_state, const float* d_state_velocity,
     const float* d_barrier_rhs, float* d_rhs) {
@@ -38,15 +38,15 @@ __global__ void compute_other_rhs_kernel(
     int o1 = 3 * tid;
     int o2 = 3 * tid + 1;
     int o3 = 3 * tid + 2;
-    d_rhs[o1] = (d_mass[o1] / (dt * dt)) * d_state[o1] +
-                (d_mass[o1] / dt) * d_state_velocity[o1] + d_mass[o1] * acc_x +
-                d_barrier_rhs[o1];
-    d_rhs[o2] = (d_mass[o2] / (dt * dt)) * d_state[o2] +
-                (d_mass[o2] / dt) * d_state_velocity[o2] + d_mass[o2] * acc_y +
-                d_barrier_rhs[o2];
-    d_rhs[o3] = (d_mass[o3] / (dt * dt)) * d_state[o3] +
-                (d_mass[o3] / dt) * d_state_velocity[o3] + d_mass[o3] * acc_z +
-                d_barrier_rhs[o3];
+    d_rhs[o1] += (d_mass[o1] / (dt * dt)) * d_state[o1] +
+                 (d_mass[o1] / dt) * d_state_velocity[o1] + d_mass[o1] * acc_x +
+                 d_barrier_rhs[o1];
+    d_rhs[o2] += (d_mass[o2] / (dt * dt)) * d_state[o2] +
+                 (d_mass[o2] / dt) * d_state_velocity[o2] + d_mass[o2] * acc_y +
+                 d_barrier_rhs[o2];
+    d_rhs[o3] += (d_mass[o3] / (dt * dt)) * d_state[o3] +
+                 (d_mass[o3] / dt) * d_state_velocity[o3] + d_mass[o3] * acc_z +
+                 d_barrier_rhs[o3];
   }
 }
 
@@ -57,10 +57,10 @@ void compute_outer_rhs(int state_num, float dt, float acc_x, float acc_y,
   int block_size;
   int min_grid_size;
   cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
-                                     compute_other_rhs_kernel, 0, 0);
+                                     compute_outer_rhs_kernel, 0, 0);
   int grid_size = (state_num / 3 + block_size - 1) / block_size;
 
-  compute_other_rhs_kernel<<<grid_size, block_size>>>(
+  compute_outer_rhs_kernel<<<grid_size, block_size>>>(
       state_num, dt, acc_x, acc_y, acc_z, d_mass, d_state, d_state_velocity,
       d_barrier_rhs, d_rhs);
 }

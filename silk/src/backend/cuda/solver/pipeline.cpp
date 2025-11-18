@@ -77,6 +77,8 @@ bool SolverPipeline::step(Registry& registry) {
     predict(state_num, dt, const_acceleration(0), const_acceleration(1),
             const_acceleration(2), d_curr_state, d_state_velocity,
             d_next_state);
+    CHECK_CUDA(cudaMemcpy(d_buffer, d_next_state, state_num * sizeof(float),
+                          cudaMemcpyDeviceToDevice));
 
     if (!batch_compute_cloth_outer_loop(registry, d_curr_state,
                                         d_state_velocity, barrier,
@@ -89,8 +91,7 @@ bool SolverPipeline::step(Registry& registry) {
       SPDLOG_DEBUG("Inner iter {}", inner_it);
 
       Eigen::VectorXf solution(state_num);
-      if (!batch_compute_cloth_inner_loop(registry, outer_rhs, d_next_state,
-                                          d_buffer)) {
+      if (!batch_compute_cloth_inner_loop(registry, outer_rhs, d_next_state)) {
         return false;
       }
 
@@ -104,11 +105,11 @@ bool SolverPipeline::step(Registry& registry) {
       }
       if (dist <= threshold) {
         SPDLOG_DEBUG("||dx|| < {}, lg loop terminate", threshold);
-        std::swap(d_next_state, d_buffer);
         break;
       }
 
-      std::swap(d_next_state, d_buffer);
+      CHECK_CUDA(cudaMemcpy(d_buffer, d_next_state, state_num * sizeof(float),
+                            cudaMemcpyDeviceToDevice));
     }
 
     // Project to barrier targets to prevent accumulation of small violations,

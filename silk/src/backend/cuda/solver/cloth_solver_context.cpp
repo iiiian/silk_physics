@@ -31,10 +31,9 @@ ClothSolverContext::ClothSolverContext(const ClothConfig& config,
     H_triplets.emplace_back(3 * i + 1, 3 * i + 1, M(i));
     H_triplets.emplace_back(3 * i + 2, 3 * i + 2, M(i));
   }
-  append_triplets_from_sparse(t.JWJ, 0, 0, c.elastic_stiffness, H_triplets,
-                              Symmetry::NotSymmetric);
+  append_triplets_from_sparse(t.JWJ, 0, 0, c.elastic_stiffness, H_triplets);
   append_triplets_from_vectorized_sparse(t.CWC, 0, 0, c.bending_stiffness,
-                                         H_triplets, Symmetry::NotSymmetric);
+                                         H_triplets);
   for (int i = 0; i < pin.index.size(); ++i) {
     int offset = 3 * pin.index(i);
     H_triplets.emplace_back(offset, offset, pin.pin_stiffness);
