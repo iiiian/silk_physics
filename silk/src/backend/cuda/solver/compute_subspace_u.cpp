@@ -14,6 +14,9 @@ namespace silk::cuda {
 std::optional<Eigen::MatrixXf> compute_subspace_u(
     const Eigen::SparseMatrix<float>& H, int r, int max_subspace, int max_iter,
     float tol) {
+  // Disable subspace u for now.
+  return Eigen::MatrixXf::Zero(H.rows(), 32);
+
   SPDLOG_INFO("Start computing eigen decomposition.");
 
   const int n = static_cast<int>(H.rows());

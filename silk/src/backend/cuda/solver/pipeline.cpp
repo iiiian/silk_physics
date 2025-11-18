@@ -86,11 +86,16 @@ bool SolverPipeline::step(Registry& registry) {
       return false;
     }
 
+    // if (!collisions.empty()) {
+    //   enforce_barrier_constrain(barrier, d_next_state);
+    //   cudaDeviceSynchronize();
+    //   CHECK_CUDA(cudaGetLastError());
+    // }
+
     // Inner loop: solve until the state update is small relative to scene size.
     for (int inner_it = 0; inner_it < max_inner_iteration; ++inner_it) {
       SPDLOG_DEBUG("Inner iter {}", inner_it);
 
-      Eigen::VectorXf solution(state_num);
       if (!batch_compute_cloth_inner_loop(registry, outer_rhs, barrier,
                                           d_next_state)) {
         return false;

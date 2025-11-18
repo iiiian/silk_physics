@@ -175,9 +175,9 @@ bool compute_cloth_inner_loop(const ClothConfig& config,
   cudaDeviceSynchronize();
   CHECK_CUDA(cudaGetLastError());
 
-  inexact_solve(solver_context, d_inner_rhs, barrier_constrain, state_offset,
-                d_state);
-  CHECK_CUDA(cudaGetLastError());
+  // inexact_solve(solver_context, d_inner_rhs, barrier_constrain, state_offset,
+  //               d_state);
+  // CHECK_CUDA(cudaGetLastError());
 
   bool success = a_jacobi(s.state_num, 1000, 1e-5f, 1e-2f, s.d_R, s.d_DB,
                           d_inner_rhs, d_state);
