@@ -91,7 +91,8 @@ bool SolverPipeline::step(Registry& registry) {
       SPDLOG_DEBUG("Inner iter {}", inner_it);
 
       Eigen::VectorXf solution(state_num);
-      if (!batch_compute_cloth_inner_loop(registry, outer_rhs, d_next_state)) {
+      if (!batch_compute_cloth_inner_loop(registry, outer_rhs, barrier,
+                                          d_next_state)) {
         return false;
       }
 

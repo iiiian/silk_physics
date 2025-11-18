@@ -161,7 +161,8 @@ bool batch_compute_cloth_outer_loop(Registry& registry, const float* d_state,
 
 bool compute_cloth_inner_loop(const ClothConfig& config,
                               const ClothSolverContext& solver_context,
-                              const float* d_outer_rhs, float* d_state) {
+                              const float* d_outer_rhs,
+                              const float* d_barrier_lhs, float* d_state) {
   auto& s = solver_context;
 
   DVector<float> d_inner_rhs(s.state_num);
@@ -173,8 +174,8 @@ bool compute_cloth_inner_loop(const ClothConfig& config,
   cudaDeviceSynchronize();
   CHECK_CUDA(cudaGetLastError());
 
-  // inexact_solve(solver_context, d_buffer, d_state);
-  // CHECK_CUDA(cudaGetLastError());
+  inexact_solve(solver_context, d_inner_rhs, d_barrier_lhs, d_state);
+  CHECK_CUDA(cudaGetLastError());
 
   bool success = a_jacobi(s.state_num, 1000, 1e-5f, 1e-2f, s.d_R, s.d_DB,
                           d_inner_rhs, d_state);
@@ -187,7 +188,9 @@ bool compute_cloth_inner_loop(const ClothConfig& config,
 }
 
 bool batch_compute_cloth_inner_loop(Registry& registry,
-                                    const float* d_outer_rhs, float* d_state) {
+                                    const float* d_outer_rhs,
+                                    const BarrierConstrain& barrier_constrain,
+                                    float* d_state) {
   for (Entity& e : registry.get_all_entities()) {
     auto config = registry.get<ClothConfig>(e);
     auto mesh = registry.get<TriMesh>(e);
@@ -199,8 +202,10 @@ bool batch_compute_cloth_inner_loop(Registry& registry,
     }
 
     int offset = state->state_offset;
+    const float* d_barrier_lhs = barrier_constrain.d_lhs + offset;
     if (!compute_cloth_inner_loop(*config, *solver_context,
-                                  d_outer_rhs + offset, d_state + offset)) {
+                                  d_outer_rhs + offset, d_barrier_lhs,
+                                  d_state + offset)) {
       return false;
     }
   }

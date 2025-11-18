@@ -5,6 +5,6 @@
 namespace silk::cuda {
 
 void inexact_solve(const ClothSolverContext& solver_context, const float* d_rhs,
-                   float* d_x);
+                   const float* d_barrier_lhs, float* d_x);
 
 }  // namespace silk::cuda

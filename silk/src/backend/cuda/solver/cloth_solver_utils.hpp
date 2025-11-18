@@ -21,6 +21,8 @@ bool batch_compute_cloth_outer_loop(Registry& registry, const float* d_state,
                                     float* d_rhs);
 
 bool batch_compute_cloth_inner_loop(Registry& registry,
-                                    const float* d_outer_rhs, float* d_state);
+                                    const float* d_outer_rhs,
+                                    const BarrierConstrain& barrier_constrain,
+                                    float* d_state);
 
 }  // namespace silk::cuda

@@ -16,8 +16,6 @@ std::optional<Eigen::MatrixXf> compute_subspace_u(
     float tol) {
   SPDLOG_INFO("Start computing eigen decomposition.");
 
-  return Eigen::MatrixXf::Zero(H.rows(), 32);
-
   const int n = static_cast<int>(H.rows());
   if (H.rows() != H.cols() || r <= 0 || r > n) {
     SPDLOG_ERROR(
@@ -27,9 +25,15 @@ std::optional<Eigen::MatrixXf> compute_subspace_u(
 
   using Op = Spectra::SparseSymMatProd<float>;
   Op op(H);
-  Spectra::SymEigsSolver<Op> eigs(op, 32, 128);
+
+  int nev = r;
+  int ncv = (max_subspace > 0) ? max_subspace
+                               : std::min(std::max(2 * r + 1, r + 1), n);
+  ncv = std::min(std::max(nev + 1, ncv), n);
+
+  Spectra::SymEigsSolver<Op> eigs(op, nev, ncv);
   eigs.init();
-  eigs.compute(Spectra::SortRule::LargestAlge);
+  eigs.compute(Spectra::SortRule::SmallestAlge, max_iter, tol);
 
   if (eigs.info() == Spectra::CompInfo::Successful) {
     SPDLOG_INFO("Finish computing subspace u.");

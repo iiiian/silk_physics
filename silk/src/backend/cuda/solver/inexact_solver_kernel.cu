@@ -25,6 +25,8 @@ __global__ void compute_subspace_d32_rhs_kernel(
     const float* d_U,    // n x 32, column-major
     const float* d_HX,   // n
     const float* d_rhs,  // n
+    const float* d_dH,   // n
+    const float* d_X,    // n
     float* d_srhs)       // 32
 {
   using BlockReduce = cub::BlockReduce<Vec32, 256>;
@@ -33,10 +35,11 @@ __global__ void compute_subspace_d32_rhs_kernel(
   // Per-thread partial accumulator for 32 components
   Vec32 local{};
 
-  // Compute U^T * (rhs-HX). All threads participate in BlockReduce.
+  // Compute U^T * (rhs - H X - ΔH X). All threads participate in BlockReduce.
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid < n) {
-    float diff = d_rhs[tid] - d_HX[tid];
+    float dh = d_dH ? d_dH[tid] : 0.0f;
+    float diff = d_rhs[tid] - d_HX[tid] - dh * d_X[tid];
 #pragma unroll
     for (int j = 0; j < 32; ++j) {
       local[j] += diff * d_U[tid + j * n];
@@ -56,15 +59,59 @@ __global__ void compute_subspace_d32_rhs_kernel(
 }
 
 void compute_subspace_d32_rhs(int n,
-                              const float* d_U,    // n x 32, column-major
-                              const float* d_HX,   // n
-                              const float* d_rhs,  // n
-                              float* d_srhs)       // 32
+                              const float* d_U,        // n x 32, column-major
+                              const float* d_HX,       // n
+                              const float* d_rhs,      // n
+                              const float* d_delta_H,  // n
+                              const float* d_X,        // n
+                              float* d_srhs)           // 32
 {
   constexpr int BLOCK_SIZE = 256;
   int grid_size = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
-  compute_subspace_d32_rhs_kernel<<<grid_size, BLOCK_SIZE>>>(n, d_U, d_HX,
-                                                             d_rhs, d_srhs);
+  compute_subspace_d32_rhs_kernel<<<grid_size, BLOCK_SIZE>>>(
+      n, d_U, d_HX, d_rhs, d_delta_H, d_X, d_srhs);
+}
+
+__global__ void compute_subspace_d32_UdHU_kernel(int n, const float* d_U,
+                                                 const float* d_dH,
+                                                 float* d_UDHU) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid >= n) {
+    return;
+  }
+
+  float dh = d_dH[tid];
+  if (dh == 0.0f) {
+    return;
+  }
+
+  // Load the row of U corresponding to this DOF.
+  float u_row[32];
+#pragma unroll
+  for (int j = 0; j < 32; ++j) {
+    u_row[j] = d_U[tid + j * n];
+  }
+
+  // Accumulate outer product delta_h * u_row * u_row^T into d_UDHU.
+  // We only write the upper triangle (p <= q) and rely on the host
+  // to symmetrize after copying back.
+#pragma unroll
+  for (int p = 0; p < 32; ++p) {
+    float up = u_row[p];
+    float scale = dh * up;
+#pragma unroll
+    for (int q = p; q < 32; ++q) {
+      atomicAdd(&d_UDHU[p + q * 32], scale * u_row[q]);
+    }
+  }
+}
+
+void compute_subspace_d32_UdHU(int n, const float* d_U, const float* d_dH,
+                               float* d_UDHU) {
+  constexpr int BLOCK_SIZE = 256;
+  int grid_size = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+  compute_subspace_d32_UdHU_kernel<<<grid_size, BLOCK_SIZE>>>(n, d_U, d_dH,
+                                                              d_UDHU);
 }
 
 __global__ void project_subspace_d32_sol_kernel(int n, const float* d_U,
