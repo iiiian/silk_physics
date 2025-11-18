@@ -62,6 +62,8 @@ __global__ void compute_residial2_kernel(int n, CSRMatrixView d_R,
   }
 }
 
+// Compute L_inf distance between two device vectors:
+//   max_i |a_i - b_i|.
 __global__ void linf_diff_kernel(int n, const float* d_a, const float* d_b,
                                  float* d_out) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -103,15 +105,12 @@ float compute_Linf_dist(int n, const float* d_a, const float* d_b,
 bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
               const CSRMatrix& d_R, const float* d_D, const float* d_rhs,
               float* d_x) {
-  DVector<float> d_residual2(1);
   DVector<float> d_x_buffer(static_cast<size_t>(n));
-  float h_residual2 = 0.0f;
-
   float* d_x_prev = d_x;
   float* d_x_next = d_x_buffer;
+  float Linf_dist0;
+  float Linf_dist;
 
-  float prev_residual = std::numeric_limits<float>::infinity();
-  float residual;
   constexpr int ACCUM_RUN = 4;
   for (int iter = 0; iter < max_iter; iter += ACCUM_RUN) {
     int min_grid_size;
@@ -126,55 +125,40 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
 
       CHECK_CUDA(cudaDeviceSynchronize());
       CHECK_CUDA(cudaGetLastError());
+
+      std::swap(d_x_prev, d_x_next);
+    }
+    // At this point d_x_prev holds the newest iterate and d_x_next the previous one.
+    // Use the previous iterate as scratch for the Linf computation to avoid corrupting
+    // the current solution that will be used as input for the next block of iterations.
+    Linf_dist = compute_Linf_dist(n, d_x_prev, d_x_next, d_x_next);
+    if (iter == 0) {
+      Linf_dist0 = Linf_dist;
     }
 
-    CHECK_CUDA(cudaMemset(d_residual2, 0, sizeof(float)));
-    CHECK_CUDA(cudaDeviceSynchronize());
-    CHECK_CUDA(cudaGetLastError());
-
-    cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
-                                       compute_residial2_kernel, 0, 0);
-    grid_size = (n + 256 - 1) / 256;
-    compute_residial2_kernel<<<grid_size, 256>>>(n, d_R.get_view(), d_D, d_rhs,
-                                                 d_x_next, d_residual2);
-    CHECK_CUDA(cudaDeviceSynchronize());
-    CHECK_CUDA(cudaGetLastError());
-    CHECK_CUDA(cudaMemcpy(&h_residual2, d_residual2, sizeof(float),
-                          cudaMemcpyDeviceToHost));
-
-    residual = std::sqrt(h_residual2);
-    float rel_diff = (prev_residual - residual) / residual;
-    if (residual > prev_residual) {
-      std::cout << "Jacobi solver residual increase: iter " << iter
-                << ", curr residual " << residual << ", abs tol " << abs_tol
-                << ", rel residual diff " << rel_diff << "\n";
-      // return false;
-    }
-    if (residual < abs_tol || (rel_diff < rel_tol)) {
+    if (Linf_dist < abs_tol || (Linf_dist < rel_tol * Linf_dist0)) {
       // Ensure the latest solution lives in the user buffer d_x.
-      if (d_x_next != d_x) {
-        CHECK_CUDA(cudaMemcpy(d_x, d_x_next, n * sizeof(float),
+      if (d_x_prev != d_x) {
+        CHECK_CUDA(cudaMemcpy(d_x, d_x_prev, n * sizeof(float),
                               cudaMemcpyDeviceToDevice));
       }
 
-      // std::cout << "Jacobi solver terminate: iter " << iter
-      //           << ", curr residual " << residual << ", abs tol " << abs_tol
-      //           << ", rel residual diff " << rel_diff << "\n";
+      std::cout << "Jacobi solver terminate: iter " << iter << ", Linf dist "
+                << Linf_dist << ", abs tol " << abs_tol << ", rel dist tol "
+                << rel_tol * Linf_dist0 << "\n";
       return true;
     }
-
-    prev_residual = residual;
-    std::swap(d_x_prev, d_x_next);
   }
   // On failure, still copy the last iterate back if needed.
-  if (d_x_prev != d_x) {
-    CHECK_CUDA(
-        cudaMemcpy(d_x, d_x_prev, n * sizeof(float), cudaMemcpyDeviceToDevice));
-  }
+  // if (d_x_prev != d_x) {
+  //   CHECK_CUDA(
+  //       cudaMemcpy(d_x, d_x_prev, n * sizeof(float),
+  //       cudaMemcpyDeviceToDevice));
+  // }
 
-  std::cout << "Jacobi solver fail: iter " << max_iter << ", curr residual "
-            << residual << ", abs tol " << abs_tol << ", rel residual diff "
-            << (prev_residual - residual) / residual << "\n";
+  std::cout << "Jacobi solver terminate: iter " << max_iter << ", Linf dist "
+            << Linf_dist << ", abs tol " << abs_tol << ", rel dist tol "
+            << rel_tol * Linf_dist0 << "\n";
   return false;
 }
 
