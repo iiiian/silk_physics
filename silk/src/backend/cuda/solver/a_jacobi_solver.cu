@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cub/cub.cuh>
+#include <iostream>
 
 #include "backend/cuda/csr_matrix.hpp"
 #include "backend/cuda/cuda_utils.hpp"
@@ -72,6 +73,7 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
   float* d_x_next = d_x_buffer;
 
   float residual0;
+  float residual;
   for (int iter = 0; iter < max_iter; ++iter) {
     int min_grid_size;
     int block_size;
@@ -94,7 +96,7 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
     CHECK_CUDA(cudaMemcpy(&h_residual2, d_residual2, sizeof(float),
                           cudaMemcpyDeviceToHost));
 
-    float residual = std::sqrt(h_residual2);
+    residual = std::sqrt(h_residual2);
     if (iter == 0) {
       residual0 = residual;
     }
@@ -105,6 +107,10 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
         CHECK_CUDA(cudaMemcpy(d_x, d_x_next, n * sizeof(float),
                               cudaMemcpyDeviceToDevice));
       }
+
+      std::cout << "Jacobi solver terminate: iter " << iter
+                << ", curr residual " << residual << ", abs tol " << abs_tol
+                << ", rel residual tol " << residual0 * rel_tol << "\n";
       return true;
     }
 
@@ -115,6 +121,10 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
     CHECK_CUDA(
         cudaMemcpy(d_x, d_x_prev, n * sizeof(float), cudaMemcpyDeviceToDevice));
   }
+
+  std::cout << "Jacobi solver fail: iter " << max_iter << ", curr residual "
+            << residual << ", abs tol " << abs_tol << ", rel residual tol "
+            << residual0 * rel_tol << "\n";
   return false;
 }
 

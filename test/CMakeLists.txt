@@ -142,7 +142,25 @@ set(SILK_TEST_TARGETS
 )
 
 if(SILK_ENABLE_CUDA)
-    list(APPEND SILK_TEST_TARGETS elastic_rhs_test)
+    add_executable(
+        jacobi_solver_test
+        jacobi_solver_test.cpp
+    )
+    target_include_directories(
+        jacobi_solver_test
+        PRIVATE ${SILK_DIR}
+    )
+    target_link_libraries(
+        jacobi_solver_test
+        PRIVATE silk::silk
+        PRIVATE Eigen3::Eigen
+        PRIVATE spdlog::spdlog
+        PRIVATE Catch2::Catch2WithMain
+        PRIVATE TBB::tbb
+        PRIVATE CUDA::cudart
+    )
+
+    list(APPEND SILK_TEST_TARGETS elastic_rhs_test jacobi_solver_test)
 endif()
 
 catch_discover_tests(${SILK_TEST_TARGETS})
