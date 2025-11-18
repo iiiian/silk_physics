@@ -154,24 +154,29 @@ __global__ void compute_elastic_rhs_kernel(int face_num,
   const float* jac_op = d_jacobian_ops + tid * 54;
   mat_mul<6, 1, 9>(jac_op, buffer, D);
 
-  // SVD decomposition D = USV^T
+  // SVD decomposition D = U S V^T via svd32 (backed by the 3x3 ref SVD).
   float U[6];
   float V[4];
   float S[2];
   svd32(
-      // input D
+      // input D encoded as [d11,d21,d31,d12,d22,d32]
       D[0], D[1], D[2], D[3], D[4], D[5],
-      // output U
+      // output U (3x2, column-major)
       U[0], U[1], U[2], U[3], U[4], U[5],
-      // output sigma
+      // output singular values
       S[0], S[1],
-      // output V
+      // output V (2x2, column-major)
       V[0], V[1], V[2], V[3]);
 
-  // compute T = U S' V^t where S is clamped between 0.9 and 1.1
+  // Clamp singular values to [0.9, 1.1] as in the CPU solver.
   S[0] = max(0.9f, min(1.1f, S[0]));
   S[1] = max(0.9f, min(1.1f, S[1]));
+
+  // Compute T = U S' V^T where S' is clamped.
   float SVT[4];
+  // Σ' V^T in column-major:
+  //   [s1 * v11, s2 * v12,
+  //    s1 * v21, s2 * v22]
   SVT[0] = S[0] * V[0];
   SVT[1] = S[1] * V[2];
   SVT[2] = S[0] * V[1];

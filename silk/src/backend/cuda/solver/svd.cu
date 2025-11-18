@@ -438,27 +438,55 @@ __device__ void svd33(
 }
 
 __device__ void svd32(
-    // input A
+    // input 3x2 matrix D encoded as
+    //   a11 = D(0,0), a21 = D(1,0), a12 = D(2,0),
+    //   a22 = D(0,1), a13 = D(1,1), a23 = D(2,1),
     float a11, float a21, float a12, float a22, float a13, float a23,
-    // output U
+    // output U: 3x2 left singular vectors of D in column-major:
+    //   [u11,u21,u31,u12,u22,u32]
     float &u11, float &u21, float &u12, float &u22, float &u13, float &u23,
-    // output S
+    // output singular values (diagonal of Σ)
     float &s11, float &s22,
-    // output V
+    // output V: 2x2 right singular vectors of D, column-major:
+    //   [v11,v21,v12,v22]
     float &v11, float &v21, float &v12, float &v22) {
-  float a31 = 0.0f, a32 = 0.0f, a33 = 0.0f;
-  float u31, u32, u33;
-  float s12, s13, s21, s23, s31, s32, s33;
-  float v13, v23, v31, v32, v33;
-  svd(
-      // input A
-      a11, a12, a13, a21, a22, a23, a31, a32, a33,
-      // output U
-      u11, u12, u13, u21, u22, u23, u31, u32, u33,
-      // output S
-      s11, s12, s13, s21, s22, s23, s31, s32, s33,
-      // output V
-      v11, v12, v13, v21, v22, v23, v31, v32, v33);
+  // Reconstruct 3x2 D from packed inputs.
+  float d11 = a11;
+  float d21 = a21;
+  float d31 = a12;
+  float d12 = a22;
+  float d22 = a13;
+  float d32 = a23;
+
+  // Embed D into a 3x3 matrix with zero third column and compute SVD via svd33.
+  float fu11, fu21, fu31, fu12, fu22, fu32, fu13, fu23, fu33;
+  float fs11, fs22, fs33;
+  float fv11, fv21, fv31, fv12, fv22, fv32, fv13, fv23, fv33;
+
+  svd33(d11, d21, d31,  // first column
+        d12, d22, d32,  // second column
+        0.0f, 0.0f, 0.0f,  // third column
+        fu11, fu21, fu31, fu12, fu22, fu32, fu13, fu23, fu33, fs11, fs22,
+        fs33, fv11, fv21, fv31, fv12, fv22, fv32, fv13, fv23, fv33);
+
+  // Thin SVD for D = U * Σ * V^T.
+  // Left singular vectors U (3x2), column-major.
+  u11 = fu11;  // row 0, col 0
+  u21 = fu21;  // row 1, col 0
+  u12 = fu31;  // row 2, col 0 (stored in u12 slot)
+  u22 = fu12;  // row 0, col 1
+  u13 = fu22;  // row 1, col 1
+  u23 = fu32;  // row 2, col 1
+
+  // Singular values.
+  s11 = fs11;
+  s22 = fs22;
+
+  // Right singular vectors V (2x2), column-major.
+  v11 = fv11;
+  v21 = fv21;
+  v12 = fv12;
+  v22 = fv22;
 }
 
 }  // namespace silk::cuda

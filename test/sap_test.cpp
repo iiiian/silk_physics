@@ -6,10 +6,10 @@
 #include <vector>
 
 #include "abc_file_loader.hpp"
-#include "collision/cpu/broadphase.hpp"
+#include "backend/cpu/collision/broadphase.hpp"
 #include "collision_broadphase_test_utils.hpp"
 
-using namespace silk;
+using namespace silk::cpu;
 namespace fs = std::filesystem;
 
 const fs::path root{PHYSICS_SCENE_ROOT};
