@@ -7,6 +7,7 @@
 #include "backend/cuda/collision/object_collider.hpp"
 #include "backend/cuda/cuda_utils.hpp"
 #include "backend/cuda/object_state.hpp"
+#include "backend/cuda/solver/a_jacobi_solver.hpp"
 #include "backend/cuda/solver/barrier_constrain.hpp"
 #include "backend/cuda/solver/cloth_solver_context.hpp"
 #include "backend/cuda/solver/cloth_solver_kernel.hpp"
@@ -174,7 +175,12 @@ bool compute_cloth_inner_loop(const ClothConfig& config,
   inexact_solve(solver_context, d_buffer, d_state);
   CHECK_CUDA(cudaGetLastError());
 
-  // TODO: add jacobi solver
+  bool success = a_jacobi(s.state_num, 100, 1e-5f, 1e-2f, s.d_R, s.d_RR, s.d_DB,
+                          d_buffer, d_state);
+  if (!success) {
+    SPDLOG_ERROR("A-Jacobi solve failed.");
+    return false;
+  }
 
   return true;
 }

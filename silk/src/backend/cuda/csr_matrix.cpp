@@ -13,36 +13,6 @@
 
 namespace silk::cuda {
 
-CSRMatrix::CSRMatrix(const Eigen::SparseMatrix<float, Eigen::RowMajor>& m) {
-  assert(m.isCompressed());
-  constexpr int MAX_IDX = std::numeric_limits<int>::max();
-  assert(m.rows() < MAX_IDX && m.cols() < MAX_IDX && m.nonZeros() < MAX_IDX);
-
-  row_num = m.rows();
-  col_num = m.cols();
-  non_zero_num = m.nonZeros();
-
-  // In RowMajor Eigen::SparseMatrix, outerIndexPtr() corresponds to row_ptr
-  // and innerIndexPtr() corresponds to col indices.
-  std::vector<int> h_row_ptr(m.outerSize() + 1);
-  for (int i = 0; i < m.outerSize() + 1; ++i) {
-    h_row_ptr[i] = m.outerIndexPtr()[i];
-  }
-  d_row_ptr = host_vector_to_device(h_row_ptr);
-
-  std::vector<int> h_col_idx(non_zero_num);
-  for (int i = 0; i < non_zero_num; ++i) {
-    h_col_idx[i] = m.innerIndexPtr()[i];
-  }
-  d_col_idx = host_vector_to_device(h_col_idx);
-
-  std::vector<float> h_values(non_zero_num);
-  for (int i = 0; i < non_zero_num; ++i) {
-    h_values[i] = m.valuePtr()[i];
-  }
-  d_values = host_vector_to_device(h_values);
-}
-
 CSRMatrix::CSRMatrix(cusparseSpMatDescr_t desc) {
   int64_t rows, cols, nnz;
   void *row_offsets, *colind, *values;

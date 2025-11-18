@@ -32,6 +32,7 @@ set(SILK_CUDA_SOURCES
     src/backend/cuda/collision/object_collider.cpp
     src/backend/cuda/collision/pipeline.cpp
     src/backend/cuda/csr_matrix.cpp
+    src/backend/cuda/sparse_matrix_interop.cpp
     src/backend/cuda/cuda_backend.cpp
     src/backend/cuda/ecs.cpp
     src/backend/cuda/object_state.cpp
@@ -46,6 +47,7 @@ set(SILK_CUDA_SOURCES
     src/backend/cuda/solver/compute_subspace_u.cpp
     src/backend/cuda/solver/inexact_solver_kernel.cu
     src/backend/cuda/solver/inexact_solver.cpp
+    src/backend/cuda/solver/a_jacobi_solver.cu
 )
 
 add_library(silk ${SILK_SOURCES})

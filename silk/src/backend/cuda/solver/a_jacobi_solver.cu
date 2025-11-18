@@ -1,0 +1,132 @@
+#include <cuda_runtime.h>
+
+#include <cmath>
+#include <cub/cub.cuh>
+
+#include "backend/cuda/csr_matrix.hpp"
+#include "backend/cuda/cuda_utils.hpp"
+#include "backend/cuda/device_vector.hpp"
+#include "backend/cuda/solver/a_jacobi_solver.hpp"
+
+namespace silk::cuda {
+
+__global__ void compute_coeff_kernel(int n, const CSRMatrix& d_R,
+                                     const float* d_D, const float* d_rhs,
+                                     float* d_out) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (tid < n) {
+    int row_start = d_R.d_row_ptr[tid];
+    int row_end = d_R.d_row_ptr[tid + 1];
+
+    float accu = 0.0f;
+    for (int i = row_start; i < row_end; ++i) {
+      int col = d_R.d_col_idx[i];
+      float val = d_R.d_values[i];
+      accu += val * d_rhs[col];
+    }
+
+    float diag = d_D[tid];
+    float inv_diag = 1.0f / diag;
+    // coeff[row] = D^{-1} b - D^{-2} R b
+    d_out[tid] = inv_diag * d_rhs[tid] - (inv_diag * inv_diag) * accu;
+  }
+}
+
+__global__ void compute_x_kernel(int n, const CSRMatrix& d_RR, const float* d_D,
+                                 const float* d_coeff, float* d_x) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (tid < n) {
+    int row_start = d_RR.d_row_ptr[tid];
+    int row_end = d_RR.d_row_ptr[tid + 1];
+
+    float accu = 0.0f;
+    for (int i = row_start; i < row_end; ++i) {
+      int col = d_RR.d_col_idx[i];
+      float val = d_RR.d_values[i];
+      accu += val * d_x[col];
+    }
+
+    float diag = d_D[tid];
+    d_x[tid] = 1.0f / (diag * diag) * accu;
+  }
+}
+
+__global__ void compute_residial2_kernel(int n, const CSRMatrix& d_R,
+                                         const float* d_D, const float* d_rhs,
+                                         const float* d_x, float* d_residual2) {
+  using BlockReduce = cub::BlockReduce<float, 256>;
+  __shared__ typename BlockReduce::TempStorage temp_storage;
+
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid < n) {
+    int row_start = d_R.d_row_ptr[tid];
+    int row_end = d_R.d_row_ptr[tid + 1];
+
+    float accu = 0.0f;
+    for (int i = row_start; i < row_end; ++i) {
+      int col = d_R.d_col_idx[i];
+      float val = d_R.d_values[i];
+      accu += val * d_x[col];
+    }
+
+    float diff = 1.0f / d_D[tid] * accu - d_rhs[tid];
+    float diff2 = diff * diff;
+
+    float diff2_sum = BlockReduce(temp_storage).Sum(diff2);
+    if (threadIdx.x == 0) {
+      atomicAdd(d_residual2, diff2_sum);
+    }
+  }
+}
+
+bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
+              const CSRMatrix& d_R, const CSRMatrix& d_RR, const float* d_D,
+              const float* d_rhs, float* d_x) {
+  DVector<float> d_buffer(n);
+  DVector<float> d_residual2(1);
+  float h_residual2 = 0.0f;
+
+  int block_size;
+  int min_grid_size;
+  cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
+                                     compute_coeff_kernel, 0, 0);
+  int grid_size = (n + block_size - 1) / block_size;
+  compute_coeff_kernel<<<grid_size, block_size>>>(n, d_R, d_D, d_rhs, d_buffer);
+  CHECK_CUDA(cudaDeviceSynchronize());
+
+  float residual0;
+  for (int iter = 0; iter < max_iter; ++iter) {
+    cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
+                                       compute_x_kernel, 0, 0);
+    grid_size = (n + block_size - 1) / block_size;
+    compute_x_kernel<<<grid_size, block_size>>>(n, d_RR, d_D, d_buffer, d_x);
+    cudaMemset(d_residual2, 0, sizeof(float));
+    CHECK_CUDA(cudaDeviceSynchronize());
+    CHECK_CUDA(cudaGetLastError());
+
+    cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
+                                       compute_residial2_kernel, 0, 0);
+    grid_size = (n + 256 - 1) / 256;
+    compute_residial2_kernel<<<grid_size, 256>>>(n, d_R, d_D, d_rhs, d_x,
+                                                 d_residual2);
+    CHECK_CUDA(cudaDeviceSynchronize());
+    CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaMemcpy(&h_residual2, d_residual2, sizeof(float),
+                          cudaMemcpyDeviceToHost));
+
+    float residual = std::sqrt(h_residual2);
+    if (iter == 0) {
+      residual0 = residual;
+    }
+
+    if (residual < abs_tol || residual < residual0 * rel_tol) {
+      return true;
+    }
+
+    return false;
+  }
+}
+
+}  // namespace silk::cuda

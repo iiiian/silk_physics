@@ -5,6 +5,7 @@
 #include "backend/cuda/copy_vector_like.hpp"
 #include "backend/cuda/cuda_utils.hpp"
 #include "backend/cuda/solver/compute_subspace_u.hpp"
+#include "backend/cuda/sparse_matrix_interop.hpp"
 #include "common/cloth_topology.hpp"
 #include "common/eigen_utils.hpp"
 #include "common/logger.hpp"
@@ -83,8 +84,8 @@ ClothSolverContext::ClothSolverContext(const ClothConfig& config,
   this->d_area = host_eigen_to_device(t.area);
   this->d_D = host_eigen_to_device(D);
   this->d_DB = host_eigen_to_device(D);
-  this->d_R = CSRMatrix{R};
-  this->d_RR = CSRMatrix{RR};
+  this->d_R = make_csr_from_eigen(R);
+  this->d_RR = make_csr_from_eigen(RR);
   this->d_F = host_eigen_to_device(mesh.F);
   this->d_jacobian_ops = host_vector_to_device(jacobian_ops);
   this->d_C0 = host_eigen_to_device(t.C0);
