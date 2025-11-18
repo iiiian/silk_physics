@@ -20,7 +20,8 @@ bool batch_compute_cloth_outer_loop(Registry& registry, const float* d_state,
                                     const Eigen::Vector3f& state_acceleration,
                                     float* d_rhs);
 
-bool batch_compute_cloth_inner_loop(Registry& registry, const float* d_outer_rhs,
-                                    float* d_state, float* d_buffer);
+bool batch_compute_cloth_inner_loop(Registry& registry,
+                                    const float* d_outer_rhs, float* d_state,
+                                    float* d_buffer);
 
 }  // namespace silk::cuda

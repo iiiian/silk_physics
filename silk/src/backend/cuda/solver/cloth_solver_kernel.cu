@@ -39,14 +39,14 @@ __global__ void compute_other_rhs_kernel(
     int o2 = 3 * tid + 1;
     int o3 = 3 * tid + 2;
     d_rhs[o1] = (d_mass[o1] / (dt * dt)) * d_state[o1] +
-                (d_mass[o1] / dt) * d_state_velocity[o1] +
-                d_mass[o1] * acc_x + d_barrier_rhs[o1];
+                (d_mass[o1] / dt) * d_state_velocity[o1] + d_mass[o1] * acc_x +
+                d_barrier_rhs[o1];
     d_rhs[o2] = (d_mass[o2] / (dt * dt)) * d_state[o2] +
-                (d_mass[o2] / dt) * d_state_velocity[o2] +
-                d_mass[o2] * acc_y + d_barrier_rhs[o2];
+                (d_mass[o2] / dt) * d_state_velocity[o2] + d_mass[o2] * acc_y +
+                d_barrier_rhs[o2];
     d_rhs[o3] = (d_mass[o3] / (dt * dt)) * d_state[o3] +
-                (d_mass[o3] / dt) * d_state_velocity[o3] +
-                d_mass[o3] * acc_z + d_barrier_rhs[o3];
+                (d_mass[o3] / dt) * d_state_velocity[o3] + d_mass[o3] * acc_z +
+                d_barrier_rhs[o3];
   }
 }
 

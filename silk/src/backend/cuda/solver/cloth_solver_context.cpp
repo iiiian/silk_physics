@@ -87,8 +87,8 @@ ClothSolverContext::ClothSolverContext(const ClothConfig& config,
   this->d_R = make_csr_from_eigen(R);
   this->d_F = host_eigen_to_device(mesh.F);
   this->d_jacobian_ops = host_vector_to_device(jacobian_ops);
-  this->d_C0 =
-      host_eigen_to_device((c.bending_stiffness * t.C0).reshaped<Eigen::RowMajor>());
+  this->d_C0 = host_eigen_to_device(
+      (c.bending_stiffness * t.C0).reshaped<Eigen::RowMajor>());
   this->r = 32;
   this->UHU = (*U).transpose() * H * (*U);
   this->d_U = host_eigen_to_device(*U);

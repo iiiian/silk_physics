@@ -463,11 +463,11 @@ __device__ void svd32(
   float fs11, fs22, fs33;
   float fv11, fv21, fv31, fv12, fv22, fv32, fv13, fv23, fv33;
 
-  svd33(d11, d21, d31,  // first column
-        d12, d22, d32,  // second column
+  svd33(d11, d21, d31,     // first column
+        d12, d22, d32,     // second column
         0.0f, 0.0f, 0.0f,  // third column
-        fu11, fu21, fu31, fu12, fu22, fu32, fu13, fu23, fu33, fs11, fs22,
-        fs33, fv11, fv21, fv31, fv12, fv22, fv32, fv13, fv23, fv33);
+        fu11, fu21, fu31, fu12, fu22, fu32, fu13, fu23, fu33, fs11, fs22, fs33,
+        fv11, fv21, fv31, fv12, fv22, fv32, fv13, fv23, fv33);
 
   // Thin SVD for D = U * Σ * V^T.
   // Left singular vectors U (3x2), column-major.
