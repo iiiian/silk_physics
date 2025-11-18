@@ -72,7 +72,7 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
   float* d_x_prev = d_x;
   float* d_x_next = d_x_buffer;
 
-  float residual0;
+  float prev_residual = std::numeric_limits<float>::infinity();
   float residual;
   for (int iter = 0; iter < max_iter; ++iter) {
     int min_grid_size;
@@ -97,11 +97,7 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
                           cudaMemcpyDeviceToHost));
 
     residual = std::sqrt(h_residual2);
-    if (iter == 0) {
-      residual0 = residual;
-    }
-
-    if (residual < abs_tol || residual < residual0 * rel_tol) {
+    if (residual < abs_tol || (prev_residual - residual) / residual < rel_tol) {
       // Ensure the latest solution lives in the user buffer d_x.
       if (d_x_next != d_x) {
         CHECK_CUDA(cudaMemcpy(d_x, d_x_next, n * sizeof(float),
@@ -110,10 +106,12 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
 
       std::cout << "Jacobi solver terminate: iter " << iter
                 << ", curr residual " << residual << ", abs tol " << abs_tol
-                << ", rel residual tol " << residual0 * rel_tol << "\n";
+                << ", rel residual diff "
+                << (prev_residual - residual) / residual << "\n";
       return true;
     }
 
+    prev_residual = residual;
     std::swap(d_x_prev, d_x_next);
   }
   // On failure, still copy the last iterate back if needed.
@@ -123,8 +121,8 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
   }
 
   std::cout << "Jacobi solver fail: iter " << max_iter << ", curr residual "
-            << residual << ", abs tol " << abs_tol << ", rel residual tol "
-            << residual0 * rel_tol << "\n";
+            << residual << ", abs tol " << abs_tol << ", rel residual diff "
+            << (prev_residual - residual) / residual << "\n";
   return false;
 }
 
