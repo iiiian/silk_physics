@@ -35,6 +35,9 @@ class ClothSolverContext {
   int r = 0;
   Eigen::MatrixXf UHU;
   float* d_U = nullptr;
+  // Row-major copy of U (state_num x r) for subspace kernels that
+  // benefit from contiguous per-row access.
+  float* d_U_RM = nullptr;
   float* d_HX = nullptr;
   float* d_X = nullptr;
 

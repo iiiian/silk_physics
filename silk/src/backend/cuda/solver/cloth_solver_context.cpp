@@ -91,6 +91,11 @@ ClothSolverContext::ClothSolverContext(const ClothConfig& config,
   this->r = 32;
   this->UHU = (*U).transpose() * H * (*U);
   this->d_U = host_eigen_to_device(*U);
+  // Row‑major copy of U for kernels that traverse rows.
+  using MatrixXfRowMajor =
+      Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+  MatrixXfRowMajor U_row_major = (*U);
+  this->d_U_RM = host_eigen_to_device(U_row_major);
   this->d_HX = host_eigen_to_device(HX);
   this->d_X = host_eigen_to_device(mesh.V.reshaped<Eigen::RowMajor>());
 }
@@ -114,6 +119,7 @@ ClothSolverContext::~ClothSolverContext() {
   CHECK_CUDA(cudaFree(d_jacobian_ops));
   CHECK_CUDA(cudaFree(d_C0));
   CHECK_CUDA(cudaFree(d_U));
+  CHECK_CUDA(cudaFree(d_U_RM));
   CHECK_CUDA(cudaFree(d_HX));
   CHECK_CUDA(cudaFree(d_X));
 }
@@ -138,6 +144,7 @@ void ClothSolverContext::swap(ClothSolverContext& other) noexcept {
   std::swap(r, other.r);
   std::swap(UHU, other.UHU);
   std::swap(d_U, other.d_U);
+  std::swap(d_U_RM, other.d_U_RM);
   std::swap(d_HX, other.d_HX);
   std::swap(d_X, other.d_X);
 }

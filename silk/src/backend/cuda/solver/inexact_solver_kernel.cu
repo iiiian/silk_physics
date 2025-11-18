@@ -72,46 +72,78 @@ void compute_subspace_d32_rhs(int n,
       n, d_U, d_HX, d_rhs, d_delta_H, d_X, d_srhs);
 }
 
-__global__ void compute_subspace_d32_UdHU_kernel(int n, const float* d_U,
-                                                 const float* d_dH,
-                                                 float* d_UDHU) {
+__global__ void compute_subspace_d32_UdHU_kernel(
+    int constrain_num, const int* d_index, const float* d_dH_global,
+    const float* d_U_row_major, int state_offset, int state_size,
+    float* d_UDHU) {
+  using BlockReduce = cub::BlockReduce<Vec32, 256>;
+  __shared__ typename BlockReduce::TempStorage temp_storage;
+
+  int p = blockIdx.y;  // row in subspace (0..31)
+  if (p >= 32) {
+    return;
+  }
+
+  Vec32 local{};
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  if (tid >= n) {
-    return;
+  int stride = gridDim.x * blockDim.x;
+
+  // Each thread processes up to two active DOFs (two rows of U) per loop
+  // iteration for better memory throughput.
+  for (int k = tid * 2; k < constrain_num; k += stride * 2) {
+#pragma unroll
+    for (int kk = 0; kk < 2; ++kk) {
+      int idx_k = k + kk;
+      if (idx_k >= constrain_num) {
+        break;
+      }
+
+      int dof_idx = d_index[idx_k];
+      if (dof_idx < state_offset || dof_idx >= state_offset + state_size) {
+        continue;
+      }
+
+      int local_idx = dof_idx - state_offset;
+      float dh = d_dH_global[dof_idx];
+      if (dh == 0.0f) {
+        continue;
+      }
+
+      const float* u_row = d_U_row_major + static_cast<size_t>(local_idx) * 32;
+      float scale = dh * u_row[p];
+
+#pragma unroll
+      for (int q = 0; q < 32; ++q) {
+        local[q] += scale * u_row[q];
+      }
+    }
   }
 
-  float dh = d_dH[tid];
-  if (dh == 0.0f) {
-    return;
-  }
-
-  // Load the row of U corresponding to this DOF.
-  float u_row[32];
+  Vec32 row_sum = BlockReduce(temp_storage).Reduce(local, Vec32Plus{});
+  if (threadIdx.x == 0) {
 #pragma unroll
-  for (int j = 0; j < 32; ++j) {
-    u_row[j] = d_U[tid + j * n];
-  }
-
-  // Accumulate outer product delta_h * u_row * u_row^T into d_UDHU.
-  // We only write the upper triangle (p <= q) and rely on the host
-  // to symmetrize after copying back.
-#pragma unroll
-  for (int p = 0; p < 32; ++p) {
-    float up = u_row[p];
-    float scale = dh * up;
-#pragma unroll
-    for (int q = p; q < 32; ++q) {
-      atomicAdd(&d_UDHU[p + q * 32], scale * u_row[q]);
+    for (int q = 0; q < 32; ++q) {
+      atomicAdd(&d_UDHU[p + q * 32], row_sum[q]);
     }
   }
 }
 
-void compute_subspace_d32_UdHU(int n, const float* d_U, const float* d_dH,
-                               float* d_UDHU) {
+void compute_subspace_d32_UdHU(int constrain_num, const int* d_index,
+                               const float* d_dH_global,
+                               const float* d_U_row_major, int state_offset,
+                               int state_size, float* d_UDHU) {
+  if (constrain_num == 0) {
+    return;
+  }
   constexpr int BLOCK_SIZE = 256;
-  int grid_size = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
-  compute_subspace_d32_UdHU_kernel<<<grid_size, BLOCK_SIZE>>>(n, d_U, d_dH,
-                                                              d_UDHU);
+  int grid_x = (constrain_num + 2 * BLOCK_SIZE - 1) / (2 * BLOCK_SIZE);
+  if (grid_x <= 0) {
+    grid_x = 1;
+  }
+  dim3 grid(grid_x, 32, 1);
+  compute_subspace_d32_UdHU_kernel<<<grid, BLOCK_SIZE>>>(
+      constrain_num, d_index, d_dH_global, d_U_row_major, state_offset,
+      state_size, d_UDHU);
 }
 
 __global__ void project_subspace_d32_sol_kernel(int n, const float* d_U,

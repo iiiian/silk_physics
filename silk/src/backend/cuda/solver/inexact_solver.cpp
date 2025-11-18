@@ -11,7 +11,8 @@
 namespace silk::cuda {
 
 void inexact_solve(const ClothSolverContext& solver_context, const float* d_rhs,
-                   const float* d_barrier_lhs, float* d_x) {
+                   const BarrierConstrain& barrier_constrain, int state_offset,
+                   float* d_x) {
   auto& c = solver_context;
 
   DVector<float> d_srhs{32};
@@ -21,10 +22,14 @@ void inexact_solve(const ClothSolverContext& solver_context, const float* d_rhs,
   CHECK_CUDA(cudaDeviceSynchronize());
 
   // Compute U^T (b - H X - dH X).
-  compute_subspace_d32_rhs(c.state_num, c.d_U, c.d_HX, d_rhs, d_barrier_lhs,
-                           c.d_X, d_srhs);
-  // Compute U^T (dH) U
-  compute_subspace_d32_UdHU(c.state_num, c.d_U, d_barrier_lhs, d_UdHU);
+  const float* d_barrier_lhs_local = barrier_constrain.d_lhs + state_offset;
+  compute_subspace_d32_rhs(c.state_num, c.d_U, c.d_HX, d_rhs,
+                           d_barrier_lhs_local, c.d_X, d_srhs);
+
+  // Compute U^T (dH) U using only active barrier entries.
+  compute_subspace_d32_UdHU(barrier_constrain.constrain_num,
+                            barrier_constrain.d_index, barrier_constrain.d_lhs,
+                            c.d_U_RM, state_offset, c.state_num, d_UdHU);
   CHECK_CUDA(cudaDeviceSynchronize());
 
   Eigen::Vector<float, 32> h_srhs;
@@ -34,15 +39,6 @@ void inexact_solve(const ClothSolverContext& solver_context, const float* d_rhs,
   Eigen::Matrix<float, 32, 32> h_UdHU;
   CHECK_CUDA(cudaMemcpy(h_UdHU.data(), d_UdHU, 32 * 32 * sizeof(float),
                         cudaMemcpyDeviceToHost));
-  // Symmetrize the upper-triangular accumulation from the kernel.
-  for (int p = 0; p < 32; ++p) {
-    for (int q = p + 1; q < 32; ++q) {
-      float v = h_UdHU(p, q) + h_UdHU(q, p);
-      h_UdHU(p, q) = v;
-      h_UdHU(q, p) = v;
-    }
-  }
-
   // Eq. (18): (U^T(H + dH)U) q = U^T(b - H X - dH X).
   Eigen::Matrix<float, 32, 32> H_sub = c.UHU + h_UdHU;
   Eigen::Vector<float, 32> h_ssol = H_sub.ldlt().solve(h_srhs);
