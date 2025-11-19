@@ -25,8 +25,8 @@ CpuBackend::~CpuBackend() = default;
 
 Result CpuBackend::set_global_config(GlobalConfig config) {
   auto& c = config;
-  impl_->solver_pipeline_.const_acceleration = {c.acceleration_x, c.acceleration_y,
-                                                c.acceleration_z};
+  impl_->solver_pipeline_.const_acceleration = {
+      c.acceleration_x, c.acceleration_y, c.acceleration_z};
   impl_->solver_pipeline_.dt = c.dt;
   impl_->solver_pipeline_.max_outer_iteration = c.max_outer_iteration;
   impl_->solver_pipeline_.max_inner_iteration = c.max_inner_iteration;

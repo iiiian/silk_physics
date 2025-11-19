@@ -18,8 +18,8 @@ namespace silk::cuda {
 ClothSolverContext::ClothSolverContext(const ClothConfig& config,
                                        const TriMesh& mesh,
                                        const ClothTopology& topology,
-                                       const Pin& pin,
-                                       const ObjectState& state, float dt) {
+                                       const Pin& pin, const ObjectState& state,
+                                       float dt) {
   auto& c = config;
   auto& t = topology;
   int state_num = 3 * t.mass.size();

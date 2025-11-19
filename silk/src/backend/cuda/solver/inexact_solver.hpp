@@ -1,7 +1,7 @@
 #pragma once
 
-#include "backend/cuda/solver/cloth_solver_context.hpp"
 #include "backend/cuda/solver/barrier_constrain.hpp"
+#include "backend/cuda/solver/cloth_solver_context.hpp"
 
 namespace silk::cuda {
 

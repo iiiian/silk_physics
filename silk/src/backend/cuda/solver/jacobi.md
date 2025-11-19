@@ -1,4 +1,4 @@
-# Block-Jacobi CUDA Kernel in Silk
+#Block - Jacobi CUDA Kernel in Silk
 
 This note documents the CUDA Jacobi solver used in `a_jacobi_solver.cu`, and how it leverages the connectivity-based vertex ordering.
 
@@ -23,7 +23,8 @@ The matrix and vectors live in a **permuted DOF order**:
 
 The Jacobi update for row `i` is
 
-> \[x_i^{(k+1)} = (b_i - \sum_{j} R_{ij} x_j^{(k)}) / D_{ii}\]
+> \[x_i^{(k+1)} = (b_i - \sum_{j} R_{ij} x_j^{(k)}) / D_{
+  ii}\]
 
 ## Block-Jacobi Kernel Design
 
@@ -40,10 +41,9 @@ __global__ void compute_x_block_kernel(
     int inner_iters);
 ```
 
-Key properties:
+    Key properties :
 
-- **Row partitioning:**  
-  - 1D grid; each block owns a contiguous range of rows.  
+    -**Row partitioning : **-1D grid; each block owns a contiguous range of rows.  
   - Global row index: `row = blockIdx.x * blockDim.x + threadIdx.x`.  
   - Block range: `[block_row_start, block_row_start + blockDim.x)`.
 
@@ -58,16 +58,16 @@ Key properties:
 
   ```cpp
   for (int it = 0; it < inner_iters; ++it) {
-    // For each owned row (global_row < n):
-    //   accu = sum_j R[row,j] * x_j
-    //   x_j comes from:
-    //     - s_curr[local_col] if neighbor j is inside this block's range
-    //     - d_x_in[col]       if neighbor j belongs to another block
-    //   s_next[local_id] = (rhs[row] - accu) / D[row];
+  // For each owned row (global_row < n):
+  //   accu = sum_j R[row,j] * x_j
+  //   x_j comes from:
+  //     - s_curr[local_col] if neighbor j is inside this block's range
+  //     - d_x_in[col]       if neighbor j belongs to another block
+  //   s_next[local_id] = (rhs[row] - accu) / D[row];
 
-    __syncthreads();
-    swap(s_curr, s_next);
-    __syncthreads();
+  __syncthreads();
+  swap(s_curr, s_next);
+  __syncthreads();
   }
   ```
 
@@ -101,16 +101,17 @@ float* d_x_next = d_x_buffer;  // next iterate
   size_t shmem_bytes = 2 * block_size * sizeof(float);
 
   for (int iter = 0; iter < max_iter; iter += ACCUM_RUN) {
-    compute_x_block_kernel<<<grid_size, block_size, shmem_bytes>>>(
-        n, d_R.get_view(), d_D, d_rhs, d_x_prev, d_x_next, ACCUM_RUN);
-    cudaDeviceSynchronize();
+  compute_x_block_kernel<<<grid_size, block_size, shmem_bytes>>>(
+      n, d_R.get_view(), d_D, d_rhs, d_x_prev, d_x_next, ACCUM_RUN);
+  cudaDeviceSynchronize();
 
-    // d_x_next now holds the newest iterate; swap so d_x_prev is always "current".
-    std::swap(d_x_prev, d_x_next);
+  // d_x_next now holds the newest iterate; swap so d_x_prev is always
+  // "current".
+  std::swap(d_x_prev, d_x_next);
 
-    // Compute Linf distance between latest and previous iterate.
-    Linf_dist = compute_Linf_dist(n, d_x_prev, d_x_next, d_x_next);
-    ...
+  // Compute Linf distance between latest and previous iterate.
+  Linf_dist = compute_Linf_dist(n, d_x_prev, d_x_next, d_x_next);
+  ...
   }
   ```
 
@@ -125,8 +126,7 @@ float* d_x_next = d_x_buffer;  // next iterate
 
     ```cpp
     if (d_x_prev != d_x) {
-      cudaMemcpy(d_x, d_x_prev, n * sizeof(float),
-                 cudaMemcpyDeviceToDevice);
+  cudaMemcpy(d_x, d_x_prev, n * sizeof(float), cudaMemcpyDeviceToDevice);
     }
     ```
 
@@ -144,5 +144,4 @@ float* d_x_next = d_x_buffer;  // next iterate
   - Mapping these ranges to blocks means many neighbors of a row reside in the same block, so inner iterations can reuse updated values via shared memory.
   - Neighbors in other blocks still use the frozen snapshot, preserving Jacobi-like behavior across blocks and keeping the update inexpensive.
 
-This design keeps the global solver interface unchanged while significantly reducing launch overhead and improving convergence per outer loop step, especially on meshes where the permutation clusters connected vertices. 
-
+This design keeps the global solver interface unchanged while significantly reducing launch overhead and improving convergence per outer loop step, especially on meshes where the permutation clusters connected vertices.

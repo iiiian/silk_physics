@@ -117,8 +117,8 @@ Result CudaBackend::get_cloth_position(uint32_t handle,
                           cudaMemcpyDeviceToHost));
 
     const TriMesh* mesh = impl_->registry_.get<TriMesh>(e);
-    int vert_num = (mesh) ? static_cast<int>(mesh->V.rows())
-                          : obj_state->state_num / 3;
+    int vert_num =
+        (mesh) ? static_cast<int>(mesh->V.rows()) : obj_state->state_num / 3;
     // Map from permuted solver order back to original vertex order.
     if (obj_state->inv_perm.size() == vert_num) {
       for (int v_old = 0; v_old < vert_num; ++v_old) {
