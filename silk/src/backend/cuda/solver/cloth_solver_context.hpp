@@ -4,6 +4,7 @@
 #include <optional>
 
 #include "backend/cuda/csr_matrix.hpp"
+#include "backend/cuda/object_state.hpp"
 #include "common/cloth_topology.hpp"
 #include "common/mesh.hpp"
 #include "common/pin.hpp"
@@ -44,7 +45,8 @@ class ClothSolverContext {
  public:
   ClothSolverContext() = default;
   ClothSolverContext(const ClothConfig& config, const TriMesh& mesh,
-                     const ClothTopology& topology, const Pin& pin, float dt);
+                     const ClothTopology& topology, const Pin& pin,
+                     const ObjectState& state, float dt);
   ClothSolverContext(const ClothSolverContext& other) = delete;
   ClothSolverContext(ClothSolverContext&& other) noexcept;
   ClothSolverContext& operator=(const ClothSolverContext& other) = delete;

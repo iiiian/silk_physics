@@ -262,6 +262,7 @@ struct TTPair {
 };
 
 template <typename C, int NODE_PROXY_NUM_THRESHOLD = 1024>
+
 /**
  * KDTree broad-phase accelerator for colliders of type `C`.
  *
@@ -324,6 +325,9 @@ class KDTree {
 
   /** Read-only access to stored colliders. */
   const std::vector<C>& get_colliders() const { return colliders_; }
+
+  /** Read-only access to the in-order proxy array. */
+  const std::vector<int>& get_proxies() const { return proxies_; }
 
   /**
    * Update KD-tree structure for the current frame.

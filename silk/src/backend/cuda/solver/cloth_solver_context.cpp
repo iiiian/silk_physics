@@ -18,7 +18,8 @@ namespace silk::cuda {
 ClothSolverContext::ClothSolverContext(const ClothConfig& config,
                                        const TriMesh& mesh,
                                        const ClothTopology& topology,
-                                       const Pin& pin, float dt) {
+                                       const Pin& pin,
+                                       const ObjectState& state, float dt) {
   auto& c = config;
   auto& t = topology;
   int state_num = 3 * t.mass.size();
@@ -35,7 +36,9 @@ ClothSolverContext::ClothSolverContext(const ClothConfig& config,
   append_triplets_from_vectorized_sparse(t.CWC, 0, 0, c.bending_stiffness,
                                          H_triplets);
   for (int i = 0; i < pin.index.size(); ++i) {
-    int offset = 3 * pin.index(i);
+    int v_old = pin.index(i);
+    int v_new = state.inv_perm(v_old);
+    int offset = 3 * v_new;
     H_triplets.emplace_back(offset, offset, pin.pin_stiffness);
     H_triplets.emplace_back(offset + 1, offset + 1, pin.pin_stiffness);
     H_triplets.emplace_back(offset + 2, offset + 2, pin.pin_stiffness);

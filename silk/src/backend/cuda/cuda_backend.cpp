@@ -111,9 +111,29 @@ Result CudaBackend::get_cloth_position(uint32_t handle,
     if (position.size < obj_state->state_num) {
       return Result::error(ErrorCode::IncorrectPositionNum);
     }
-    CHECK_CUDA(cudaMemcpy(position.data, obj_state->d_curr_state,
+    Eigen::VectorXf curr_state(obj_state->state_num);
+    CHECK_CUDA(cudaMemcpy(curr_state.data(), obj_state->d_curr_state,
                           obj_state->state_num * sizeof(float),
                           cudaMemcpyDeviceToHost));
+
+    const TriMesh* mesh = impl_->registry_.get<TriMesh>(e);
+    int vert_num = (mesh) ? static_cast<int>(mesh->V.rows())
+                          : obj_state->state_num / 3;
+    // Map from permuted solver order back to original vertex order.
+    if (obj_state->inv_perm.size() == vert_num) {
+      for (int v_old = 0; v_old < vert_num; ++v_old) {
+        int v_new = obj_state->inv_perm(v_old);
+        int dst_offset = 3 * v_old;
+        int src_offset = 3 * v_new;
+        position.data[dst_offset + 0] = curr_state[src_offset + 0];
+        position.data[dst_offset + 1] = curr_state[src_offset + 1];
+        position.data[dst_offset + 2] = curr_state[src_offset + 2];
+      }
+    } else {
+      // Fallback: treat state as already in user order.
+      memcpy(position.data, curr_state.data(),
+             obj_state->state_num * sizeof(float));
+    }
     return Result::ok();
   }
   auto mesh = impl_->registry_.get<TriMesh>(e);

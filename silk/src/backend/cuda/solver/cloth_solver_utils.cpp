@@ -28,8 +28,25 @@ void batch_reset_cloth_simulation(Registry& registry) {
     auto context = registry.get<ClothSolverContext>(e);
 
     if (mesh && state && context) {
-      auto vec_V = mesh->V.reshaped<Eigen::RowMajor>();
-      *state = ObjectState{0, vec_V, Eigen::VectorXf::Zero(vec_V.size())};
+      auto vec_V_orig = mesh->V.reshaped<Eigen::RowMajor>();
+      int vert_num = static_cast<int>(mesh->V.rows());
+      if (state->inv_perm.size() == vert_num &&
+          state->state_num == vec_V_orig.size()) {
+        Eigen::VectorXf vec_V_perm(state->state_num);
+        for (int v_old = 0; v_old < vert_num; ++v_old) {
+          int v_new = state->inv_perm(v_old);
+          auto dst_seq = Eigen::seqN(3 * v_new, 3);
+          auto src_seq = Eigen::seqN(3 * v_old, 3);
+          vec_V_perm(dst_seq) = vec_V_orig(src_seq);
+        }
+        CHECK_CUDA(cudaMemcpy(state->d_curr_state, vec_V_perm.data(),
+                              state->state_num * sizeof(float),
+                              cudaMemcpyHostToDevice));
+        Eigen::VectorXf zero = Eigen::VectorXf::Zero(state->state_num);
+        CHECK_CUDA(cudaMemcpy(state->d_state_velocity, zero.data(),
+                              state->state_num * sizeof(float),
+                              cudaMemcpyHostToDevice));
+      }
     }
   }
 }
@@ -48,10 +65,8 @@ bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
 
   auto state = registry.get<ObjectState>(e);
   if (!state) {
-    auto vec_V = mesh->V.reshaped<Eigen::RowMajor>();
-    state = registry.set<ObjectState>(
-        e,
-        ObjectState{state_offset, vec_V, Eigen::VectorXf::Zero(vec_V.size())});
+    state =
+        registry.set<ObjectState>(e, ObjectState{state_offset, *mesh});
   } else {
     state->state_offset = state_offset;
   }
@@ -59,22 +74,108 @@ bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
 
   auto topology = registry.get<ClothTopology>(e);
   if (!topology) {
-    topology =
-        registry.set<ClothTopology>(e, ClothTopology(*cloth_config, *mesh));
+    // Build a permuted mesh for topology and solver context.
+    const auto& perm = state->perm;
+    const auto& inv_perm = state->inv_perm;
+    TriMesh perm_mesh;
+    int vert_num = static_cast<int>(mesh->V.rows());
+    perm_mesh.V.resize(vert_num, 3);
+    for (int i = 0; i < vert_num; ++i) {
+      int old_idx = perm(i);
+      perm_mesh.V.row(i) = mesh->V.row(old_idx);
+    }
+    perm_mesh.E.resizeLike(mesh->E);
+    for (int i = 0; i < mesh->E.rows(); ++i) {
+      perm_mesh.E(i, 0) = inv_perm(mesh->E(i, 0));
+      perm_mesh.E(i, 1) = inv_perm(mesh->E(i, 1));
+    }
+    perm_mesh.F.resizeLike(mesh->F);
+    for (int i = 0; i < mesh->F.rows(); ++i) {
+      perm_mesh.F(i, 0) = inv_perm(mesh->F(i, 0));
+      perm_mesh.F(i, 1) = inv_perm(mesh->F(i, 1));
+      perm_mesh.F(i, 2) = inv_perm(mesh->F(i, 2));
+    }
+    perm_mesh.avg_edge_length = mesh->avg_edge_length;
+
+    topology = registry.set<ClothTopology>(
+        e, ClothTopology(*cloth_config, perm_mesh));
   }
   assert(topology != nullptr);
 
   auto context = registry.get<ClothSolverContext>(e);
   if (!(context && context->dt == dt)) {
+    // Rebuild permuted mesh consistently with topology/state.
+    const auto& perm = state->perm;
+    const auto& inv_perm = state->inv_perm;
+    TriMesh perm_mesh;
+    int vert_num = static_cast<int>(mesh->V.rows());
+    perm_mesh.V.resize(vert_num, 3);
+    for (int i = 0; i < vert_num; ++i) {
+      int old_idx = perm(i);
+      perm_mesh.V.row(i) = mesh->V.row(old_idx);
+    }
+    perm_mesh.E.resizeLike(mesh->E);
+    for (int i = 0; i < mesh->E.rows(); ++i) {
+      perm_mesh.E(i, 0) = inv_perm(mesh->E(i, 0));
+      perm_mesh.E(i, 1) = inv_perm(mesh->E(i, 1));
+    }
+    perm_mesh.F.resizeLike(mesh->F);
+    for (int i = 0; i < mesh->F.rows(); ++i) {
+      perm_mesh.F(i, 0) = inv_perm(mesh->F(i, 0));
+      perm_mesh.F(i, 1) = inv_perm(mesh->F(i, 1));
+      perm_mesh.F(i, 2) = inv_perm(mesh->F(i, 2));
+    }
+    perm_mesh.avg_edge_length = mesh->avg_edge_length;
+
     context = registry.set<ClothSolverContext>(
-        e, ClothSolverContext{*cloth_config, *mesh, *topology, *pin, dt});
+        e, ClothSolverContext{*cloth_config, perm_mesh, *topology, *pin,
+                              *state, dt});
   }
   assert(context != nullptr);
 
   auto collider = registry.get<ObjectCollider>(e);
   if (!collider) {
-    auto new_collider = ObjectCollider(e.self, *collision_config, *mesh, *pin,
-                                       context->h_mass, state_offset);
+    // Build permuted mesh for collision to align vertex indices with solver
+    // state layout.
+    const auto& perm = state->perm;
+    const auto& inv_perm = state->inv_perm;
+    TriMesh perm_mesh;
+    int vert_num = static_cast<int>(mesh->V.rows());
+    perm_mesh.V.resize(vert_num, 3);
+    for (int i = 0; i < vert_num; ++i) {
+      int old_idx = perm(i);
+      perm_mesh.V.row(i) = mesh->V.row(old_idx);
+    }
+    perm_mesh.E.resizeLike(mesh->E);
+    for (int i = 0; i < mesh->E.rows(); ++i) {
+      perm_mesh.E(i, 0) = inv_perm(mesh->E(i, 0));
+      perm_mesh.E(i, 1) = inv_perm(mesh->E(i, 1));
+    }
+    perm_mesh.F.resizeLike(mesh->F);
+    for (int i = 0; i < mesh->F.rows(); ++i) {
+      perm_mesh.F(i, 0) = inv_perm(mesh->F(i, 0));
+      perm_mesh.F(i, 1) = inv_perm(mesh->F(i, 1));
+      perm_mesh.F(i, 2) = inv_perm(mesh->F(i, 2));
+    }
+    perm_mesh.avg_edge_length = mesh->avg_edge_length;
+
+    // Per-vertex mass in permuted indexing for collision.
+    Eigen::VectorXf collider_mass(vert_num);
+    for (int v_new = 0; v_new < vert_num; ++v_new) {
+      collider_mass(v_new) =
+          cloth_config->density * topology->mass(v_new);
+    }
+
+    // Build a permuted pin description for collision (stored only locally).
+    Pin perm_pin = *pin;
+    perm_pin.index.resize(pin->index.size());
+    for (int i = 0; i < pin->index.size(); ++i) {
+      int v_old = pin->index(i);
+      perm_pin.index(i) = state->inv_perm(v_old);
+    }
+
+    auto new_collider = ObjectCollider(e.self, *collision_config, perm_mesh,
+                                       perm_pin, collider_mass, state_offset);
     collider = registry.set<ObjectCollider>(e, std::move(new_collider));
   } else {
     collider->state_offset = state_offset;
@@ -85,13 +186,17 @@ bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
 }
 
 void compute_cloth_invariant_rhs(const ClothSolverContext& solver_context,
-                                 const Pin& pin, float* d_rhs) {
+                                 const Pin& pin,
+                                 const ObjectState& object_state,
+                                 float* d_rhs) {
   auto& c = solver_context;
 
   // set pin rhs
   Eigen::VectorXf pin_rhs = Eigen::VectorXf::Zero(c.state_num);
   for (int i = 0; i < pin.index.size(); ++i) {
-    pin_rhs(Eigen::seqN(3 * pin.index(i), 3)) =
+    int v_old = pin.index(i);
+    int v_new = object_state.inv_perm(v_old);
+    pin_rhs(Eigen::seqN(3 * v_new, 3)) =
         pin.pin_stiffness * pin.position(Eigen::seqN(3 * i, 3));
   }
   CHECK_CUDA(cudaMemcpy(d_rhs, pin_rhs.data(), c.state_num * sizeof(float),
@@ -108,7 +213,8 @@ void batch_compute_cloth_invariant_rhs(Registry& registry, float* d_rhs) {
     auto pin = registry.get<Pin>(e);
 
     if (state && context && pin) {
-      compute_cloth_invariant_rhs(*context, *pin, d_rhs + state->state_offset);
+      compute_cloth_invariant_rhs(*context, *pin, *state,
+                                  d_rhs + state->state_offset);
     }
   }
   cudaDeviceSynchronize();
