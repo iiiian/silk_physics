@@ -23,8 +23,8 @@ class CollisionPipeline {
   // Minimum time-of-impact to prevent infinite solver loop.
   float min_toi = 0.05f;
 
-  float collision_stiffness_base = 1e4f;
-  float collision_stiffness_max = 1e4f;
+  float collision_stiffness_base = 1e8f;
+  float collision_stiffness_max = 1e8f;
   float collision_stiffness_growth = 16.0f;
 
   /**

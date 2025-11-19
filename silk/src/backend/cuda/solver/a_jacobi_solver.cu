@@ -128,9 +128,10 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
 
       std::swap(d_x_prev, d_x_next);
     }
-    // At this point d_x_prev holds the newest iterate and d_x_next the previous one.
-    // Use the previous iterate as scratch for the Linf computation to avoid corrupting
-    // the current solution that will be used as input for the next block of iterations.
+    // At this point d_x_prev holds the newest iterate and d_x_next the previous
+    // one. Use the previous iterate as scratch for the Linf computation to
+    // avoid corrupting the current solution that will be used as input for the
+    // next block of iterations.
     Linf_dist = compute_Linf_dist(n, d_x_prev, d_x_next, d_x_next);
     if (iter == 0) {
       Linf_dist0 = Linf_dist;
@@ -149,17 +150,17 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
       return true;
     }
   }
+
   // On failure, still copy the last iterate back if needed.
-  // if (d_x_prev != d_x) {
-  //   CHECK_CUDA(
-  //       cudaMemcpy(d_x, d_x_prev, n * sizeof(float),
-  //       cudaMemcpyDeviceToDevice));
-  // }
+  if (d_x_prev != d_x) {
+    CHECK_CUDA(
+        cudaMemcpy(d_x, d_x_prev, n * sizeof(float), cudaMemcpyDeviceToDevice));
+  }
 
   std::cout << "Jacobi solver terminate: iter " << max_iter << ", Linf dist "
             << Linf_dist << ", abs tol " << abs_tol << ", rel dist tol "
             << rel_tol * Linf_dist0 << "\n";
-  return false;
+  return true;
 }
 
 }  // namespace silk::cuda
