@@ -4,11 +4,11 @@
 #include <vector>
 
 #include "abc_file_loader.hpp"
-#include "collision/cpu/bbox.hpp"
-#include "collision/cpu/broadphase.hpp"
+#include "backend/cpu/collision/bbox.hpp"
+#include "backend/cpu/collision/broadphase.hpp"
 
 struct SimpleCollider {
-  silk::Bbox bbox;
+  silk::cpu::Bbox bbox;
   int object_id;
   int face_id;
   int v0;
@@ -31,11 +31,11 @@ void update_colliders(std::vector<SimpleCollider>& colliders,
 
 void brute_force_self_collision(
     std::vector<SimpleCollider>& colliders,
-    silk::CollisionFilter<SimpleCollider> filter_callback,
-    silk::CollisionCache<SimpleCollider>& cache);
+    silk::cpu::CollisionFilter<SimpleCollider> filter_callback,
+    silk::cpu::CollisionCache<SimpleCollider>& cache);
 
 void brute_force_group_group_collision(
     std::vector<SimpleCollider>& colliders_a,
     std::vector<SimpleCollider>& colliders_b,
-    silk::CollisionFilter<SimpleCollider> filter_callback,
-    silk::CollisionCache<SimpleCollider>& cache);
+    silk::cpu::CollisionFilter<SimpleCollider> filter_callback,
+    silk::cpu::CollisionCache<SimpleCollider>& cache);

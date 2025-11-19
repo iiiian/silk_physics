@@ -1,6 +1,6 @@
 {
   "global": {
-    "dt": 0.01,
+    "dt": 0.005,
     "max_outer_iteration": 120,
     "max_inner_iteration": 80,
     "acceleration": [

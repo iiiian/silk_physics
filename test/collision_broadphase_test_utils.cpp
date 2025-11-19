@@ -41,12 +41,13 @@ void update_colliders(std::vector<SimpleCollider>& colliders,
 
 void brute_force_self_collision(
     std::vector<SimpleCollider>& colliders,
-    silk::CollisionFilter<SimpleCollider> filter_callback,
-    silk::CollisionCache<SimpleCollider>& cache) {
+    silk::cpu::CollisionFilter<SimpleCollider> filter_callback,
+    silk::cpu::CollisionCache<SimpleCollider>& cache) {
   for (int i = 0; i < colliders.size(); ++i) {
     for (int j = i + 1; j < colliders.size(); ++j) {
       if (filter_callback(colliders[i], colliders[j])) {
-        if (silk::Bbox::is_colliding(colliders[i].bbox, colliders[j].bbox)) {
+        if (silk::cpu::Bbox::is_colliding(colliders[i].bbox,
+                                          colliders[j].bbox)) {
           cache.emplace_back(colliders.data() + i, colliders.data() + j);
         }
       }
@@ -57,13 +58,13 @@ void brute_force_self_collision(
 void brute_force_group_group_collision(
     std::vector<SimpleCollider>& colliders_a,
     std::vector<SimpleCollider>& colliders_b,
-    silk::CollisionFilter<SimpleCollider> filter_callback,
-    silk::CollisionCache<SimpleCollider>& cache) {
+    silk::cpu::CollisionFilter<SimpleCollider> filter_callback,
+    silk::cpu::CollisionCache<SimpleCollider>& cache) {
   for (int i = 0; i < colliders_a.size(); ++i) {
     for (int j = 0; j < colliders_b.size(); ++j) {
       if (filter_callback(colliders_a[i], colliders_b[j])) {
-        if (silk::Bbox::is_colliding(colliders_a[i].bbox,
-                                     colliders_b[j].bbox)) {
+        if (silk::cpu::Bbox::is_colliding(colliders_a[i].bbox,
+                                          colliders_b[j].bbox)) {
           cache.emplace_back(colliders_a.data() + i, colliders_b.data() + j);
         }
       }

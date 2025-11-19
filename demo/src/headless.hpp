@@ -9,4 +9,7 @@
  * @param config Simulation description including global and object settings.
  * @param out_path Destination Alembic file path for the exported scene.
  */
-void headless_run(const SimConfig& config, const std::string& out_path);
+#include <silk/silk.hpp>
+
+void headless_run(const SimConfig& config, const std::string& out_path,
+                  silk::Backend backend);

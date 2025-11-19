@@ -7,10 +7,10 @@
 #include <vector>
 
 #include "abc_file_loader.hpp"
-#include "collision/cpu/broadphase.hpp"
+#include "backend/cpu/collision/broadphase.hpp"
 #include "collision_broadphase_test_utils.hpp"
 
-using namespace silk;
+using namespace silk::cpu;
 namespace fs = std::filesystem;
 
 const fs::path root{PHYSICS_SCENE_ROOT};
@@ -50,7 +50,7 @@ TEST_CASE("sap-kd-tree-benchmark", "[collision]") {
 
   // sphere is static, only update once.
   update_colliders(sphere_colliders, sphere, 1, sphere.series[0]);
-  silk::Bbox bbox = sphere_colliders[0].bbox;
+  Bbox bbox = sphere_colliders[0].bbox;
   for (int i = 0; i < sphere_colliders.size(); ++i) {
     bbox.merge_inplace(sphere_colliders[i].bbox);
   }
@@ -63,7 +63,7 @@ TEST_CASE("sap-kd-tree-benchmark", "[collision]") {
   int frame_num = 60;
   for (int i = 0; i < frame_num; ++i) {
     update_colliders(cloth_colliders, cloth, 0, cloth.series[i]);
-    silk::Bbox bbox = cloth_colliders[0].bbox;
+    Bbox bbox = cloth_colliders[0].bbox;
     for (int i = 0; i < cloth_colliders.size(); ++i) {
       bbox.merge_inplace(cloth_colliders[i].bbox);
     }

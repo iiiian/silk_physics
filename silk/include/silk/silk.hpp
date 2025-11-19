@@ -10,10 +10,17 @@
 
 #include <cstdint>
 #include <memory>
-#include <silk/result.hpp>
 #include <vector>
 
+#include "silk/result.hpp"
+
 namespace silk {
+
+/** Backend selection for the simulation world. */
+enum class Backend { Cpu, Gpu };
+
+// Internal backend interface (defined in source tree)
+class IBackend;
 
 /**
  * @brief Non-owning view over contiguous array data.
@@ -118,9 +125,11 @@ struct GlobalConfig {
  * @brief Main simulation world managing all physics entities and systems.
  */
 class World {
+ public:
+  class IBackend;
+
  private:
-  class WorldImpl;
-  std::unique_ptr<WorldImpl> impl_;
+  std::unique_ptr<IBackend> backend_;
 
  public:
   World();
@@ -135,6 +144,13 @@ class World {
   // ---------------------------------------
   // Global API
   // ---------------------------------------
+
+  /**
+   * @brief Select computation backend (CPU or GPU).
+   * Defaults to CPU. Switching clears current simulation state.
+   * @return Success or NoCudaSupport if GPU backend is unavailable.
+   */
+  [[nodiscard]] Result set_backend(Backend backend);
 
   /**
    * @brief Configure global simulation parameters.

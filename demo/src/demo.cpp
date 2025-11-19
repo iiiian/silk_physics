@@ -44,3 +44,13 @@ void Demo::run() { py::show(); }
 void Demo::apply_config(const SimConfig& config) {
   config_widget_.apply_config_to_gui(config);
 }
+
+bool Demo::set_backend(silk::Backend backend) {
+  silk::Result r = ctx_.silk_world.set_backend(backend);
+  if (!r) {
+    spdlog::error("Failed to set backend. Error: {}", r.to_string());
+    return false;
+  }
+  spdlog::info("Backend set to {}", backend == silk::Backend::Cpu ? "CPU" : "CUDA");
+  return true;
+}

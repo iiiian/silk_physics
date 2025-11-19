@@ -6,7 +6,7 @@ add_executable(
     sap_test.cpp
     collision_broadphase_test_utils.cpp
     abc_file_loader.cpp
-    ${SILK_DIR}/collision/cpu/bbox.cpp
+    ${SILK_DIR}/backend/cpu/collision/bbox.cpp
 )
 target_include_directories(
     sap_test
@@ -43,7 +43,7 @@ add_executable(
     sap_kd_tree_test.cpp
     collision_broadphase_test_utils.cpp
     abc_file_loader.cpp
-    ${SILK_DIR}/collision/cpu/bbox.cpp
+    ${SILK_DIR}/backend/cpu/collision/bbox.cpp
 )
 target_include_directories(
     sap_kd_tree_test
@@ -67,7 +67,7 @@ add_executable(
     sap_benchmark.cpp
     collision_broadphase_test_utils.cpp
     abc_file_loader.cpp
-    ${SILK_DIR}/collision/cpu/bbox.cpp
+    ${SILK_DIR}/backend/cpu/collision/bbox.cpp
 )
 target_include_directories(
     sap_benchmark
@@ -91,7 +91,7 @@ add_executable(
     sap_kd_tree_benchmark.cpp
     collision_broadphase_test_utils.cpp
     abc_file_loader.cpp
-    ${SILK_DIR}/collision/cpu/bbox.cpp
+    ${SILK_DIR}/backend/cpu/collision/bbox.cpp
 )
 target_include_directories(
     sap_kd_tree_benchmark
@@ -110,6 +110,57 @@ target_compile_definitions(
     PRIVATE PHYSICS_SCENE_ROOT="${CMAKE_SOURCE_DIR}/misc/physics_scene"
 )
 
+if(SILK_ENABLE_CUDA)
+    add_executable(
+        elastic_rhs_test
+        elastic_rhs_test.cpp
+    )
+    target_include_directories(
+        elastic_rhs_test
+        PRIVATE ${SILK_DIR}
+    )
+    target_link_libraries(
+        elastic_rhs_test
+        PRIVATE silk::silk
+        PRIVATE Eigen3::Eigen
+        PRIVATE spdlog::spdlog
+        PRIVATE Catch2::Catch2WithMain
+        PRIVATE TBB::tbb
+        PRIVATE CUDA::cudart
+    )
+endif()
+
 include(CTest)
 include(Catch)
-catch_discover_tests(manager_test sap_test sap_kd_tree_test sap_benchmark sap_kd_tree_benchmark ccd_poly)
+
+set(SILK_TEST_TARGETS
+    manager_test
+    sap_test
+    sap_kd_tree_test
+    sap_benchmark
+    sap_kd_tree_benchmark
+)
+
+if(SILK_ENABLE_CUDA)
+    add_executable(
+        jacobi_solver_test
+        jacobi_solver_test.cpp
+    )
+    target_include_directories(
+        jacobi_solver_test
+        PRIVATE ${SILK_DIR}
+    )
+    target_link_libraries(
+        jacobi_solver_test
+        PRIVATE silk::silk
+        PRIVATE Eigen3::Eigen
+        PRIVATE spdlog::spdlog
+        PRIVATE Catch2::Catch2WithMain
+        PRIVATE TBB::tbb
+        PRIVATE CUDA::cudart
+    )
+
+    list(APPEND SILK_TEST_TARGETS elastic_rhs_test jacobi_solver_test)
+endif()
+
+catch_discover_tests(${SILK_TEST_TARGETS})
