@@ -19,12 +19,16 @@ __global__ void predict_kernel(int state_num, float dt, float acc_x,
     int o1 = 3 * tid;
     int o2 = 3 * tid + 1;
     int o3 = 3 * tid + 2;
-    d_next_state[o1] =
-        d_curr_state[o1] + dt * d_state_velocity[o1] + dt * dt * acc_x;
-    d_next_state[o2] =
-        d_curr_state[o2] + dt * d_state_velocity[o2] + dt * dt * acc_y;
-    d_next_state[o3] =
-        d_curr_state[o3] + dt * d_state_velocity[o3] + dt * dt * acc_z;
+    d_next_state[o1] = d_curr_state[o1] + dt * d_state_velocity[o1];
+    d_next_state[o2] = d_curr_state[o2] + dt * d_state_velocity[o2];
+    d_next_state[o3] = d_curr_state[o3] + dt * d_state_velocity[o3];
+
+    // d_next_state[o1] =
+    //     d_curr_state[o1] + dt * d_state_velocity[o1] + dt * dt * acc_x;
+    // d_next_state[o2] =
+    //     d_curr_state[o2] + dt * d_state_velocity[o2] + dt * dt * acc_y;
+    // d_next_state[o3] =
+    //     d_curr_state[o3] + dt * d_state_velocity[o3] + dt * dt * acc_z;
   }
 }
 

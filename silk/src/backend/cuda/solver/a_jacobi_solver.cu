@@ -11,23 +11,56 @@
 
 namespace silk::cuda {
 
-__global__ void compute_x_kernel(int n, CSRMatrixView d_R, const float* d_D,
-                                 const float* d_rhs, const float* d_x_in,
-                                 float* d_x_out) {
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void compute_x_block_kernel(int n, CSRMatrixView d_R,
+                                       const float* d_D, const float* d_rhs,
+                                       const float* d_x_in, float* d_x_out,
+                                       int inner_iters) {
+  extern __shared__ float s_data[];
+  float* s_curr = s_data;
+  float* s_next = s_data + blockDim.x;
 
-  if (tid < n) {
-    int row_start = d_R.d_row_ptr[tid];
-    int row_end = d_R.d_row_ptr[tid + 1];
+  int local_id = threadIdx.x;
+  int global_row = blockIdx.x * blockDim.x + local_id;
+  int block_row_start = blockIdx.x * blockDim.x;
 
-    float accu = 0.0f;
-    for (int i = row_start; i < row_end; ++i) {
-      int col = d_R.d_col_idx[i];
-      float val = d_R.d_values[i];
-      accu += val * d_x_in[col];
+  if (global_row < n) {
+    s_curr[local_id] = d_x_in[global_row];
+  }
+  __syncthreads();
+
+  for (int it = 0; it < inner_iters; ++it) {
+    if (global_row < n) {
+      int row_start = d_R.d_row_ptr[global_row];
+      int row_end = d_R.d_row_ptr[global_row + 1];
+
+      float accu = 0.0f;
+      for (int i = row_start; i < row_end; ++i) {
+        int col = d_R.d_col_idx[i];
+        float val = d_R.d_values[i];
+        float x_val;
+        if (col >= block_row_start && col < block_row_start + blockDim.x) {
+          int local_col = col - block_row_start;
+          x_val = s_curr[local_col];
+        } else {
+          x_val = d_x_in[col];
+        }
+        accu += val * x_val;
+      }
+
+      s_next[local_id] = (d_rhs[global_row] - accu) / d_D[global_row];
     }
 
-    d_x_out[tid] = (d_rhs[tid] - accu) / d_D[tid];
+    __syncthreads();
+
+    float* tmp = s_curr;
+    s_curr = s_next;
+    s_next = tmp;
+
+    __syncthreads();
+  }
+
+  if (global_row < n) {
+    d_x_out[global_row] = s_curr[local_id];
   }
 }
 
@@ -111,27 +144,32 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
   float Linf_dist0;
   float Linf_dist;
 
-  constexpr int ACCUM_RUN = 4;
-  for (int iter = 0; iter < max_iter; iter += ACCUM_RUN) {
-    int min_grid_size;
-    int block_size;
-    int grid_size;
-    for (int j = 0; j < ACCUM_RUN; ++j) {
-      cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
-                                         compute_x_kernel, 0, 0);
-      grid_size = (n + block_size - 1) / block_size;
-      compute_x_kernel<<<grid_size, block_size>>>(n, d_R.get_view(), d_D, d_rhs,
-                                                  d_x_prev, d_x_next);
+  constexpr int ACCUM_RUN = 2;
+  constexpr int ACCUM_ITER = 16;
+
+  // int min_grid_size;
+  // int block_size;
+  // cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size,
+  //                                    compute_x_block_kernel, 0, 0);
+  int block_size = 128;
+  int grid_size = (n + block_size - 1) / block_size;
+  size_t shmem_bytes = 2 * static_cast<size_t>(block_size) * sizeof(float);
+
+  for (int iter = 0; iter < max_iter; iter += ACCUM_ITER) {
+    for (int j = 0; j < ACCUM_ITER; ++j) {
+      compute_x_block_kernel<<<grid_size, block_size, shmem_bytes>>>(
+          n, d_R.get_view(), d_D, d_rhs, d_x_prev, d_x_next, ACCUM_RUN);
 
       CHECK_CUDA(cudaDeviceSynchronize());
       CHECK_CUDA(cudaGetLastError());
 
+      // After the kernel, d_x_next holds the newest iterate and d_x_prev holds
+      // the previous one. Swap so that d_x_prev always points to the latest
+      // solution.
       std::swap(d_x_prev, d_x_next);
     }
-    // At this point d_x_prev holds the newest iterate and d_x_next the previous
-    // one. Use the previous iterate as scratch for the Linf computation to
-    // avoid corrupting the current solution that will be used as input for the
-    // next block of iterations.
+
+    // d_x_prev: newest iterate, d_x_next: previous iterate (used as scratch).
     Linf_dist = compute_Linf_dist(n, d_x_prev, d_x_next, d_x_next);
     if (iter == 0) {
       Linf_dist0 = Linf_dist;
@@ -144,9 +182,9 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
                               cudaMemcpyDeviceToDevice));
       }
 
-      std::cout << "Jacobi solver terminate: iter " << iter << ", Linf dist "
-                << Linf_dist << ", abs tol " << abs_tol << ", rel dist tol "
-                << rel_tol * Linf_dist0 << "\n";
+      // std::cout << "Jacobi solver terminate: iter " << iter << ", Linf dist "
+      //           << Linf_dist << ", abs tol " << abs_tol << ", rel dist tol "
+      //           << rel_tol * Linf_dist0 << "\n";
       return true;
     }
   }
@@ -157,9 +195,9 @@ bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
         cudaMemcpy(d_x, d_x_prev, n * sizeof(float), cudaMemcpyDeviceToDevice));
   }
 
-  std::cout << "Jacobi solver terminate: iter " << max_iter << ", Linf dist "
-            << Linf_dist << ", abs tol " << abs_tol << ", rel dist tol "
-            << rel_tol * Linf_dist0 << "\n";
+  // std::cout << "Jacobi solver terminate: iter " << max_iter << ", Linf dist "
+  //           << Linf_dist << ", abs tol " << abs_tol << ", rel dist tol "
+  //           << rel_tol * Linf_dist0 << "\n";
   return true;
 }
 
