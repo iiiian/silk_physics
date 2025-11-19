@@ -261,7 +261,7 @@ struct TTPair {
   bool exclude_nb_children = false;
 };
 
-template <typename C>
+template <typename C, int NODE_PROXY_NUM_THRESHOLD = 1024>
 /**
  * KDTree broad-phase accelerator for colliders of type `C`.
  *
@@ -277,8 +277,6 @@ class KDTree {
  private:
   using ThreadCollisionCache =
       tbb::enumerable_thread_specific<CollisionCache<C>>;
-
-  static constexpr int NODE_PROXY_NUM_THRESHOLD = 1024;
 
   int collider_num_ = 0;
   std::vector<C> colliders_;
