@@ -65,8 +65,7 @@ bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
 
   auto state = registry.get<ObjectState>(e);
   if (!state) {
-    state =
-        registry.set<ObjectState>(e, ObjectState{state_offset, *mesh});
+    state = registry.set<ObjectState>(e, ObjectState{state_offset, *mesh});
   } else {
     state->state_offset = state_offset;
   }
@@ -97,8 +96,8 @@ bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
     }
     perm_mesh.avg_edge_length = mesh->avg_edge_length;
 
-    topology = registry.set<ClothTopology>(
-        e, ClothTopology(*cloth_config, perm_mesh));
+    topology =
+        registry.set<ClothTopology>(e, ClothTopology(*cloth_config, perm_mesh));
   }
   assert(topology != nullptr);
 
@@ -128,8 +127,8 @@ bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
     perm_mesh.avg_edge_length = mesh->avg_edge_length;
 
     context = registry.set<ClothSolverContext>(
-        e, ClothSolverContext{*cloth_config, perm_mesh, *topology, *pin,
-                              *state, dt});
+        e, ClothSolverContext{*cloth_config, perm_mesh, *topology, *pin, *state,
+                              dt});
   }
   assert(context != nullptr);
 
@@ -162,8 +161,7 @@ bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
     // Per-vertex mass in permuted indexing for collision.
     Eigen::VectorXf collider_mass(vert_num);
     for (int v_new = 0; v_new < vert_num; ++v_new) {
-      collider_mass(v_new) =
-          cloth_config->density * topology->mass(v_new);
+      collider_mass(v_new) = cloth_config->density * topology->mass(v_new);
     }
 
     // Build a permuted pin description for collision (stored only locally).
@@ -285,7 +283,7 @@ bool compute_cloth_inner_loop(const ClothConfig& config,
   //               d_state);
   // CHECK_CUDA(cudaGetLastError());
 
-  bool success = a_jacobi(s.state_num, 2000, 1e-6f, 1e-3f, s.d_R, s.d_DB,
+  bool success = a_jacobi(s.state_num, 100, 1e-6f, 1e-3f, s.d_R, s.d_DB,
                           d_inner_rhs, d_state);
   if (!success) {
     SPDLOG_ERROR("A-Jacobi solve failed.");
