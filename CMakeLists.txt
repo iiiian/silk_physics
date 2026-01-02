@@ -17,7 +17,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 # Options
 # ---------------------------------------------------------------
 
-option(SILK_ENABLE_CUDA "Build with CUDA" ON)
+option(SILK_ENABLE_CUDA "Build with CUDA" OFF)
 option(SILK_BUILD_DEMO "Build the GUI demo application" ON)
 option(SILK_BUILD_TEST "Build tests" ON)
 option(SILK_FETCH_DEPENDENCIES "Download dependencies using CMake FetchContent" ${_silk_fetch_dependencies_default})
