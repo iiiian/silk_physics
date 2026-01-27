@@ -51,15 +51,6 @@ set(SILK_CUDA_SOURCES
     src/backend/cuda/solver/a_jacobi_solver.cu
 )
 
-file(GLOB SILK_GPU_SOURCE
-    src/solver/gpu/cloth_solver_kernels.cu
-    src/solver/gpu/gpu_cloth_solver_context.cu
-    src/solver/gpu/cloth_solver_utils.cu
-    src/solver/gpu/pipeline.cpp
-    src/solver/gpu/inexact_solver.cu
-    src/solver/cpu/u_constructor.cpp
-)
-
 add_library(silk ${SILK_SOURCES})
 add_library(silk::silk ALIAS silk)
 
