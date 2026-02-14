@@ -12,18 +12,16 @@
 
 namespace silk {
 
-/**
- * @brief Validates basic schema requirements for mesh data.
- *
- * Ensures the input data has valid pointers, correct array sizing (multiples of
- * 3 for XYZ coordinates and triangle indices), and meets minimum geometry
- * requirements.
- *
- * @param mc Input mesh configuration to validate
- * @param vnum Minimal vertex count
- * @param fnum Minimal face count
- * @return true if schema is valid, false otherwise
- */
+/// @brief Validates basic schema requirements for mesh data.
+///
+/// Ensures the input data has valid pointers, correct array sizing (multiples of
+/// 3 for XYZ coordinates and triangle indices), and meets minimum geometry
+/// requirements.
+///
+/// @param mc Input mesh configuration to validate
+/// @param vnum Minimal vertex count
+/// @param fnum Minimal face count
+/// @return true if schema is valid, false otherwise
 bool check_schema(const MeshConfig& mc, int min_vnum, int min_fnum) {
   if (mc.verts.data == nullptr || mc.faces.data == nullptr) {
     SPDLOG_WARN("Invalid mesh: null pointer(s) in verts or faces.");
@@ -56,12 +54,10 @@ bool check_schema(const MeshConfig& mc, int min_vnum, int min_fnum) {
   return true;
 }
 
-/**
- * @brief Validates that all vertex positions are finite numbers.
- *
- * @param V Vertex position matrix (#vertices × 3)
- * @return true if all positions are finite, false if any NaN/Inf detected
- */
+/// @brief Validates that all vertex positions are finite numbers.
+///
+/// @param V Vertex position matrix (#vertices × 3)
+/// @return true if all positions are finite, false if any NaN/Inf detected
 bool check_finite_positions(const RMatrixX3f& V) {
   if (!V.allFinite()) {
     SPDLOG_WARN("Invalid mesh: vertex positions contain NaN/Inf.");
@@ -70,17 +66,15 @@ bool check_finite_positions(const RMatrixX3f& V) {
   return true;
 }
 
-/**
- * @brief Validates face indexing integrity.
- *
- * Ensures all face indices are within valid vertex range [0, vnum) and that
- * no triangle has repeated vertex indices.
- *
- * @param F Face index matrix (#faces × 3)
- * @param vnum Total number of vertices for bounds checking
- * @return true if indexing is valid, false if out-of-bounds or degenerate faces
- * found
- */
+/// @brief Validates face indexing integrity.
+///
+/// Ensures all face indices are within valid vertex range [0, vnum) and that
+/// no triangle has repeated vertex indices.
+///
+/// @param F Face index matrix (#faces × 3)
+/// @param vnum Total number of vertices for bounds checking
+/// @return true if indexing is valid, false if out-of-bounds or degenerate faces
+/// found
 bool check_indexing(const RMatrixX3i& F, int vnum) {
   int min_idx = F.minCoeff();
   int max_idx = F.maxCoeff();
@@ -107,17 +101,15 @@ bool check_indexing(const RMatrixX3i& F, int vnum) {
   return true;
 }
 
-/**
- * @brief Validates triangle angle quality via angle check.
- *
- * Ensures all triangle internal angles fall within [min_degree,
- * 180-min_degree].
- *
- * @param V Vertex position matrix (#vertices × 3)
- * @param F Face index matrix (#faces × 3)
- * @param min_degree Minimum allowed angle in degrees (default: 0.5°)
- * @return true if all angles are within acceptable bounds, false otherwise
- */
+/// @brief Validates triangle angle quality via angle check.
+///
+/// Ensures all triangle internal angles fall within [min_degree,
+/// 180-min_degree].
+///
+/// @param V Vertex position matrix (#vertices × 3)
+/// @param F Face index matrix (#faces × 3)
+/// @param min_degree Minimum allowed angle in degrees (default: 0.5°)
+/// @return true if all angles are within acceptable bounds, false otherwise
 bool check_triangle_angles_min(const RMatrixX3f& V, const RMatrixX3i& F,
                                float min_degree = 0.5f) {
   static constexpr float PI = 3.14159265358979323846f;
@@ -141,12 +133,10 @@ bool check_triangle_angles_min(const RMatrixX3f& V, const RMatrixX3i& F,
   return true;
 }
 
-/**
- * @brief Validates edge manifoldness.
- *
- * @param F Face index matrix (#faces × 3)
- * @return true if mesh is edge-manifold, false otherwise
- */
+/// @brief Validates edge manifoldness.
+///
+/// @param F Face index matrix (#faces × 3)
+/// @return true if mesh is edge-manifold, false otherwise
 bool check_edge_manifold(const RMatrixX3i& F) {
   if (!igl::is_edge_manifold(F)) {
     SPDLOG_WARN(
@@ -157,12 +147,10 @@ bool check_edge_manifold(const RMatrixX3i& F) {
   return true;
 }
 
-/**
- * @brief Validates vertex manifoldness.
- *
- * @param F Face index matrix (#faces × 3)
- * @return true if mesh is vertex-manifold, false otherwise
- */
+/// @brief Validates vertex manifoldness.
+///
+/// @param F Face index matrix (#faces × 3)
+/// @return true if mesh is vertex-manifold, false otherwise
 bool check_vertex_manifold(const RMatrixX3i& F) {
   if (!igl::is_vertex_manifold(F)) {
     SPDLOG_WARN(
@@ -173,12 +161,10 @@ bool check_vertex_manifold(const RMatrixX3i& F) {
   return true;
 }
 
-/**
- * @brief Validates that the mesh forms a single connected component.
- *
- * @param F Face index matrix (#faces × 3)
- * @return true if mesh has exactly one connected component, false otherwise
- */
+/// @brief Validates that the mesh forms a single connected component.
+///
+/// @param F Face index matrix (#faces × 3)
+/// @return true if mesh has exactly one connected component, false otherwise
 bool check_single_component(const RMatrixX3i& F) {
   Eigen::VectorXi C;  // Per-face component labels
   int num = igl::facet_components(F, C);

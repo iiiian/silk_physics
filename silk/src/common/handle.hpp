@@ -5,14 +5,12 @@
 
 namespace silk {
 
-/**
- * @brief A generational handle for safe resource management.
- *
- * Bit layout: | is_valid (1) | generation (11) | index (20) |
- * - Maximum 1,048,575 concurrent resources (2^20)
- * - Maximum 2,047 generations per slot (2^11)
- * - Automatic invalidation when resources are freed
- */
+/// @brief A generational handle for safe resource management.
+///
+/// Bit layout: | is_valid (1) | generation (11) | index (20) |
+/// - Maximum 1,048,575 concurrent resources (2^20)
+/// - Maximum 2,047 generations per slot (2^11)
+/// - Automatic invalidation when resources are freed
 class Handle {
  public:
   static constexpr uint32_t GEN_BITS = 11;

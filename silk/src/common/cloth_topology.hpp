@@ -10,17 +10,15 @@
 
 namespace silk {
 
-/**
- * Static, mesh-dependent quantities used for cloth simulation.
- *
- * Built once from geometry and reused across time steps. This data should not
- * depend on runtime-configurable physical parameters.
- *
- * Notation:
- * vnum = number of vertices.
- * fnum = number of faces.
- * state_num = 3 * vnum.
- */
+/// Static, mesh-dependent quantities used for cloth simulation.
+///
+/// Built once from geometry and reused across time steps. This data should not
+/// depend on runtime-configurable physical parameters.
+///
+/// Notation:
+/// vnum = number of vertices.
+/// fnum = number of faces.
+/// state_num = 3 * vnum.
 class ClothTopology {
  public:
   // Voronoi vertex mass of length vnum (no density applied).

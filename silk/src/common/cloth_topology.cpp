@@ -17,14 +17,13 @@
 
 namespace silk {
 
-/** Compute the Jacobian operator that maps stacked vertex positions of a
- *  triangle (9x1) to the 3x2 deformation gradient in a local 2D chart, and
- *  return it in vectorized form as a 6x9 matrix J such that vec(F) = J * x.
- *
- *  Preconditions: the triangle is non‑degenerate (non‑zero edge length and
- *  area). Basis differences between dx and dX are ignored intentionally since
- *  they cancel out in the quadratic form used later.
- */
+/// Compute the Jacobian operator that maps stacked vertex positions of a
+///  triangle (9x1) to the 3x2 deformation gradient in a local 2D chart, and
+///  return it in vectorized form as a 6x9 matrix J such that vec(F) = J * x.
+///
+///  Preconditions: the triangle is non‑degenerate (non‑zero edge length and
+///  area). Basis differences between dx and dX are ignored intentionally since
+///  they cancel out in the quadratic form used later.
 Eigen::Matrix<float, 6, 9> triangle_jacobian_operator(
     Eigen::Ref<const Eigen::Vector3f> v0, Eigen::Ref<const Eigen::Vector3f> v1,
     Eigen::Ref<const Eigen::Vector3f> v2) {

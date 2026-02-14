@@ -59,9 +59,7 @@ float clamp_div(float a, float b, float max_val) {
 
 constexpr float DEFAULT_CCD_DISTANCE_TOL = 1e-6;
 
-/**
- * @brief Map a distance tolerance to {t,u,v} tolerances for vertex–face CCD.
- */
+/// @brief Map a distance tolerance to {t,u,v} tolerances for vertex–face CCD.
 Eigen::Array3f compute_vertex_face_tolerances(
     const Eigen::Vector3f &v_t0, const Eigen::Vector3f &f0_t0,
     const Eigen::Vector3f &f1_t0, const Eigen::Vector3f &f2_t0,
@@ -89,9 +87,7 @@ Eigen::Array3f compute_vertex_face_tolerances(
       clamp_div(distance_tolerance, edge1_length, CCD_MAX_COORD_TOL));
 }
 
-/**
- * @brief Map a distance tolerance to {t,u,v} tolerances for edge–edge CCD.
- */
+/// @brief Map a distance tolerance to {t,u,v} tolerances for edge–edge CCD.
 Eigen::Array3f compute_edge_edge_tolerances(
     const Eigen::Vector3f &ea0_t0, const Eigen::Vector3f &ea1_t0,
     const Eigen::Vector3f &eb0_t0, const Eigen::Vector3f &eb1_t0,

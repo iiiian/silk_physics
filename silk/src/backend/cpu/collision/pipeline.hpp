@@ -11,9 +11,7 @@
 
 namespace silk::cpu {
 
-/**
- * @brief Collision detection and resolution pipeline.
- */
+/// @brief Collision detection and resolution pipeline.
 class CollisionPipeline {
  public:
   float ccd_tolerance = 1e-6f;
@@ -27,34 +25,30 @@ class CollisionPipeline {
   float collision_stiffness_max = 1e4f;
   float collision_stiffness_growth = 16.0f;
 
-  /**
-   * @brief Detect collisions by running broad- and narrow-phase CCD.
-   * @param registry ECS registry providing colliders to test and update.
-   * @param scene_bbox Axis-aligned bounds enclosing the scene for error
-   * metrics.
-   * @param dt Simulation timestep size in seconds.
-   * @return All collisions detected during the timestep.
-   */
+  /// @brief Detect collisions by running broad- and narrow-phase CCD.
+  /// @param registry ECS registry providing colliders to test and update.
+  /// @param scene_bbox Axis-aligned bounds enclosing the scene for error
+  /// metrics.
+  /// @param dt Simulation timestep size in seconds.
+  /// @return All collisions detected during the timestep.
   std::vector<Collision> find_collision(Registry& registry,
                                         const Bbox& scene_bbox, float dt);
 
-  /**
-   * @brief Partial CCD update.
-   *
-   * Currently this is not used anywhere.
-   *
-   * @param global_state_t0 Global state vector at start of timestep
-   * @param global_state_t1 Global state vector after position update
-   * @param collisions Collision list to update with new contact data
-   */
+  /// @brief Partial CCD update.
+  ///
+  /// Currently this is not used anywhere.
+  ///
+  /// @param global_state_t0 Global state vector at start of timestep
+  /// @param global_state_t1 Global state vector after position update
+  /// @param collisions Collision list to update with new contact data
   void update_collision(const Eigen::VectorXf& global_state_t0,
                         const Eigen::VectorXf& global_state_t1,
                         std::vector<Collision>& collisions) const;
 
  private:
-  /** @brief Numerical error tolerance for edge-edge CCD queries. */
+  /// @brief Numerical error tolerance for edge-edge CCD queries.
   Eigen::Array3f scene_ee_err_;
-  /** @brief Numerical error tolerance for vertex-face CCD queries. */
+  /// @brief Numerical error tolerance for vertex-face CCD queries.
   Eigen::Array3f scene_vf_err_;
 
   CollisionCache<MeshCollider> mesh_ccache_;

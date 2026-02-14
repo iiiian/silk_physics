@@ -1,10 +1,9 @@
-/** @file
- * RAII wrappers and utilities for interfacing between Eigen and CHOLMOD sparse
- * linear algebra library.
- *
- * Provides safe memory management for CHOLMOD objects and zero-copy view
- * conversions between Eigen and CHOLMOD data structures.
- */
+/// @file
+/// RAII wrappers and utilities for interfacing between Eigen and CHOLMOD sparse
+/// linear algebra library.
+///
+/// Provides safe memory management for CHOLMOD objects and zero-copy view
+/// conversions between Eigen and CHOLMOD data structures.
 
 #pragma once
 
@@ -18,11 +17,10 @@
 
 namespace silk::cpu::cholmod_raii {
 
-/** RAII wrapper for cholmod_common context object.
- *
- * Manages CHOLMOD library initialization and cleanup. Non-copyable and
- * non-movable to ensure single ownership of the CHOLMOD context.
- */
+/// RAII wrapper for cholmod_common context object.
+///
+/// Manages CHOLMOD library initialization and cleanup. Non-copyable and
+/// non-movable to ensure single ownership of the CHOLMOD context.
 class CholmodCommon {
  private:
   cholmod_common common_;
@@ -34,45 +32,43 @@ class CholmodCommon {
   ~CholmodCommon();
   CholmodCommon& operator=(const CholmodCommon&) = delete;
   CholmodCommon& operator=(CholmodCommon&&) = delete;
-  /** Implicit conversion to cholmod_common* for CHOLMOD function calls. */
+  /// Implicit conversion to cholmod_common* for CHOLMOD function calls.
   operator cholmod_common*();
-  /** Explicit access to underlying cholmod_common pointer. */
+  /// Explicit access to underlying cholmod_common pointer.
   cholmod_common* raw();
 };
 
-/** Global CHOLMOD context - all CHOLMOD function calls in this codebase should
- * use this. */
+/// Global CHOLMOD context - all CHOLMOD function calls in this codebase should
+/// use this.
 extern CholmodCommon common;
 
-/** Function pointer type for CHOLMOD free functions (e.g.,
- * cholmod_free_sparse). */
+/// Function pointer type for CHOLMOD free functions (e.g.,
+/// cholmod_free_sparse).
 template <typename T>
 using CholmodFreeFunc = int (*)(T**, cholmod_common*);
-/** Function pointer type for CHOLMOD copy functions (e.g.,
- * cholmod_copy_sparse). */
+/// Function pointer type for CHOLMOD copy functions (e.g.,
+/// cholmod_copy_sparse).
 template <typename T>
 using CholmodCopyFunc = T* (*)(T*, cholmod_common*);
 
-/** Generic RAII wrapper for CHOLMOD objects with automatic memory management.
- *
- * Provides safe ownership, copying, and moving of CHOLMOD data structures.
- *
- * @tparam T CHOLMOD object type (e.g., cholmod_sparse, cholmod_dense)
- * @tparam cholmod_copy Function to deep-copy the CHOLMOD object
- * @tparam cholmod_free Function to free the CHOLMOD object
- */
+/// Generic RAII wrapper for CHOLMOD objects with automatic memory management.
+///
+/// Provides safe ownership, copying, and moving of CHOLMOD data structures.
+///
+/// @tparam T CHOLMOD object type (e.g., cholmod_sparse, cholmod_dense)
+/// @tparam cholmod_copy Function to deep-copy the CHOLMOD object
+/// @tparam cholmod_free Function to free the CHOLMOD object
 template <typename T, CholmodCopyFunc<T> cholmod_copy,
           CholmodFreeFunc<T> cholmod_free>
 class RAIIWrapper {
  private:
-  /** Pointer to the managed CHOLMOD object (e.g., cholmod_sparse*). */
+  /// Pointer to the managed CHOLMOD object (e.g., cholmod_sparse*).
   T* handle_ = nullptr;
 
  public:
   RAIIWrapper() = default;
-  /** Constructor takes ownership of existing CHOLMOD object.
-   * @param handle CHOLMOD object to manage (takes ownership)
-   */
+  /// Constructor takes ownership of existing CHOLMOD object.
+  /// @param handle CHOLMOD object to manage (takes ownership)
   RAIIWrapper(T* handle) : handle_(handle) {}
   RAIIWrapper(const RAIIWrapper& other) {
     if (other.handle_) {
@@ -105,41 +101,40 @@ class RAIIWrapper {
     other.handle_ = nullptr;
     return *this;
   }
-  /** Explicitly free the managed CHOLMOD object. */
+  /// Explicitly free the managed CHOLMOD object.
   void clear() {
     if (!handle_) {
       return;
     }
     cholmod_free(&handle_, common);
   }
-  /** Implicit conversion to raw CHOLMOD pointer for function calls. */
+  /// Implicit conversion to raw CHOLMOD pointer for function calls.
   operator T*() const { return handle_; }
-  /** Explicit access to raw CHOLMOD pointer. */
+  /// Explicit access to raw CHOLMOD pointer.
   T* raw() const { return handle_; }
-  /** Check if wrapper is empty (managing no object). */
+  /// Check if wrapper is empty (managing no object).
   bool is_empty() const { return (handle_ == nullptr); }
 };
 
-/** RAII wrapper for cholmod_dense objects (dense matrices/vectors). */
+/// RAII wrapper for cholmod_dense objects (dense matrices/vectors).
 using CholmodDense =
     RAIIWrapper<cholmod_dense, &cholmod_copy_dense, &cholmod_free_dense>;
-/** RAII wrapper for cholmod_sparse objects (sparse matrices). */
+/// RAII wrapper for cholmod_sparse objects (sparse matrices).
 using CholmodSparse =
     RAIIWrapper<cholmod_sparse, &cholmod_copy_sparse, &cholmod_free_sparse>;
-/** RAII wrapper for cholmod_factor objects (Cholesky factorizations). */
+/// RAII wrapper for cholmod_factor objects (Cholesky factorizations).
 using CholmodFactor =
     RAIIWrapper<cholmod_factor, &cholmod_copy_factor, &cholmod_free_factor>;
 
-/** Create a zero-copy CHOLMOD view of an Eigen sparse matrix.
- *
- * The returned cholmod_sparse shares memory with the input matrix - no data
- * is copied. The input matrix must remain valid while the view is used.
- *
- * @tparam Scalar Matrix element type (must be float or double)
- * @param m Input Eigen sparse matrix (will be compressed if needed)
- * @param sym_stat Matrix symmetry property for CHOLMOD optimization
- * @return cholmod_sparse view sharing memory with input matrix
- */
+/// Create a zero-copy CHOLMOD view of an Eigen sparse matrix.
+///
+/// The returned cholmod_sparse shares memory with the input matrix - no data
+/// is copied. The input matrix must remain valid while the view is used.
+///
+/// @tparam Scalar Matrix element type (must be float or double)
+/// @param m Input Eigen sparse matrix (will be compressed if needed)
+/// @param sym_stat Matrix symmetry property for CHOLMOD optimization
+/// @return cholmod_sparse view sharing memory with input matrix
 template <typename Scalar>
 cholmod_sparse make_cholmod_sparse_view(
     Eigen::SparseMatrix<Scalar, Eigen::ColMajor, int>& m,
@@ -173,15 +168,14 @@ cholmod_sparse make_cholmod_sparse_view(
   return s;
 }
 
-/** Create a zero-copy CHOLMOD view of an Eigen dense matrix.
- *
- * The returned cholmod_dense shares memory with the input matrix - no data
- * is copied. The input matrix must remain valid while the view is used.
- *
- * @tparam Derived Eigen dense matrix type (must be column-major)
- * @param M Input Eigen dense matrix
- * @return cholmod_dense view sharing memory with input matrix
- */
+/// Create a zero-copy CHOLMOD view of an Eigen dense matrix.
+///
+/// The returned cholmod_dense shares memory with the input matrix - no data
+/// is copied. The input matrix must remain valid while the view is used.
+///
+/// @tparam Derived Eigen dense matrix type (must be column-major)
+/// @param M Input Eigen dense matrix
+/// @return cholmod_dense view sharing memory with input matrix
 template <typename Derived>
 cholmod_dense make_cholmod_dense_view(Eigen::DenseBase<Derived>& M) {
   static_assert(!Derived::IsRowMajor, "cholmod expect col major matrices");
@@ -206,14 +200,13 @@ cholmod_dense make_cholmod_dense_view(Eigen::DenseBase<Derived>& M) {
   return d;
 }
 
-/** Create an Eigen vector view of a CHOLMOD dense vector.
- *
- * Creates a zero-copy Eigen::Map that allows accessing CHOLMOD dense data
- * as an Eigen vector. Currently only supports single-precision float vectors.
- *
- * @param v CHOLMOD dense vector (must be single-precision, real, single-column)
- * @return Eigen::Map view of the CHOLMOD vector data
- */
+/// Create an Eigen vector view of a CHOLMOD dense vector.
+///
+/// Creates a zero-copy Eigen::Map that allows accessing CHOLMOD dense data
+/// as an Eigen vector. Currently only supports single-precision float vectors.
+///
+/// @param v CHOLMOD dense vector (must be single-precision, real, single-column)
+/// @return Eigen::Map view of the CHOLMOD vector data
 Eigen::Map<Eigen::VectorXf> make_eigen_dense_vector_view(cholmod_dense* v);
 
 }  // namespace silk::cpu::cholmod_raii

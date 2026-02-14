@@ -12,12 +12,10 @@
 
 namespace silk::cuda {
 
-/**
- * Dynamic, time step or config dependent quantities used by the cloth solver.
- *
- * Notation:
- * state_num = 3 * vertex num.
- */
+/// Dynamic, time step or config dependent quantities used by the cloth solver.
+///
+/// Notation:
+/// state_num = 3 * vertex num.
 class ClothSolverContext {
  public:
   float dt;

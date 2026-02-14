@@ -697,11 +697,9 @@ std::optional<std::string> load_text(const std::string& path) {
 //**                    JSON PARSER [std::optional]                   ** /
 //***********************************************************************/
 
-/**
- * @brief Parsing a JSON file into a struct.
- * @param path, default_path, check_readable Storage container to inspect.
- * @return ParseResult struct.
- */
+/// @brief Parsing a JSON file into a struct.
+/// @param path, default_path, check_readable Storage container to inspect.
+/// @return ParseResult struct.
 std::optional<SimConfig> parse_config(const std::string& path) {
   // [M2] .json?
   if (!is_json_path(path)) {

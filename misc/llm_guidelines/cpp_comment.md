@@ -9,10 +9,8 @@ Core principles:
 - Adjust or merge with existing comments instead of duplicating.
 
 Approved comment forms:
-- **Public interfaces (headers, exported APIs):** Use Doxygen `/** ... */` blocks that include `@brief`, `@param`, and `@return`. Summaries are one sentence, imperative mood.
-- **Non-trivial helpers:** Add short `/** ... */` summaries that explain intent or algorithms.
+- **Public interfaces (headers, exported APIs):** Use Doxygen `///` blocks that include `@brief`, `@param`, and `@return`. Summaries are one sentence, imperative mood.
 - **Inline explanations:** Use `//` comments at the narrowest scope to clarify tricky branches, invariants, or state transitions.
-- **Module overviews (optional):** Only add a top-of-file comment when it materially improves understanding; limit to a compact paragraph of purpose and key invariants.
 
 Execution checklist before finishing:
 - Did you capture intent, invariants, inputs/outputs, and side effects that are not obvious from the signature?

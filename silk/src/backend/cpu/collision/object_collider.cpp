@@ -15,19 +15,17 @@
 
 namespace silk::cpu {
 
-/**
- * Creates all mesh colliders (vertices, edges, faces) for collision detection.
- *
- * @param mesh Triangle mesh to convert into collision primitives
- * @param bbox_padding Amount to expand bounding boxes for collision tolerance
- * @param get_inv_mass Function returning inverse mass for each vertex index
- * @return Vector of mesh colliders ready for spatial partitioning
- *
- * Creates three types of colliders for comprehensive collision detection:
- * - Point colliders for vertex-vertex and vertex-face interactions
- * - Edge colliders for edge-edge interactions
- * - Triangle colliders for continuous collision detection against faces
- */
+/// Creates all mesh colliders (vertices, edges, faces) for collision detection.
+///
+/// @param mesh Triangle mesh to convert into collision primitives
+/// @param bbox_padding Amount to expand bounding boxes for collision tolerance
+/// @param get_inv_mass Function returning inverse mass for each vertex index
+/// @return Vector of mesh colliders ready for spatial partitioning
+///
+/// Creates three types of colliders for comprehensive collision detection:
+/// - Point colliders for vertex-vertex and vertex-face interactions
+/// - Edge colliders for edge-edge interactions
+/// - Triangle colliders for continuous collision detection against faces
 static std::vector<MeshCollider> make_mesh_colliders(
     const TriMesh& mesh, float bbox_padding,
     std::function<float(int)> get_inv_mass) {

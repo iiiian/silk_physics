@@ -6,17 +6,15 @@
 #include <Eigen/QR>
 #include <iostream>
 
-/**
- * @brief Construct matrix U by combining r eigenvectors of H (smallest |lambda| of H)
- * 
- * @param H Symmetric positive definite sparse matrix.
- * @param r Number of eigenvectors to compute.
- * @param U_out Output matrix containing orthogonal basis (n x r).
- * @param max_subspace Optional maximum subspace dimension.
- * @param max_iter Maximum number of iterations for eigen solver.
- * @param tol Convergence tolerance.
- * @return true if eigen decomposition succeeded, false otherwise.
- */
+/// @brief Construct matrix U by combining r eigenvectors of H (smallest |lambda| of H)
+///
+/// @param H Symmetric positive definite sparse matrix.
+/// @param r Number of eigenvectors to compute.
+/// @param U_out Output matrix containing orthogonal basis (n x r).
+/// @param max_subspace Optional maximum subspace dimension.
+/// @param max_iter Maximum number of iterations for eigen solver.
+/// @param tol Convergence tolerance.
+/// @return true if eigen decomposition succeeded, false otherwise.
 
 // to use:
 //  Eigen::MatrixXf U;

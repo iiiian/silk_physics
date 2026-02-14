@@ -17,13 +17,11 @@
 
 namespace silk::cuda {
 
-/**
- * @brief Filter function for object-level collision detection.
- *
- * @param a First object collider
- * @param b Second object collider
- * @return true if collision should be tested, false to skip
- */
+/// @brief Filter function for object-level collision detection.
+///
+/// @param a First object collider
+/// @param b Second object collider
+/// @return true if collision should be tested, false to skip
 bool object_collision_filter(const ObjectCollider& a, const ObjectCollider& b) {
   // Collision rules:
   // - Group = -1 means collision is disabled completely
@@ -33,13 +31,11 @@ bool object_collision_filter(const ObjectCollider& a, const ObjectCollider& b) {
           !(a.state_offset == -1 && b.state_offset == -1));
 };
 
-/**
- * @brief Filter function for mesh-level inter-object collision.
- *
- * @param a First mesh collider
- * @param b Second mesh collider
- * @return True if collision should be tested, false to skip
- */
+/// @brief Filter function for mesh-level inter-object collision.
+///
+/// @param a First mesh collider
+/// @param b Second mesh collider
+/// @return True if collision should be tested, false to skip
 bool mesh_inter_collision_filter(const MeshCollider& a, const MeshCollider& b) {
   // Enforces three filtering rules:
   // 1. Only allows point-triangle and edge-edge collision types
@@ -67,13 +63,11 @@ bool mesh_inter_collision_filter(const MeshCollider& a, const MeshCollider& b) {
   return false;
 };
 
-/**
- * @brief Filter function for mesh self-collision detection.
- *
- * @param a First mesh primitive
- * @param b Second mesh primitive
- * @return true if collision should be tested
- */
+/// @brief Filter function for mesh self-collision detection.
+///
+/// @param a First mesh primitive
+/// @param b Second mesh primitive
+/// @return true if collision should be tested
 bool mesh_self_collision_filter(const MeshCollider& a, const MeshCollider& b) {
   // Enforces three filtering rules:
   // 1. Only allows point-triangle and edge-edge collision types

@@ -128,14 +128,13 @@ void batch_compute_cloth_invariant_rhs(Registry& registry,
   }
 }
 
-/** Outer loop: Accumulate global RHS terms and, if needed, update the
- *  factorization with diagonal barrier weights using CHOLMOD up/down.
- *
- *  Barrier handling: We build a diagonal C from `barrier_lhs` (skipping zeros)
- *  and then apply a CHOLMOD up/down update to the Cholesky factorization in
- *  the permuted order expected by CHOLMOD (using `L.Perm`). This realizes
- *  H' = H + C.
- */
+/// Outer loop: Accumulate global RHS terms and, if needed, update the
+///  factorization with diagonal barrier weights using CHOLMOD up/down.
+///
+///  Barrier handling: We build a diagonal C from `barrier_lhs` (skipping zeros)
+///  and then apply a CHOLMOD up/down update to the Cholesky factorization in
+///  the permuted order expected by CHOLMOD (using `L.Perm`). This realizes
+///  H' = H + C.
 bool compute_cloth_outer_loop(
     Eigen::Ref<const Eigen::VectorXf> state,
     Eigen::Ref<const Eigen::VectorXf> state_velocity,
@@ -215,9 +214,8 @@ bool batch_compute_cloth_outer_loop(
   return true;
 }
 
-/** Inner loop: Project in-plane elastic constraints followed by a global linear
- * solve using the cached factorization.
- */
+/// Inner loop: Project in-plane elastic constraints followed by a global linear
+/// solve using the cached factorization.
 bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
                               const ClothTopology& topology,
                               const ClothSolverContext& solver_context,

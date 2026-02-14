@@ -8,18 +8,16 @@
 
 namespace silk {
 
-/**
- * @brief Extracts triplets from a sparse matrix with offset and scaling
- * transformations.
- *
- * @tparam Scalar The scalar type of the matrix elements
- * @param m The source sparse matrix (must be square)
- * @param row_offset Offset added to all row indices
- * @param col_offset Offset added to all column indices
- * @param scaling Factor multiplied with all matrix values
- * @param triplets Output vector where triplets are appended
- * @param symmetry Symmetry filter applied to source matrix indices
- */
+/// @brief Extracts triplets from a sparse matrix with offset and scaling
+/// transformations.
+///
+/// @tparam Scalar The scalar type of the matrix elements
+/// @param m The source sparse matrix (must be square)
+/// @param row_offset Offset added to all row indices
+/// @param col_offset Offset added to all column indices
+/// @param scaling Factor multiplied with all matrix values
+/// @param triplets Output vector where triplets are appended
+/// @param symmetry Symmetry filter applied to source matrix indices
 template <typename Scalar>
 void append_triplets_from_sparse(const Eigen::SparseMatrix<Scalar>& m,
                                  int row_offset, int col_offset, Scalar scaling,
@@ -47,17 +45,15 @@ void append_triplets_from_sparse(const Eigen::SparseMatrix<Scalar>& m,
   }
 }
 
-/**
- * @brief Extracts triplets from a sparse matrix with 3x3 block expansion.
- *
- * @tparam Scalar The scalar type of the matrix elements
- * @param m The source sparse matrix
- * @param row_offset Base offset for row indices (before 3x multiplication)
- * @param col_offset Base offset for column indices (before 3x multiplication)
- * @param scaling Factor multiplied with all matrix values
- * @param triplets Output vector where expanded triplets are appended
- * @param symmetry Symmetry filter applied to source matrix indices
- */
+/// @brief Extracts triplets from a sparse matrix with 3x3 block expansion.
+///
+/// @tparam Scalar The scalar type of the matrix elements
+/// @param m The source sparse matrix
+/// @param row_offset Base offset for row indices (before 3x multiplication)
+/// @param col_offset Base offset for column indices (before 3x multiplication)
+/// @param scaling Factor multiplied with all matrix values
+/// @param triplets Output vector where expanded triplets are appended
+/// @param symmetry Symmetry filter applied to source matrix indices
 template <typename Scalar>
 void append_triplets_from_vectorized_sparse(
     const Eigen::SparseMatrix<Scalar>& m, int row_offset, int col_offset,

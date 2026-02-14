@@ -135,26 +135,15 @@ class Foo{
 
 ## Document and Comments
 
-Start public headers and major interfaces with `/** ... */` blocks that include `@brief`, `@param`, and `@return`.
+Start public headers and major interfaces with  `///` blocks that include `@brief`, `@param`, and `@return`.
 
 ```cpp
-/**
- * @brief Count pieces of fruit in the basket.
- * @param basket Storage container to inspect.
- * @return Number of fruit items currently stored.
- */
+/// @brief Count pieces of fruit in the basket.
+/// @param basket Storage container to inspect.
+/// @return Number of fruit items currently stored.
 int count_fruit(const Basket& basket);
 ```
 
-Use short `/** ... */` summaries for non-trivial helpers and add inline `//` comments only when intent is unclear.
-
-```cpp
-/** Compute the freshness score for a fruit. */
-int compute_freshness(const Fruit& fruit) {
-  int age = fruit.days_on_shelf;
-  // Older fruit loses one point per day.
-  return std::max(0, 100 - age);
-}
-```
+For code comments, use `//`.
 
 Tips: You can feed misc/llm_guidelines/cpp_comment.md to generate the initial comment/doc. Make sure to review it though.

@@ -10,12 +10,10 @@
 
 namespace silk::cpu {
 
-/**
- * Dynamic, time step or config dependent quantities used by the cloth solver.
- *
- * Notation:
- * state_num = 3 * vertex num.
- */
+/// Dynamic, time step or config dependent quantities used by the cloth solver.
+///
+/// Notation:
+/// state_num = 3 * vertex num.
 class ClothSolverContext {
  public:
   // Time step in seconds.
@@ -41,11 +39,10 @@ class ClothSolverContext {
   Eigen::VectorXf C0;
 
  public:
-  /** Build dynamic, time‑step‑dependent or config-dependent data for a
-   * cloth.
-   *
-   *  Returns std::nullopt if analysis/factorization fails.
-   */
+  /// Build dynamic, time‑step‑dependent or config-dependent data for a
+  /// cloth.
+  ///
+  ///  Returns std::nullopt if analysis/factorization fails.
   static std::optional<ClothSolverContext> make_cloth_solver_context(
       const ClothConfig& config, const ClothTopology& topology, const Pin& pin,
       float dt);
