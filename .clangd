@@ -1,3 +1,5 @@
 CompileFlags:
   Add:
     - "-I/usr/local/cuda-13/include"
+Documentation:
+  CommentFormat: Doxygen
