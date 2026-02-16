@@ -15,21 +15,21 @@ void ui_console_clear();
 
 template <typename... T>
 void ui_info(std::string_view format_string, T... args) {
-  std::string s = fmt::format(format_string, args...);
+  std::string s = fmt::format(fmt::runtime(format_string), args...);
   spdlog::info("{}", s);
   ui_console_push(std::move(s));
 }
 
 template <typename... T>
 void ui_warning(std::string_view format_string, T... args) {
-  std::string s = fmt::format(format_string, args...);
+  std::string s = fmt::format(fmt::runtime(format_string), args...);
   spdlog::warn("{}", s);
   ui_console_push(std::move(s));
 }
 
 template <typename... T>
 void ui_error(std::string_view format_string, T... args) {
-  std::string s = fmt::format(format_string, args...);
+  std::string s = fmt::format(fmt::runtime(format_string), args...);
   spdlog::error("{}", s);
   ui_console_push(std::move(s));
 }
