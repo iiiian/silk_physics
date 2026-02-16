@@ -2,7 +2,8 @@
 
 #include <Eigen/Core>
 
-#include "backend/cuda/collision/bbox.hpp"
+#include "backend/cuda/collision/bbox.cuh"
+#include "backend/cuda/simple_linalg.cuh"
 
 namespace silk::cuda {
 
@@ -11,13 +12,14 @@ enum class MeshColliderType { Point, Edge, Triangle };
 struct MeshCollider {
   MeshColliderType type;
   // vertex index
-  Eigen::Vector3i index;
+  Vec3 index;
   // vertex inverse mass
-  Eigen::Vector3f inv_mass;
+  Vec3 inv_mass;
   // position of vertex at t0, each col is a vertex
   Eigen::Matrix3f position_t0;
   // position of vertex at t1, each col is a vertex
   Eigen::Matrix3f position_t1;
+
   Bbox bbox;
 };
 

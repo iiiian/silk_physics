@@ -53,4 +53,6 @@ inline void check_cusparse(cusparseStatus_t result, char const* const func,
   }
 }
 
+#define __both__ __host__ __device__
+
 }  // namespace silk::cuda

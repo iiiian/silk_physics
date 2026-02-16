@@ -25,11 +25,7 @@ set(SILK_SOURCES
 )
 
 set(SILK_CUDA_SOURCES
-    src/backend/cuda/collision/bbox.cpp
-    src/backend/cuda/collision/ccd.cpp
-    src/backend/cuda/collision/interval.cpp
-    src/backend/cuda/collision/interval_root_finder.cpp
-    src/backend/cuda/collision/narrowphase.cpp
+    src/backend/cuda/collision/bbox.cu
     src/backend/cuda/collision/object_collider.cpp
     src/backend/cuda/collision/pipeline.cpp
     src/backend/cuda/csr_matrix.cpp
