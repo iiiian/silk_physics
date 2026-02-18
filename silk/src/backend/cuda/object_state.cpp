@@ -1,4 +1,4 @@
-#include "backend/cuda/object_state.hpp"
+#include "backend/cuda/object_state.cuh"
 
 #include <cuda_runtime_api.h>
 
@@ -6,10 +6,10 @@
 #include <utility>
 #include <vector>
 
-#include "backend/cuda/collision/bbox.hpp"
-#include "backend/cuda/collision/broadphase.hpp"
-#include "backend/cuda/copy_vector_like.hpp"
-#include "backend/cuda/cuda_utils.hpp"
+#include "backend/cuda/collision/bbox.cuh"
+#include "backend/cuda/collision/broadphase.cuh"
+#include "backend/cuda/copy_vector_like.cuh"
+#include "backend/cuda/cuda_utils.cuh"
 #include "common/mesh.hpp"
 
 namespace silk::cuda {
@@ -23,19 +23,22 @@ struct VertexCollider {
 
 }  // namespace
 
-ObjectState::ObjectState(int state_offset, const Eigen::VectorXf& curr_state,
-                         const Eigen::VectorXf& state_velocity) {
+ObjectState::ObjectState(int state_offset, ctd::span<const float> curr_state,
+                         ctd::span<const float> state_velocity, CudaRuntime rt)
+    : state_offset(state_offset),
+      state_num(static_cast<int>(curr_state.size())),
+      curr_state(rt.stream, rt.mem_resource, curr_state),
+      state_velocity(rt.stream, rt.mem_resource, state_velocity),
+      perm(rt.stream, rt.mem_resource),
+      inv_perm(rt.stream, rt.mem_resource) {
   assert(curr_state.size() == state_velocity.size());
   assert(state_offset >= 0);
-
-  this->state_num = static_cast<int>(curr_state.size());
-  this->state_offset = state_offset;
-  d_curr_state = host_eigen_to_device(curr_state);
-  d_state_velocity = host_eigen_to_device(state_velocity);
 }
 
 ObjectState::ObjectState(int state_offset, const ::silk::TriMesh& mesh) {
   assert(state_offset >= 0);
+
+  // TODO: impl after broadphase fin
 
   const auto& V = mesh.V;
   int vert_num = static_cast<int>(V.rows());
@@ -91,30 +94,6 @@ ObjectState::ObjectState(int state_offset, const ::silk::TriMesh& mesh) {
   this->state_offset = state_offset;
   d_curr_state = host_eigen_to_device(curr_state);
   d_state_velocity = host_eigen_to_device(state_velocity);
-}
-
-ObjectState::ObjectState(ObjectState&& other) noexcept { swap(other); }
-
-ObjectState& ObjectState::operator=(ObjectState&& other) noexcept {
-  swap(other);
-  return *this;
-}
-
-ObjectState::~ObjectState() {
-  CHECK_CUDA(cudaFree(d_curr_state));
-  CHECK_CUDA(cudaFree(d_state_velocity));
-}
-
-void ObjectState::swap(ObjectState& other) noexcept {
-  if (this == &other) {
-    return;
-  }
-  std::swap(state_offset, other.state_offset);
-  std::swap(state_num, other.state_num);
-  std::swap(d_curr_state, other.d_curr_state);
-  std::swap(d_state_velocity, other.d_state_velocity);
-  std::swap(perm, other.perm);
-  std::swap(inv_perm, other.inv_perm);
 }
 
 }  // namespace silk::cuda

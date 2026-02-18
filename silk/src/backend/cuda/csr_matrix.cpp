@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "backend/cuda/copy_vector_like.hpp"
-#include "backend/cuda/cuda_utils.hpp"
+#include "backend/cuda/cuda_utils.cuh"
 
 namespace silk::cuda {
 

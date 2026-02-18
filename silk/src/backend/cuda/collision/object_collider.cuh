@@ -2,10 +2,10 @@
 
 #include <Eigen/Core>
 
-#include "backend/cuda/collision/bbox.hpp"
-#include "backend/cuda/collision/broadphase.hpp"
-#include "backend/cuda/collision/mesh_collider.hpp"
-#include "backend/cuda/object_state.hpp"
+#include "backend/cuda/collision/bbox.cuh"
+#include "backend/cuda/collision/broadphase.cuh"
+#include "backend/cuda/collision/mesh_collider.cuh"
+#include "backend/cuda/object_state.cuh"
 #include "backend/cuda/obstacle_position.hpp"
 #include "common/handle.hpp"
 #include "common/mesh.hpp"
@@ -31,7 +31,9 @@ class ObjectCollider {
   // Surface friction coefficient for contact resolution.
   float friction;
   // Broadphase collision culling data struture
-  KDTree<MeshCollider> mesh_collider_tree;
+
+  // TODO: impl
+  // KDTree<MeshCollider> mesh_collider_tree;
 
  public:
   /// @brief Build a collider for a simulated (dynamic) object.
@@ -40,7 +42,8 @@ class ObjectCollider {
   /// @param config Collision parameters that control filtering and materials.
   /// @param mesh Geometry source; positions are copied into collider buffers.
   /// @param pin Pin data identifying vertices that should not move.
-  /// @param mass Per-degree-of-freedom mass vector used to compute inverse mass.
+  /// @param mass Per-degree-of-freedom mass vector used to compute inverse
+  /// mass.
   /// @param state_offset Offset into the solver state array for this object.
   ObjectCollider(Handle entity_handle, const CollisionConfig& config,
                  const TriMesh& mesh, const Pin& pin,
@@ -56,7 +59,8 @@ class ObjectCollider {
 
   /// @brief Sync collider geometry with a dynamic object's current state.
   ///
-  /// @param config Runtime collision controls (group toggles, restitution, etc).
+  /// @param config Runtime collision controls (group toggles, restitution,
+  /// etc).
   /// @param object_state Layout information for slicing into the global state.
   /// @param global_curr_state Stacked xyz positions at the end of the step.
   /// @param global_prev_state Stacked xyz positions at the start of the step.
@@ -66,7 +70,8 @@ class ObjectCollider {
 
   /// @brief Sync collider geometry with a kinematic obstacle.
   ///
-  /// @param config Runtime collision controls (group toggles, restitution, etc).
+  /// @param config Runtime collision controls (group toggles, restitution,
+  /// etc).
   /// @param obstacle_position Buffered obstacle poses and static state flags.
   void update(const CollisionConfig& config,
               const ObstaclePosition& obstacle_position);

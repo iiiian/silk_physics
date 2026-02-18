@@ -1,6 +1,6 @@
 #pragma once
 
-#include "backend/cuda/cuda_utils.hpp"
+#include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/simple_linalg.cuh"
 
 namespace silk::cuda {
@@ -9,9 +9,9 @@ namespace silk::cuda {
 class Bbox {
  public:
   /// Minimum corner of the bounding box.
-  Vec3 min;
+  Vec3f min;
   /// Maximum corner of the bounding box.
-  Vec3 max;
+  Vec3f max;
 
   /// @brief Create a new bounding box containing device input boxes.
   /// @param a First bounding box
@@ -39,7 +39,7 @@ class Bbox {
 
   /// Calculate the geometric center of the bounding box.
   /// @return Center point as (min + max) / 2
-  __both__ Vec3 center() const;
+  __both__ Vec3f center() const;
 
   /// Check if this bounding box completely contains another.
   /// @param other Bounding box to test for containment

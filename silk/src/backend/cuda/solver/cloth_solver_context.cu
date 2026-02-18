@@ -3,7 +3,7 @@
 #include <Eigen/Core>
 
 #include "backend/cuda/copy_vector_like.hpp"
-#include "backend/cuda/cuda_utils.hpp"
+#include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/solver/compute_subspace_u.hpp"
 #include "backend/cuda/sparse_matrix_interop.hpp"
 #include "common/cloth_topology.hpp"

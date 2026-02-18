@@ -2,7 +2,7 @@
 
 #include <cassert>
 
-#include "backend/cuda/cuda_utils.hpp"
+#include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/solver/cloth_solver_kernel.hpp"
 #include "backend/cuda/solver/svd.cuh"
 

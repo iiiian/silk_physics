@@ -5,7 +5,7 @@
 #include <iostream>
 
 #include "backend/cuda/csr_matrix.hpp"
-#include "backend/cuda/cuda_utils.hpp"
+#include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/device_vector.hpp"
 #include "backend/cuda/solver/a_jacobi_solver.hpp"
 
@@ -138,7 +138,7 @@ float compute_Linf_dist(int n, const float* d_a, const float* d_b,
 bool a_jacobi(int n, int max_iter, float abs_tol, float rel_tol,
               const CSRMatrix& d_R, const float* d_D, const float* d_rhs,
               float* d_x) {
-  DVector<float> d_x_buffer(static_cast<size_t>(n));
+  DynArray<float> d_x_buffer(static_cast<size_t>(n));
   float* d_x_prev = d_x;
   float* d_x_next = d_x_buffer;
   float Linf_dist0;

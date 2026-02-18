@@ -7,7 +7,7 @@
 #include <cstring>
 
 #include "backend/cuda/collision/object_collider.hpp"
-#include "backend/cuda/cuda_utils.hpp"
+#include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/ecs.hpp"
 #include "backend/cuda/object_state.hpp"
 #include "backend/cuda/obstacle_position.hpp"

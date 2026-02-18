@@ -92,7 +92,7 @@ target_link_libraries(
 )
 
 if(SILK_ENABLE_CUDA)
-    target_link_libraries(silk PRIVATE CUDA::cudart CUDA::cusparse Spectra::Spectra)
+  target_link_libraries(silk PRIVATE CUDA::cudart CUDA::cusparse Spectra::Spectra CCCL::CCCL)
     target_sources(silk PRIVATE ${SILK_CUDA_SOURCES})
 endif()
 

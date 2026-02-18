@@ -4,10 +4,21 @@
 #include <cusparse.h>
 
 #include <cassert>
+#include <cuda/memory_resource>
+#include <cuda/stream>
 #include <stdexcept>
 #include <string>
 
+// libcu++ cuda:: and cuda::std:: namespace conflicts with silk::cuda,
+// making it annoying to use. To remedy this, rename them to cu:: and ctd::.
+namespace cuda {}
+namespace cu = ::cuda;
+namespace cuda::std {}
+namespace ctd = ::cuda::std;
+
 namespace silk::cuda {
+
+#define __both__ __host__ __device__
 
 #define CHECK_CUDA(val) check_cuda((val), #val, __FILE__, __LINE__)
 inline void check_cuda(cudaError_t result, char const* const func,
@@ -53,6 +64,9 @@ inline void check_cusparse(cusparseStatus_t result, char const* const func,
   }
 }
 
-#define __both__ __host__ __device__
+struct CudaRuntime {
+  cu::stream_ref stream;
+  cu::mr::resource_ref<cu::mr::device_accessible> mem_resource;
+};
 
 }  // namespace silk::cuda

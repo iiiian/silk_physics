@@ -5,7 +5,7 @@
 #include <cassert>
 
 #include "backend/cuda/collision/object_collider.hpp"
-#include "backend/cuda/cuda_utils.hpp"
+#include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/device_vector.hpp"
 #include "backend/cuda/object_state.hpp"
 #include "backend/cuda/solver/a_jacobi_solver.hpp"
@@ -270,7 +270,7 @@ bool compute_cloth_inner_loop(const ClothConfig& config,
                               float* d_state) {
   auto& s = solver_context;
 
-  DVector<float> d_inner_rhs(s.state_num);
+  DynArray<float> d_inner_rhs(s.state_num);
   CHECK_CUDA(cudaMemcpy(d_inner_rhs, d_outer_rhs, s.state_num * sizeof(float),
                         cudaMemcpyDeviceToDevice));
   compute_elastic_rhs(s.face_num, config.elastic_stiffness, s.d_F, d_state,

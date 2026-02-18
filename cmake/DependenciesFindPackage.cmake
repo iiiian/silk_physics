@@ -2,6 +2,7 @@ include_guard(GLOBAL)
 
 if (SILK_ENABLE_CUDA)
   find_package(CUDAToolkit REQUIRED)
+  find_package(CCCL 3.2 REQUIRED)
 endif()
 
 find_package(eigen3 REQUIRED)

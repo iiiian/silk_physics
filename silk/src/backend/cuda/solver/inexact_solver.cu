@@ -3,7 +3,7 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
-#include "backend/cuda/cuda_utils.hpp"
+#include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/device_vector.hpp"
 #include "backend/cuda/solver/cloth_solver_context.hpp"
 #include "backend/cuda/solver/inexact_solver_kernel.hpp"
@@ -15,8 +15,8 @@ void inexact_solve(const ClothSolverContext& solver_context, const float* d_rhs,
                    float* d_x) {
   auto& c = solver_context;
 
-  DVector<float> d_srhs{32};
-  DVector<float> d_UdHU{32 * 32};
+  DynArray<float> d_srhs{32};
+  DynArray<float> d_UdHU{32 * 32};
   CHECK_CUDA(cudaMemset(d_srhs, 0, 32 * sizeof(float)));
   CHECK_CUDA(cudaMemset(d_UdHU, 0, 32 * 32 * sizeof(float)));
   CHECK_CUDA(cudaDeviceSynchronize());

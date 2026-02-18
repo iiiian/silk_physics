@@ -9,7 +9,7 @@
 #include "backend/cuda/collision/bbox.hpp"
 #include "backend/cuda/collision/collision.hpp"
 #include "backend/cuda/collision/object_collider.hpp"
-#include "backend/cuda/cuda_utils.hpp"
+#include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/device_vector.hpp"
 #include "backend/cuda/ecs.hpp"
 #include "backend/cuda/object_state.hpp"
@@ -54,17 +54,17 @@ bool SolverPipeline::step(Registry& registry) {
 
   float* d_curr_state = global_state.d_curr_state;
   float* d_state_velocity = global_state.d_state_velocity;
-  DVector<float> d_next_state{static_cast<size_t>(state_num)};
-  DVector<float> d_buffer{static_cast<size_t>(state_num)};
+  DynArray<float> d_next_state{static_cast<size_t>(state_num)};
+  DynArray<float> d_buffer{static_cast<size_t>(state_num)};
   Eigen::VectorXf h_curr_state = Eigen::VectorXf::Zero(state_num);
   Eigen::VectorXf h_next_state = Eigen::VectorXf::Zero(state_num);
   std::vector<Collision> collisions;
   BarrierConstrain barrier{state_num};
   float remaining_step = 1.0f;
   Bbox scene_bbox = compute_scene_bbox(registry);
-  DVector<float> init_rhs{static_cast<size_t>(state_num)};
+  DynArray<float> init_rhs{static_cast<size_t>(state_num)};
   batch_compute_cloth_invariant_rhs(registry, init_rhs);
-  DVector<float> outer_rhs{static_cast<size_t>(state_num)};
+  DynArray<float> outer_rhs{static_cast<size_t>(state_num)};
 
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
     SPDLOG_DEBUG("Outer iter {}", outer_it);

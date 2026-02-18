@@ -3,7 +3,7 @@
 #include <cassert>
 #include <cub/cub.cuh>
 
-#include "backend/cuda/cuda_utils.hpp"
+#include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/solver/barrier_constrain.hpp"
 #include "backend/cuda/solver/pipeline_kernel.hpp"
 

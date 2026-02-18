@@ -90,6 +90,12 @@ FetchContent_Declare(
     GIT_TAG 43a1489a0f5e15420e4be7225df86e819884b6fa # version 1.8.8
 )
 
+FetchContent_Declare(
+    CCCL
+    GIT_REPOSITORY https://github.com/NVIDIA/cccl.git
+    GIT_TAG d84981c797eb186e45f883f85423df94f9ac8bf4 # version 3.2.1
+)
+
 
 FetchContent_MakeAvailable(
     Eigen3
@@ -109,6 +115,10 @@ elseif (TARGET igl::igl_core)
   set(SILK_IGL_CORE igl::igl_core)
 else()
   message(FATAL_ERROR "Could not find libigl core target")
+endif()
+
+if (SILK_ENABLE_CUDA)
+    FetchContent_MakeAvailable(CCCL)
 endif()
 
 if(SILK_BUILD_DEMO)
