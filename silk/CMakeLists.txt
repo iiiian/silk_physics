@@ -3,7 +3,6 @@
 # -------------------------------------------------
 
 set(SILK_SOURCES 
-    src/backend/cpu/collision/bbox.cpp
     src/backend/cpu/collision/ccd.cpp
     src/backend/cpu/collision/interval.cpp
     src/backend/cpu/collision/interval_root_finder.cpp

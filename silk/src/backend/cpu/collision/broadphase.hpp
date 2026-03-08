@@ -1,7 +1,9 @@
 #pragma once
 
 #include <pdqsort.h>
+#include <tbb/blocked_range.h>
 #include <tbb/enumerable_thread_specific.h>
+#include <tbb/parallel_for.h>
 #include <tbb/task_group.h>
 
 #include <Eigen/Core>
@@ -98,10 +100,10 @@ void sap_sort_proxies(const std::vector<C>& colliders, int* proxies,
 /// Early exits when intervals separate; defers narrow-phase by returning pairs
 /// of pointers to colliders; caller may run additional checks. If flip is true,
 /// return pair [b, a] instead of [a, b].
-template <typename C, bool flip = false>
+template <typename C, bool flip = false, typename FilterT>
 void sap_sorted_collision(C& ca, std::vector<C>& colliders_b,
                           const int* proxies_b, int proxy_num_b, int axis,
-                          CollisionFilter<C> filter, CollisionCache<C>& cache) {
+                          const FilterT& filter, CollisionCache<C>& cache) {
   assert((proxy_num_b != 0));
 
   for (int i = 0; i < proxy_num_b; ++i) {
@@ -128,11 +130,11 @@ void sap_sorted_collision(C& ca, std::vector<C>& colliders_b,
   }
 }
 
-template <typename C>
+template <typename C, typename FilterT>
 /// SAP within one sorted group; each pair passes through `filter`.
 void sap_sorted_group_self_collision(std::vector<C>& colliders,
                                      const int* proxies, int proxy_num,
-                                     int axis, CollisionFilter<C> filter,
+                                     int axis, const FilterT& filter,
                                      CollisionCache<C>& cache) {
   assert((proxy_num > 0));
 
@@ -143,13 +145,13 @@ void sap_sorted_group_self_collision(std::vector<C>& colliders,
   }
 }
 
-template <typename C>
+template <typename C, typename FilterT>
 /// Bipartite SAP between two sorted groups.
 void sap_sorted_group_group_collision(std::vector<C>& colliders_a,
                                       const int* proxies_a, int proxy_num_a,
                                       std::vector<C>& colliders_b,
                                       const int* proxies_b, int proxy_num_b,
-                                      int axis, CollisionFilter<C> filter,
+                                      int axis, const FilterT& filter,
                                       CollisionCache<C>& cache) {
   assert((proxy_num_a > 0));
   assert((proxy_num_b > 0));
@@ -212,14 +214,6 @@ struct KDNode {
   bool is_left() const { return (parent && this == parent->left); }
 };
 
-// for tree tree collision test
-struct TTPair {
-  KDNode* na = nullptr;
-  bool exclude_na_children = false;
-  KDNode* nb = nullptr;
-  bool exclude_nb_children = false;
-};
-
 template <typename C>
 /// KDTree broad-phase accelerator for colliders of type `C`.
 ///
@@ -236,6 +230,7 @@ class KDTree {
       tbb::enumerable_thread_specific<CollisionCache<C>>;
 
   static constexpr int NODE_PROXY_NUM_THRESHOLD = 1024;
+  static constexpr int INTER_QUERY_GRAIN_SIZE = 32;
 
   int collider_num_ = 0;
   std::vector<C> colliders_;
@@ -299,12 +294,13 @@ class KDTree {
   }
 
   /// Enumerate potentially colliding pairs within this tree.
-  /// - Uses SAP per node on the axis of largest variance; schedules node work as
+  /// - Uses SAP per node on the axis of largest variance; schedules node work
+  /// as
   ///   tbb tasks and merges per-thread caches into `cache`.
   /// - `filter` is applied before AABB checks and can skip domain-excluded
   ///   pairs (e.g. static-static in incremental mode).
-  void test_self_collision(CollisionFilter<C> filter,
-                           CollisionCache<C>& cache) {
+  template <typename FilterT>
+  void test_self_collision(const FilterT& filter, CollisionCache<C>& cache) {
     assert(root_);
 
     stack_.clear();
@@ -345,80 +341,68 @@ class KDTree {
   }
 
   /// Enumerate potentially colliding pairs between two KD-trees.
-  /// Traverses pairs of nodes and applies bipartite SAP when their bounds
-  /// intersect; honors `filter` identically to `test_self_collision`.
-  static void test_tree_collision(KDTree& ta, KDTree& tb,
-                                  CollisionFilter<C> filter,
+  /// Uses query-vs-tree traversal: for each collider in `ta`, do `tb` tree
+  /// traversal.
+  template <typename FilterT>
+  static void test_tree_collision(KDTree& ta, KDTree& tb, const FilterT& filter,
                                   CollisionCache<C>& cache) {
     assert(ta.root_ && tb.root_);
 
-    std::vector<TTPair> tt_stack_;
-    tt_stack_.push_back(TTPair{ta.root_, false, tb.root_, false});
+    tbb::enumerable_thread_specific<CollisionCache<C>> thread_cache;
+    tbb::enumerable_thread_specific<std::vector<KDNode*>> thread_node_stack;
 
-    for (int i = 0; i < tt_stack_.size(); ++i) {
-      auto [na, exclude_na_children, nb, exclude_nb_children] = tt_stack_[i];
+    tbb::parallel_for(
+        tbb::blocked_range<int>(0, ta.collider_num_, INTER_QUERY_GRAIN_SIZE),
+        [&](const tbb::blocked_range<int>& range) {
+          auto& cache = thread_cache.local();
+          auto& stack = thread_node_stack.local();
 
-      if (na == nullptr || nb == nullptr) {
-        continue;
-      }
+          for (int i = range.begin(); i != range.end(); ++i) {
+            C& ca = ta.colliders_[i];
+            stack.clear();
 
-      // test colliders on node itself only
-      if (exclude_na_children && exclude_nb_children) {
-        if (na->proxy_num() == 0 || nb->proxy_num() == 0) {
-          continue;
-        }
+            if (!Bbox::is_colliding(ca.bbox, tb.root_->bbox)) {
+              continue;
+            }
+            stack.push_back(tb.root_);
 
-        Bbox& ba = na->is_leaf() ? na->bbox : na->plane_bbox;
-        Bbox& bb = nb->is_leaf() ? nb->bbox : nb->plane_bbox;
-        if (Bbox::is_colliding(ba, bb)) {
-          int* start_a = ta.proxies_.data() + na->proxy_start;
-          int num_a = na->proxy_num();
-          int* start_b = tb.proxies_.data() + nb->proxy_start;
-          int num_b = nb->proxy_num();
+            // DFS traversal.
+            while (!stack.empty()) {
+              KDNode* nb = stack.back();
+              stack.pop_back();
 
-          int axis = sap_optimal_axis(ta.colliders_, start_a, num_a,
-                                      tb.colliders_, start_b, num_b);
-          sap_sort_proxies(ta.colliders_, start_a, num_a, axis);
-          sap_sort_proxies(tb.colliders_, start_b, num_b, axis);
-          sap_sorted_group_group_collision(ta.colliders_, start_a, num_a,
-                                           tb.colliders_, start_b, num_b, axis,
-                                           filter, cache);
-        }
+              // Test collision between ca and current node.
+              int* start_b = tb.proxies_.data() + nb->proxy_start;
+              int num_b = nb->proxy_num();
+              if (num_b > 0) {
+                const Bbox& bb = nb->is_leaf() ? nb->bbox : nb->plane_bbox;
+                if (Bbox::is_colliding(ca.bbox, bb)) {
+                  for (int j = 0; j < num_b; ++j) {
+                    C& cb = tb.colliders_[start_b[j]];
+                    if (!filter(ca, cb)) {
+                      continue;
+                    }
+                    if (Bbox::is_colliding(ca.bbox, cb.bbox)) {
+                      cache.emplace_back(&ca, &cb);
+                    }
+                  }
+                }
+              }
 
-        continue;
-      }
+              if (!nb->is_leaf()) {
+                if (Bbox::is_colliding(ca.bbox, nb->left->bbox)) {
+                  stack.push_back(nb->left);
+                }
+                if (Bbox::is_colliding(ca.bbox, nb->right->bbox)) {
+                  stack.push_back(nb->right);
+                }
+              }
+            }
+          }
+        });
 
-      if (exclude_na_children) {
-        Bbox& ba = na->is_leaf() ? na->bbox : na->plane_bbox;
-        if (Bbox::is_colliding(ba, nb->bbox)) {
-          tt_stack_.push_back(TTPair{na, true, nb, true});
-          tt_stack_.push_back(TTPair{na, true, nb->left, false});
-          tt_stack_.push_back(TTPair{na, true, nb->right, false});
-        }
-        continue;
-      }
-
-      if (exclude_nb_children) {
-        Bbox& bb = nb->is_leaf() ? nb->bbox : nb->plane_bbox;
-        if (Bbox::is_colliding(na->bbox, bb)) {
-          tt_stack_.push_back(TTPair{na, true, nb, true});
-          tt_stack_.push_back(TTPair{na->left, false, nb, true});
-          tt_stack_.push_back(TTPair{na->right, false, nb, true});
-        }
-        continue;
-      }
-
-      if (Bbox::is_colliding(na->bbox, nb->bbox)) {
-        tt_stack_.push_back(TTPair{na, true, nb, true});
-        tt_stack_.push_back(TTPair{na, true, nb->left, false});
-        tt_stack_.push_back(TTPair{na, true, nb->right, false});
-        tt_stack_.push_back(TTPair{na->left, false, nb, true});
-        tt_stack_.push_back(TTPair{na->right, false, nb, true});
-        tt_stack_.push_back(TTPair{na->left, false, nb->left, false});
-        tt_stack_.push_back(TTPair{na->left, false, nb->right, false});
-        tt_stack_.push_back(TTPair{na->right, false, nb->left, false});
-        tt_stack_.push_back(TTPair{na->right, false, nb->right, false});
-      }
+    for (auto& local : thread_cache) {
+      cache.insert(cache.end(), local.begin(), local.end());
     }
   }
 
@@ -995,8 +979,9 @@ class KDTree {
   }
 
   // Run SAP at a node. If no externals, do intra-node only; otherwise also do
-  // bipartite with externals. Work is spawned as an OpenMP task.
-  void test_node_collision(KDNode* n, CollisionFilter<C> filter,
+  // bipartite with externals. Work is spawned as a TBB task.
+  template <typename FilterT>
+  void test_node_collision(KDNode* n, const FilterT& filter,
                            ThreadCollisionCache& cache,
                            tbb::task_group& task_group) {
     int* proxy_start = proxies_.data() + n->proxy_start;
@@ -1010,7 +995,7 @@ class KDTree {
       int axis = sap_optimal_axis(colliders_, proxy_start, proxy_num);
       sap_sort_proxies(colliders_, proxy_start, proxy_num, axis);
 
-      auto task_func = [this, proxy_start, proxy_num, axis, filter, &cache]() {
+      auto task_func = [this, proxy_start, proxy_num, axis, &filter, &cache]() {
         sap_sorted_group_self_collision(colliders_, proxy_start, proxy_num,
                                         axis, filter, cache.local());
       };
@@ -1028,13 +1013,13 @@ class KDTree {
       // hence external collider buffer needs to be copied.
       std::vector<int> ext_copy(ext_start, ext_start + ext_num);
 
-      auto task_func = [this, proxy_start, proxy_num, axis, filter, ext_copy,
-                        ext_num, &cache]() {
+      auto task_func = [this, proxy_start, proxy_num, axis, &filter,
+                        ext = std::move(ext_copy), ext_num, &cache]() {
         sap_sorted_group_self_collision(colliders_, proxy_start, proxy_num,
                                         axis, filter, cache.local());
         sap_sorted_group_group_collision(colliders_, proxy_start, proxy_num,
-                                         colliders_, ext_copy.data(), ext_num,
-                                         axis, filter, cache.local());
+                                         colliders_, ext.data(), ext_num, axis,
+                                         filter, cache.local());
       };
       task_group.run(task_func);
     }
