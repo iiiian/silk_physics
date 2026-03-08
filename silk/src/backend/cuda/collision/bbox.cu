@@ -27,6 +27,8 @@ __both__ bool Bbox::is_colliding(const Bbox& a, const Bbox& b) {
 
 __both__ Vec3f Bbox::center() const { return axpby(0.5f, min, 0.5f, max); }
 
+__both__ bool Bbox::is_empty() const { return any_geq(min, max); }
+
 __both__ bool Bbox::is_inside(const Bbox& other) const {
   return (all_lt(min, other.min) && all_gt(max, other.max));
 }

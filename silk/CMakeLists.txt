@@ -24,28 +24,7 @@ set(SILK_SOURCES
     src/common/check_cuda_support.cpp
 )
 
-set(SILK_CUDA_SOURCES
-    src/backend/cuda/collision/bbox.cu
-    src/backend/cuda/collision/object_collider.cpp
-    src/backend/cuda/collision/pipeline.cpp
-    src/backend/cuda/csr_matrix.cpp
-    src/backend/cuda/sparse_matrix_interop.cpp
-    src/backend/cuda/cuda_backend.cpp
-    src/backend/cuda/ecs.cpp
-    src/backend/cuda/object_state.cpp
-    src/backend/cuda/solver/barrier_constrain.cpp
-    src/backend/cuda/solver/cloth_solver_context.cpp
-    src/backend/cuda/solver/cloth_solver_utils.cpp
-    src/backend/cuda/solver/obstacle_solver_utils.cpp
-    src/backend/cuda/solver/pipeline.cpp
-    src/backend/cuda/solver/cloth_solver_kernel.cu
-    src/backend/cuda/solver/pipeline_kernel.cu
-    src/backend/cuda/solver/svd.cu
-    src/backend/cuda/solver/compute_subspace_u.cpp
-    src/backend/cuda/solver/inexact_solver_kernel.cu
-    src/backend/cuda/solver/inexact_solver.cpp
-    src/backend/cuda/solver/a_jacobi_solver.cu
-)
+file(GLOB_RECURSE SILK_CUDA_SOURCES "src/*.cpp" "src/*.cu"  "src/*.hpp" "src/*.cuh" )
 
 add_library(silk ${SILK_SOURCES})
 add_library(silk::silk ALIAS silk)

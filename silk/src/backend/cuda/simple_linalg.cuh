@@ -340,16 +340,15 @@ __both__ constexpr bool any(const X& x, const Y& y, Pred pred) {
                 "Matric type mismatch.");
   static_assert(X::M == Y::M && X::N == Y::N, "Matrix dim mismatch.");
 
+  bool result = false;
 #pragma unroll
   for (int i = 0; i < X::M; ++i) {
 #pragma unroll
     for (int j = 0; j < X::N; ++j) {
-      if (pred(x(i, j), y(i, j))) {
-        return true;
-      }
+      result |= pred(x(i, j), y(i, j));
     }
   }
-  return false;
+  return result;
 }
 
 template <typename X, typename Y>
@@ -358,8 +357,18 @@ __both__ constexpr bool any_gt(const X& x, const Y& y) {
 }
 
 template <typename X, typename Y>
+__both__ constexpr bool any_geq(const X& x, const Y& y) {
+  return any(x, y, [] __both__(float a, float b) { return a >= b; });
+}
+
+template <typename X, typename Y>
 __both__ constexpr bool any_lt(const X& x, const Y& y) {
   return any(x, y, [] __both__(float a, float b) { return a < b; });
+}
+
+template <typename X, typename Y>
+__both__ constexpr bool any_leq(const X& x, const Y& y) {
+  return any(x, y, [] __both__(float a, float b) { return a <= b; });
 }
 
 template <typename X, typename Y, typename Pred>
@@ -368,16 +377,15 @@ __both__ constexpr bool all(const X& x, const Y& y, Pred pred) {
                 "Matric type mismatch.");
   static_assert(X::M == Y::M && X::N == Y::N, "Matrix dim mismatch.");
 
+  bool result = true;
 #pragma unroll
   for (int i = 0; i < X::M; ++i) {
 #pragma unroll
     for (int j = 0; j < X::N; ++j) {
-      if (!pred(x(i, j), y(i, j))) {
-        return false;
-      }
+      result &= pred(x(i, j), y(i, j));
     }
   }
-  return true;
+  return result;
 }
 
 template <typename X, typename Y>
@@ -386,8 +394,18 @@ __both__ constexpr bool all_gt(const X& x, const Y& y) {
 }
 
 template <typename X, typename Y>
+__both__ constexpr bool all_geq(const X& x, const Y& y) {
+  return all(x, y, [] __both__(float a, float b) { return a >= b; });
+}
+
+template <typename X, typename Y>
 __both__ constexpr bool all_lt(const X& x, const Y& y) {
   return all(x, y, [] __both__(float a, float b) { return a < b; });
+}
+
+template <typename X, typename Y>
+__both__ constexpr bool all_leq(const X& x, const Y& y) {
+  return all(x, y, [] __both__(float a, float b) { return a <= b; });
 }
 
 }  // namespace silk::cuda

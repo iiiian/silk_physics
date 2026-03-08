@@ -6,6 +6,7 @@
 namespace silk::cuda {
 
 /// @brief Axis-aligned bounding box.
+/// The box is invalid if any element of min is smaller or equal to max;
 class Bbox {
  public:
   /// Minimum corner of the bounding box.
@@ -40,6 +41,10 @@ class Bbox {
   /// Calculate the geometric center of the bounding box.
   /// @return Center point as (min + max) / 2
   __both__ Vec3f center() const;
+
+  /// Check if this bounding box is empty.
+  /// @return True if empty
+  __both__ bool is_empty() const;
 
   /// Check if this bounding box completely contains another.
   /// @param other Bounding box to test for containment
