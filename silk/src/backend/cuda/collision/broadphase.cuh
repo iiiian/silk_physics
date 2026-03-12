@@ -46,7 +46,11 @@ __device__ inline uint64_t morton_code_magic_bits(Vec3f origin,
   Vec3u cell;
 #pragma unroll
   for (int i = 0; i < 3; ++i) {
-    float float_cell = (pos(i) - origin(i)) / inv_cell_length(i);
+    constexpr uint32_t CELL_ID_MAX = (1u << 21u) - 1u;
+
+    float float_cell = (pos(i) - origin(i)) * inv_cell_length(i);
+    float_cell = max(float_cell, 0.0f);
+    float_cell = min(float_cell, static_cast<float>(CELL_ID_MAX));
     cell(i) = static_cast<uint32_t>(ctd::floor(float_cell));
   }
 
@@ -305,10 +309,10 @@ class OIBVHTree {
 
     // Compute cell dimension for morton code.
     Vec3f origin = root_bbox.min;
-    Vec3f extend = root_bbox.max = root_bbox.min;
+    Vec3f extend = axpby(1.0f, root_bbox.max, -1.0f, root_bbox.min);
     Vec3f inv_cell_length;
     for (int i = 0; i < 3; ++i) {
-      constexpr float pow_21 = static_cast<float>(1U << 20);
+      constexpr float pow_21 = static_cast<float>(1u << 21);
       float cell_length = extend(i) / pow_21;
       inv_cell_length(i) = (cell_length < 1e-20f) ? 1e20f : 1.0f / cell_length;
     }
@@ -398,9 +402,9 @@ class OIBVHTree {
     return {.max_depth = max_depth_,
             .skipped_depth = skipped_depth_,
             .vleaf_num = vleaf_num_,
-            .colliders_ = colliders_,
-            .collider_ids_ = collider_ids_,
-            .nodes_ = nodes_};
+            .colliders = colliders_,
+            .collider_ids = collider_ids_,
+            .nodes = nodes_};
   }
 
   template <typename Filter, typename OnCollision>
@@ -408,9 +412,9 @@ class OIBVHTree {
                            const OnCollision& on_collision, CudaRuntime rt) {
     // clang-format off
     auto batch_traversal = [&filter, &on_collision, &rt, tree = view()]
-      __device__ (uint32_t collider_id) {
+      __device__ (uint32_t i) {
       traverse<Filter, OnCollision, true>(
-          tree.colliders[collider_id], collider_id, tree, filter, on_collision);
+          tree.colliders[tree.collider_ids[i]], i, tree, filter, on_collision);
     };
     // clang-format on
     cub::DeviceFor::Bulk(collider_ids_.size(), batch_traversal,
@@ -423,10 +427,10 @@ class OIBVHTree {
     assert(this != &other);
 
     // clang-format off
-    auto batch_traversal = [&filter, &on_collision, &rt, tree =other.view()]
-      __device__ (uint32_t collider_id) {
+    auto batch_traversal = [&filter, &on_collision, &rt, ta = view(), tb =other.view()]
+      __device__ (uint32_t i) {
       traverse<Filter, OnCollision, false>(
-          tree.colliders[collider_id], collider_id, tree, filter, on_collision);
+          ta.colliders[ta.collider_ids[i]], 0 /* no dedup required */, tb, filter, on_collision);
     };
     // clang-format on
     cub::DeviceFor::Bulk(collider_ids_.size(), batch_traversal,
@@ -442,7 +446,7 @@ class OIBVHTree {
   cu::device_buffer<BVHNode> nodes_;
 
   template <typename Filter, typename OnCollision, bool dedup_self>
-  __device__ static void traverse(const C& collider, int collider_id,
+  __device__ static void traverse(const C& collider, int dedup_id,
                                   OIBVHTreeView<C> oibvh_tree,
                                   const Filter& filter,
                                   const OnCollision& on_collision) {
@@ -468,7 +472,7 @@ class OIBVHTree {
 
       uint32_t node_mem_offset =
           compute_mem_offset(node_id, depth, t.max_depth, t.vleaf_num);
-      Bbox& node_bbox = t.nodes[node_mem_offset].bbox;
+      auto& node_bbox = t.nodes[node_mem_offset].bbox;
 
       if (!Bbox::is_colliding(bbox, node_bbox)) {
         continue;
@@ -488,7 +492,7 @@ class OIBVHTree {
         for (int i = leaf_cid_start; i < leaf_cid_end; ++i) {
           // For self collision test only.
           if constexpr (dedup_self) {
-            if (collider_id <= i) {
+            if (dedup_id <= i) {
               continue;
             }
           }
