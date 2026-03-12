@@ -31,16 +31,6 @@ class Bbox {
     return {axpb(1.0f, bbox.min, -padding), axpb(1.0f, bbox.max, padding)};
   }
 
-  /// @brief Check if two bounding boxes do not overlap.
-  /// @param a First bounding box
-  /// @param b Second bounding box
-  /// @return True if boxes are separated along any axis
-  __both__ static inline bool is_disjoint(const Bbox& a, const Bbox& b) {
-    Vec3f max_min = vmax(a.min, b.min);
-    Vec3f min_max = vmin(a.max, b.max);
-    return any_lt(max_min, min_max);
-  }
-
   /// @brief Check if two bounding boxes overlap.
   /// @param a First bounding box
   /// @param b Second bounding box

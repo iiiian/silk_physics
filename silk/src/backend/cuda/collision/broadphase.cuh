@@ -122,14 +122,13 @@ __global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
                                    ctd::span<BVHNode> nodes) {
   assert(blockDim.x == 128);
 
-  if (starting_depth == 0u) {
-    return;
-  }
-
   uint32_t lid = threadIdx.x % 32;                       // lane id
   uint32_t wid = threadIdx.x / 32;                       // warp id
   uint32_t tid = blockDim.x * blockIdx.x + threadIdx.x;  // thread id
 
+  // 1. 1 level reduction from global mem.
+  // 2. 5 levels warp reduction.
+  // 3. 2 levels block reduction.
   int max_warp_up = min(starting_depth, 5);
   int max_block_up = min(starting_depth - max_warp_up, 2);
   uint32_t node_depth = starting_depth;
@@ -172,7 +171,7 @@ __global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
   --node_depth;
 
   // Warp level propagation.
-  for (int i = 1; i < max_warp_up; ++i) {
+  for (int i = 1; i <= max_warp_up; ++i) {
     uint32_t delta = 1u << (i - 1);
     Bbox shuffled_bbox = cu::device::warp_shuffle_down(bbox, delta);
 
@@ -226,7 +225,7 @@ __global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
       uint32_t lv_rnode_num =
           compute_level_rnode_num(node_depth, max_depth, vleaf_num);
 
-      uint32_t lv_node_id = tid >> (max_warp_up + i);
+      uint32_t lv_node_id = tid >> (max_warp_up + i + 1u);
 
       if (lv_node_id < lv_rnode_num) {
         uint32_t left_lv_node_id = lv_node_id << 1u;
@@ -265,19 +264,19 @@ __global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
 template <typename T, int N>
 class SimpleStack {
  public:
-  void push(T value) {
+  __both__ void push(T value) {
     assert(fill_ < N);
     data_[fill_] = value;
     ++fill_;
   }
 
-  T pop() {
+  __both__ T pop() {
     assert(fill_ != 0);
     --fill_;
     return data_[fill_];
   }
 
-  bool is_empty() { return fill_ == 0; }
+  __both__ bool is_empty() { return fill_ == 0; }
 
  private:
   int fill_ = 0;
@@ -411,7 +410,7 @@ class OIBVHTree {
   void test_self_collision(const Filter& filter,
                            const OnCollision& on_collision, CudaRuntime rt) {
     // clang-format off
-    auto batch_traversal = [&filter, &on_collision, &rt, tree = view()]
+    auto batch_traversal = [filter, on_collision, tree = view()]
       __device__ (uint32_t i) {
       traverse<Filter, OnCollision, true>(
           tree.colliders[tree.collider_ids[i]], i, tree, filter, on_collision);
@@ -427,10 +426,10 @@ class OIBVHTree {
     assert(this != &other);
 
     // clang-format off
-    auto batch_traversal = [&filter, &on_collision, &rt, ta = view(), tb =other.view()]
+    auto batch_traversal = [filter, on_collision, ta = view(), tb =other.view()]
       __device__ (uint32_t i) {
       traverse<Filter, OnCollision, false>(
-          ta.colliders[ta.collider_ids[i]], 0 /* no dedup required */, tb, filter, on_collision);
+          ta.colliders[ta.collider_ids[i]], 0, tb, filter, on_collision);
     };
     // clang-format on
     cub::DeviceFor::Bulk(collider_ids_.size(), batch_traversal,
