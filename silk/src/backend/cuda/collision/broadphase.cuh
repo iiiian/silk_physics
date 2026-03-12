@@ -380,7 +380,7 @@ class OIBVHTree {
     init_leaf_bbox<C><<<block_num, 128, 0, rt.stream.get()>>>(
         skipped_depth, max_depth, vleaf_num, colliders_, collider_ids_, nodes_);
 
-    for (int i = skipped_depth; i > 0; i -= 7) {
+    for (int i = skipped_depth; i > 0; i -= 8) {
       uint32_t depth = i - 1;
       uint32_t lv_rnode_num =
           compute_level_rnode_num(depth, max_depth, vleaf_num);
