@@ -75,9 +75,12 @@ __both__ inline uint32_t compute_node_id(uint32_t lv_node_id, uint32_t depth) {
 __both__ inline uint32_t compute_mem_offset(uint32_t node_id, uint32_t depth,
                                             uint32_t max_depth,
                                             uint32_t vleaf_num) {
+  // virtual leaf num one level shallower than node.
   uint32_t lv_vleaf_num = vleaf_num >> (max_depth - depth);
-  uint32_t prev_vnode_num = (lv_vleaf_num << 1) - ctd::popcount(lv_vleaf_num);
-  return node_id - prev_vnode_num;
+  lv_vleaf_num = lv_vleaf_num >> 1;
+
+  uint32_t vnode_num = (lv_vleaf_num << 1) - ctd::popcount(lv_vleaf_num);
+  return node_id - vnode_num;
 }
 
 template <typename C>
@@ -453,8 +456,8 @@ class OIBVHTree {
 
     while (!stack.is_empty()) {
       uint32_t node_id = stack.pop();
-      uint32_t depth = 32 - ctd::countl_zero(node_id);
-      uint32_t lv_node_id = node_id - (1 << depth);
+      uint32_t depth = 31u - ctd::countl_zero(node_id + 1u);
+      uint32_t lv_node_id = node_id - ((1u << depth) - 1u);
       uint32_t lv_rnode_num =
           compute_level_rnode_num(depth, t.max_depth, t.vleaf_num);
 
@@ -501,9 +504,10 @@ class OIBVHTree {
       // Descend.
       else {
         // Left child first.
-        node_id = node_id << 1;
-        stack.push(node_id + 1);
-        stack.push(node_id);
+        uint32_t left = 2u * node_id + 1u;
+        uint32_t right = 2u * node_id + 2u;
+        stack.push(right);
+        stack.push(left);
       }
     }
   }
