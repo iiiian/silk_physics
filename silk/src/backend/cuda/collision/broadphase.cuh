@@ -50,8 +50,8 @@ __device__ inline uint64_t morton_code_magic_bits(Vec3f origin,
     cell(i) = static_cast<uint32_t>(ctd::floor(float_cell));
   }
 
-  return magic_split(cell(0)) | magic_split(cell(1)) << 1 |
-         magic_split(cell(2)) << 2;
+  return magic_split(cell(0)) | (magic_split(cell(1)) << 1u) |
+         (magic_split(cell(2)) << 2u);
 }
 
 struct alignas(32) BVHNode {
@@ -63,13 +63,13 @@ __both__ inline uint32_t compute_level_rnode_num(uint32_t depth,
                                                  uint32_t vleaf_num) {
   assert(depth <= max_depth);
 
-  uint32_t lv_node_num = (1 << depth);
+  uint32_t lv_node_num = (1u << depth);
   uint32_t lv_vnode_num = vleaf_num >> (max_depth - depth);
   return lv_node_num - lv_vnode_num;
 }
 
 __both__ inline uint32_t compute_node_id(uint32_t lv_node_id, uint32_t depth) {
-  return ((1 << depth) | lv_node_id) - 1;
+  return ((1u << depth) | lv_node_id) - 1u;
 }
 
 __both__ inline uint32_t compute_mem_offset(uint32_t node_id, uint32_t depth,
@@ -77,9 +77,9 @@ __both__ inline uint32_t compute_mem_offset(uint32_t node_id, uint32_t depth,
                                             uint32_t vleaf_num) {
   // virtual leaf num one level shallower than node.
   uint32_t lv_vleaf_num = vleaf_num >> (max_depth - depth);
-  lv_vleaf_num = lv_vleaf_num >> 1;
+  lv_vleaf_num = lv_vleaf_num >> 1u;
 
-  uint32_t vnode_num = (lv_vleaf_num << 1) - ctd::popcount(lv_vleaf_num);
+  uint32_t vnode_num = (lv_vleaf_num << 1u) - ctd::popcount(lv_vleaf_num);
   return node_id - vnode_num;
 }
 
@@ -100,8 +100,8 @@ __global__ void init_leaf_bbox(uint32_t node_depth, uint32_t max_depth,
 
     // Compute index range.
     uint32_t id_num = collider_ids.size();
-    uint32_t id_start = tid * (1 << (max_depth - node_depth));
-    uint32_t id_end = (tid + 1) * (1 << (max_depth - node_depth));
+    uint32_t id_start = tid * (1u << (max_depth - node_depth));
+    uint32_t id_end = (tid + 1u) * (1u << (max_depth - node_depth));
     id_end = min(id_end, id_num);
 
     assert(id_end > id_start);
@@ -118,7 +118,7 @@ __global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
                                    ctd::span<BVHNode> nodes) {
   assert(blockDim.x == 128);
 
-  if (starting_depth == 0) {
+  if (starting_depth == 0u) {
     return;
   }
 
@@ -137,25 +137,25 @@ __global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
         compute_level_rnode_num(node_depth, max_depth, vleaf_num);
     uint32_t lv_node_id = tid;
     if (lv_node_id < lv_rnode_num) {
-      uint32_t left_lv_node_id = lv_node_id << 1;
+      uint32_t left_lv_node_id = lv_node_id << 1u;
       uint32_t child_lv_rnode_num =
-          compute_level_rnode_num(node_depth + 1, max_depth, vleaf_num);
+          compute_level_rnode_num(node_depth + 1u, max_depth, vleaf_num);
 
       bool is_left_real = (left_lv_node_id < child_lv_rnode_num);
-      bool is_right_real = (left_lv_node_id + 1 < child_lv_rnode_num);
+      bool is_right_real = (left_lv_node_id + 1u < child_lv_rnode_num);
       assert(is_left_real || is_right_real);
 
-      uint32_t left_node_id = compute_node_id(left_lv_node_id, node_depth + 1);
+      uint32_t left_node_id = compute_node_id(left_lv_node_id, node_depth + 1u);
       uint32_t left_mem_offset = compute_mem_offset(
-          left_node_id, node_depth + 1, max_depth, vleaf_num);
+          left_node_id, node_depth + 1u, max_depth, vleaf_num);
 
       if (is_left_real && is_right_real) {
         bbox = Bbox::merge(nodes[left_mem_offset].bbox,
-                           nodes[left_mem_offset + 1].bbox);
+                           nodes[left_mem_offset + 1u].bbox);
       } else if (is_left_real) {
         bbox = nodes[left_mem_offset].bbox;
       } else {
-        bbox = nodes[left_mem_offset + 1].bbox;
+        bbox = nodes[left_mem_offset + 1u].bbox;
       }
 
       uint32_t node_mem_offset =
@@ -169,23 +169,23 @@ __global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
 
   // Warp level propagation.
   for (int i = 1; i < max_warp_up; ++i) {
-    uint32_t delta = 1 << (i - 1);
+    uint32_t delta = 1u << (i - 1);
     Bbox shuffled_bbox = cu::device::warp_shuffle_down(bbox, delta);
 
     uint32_t lv_rnode_num =
         compute_level_rnode_num(node_depth, max_depth, vleaf_num);
 
     // Test if lane id % 2^i == 0.
-    if ((lid & ((1 << i) - 1)) == 0) {
+    if ((lid & ((1u << i) - 1u)) == 0u) {
       uint32_t lv_node_id = tid >> i;
 
       if (lv_node_id < lv_rnode_num) {
-        uint32_t left_lv_node_id = lv_node_id << 1;
+        uint32_t left_lv_node_id = lv_node_id << 1u;
         uint32_t child_lv_rnode_num =
-            compute_level_rnode_num(node_depth + 1, max_depth, vleaf_num);
+            compute_level_rnode_num(node_depth + 1u, max_depth, vleaf_num);
 
         bool is_left_real = (left_lv_node_id < child_lv_rnode_num);
-        bool is_right_real = ((left_lv_node_id + 1) < child_lv_rnode_num);
+        bool is_right_real = ((left_lv_node_id + 1u) < child_lv_rnode_num);
         assert(is_left_real || is_right_real);
 
         if (is_left_real && is_right_real) {
@@ -210,31 +210,31 @@ __global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
   // fill temp storage if block propagation is required.
   __shared__ Bbox bbox_temp[4];
   if (max_block_up > 0) {
-    if (lid == 0) {
+    if (lid == 0u) {
       bbox_temp[wid] = bbox;
     }
     __syncthreads();
   }
 
   for (int i = 0; i < max_block_up; ++i) {
-    uint32_t wid_mod = wid & ((1 << (i + 1)) - 1);
-    if (lid == 0 && (wid_mod == 0)) {
+    uint32_t wid_mod = wid & ((1u << (i + 1)) - 1u);
+    if (lid == 0u && (wid_mod == 0u)) {
       uint32_t lv_rnode_num =
           compute_level_rnode_num(node_depth, max_depth, vleaf_num);
 
       uint32_t lv_node_id = tid >> (max_warp_up + i);
 
       if (lv_node_id < lv_rnode_num) {
-        uint32_t left_lv_node_id = lv_node_id << 1;
+        uint32_t left_lv_node_id = lv_node_id << 1u;
         uint32_t child_lv_rnode_num =
-            compute_level_rnode_num(node_depth + 1, max_depth, vleaf_num);
+            compute_level_rnode_num(node_depth + 1u, max_depth, vleaf_num);
 
         bool is_left_real = (left_lv_node_id < child_lv_rnode_num);
-        bool is_right_real = ((left_lv_node_id + 1) < child_lv_rnode_num);
+        bool is_right_real = ((left_lv_node_id + 1u) < child_lv_rnode_num);
         assert(is_left_real || is_right_real);
 
         uint32_t left_bbox_id = wid;
-        uint32_t right_bbox_id = wid + (1 << i);
+        uint32_t right_bbox_id = wid + (1u << i);
 
         if (is_left_real && is_right_real) {
           bbox_temp[wid] =
@@ -363,9 +363,9 @@ class OIBVHTree {
     uint32_t skipped_depth =
         (max_depth > MAX_SKIP_LEVEL) ? max_depth - MAX_SKIP_LEVEL : 0;
     uint32_t skipped_vleaf_num = vleaf_num >> (max_depth - skipped_depth);
-    uint32_t skipped_rleaf_num = (1 << skipped_depth) - skipped_vleaf_num;
+    uint32_t skipped_rleaf_num = (1u << skipped_depth) - skipped_vleaf_num;
     uint32_t skipped_rnode_num =
-        2 * skipped_rleaf_num - 1 + ctd::popcount(skipped_vleaf_num);
+        2u * skipped_rleaf_num - 1u + ctd::popcount(skipped_vleaf_num);
 
     // Allocate and fill the nodes.
     BVHNode empty_node = {.bbox = {}};
@@ -452,7 +452,7 @@ class OIBVHTree {
     auto& t = oibvh_tree;
 
     SimpleStack<uint32_t, 32> stack;
-    stack.push(0);
+    stack.push(0u);
 
     while (!stack.is_empty()) {
       uint32_t node_id = stack.pop();
@@ -478,8 +478,9 @@ class OIBVHTree {
       if (depth == t.skipped_depth) {
         // Compute index range.
         uint32_t leaf_cid_num = oibvh_tree.collider_ids.size();
-        uint32_t leaf_cid_start = lv_node_id * (1 << (t.max_depth - depth));
-        uint32_t leaf_cid_end = (lv_node_id + 1) * (1 << (t.max_depth - depth));
+        uint32_t leaf_cid_start = lv_node_id * (1u << (t.max_depth - depth));
+        uint32_t leaf_cid_end =
+            (lv_node_id + 1u) * (1u << (t.max_depth - depth));
         leaf_cid_end = min(leaf_cid_end, leaf_cid_num);
 
         // Test each leaf colliders.
