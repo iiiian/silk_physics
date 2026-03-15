@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <concepts>
 #include <cstdint>
 #include <cub/cub.cuh>
 #include <cuda/atomic>
@@ -11,6 +12,7 @@
 #include <cuda/std/span>
 #include <cuda/std/utility>
 #include <cuda/warp>
+#include <functional>
 
 #include "backend/cuda/collision/bbox.cuh"
 #include "backend/cuda/cuda_utils.cuh"
@@ -18,8 +20,92 @@
 
 namespace silk::cuda {
 
-// Courtesy to
-// https://www.forceflow.be/2013/10/07/morton-encodingdecoding-through-bit-interleaving-implementations/
+/// @brief Collider type has member bbox of type Bbox.
+template <typename T>
+concept IsCollider = requires(T t) {
+  { t.bbox } -> std::same_as<Bbox>;
+};
+
+/// @brief Filter callback takes a pair of collider and return true if ignored.
+///
+/// This function is called on device.
+template <typename T, typename C>
+concept IsFilterCallback =
+    std::convertible_to<std::function<bool(const C&, const C&)>, T>;
+
+// Collision callback accepts a colliding pair that has intersecting bbox and
+// pass the filter.
+///
+/// This function is called on device.
+template <typename T, typename C>
+concept IsCollisionCallback =
+    std::convertible_to<std::function<void(const C&, const C&)>, T>;
+
+struct BVHNode {
+  Bbox bbox;
+};
+
+template <typename C>
+  requires IsCollider<C>
+struct OIBVHTreeView {
+  uint32_t max_depth;
+  uint32_t skipped_depth;
+  uint32_t vleaf_num;
+  ctd::span<const C> colliders;
+  ctd::span<const int> collider_ids;
+  ctd::span<const BVHNode> nodes;
+};
+
+template <typename C>
+  requires IsCollider<C>
+class OIBVHTree {
+ private:
+  static constexpr uint32_t MAX_SKIP_LEVEL = 1;
+
+  uint32_t max_depth_ = 0;
+  uint32_t skipped_depth_ = 0;
+  uint32_t vleaf_num_ = 0;
+  cu::device_buffer<C> colliders_;
+  cu::device_buffer<int> collider_ids_;
+  cu::device_buffer<BVHNode> nodes_;
+
+ public:
+  OIBVHTree() = default;
+
+  /// @brief Build the BVH tree. Assumes all bboxes are not empty.
+  static OIBVHTree make(Bbox root_bbox, cu::device_buffer<C> colliders,
+                        CudaRuntime rt);
+
+  /// @brief Get non-owning read only view.
+  OIBVHTreeView<C> view() const {
+    return {.max_depth = max_depth_,
+            .skipped_depth = skipped_depth_,
+            .vleaf_num = vleaf_num_,
+            .colliders = colliders_,
+            .collider_ids = collider_ids_,
+            .nodes = nodes_};
+  }
+
+  /// @brief Test self collision.
+  template <typename OnFilter, typename OnCollision>
+    requires IsFilterCallback<OnFilter, C> &&
+             IsCollisionCallback<OnCollision, C>
+  void test_self_collision(const OnFilter& on_filter,
+                           const OnCollision& on_collision, CudaRuntime rt);
+
+  /// @brief Test tree-tree collision.
+  template <typename OnFilter, typename OnCollision>
+    requires IsFilterCallback<OnFilter, C> &&
+             IsCollisionCallback<OnCollision, C>
+  void test_tree_collision(const OIBVHTree& other, const OnFilter& on_filter,
+                           const OnCollision& on_collision, CudaRuntime rt);
+};
+
+namespace detail {
+
+/// @brief Split and interleave 21 bit uint32.
+///
+/// https://www.forceflow.be/2013/10/07/morton-encodingdecoding-through-bit-interleaving-implementations/
 __both__ inline uint64_t magic_split(uint32_t x) {
   constexpr uint32_t LOW_21_BITS_MASK = 0x1fffffU;
   constexpr uint64_t MAGIC_MASK_1 = 0x001f00000000ffffULL;
@@ -38,11 +124,11 @@ __both__ inline uint64_t magic_split(uint32_t x) {
   return y;
 }
 
+/// @brief Compute morton code of a bbox.
 __device__ inline uint64_t morton_code_magic_bits(Vec3f origin,
                                                   Vec3f inv_cell_length,
                                                   Bbox bbox) {
   Vec3f pos = bbox.center();
-
   Vec3u cell;
 #pragma unroll
   for (int i = 0; i < 3; ++i) {
@@ -58,10 +144,7 @@ __device__ inline uint64_t morton_code_magic_bits(Vec3f origin,
          (magic_split(cell(2)) << 2u);
 }
 
-struct alignas(32) BVHNode {
-  Bbox bbox;
-};
-
+/// @brief Compute the number of real node of certain tree level.
 __both__ inline uint32_t compute_level_rnode_num(uint32_t depth,
                                                  uint32_t max_depth,
                                                  uint32_t vleaf_num) {
@@ -72,10 +155,12 @@ __both__ inline uint32_t compute_level_rnode_num(uint32_t depth,
   return lv_node_num - lv_vnode_num;
 }
 
+/// @brief Compute node index from level node index.
 __both__ inline uint32_t compute_node_id(uint32_t lv_node_id, uint32_t depth) {
   return ((1u << depth) | lv_node_id) - 1u;
 }
 
+/// @brief Compute node memory offset from node index.
 __both__ inline uint32_t compute_mem_offset(uint32_t node_id, uint32_t depth,
                                             uint32_t max_depth,
                                             uint32_t vleaf_num) {
@@ -87,6 +172,7 @@ __both__ inline uint32_t compute_mem_offset(uint32_t node_id, uint32_t depth,
   return node_id - vnode_num;
 }
 
+/// @brief Compute bbox for true leaves after accounting for skipped levels.
 template <typename C>
 __global__ void init_leaf_bbox(uint32_t node_depth, uint32_t max_depth,
                                uint32_t vleaf_num, ctd::span<const C> colliders,
@@ -116,7 +202,11 @@ __global__ void init_leaf_bbox(uint32_t node_depth, uint32_t max_depth,
   }
 }
 
+/// @brief Propagate and refit node bbox upward.
+///
+/// Designed for block size of 128. Propagate 8 levels upward.
 template <typename C>
+  requires IsCollider<C>
 __global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
                                    uint32_t vleaf_num,
                                    ctd::span<BVHNode> nodes) {
@@ -283,238 +373,228 @@ class SimpleStack {
   ctd::array<T, N> data_;
 };
 
-template <typename C>
-struct OIBVHTreeView {
-  uint32_t max_depth;
-  uint32_t skipped_depth;
-  uint32_t vleaf_num;
-  ctd::span<const C> colliders;
-  ctd::span<const int> collider_ids;
-  ctd::span<const BVHNode> nodes;
-};
+/// @brief Traverse collider through the tree.
+template <typename C, typename OnFilter, typename OnCollision, bool dedup_self>
+__device__ void traverse(const C& collider, int dedup_id,
+                         OIBVHTreeView<C> oibvh_tree, const OnFilter& on_filter,
+                         const OnCollision& on_collision) {
+  const Bbox& bbox = collider.bbox;
+  assert(!bbox.is_empty());
 
-template <typename C>
-class OIBVHTree {
- public:
-  static constexpr uint32_t MAX_SKIP_LEVEL = 3;
+  auto& t = oibvh_tree;
 
-  // @brief build the BVH tree. Assumes all bboxes are not empty.
-  OIBVHTree(Bbox root_bbox, cu::device_buffer<C> colliders, CudaRuntime rt) {
-    assert(colliders.size() != 0);
-    assert(!root_bbox.is_empty());
-    static_assert(sizeof(BVHNode) == 32, "Unexpected BVHNode size.");
+  SimpleStack<uint32_t, 32> stack;
+  stack.push(0u);
 
-    colliders_ = std::move(colliders);
+  while (!stack.is_empty()) {
+    uint32_t node_id = stack.pop();
+    uint32_t depth = 31u - ctd::countl_zero(node_id + 1u);
+    uint32_t lv_node_id = node_id - ((1u << depth) - 1u);
+    uint32_t lv_rnode_num =
+        compute_level_rnode_num(depth, t.max_depth, t.vleaf_num);
 
-    // Compute cell dimension for morton code.
-    Vec3f origin = root_bbox.min;
-    Vec3f extend = axpby(1.0f, root_bbox.max, -1.0f, root_bbox.min);
-    Vec3f inv_cell_length;
-    for (int i = 0; i < 3; ++i) {
-      constexpr float pow_21 = static_cast<float>(1u << 21);
-      float cell_length = extend(i) / pow_21;
-      inv_cell_length(i) = (cell_length < 1e-20f) ? 1e20f : 1.0f / cell_length;
+    // Skip virtual node.
+    if (lv_node_id >= lv_rnode_num) {
+      continue;
     }
 
-    // Fill collider id map and compute morton code.
-    int collider_num = colliders_.size();
-    auto unsort_ids = cu::make_buffer<int>(rt.stream, rt.mem_resource,
-                                           collider_num, cu::no_init);
-    auto unsort_morton = cu::make_buffer<uint64_t>(rt.stream, rt.mem_resource,
-                                                   collider_num, cu::no_init);
-    auto compute_id_and_morton = [origin, inv_cell_length,
-                                  id = unsort_ids.data(), c = colliders_.data(),
-                                  m = unsort_morton.data()] __device__(int i) {
-      id[i] = i;
-      m[i] = morton_code_magic_bits(origin, inv_cell_length, c[i].bbox);
-    };
-    cub::DeviceFor::Bulk(collider_num, compute_id_and_morton, rt.stream.get());
+    uint32_t node_mem_offset =
+        compute_mem_offset(node_id, depth, t.max_depth, t.vleaf_num);
+    auto& node_bbox = t.nodes[node_mem_offset].bbox;
 
-    // Radix sort leaves by morton code.
-    auto morton_out = cu::make_buffer<uint64_t>(rt.stream, rt.mem_resource,
-                                                collider_num, cu::no_init);
-    collider_ids_ = cu::make_buffer<int>(rt.stream, rt.mem_resource,
-                                         collider_num, cu::no_init);
-
-    size_t radix_sort_temp_size;
-    cub::DeviceRadixSort::SortPairs(
-        nullptr, radix_sort_temp_size, unsort_morton.data(), morton_out.data(),
-        unsort_ids.data(), collider_ids_.data(), collider_num, 0,
-        sizeof(uint64_t) * 8, rt.stream.get());
-    auto radix_sort_temp = cu::make_buffer<char>(
-        rt.stream, rt.mem_resource, radix_sort_temp_size, cu::no_init);
-
-    cub::DeviceRadixSort::SortPairs(
-        radix_sort_temp.data(), radix_sort_temp_size, unsort_morton.data(),
-        morton_out.data(), unsort_ids.data(), collider_ids_.data(),
-        collider_num, 0, sizeof(uint64_t) * 8, rt.stream.get());
-
-    // Free temp memory to reduce peak memory usage.
-    unsort_ids.destroy();
-    unsort_morton.destroy();
-    morton_out.destroy();
-    radix_sort_temp.destroy();
-
-    // Compute tree statistics. Use unsigned int because we use bitwise
-    // operation to compute index.
-    uint32_t rleaf_num = static_cast<uint32_t>(collider_num);
-    uint32_t leaf_num = ctd::bit_ceil(rleaf_num);
-    assert(leaf_num > 0);
-    uint32_t max_depth = ctd::countr_zero(leaf_num);
-    uint32_t vleaf_num = leaf_num - rleaf_num;
-
-    uint32_t skipped_depth =
-        (max_depth > MAX_SKIP_LEVEL) ? max_depth - MAX_SKIP_LEVEL : 0;
-    uint32_t skipped_vleaf_num = vleaf_num >> (max_depth - skipped_depth);
-    uint32_t skipped_rleaf_num = (1u << skipped_depth) - skipped_vleaf_num;
-    uint32_t skipped_rnode_num =
-        2u * skipped_rleaf_num - 1u + ctd::popcount(skipped_vleaf_num);
-
-    // Allocate and fill the nodes.
-    BVHNode empty_node = {.bbox = {}};
-    nodes_ = cu::make_buffer<BVHNode>(rt.stream, rt.mem_resource,
-                                      skipped_rnode_num, empty_node);
-
-    assert(skipped_rleaf_num > 0);
-    int block_num = (skipped_rleaf_num - 1) / 128 + 1;
-    init_leaf_bbox<C><<<block_num, 128, 0, rt.stream.get()>>>(
-        skipped_depth, max_depth, vleaf_num, colliders_, collider_ids_, nodes_);
-
-    for (int i = skipped_depth; i > 0; i -= 8) {
-      uint32_t depth = i - 1;
-      uint32_t lv_rnode_num =
-          compute_level_rnode_num(depth, max_depth, vleaf_num);
-      assert(lv_rnode_num > 0);
-
-      int block_num = (lv_rnode_num - 1) / 128 + 1;
-      propagate_bbox_128<C><<<block_num, 128, 0, rt.stream.get()>>>(
-          depth, max_depth, vleaf_num, nodes_);
+    if (!Bbox::is_colliding(bbox, node_bbox)) {
+      continue;
     }
 
-    // Fill statistics.
-    max_depth_ = max_depth;
-    skipped_depth_ = skipped_depth;
-    vleaf_num_ = vleaf_num;
-  }
+    // Reach leaf.
+    if (depth == t.skipped_depth) {
+      // Compute index range.
+      uint32_t leaf_cid_num = oibvh_tree.collider_ids.size();
+      uint32_t leaf_cid_start = lv_node_id * (1u << (t.max_depth - depth));
+      uint32_t leaf_cid_end = (lv_node_id + 1u) * (1u << (t.max_depth - depth));
+      leaf_cid_end = min(leaf_cid_end, leaf_cid_num);
 
-  OIBVHTreeView<C> view() const {
-    return {.max_depth = max_depth_,
-            .skipped_depth = skipped_depth_,
-            .vleaf_num = vleaf_num_,
-            .colliders = colliders_,
-            .collider_ids = collider_ids_,
-            .nodes = nodes_};
-  }
-
-  template <typename Filter, typename OnCollision>
-  void test_self_collision(const Filter& filter,
-                           const OnCollision& on_collision, CudaRuntime rt) {
-    // clang-format off
-    auto batch_traversal = [filter, on_collision, tree = view()]
-      __device__ (uint32_t i) {
-      traverse<Filter, OnCollision, true>(
-          tree.colliders[tree.collider_ids[i]], i, tree, filter, on_collision);
-    };
-    // clang-format on
-    cub::DeviceFor::Bulk(collider_ids_.size(), batch_traversal,
-                         rt.stream.get());
-  }
-
-  template <typename Filter, typename OnCollision>
-  void test_tree_collision(const OIBVHTree& other, const Filter& filter,
-                           const OnCollision& on_collision, CudaRuntime rt) {
-    assert(this != &other);
-
-    // clang-format off
-    auto batch_traversal = [filter, on_collision, ta = view(), tb =other.view()]
-      __device__ (uint32_t i) {
-      traverse<Filter, OnCollision, false>(
-          ta.colliders[ta.collider_ids[i]], 0, tb, filter, on_collision);
-    };
-    // clang-format on
-    cub::DeviceFor::Bulk(collider_ids_.size(), batch_traversal,
-                         rt.stream.get());
-  }
-
- private:
-  uint32_t max_depth_;
-  uint32_t skipped_depth_;
-  uint32_t vleaf_num_;
-  cu::device_buffer<C> colliders_;
-  cu::device_buffer<int> collider_ids_;
-  cu::device_buffer<BVHNode> nodes_;
-
-  template <typename Filter, typename OnCollision, bool dedup_self>
-  __device__ static void traverse(const C& collider, int dedup_id,
-                                  OIBVHTreeView<C> oibvh_tree,
-                                  const Filter& filter,
-                                  const OnCollision& on_collision) {
-    const Bbox& bbox = collider.bbox;
-    assert(!bbox.is_empty());
-
-    auto& t = oibvh_tree;
-
-    SimpleStack<uint32_t, 32> stack;
-    stack.push(0u);
-
-    while (!stack.is_empty()) {
-      uint32_t node_id = stack.pop();
-      uint32_t depth = 31u - ctd::countl_zero(node_id + 1u);
-      uint32_t lv_node_id = node_id - ((1u << depth) - 1u);
-      uint32_t lv_rnode_num =
-          compute_level_rnode_num(depth, t.max_depth, t.vleaf_num);
-
-      // Skip virtual node.
-      if (lv_node_id >= lv_rnode_num) {
-        continue;
-      }
-
-      uint32_t node_mem_offset =
-          compute_mem_offset(node_id, depth, t.max_depth, t.vleaf_num);
-      auto& node_bbox = t.nodes[node_mem_offset].bbox;
-
-      if (!Bbox::is_colliding(bbox, node_bbox)) {
-        continue;
-      }
-
-      // Reach leaf.
-      if (depth == t.skipped_depth) {
-        // Compute index range.
-        uint32_t leaf_cid_num = oibvh_tree.collider_ids.size();
-        uint32_t leaf_cid_start = lv_node_id * (1u << (t.max_depth - depth));
-        uint32_t leaf_cid_end =
-            (lv_node_id + 1u) * (1u << (t.max_depth - depth));
-        leaf_cid_end = min(leaf_cid_end, leaf_cid_num);
-
-        // Test each leaf colliders.
-        assert(leaf_cid_end > leaf_cid_start);
-        for (int i = leaf_cid_start; i < leaf_cid_end; ++i) {
-          // For self collision test only.
-          if constexpr (dedup_self) {
-            if (dedup_id <= i) {
-              continue;
-            }
-          }
-          const C& leaf_collider = t.colliders[t.collider_ids[i]];
-          if (!Bbox::is_colliding(bbox, leaf_collider.bbox)) {
+      // Test each leaf colliders.
+      assert(leaf_cid_end > leaf_cid_start);
+      for (int i = leaf_cid_start; i < leaf_cid_end; ++i) {
+        // For self collision test only.
+        if constexpr (dedup_self) {
+          if (dedup_id <= i) {
             continue;
           }
-          if (!filter(collider, leaf_collider)) {
-            continue;
-          }
-          on_collision(collider, leaf_collider);
         }
-      }
-      // Descend.
-      else {
-        // Left child first.
-        uint32_t left = 2u * node_id + 1u;
-        uint32_t right = 2u * node_id + 2u;
-        stack.push(right);
-        stack.push(left);
+        const C& leaf_collider = t.colliders[t.collider_ids[i]];
+        if (!Bbox::is_colliding(bbox, leaf_collider.bbox)) {
+          continue;
+        }
+        if (!on_filter(collider, leaf_collider)) {
+          continue;
+        }
+        on_collision(collider, leaf_collider);
       }
     }
+    // Descend.
+    else {
+      // Left child first.
+      uint32_t left = 2u * node_id + 1u;
+      uint32_t right = 2u * node_id + 2u;
+      stack.push(right);
+      stack.push(left);
+    }
   }
-};
+}
+
+}  // namespace detail
+
+template <typename C>
+  requires IsCollider<C>
+OIBVHTree<C> OIBVHTree<C>::make(Bbox root_bbox, cu::device_buffer<C> colliders,
+                                CudaRuntime rt) {
+  assert(colliders.size() != 0);
+  assert(!root_bbox.is_empty());
+  static_assert(sizeof(BVHNode) == 32, "Unexpected BVHNode size.");
+
+  // Compute cell dimension for morton code.
+  Vec3f origin = root_bbox.min;
+  Vec3f extend = axpby(1.0f, root_bbox.max, -1.0f, root_bbox.min);
+  Vec3f inv_cell_length;
+  for (int i = 0; i < 3; ++i) {
+    constexpr float pow_21 = static_cast<float>(1u << 21);
+    float cell_length = extend(i) / pow_21;
+    inv_cell_length(i) = (cell_length < 1e-20f) ? 1e20f : 1.0f / cell_length;
+  }
+
+  // Fill collider id map and compute morton code.
+  int collider_num = colliders.size();
+  auto unsort_ids = cu::make_buffer<int>(rt.stream, rt.mem_resource,
+                                         collider_num, cu::no_init);
+  auto unsort_morton = cu::make_buffer<uint64_t>(rt.stream, rt.mem_resource,
+                                                 collider_num, cu::no_init);
+  auto compute_id_and_morton = [origin, inv_cell_length, id = unsort_ids.data(),
+                                c = colliders.data(),
+                                m = unsort_morton.data()] __device__(int i) {
+    id[i] = i;
+    m[i] = morton_code_magic_bits(origin, inv_cell_length, c[i].bbox);
+  };
+  cub::DeviceFor::Bulk(collider_num, compute_id_and_morton, rt.stream.get());
+
+  // Radix sort leaves by morton code.
+  auto morton_out = cu::make_buffer<uint64_t>(rt.stream, rt.mem_resource,
+                                              collider_num, cu::no_init);
+  auto collider_ids = cu::make_buffer<int>(rt.stream, rt.mem_resource,
+                                           collider_num, cu::no_init);
+
+  size_t radix_sort_temp_size;
+  cub::DeviceRadixSort::SortPairs(
+      nullptr, radix_sort_temp_size, unsort_morton.data(), morton_out.data(),
+      unsort_ids.data(), collider_ids.data(), collider_num, 0,
+      sizeof(uint64_t) * 8, rt.stream.get());
+  auto radix_sort_temp = cu::make_buffer<char>(
+      rt.stream, rt.mem_resource, radix_sort_temp_size, cu::no_init);
+
+  cub::DeviceRadixSort::SortPairs(
+      radix_sort_temp.data(), radix_sort_temp_size, unsort_morton.data(),
+      morton_out.data(), unsort_ids.data(), collider_ids.data(), collider_num,
+      0, sizeof(uint64_t) * 8, rt.stream.get());
+
+  // Free temp memory to reduce peak memory usage.
+  unsort_ids.destroy();
+  unsort_morton.destroy();
+  morton_out.destroy();
+  radix_sort_temp.destroy();
+
+  // Compute tree statistics. Use unsigned int because we use bitwise
+  // operation to compute index.
+  uint32_t rleaf_num = static_cast<uint32_t>(collider_num);
+  uint32_t leaf_num = ctd::bit_ceil(rleaf_num);
+  assert(leaf_num > 0);
+  uint32_t max_depth = ctd::countr_zero(leaf_num);
+  uint32_t vleaf_num = leaf_num - rleaf_num;
+
+  uint32_t skipped_depth =
+      (max_depth > MAX_SKIP_LEVEL) ? max_depth - MAX_SKIP_LEVEL : 0;
+  uint32_t skipped_vleaf_num = vleaf_num >> (max_depth - skipped_depth);
+  uint32_t skipped_rleaf_num = (1u << skipped_depth) - skipped_vleaf_num;
+  uint32_t skipped_rnode_num =
+      2u * skipped_rleaf_num - 1u + ctd::popcount(skipped_vleaf_num);
+
+  // Allocate and fill the nodes.
+  BVHNode empty_node = {.bbox = {}};
+  auto nodes = cu::make_buffer<BVHNode>(rt.stream, rt.mem_resource,
+                                        skipped_rnode_num, empty_node);
+
+  assert(skipped_rleaf_num > 0);
+  int grid_num = compute_grid_num(skipped_rleaf_num, 128);
+  detail::init_leaf_bbox<C><<<grid_num, 128, 0, rt.stream.get()>>>(
+      skipped_depth, max_depth, vleaf_num, colliders, collider_ids, nodes);
+
+  for (int i = skipped_depth; i > 0; i -= 8) {
+    uint32_t depth = i - 1;
+    uint32_t lv_rnode_num =
+        detail::compute_level_rnode_num(depth, max_depth, vleaf_num);
+    assert(lv_rnode_num > 0);
+
+    int grid_num = compute_grid_num(lv_rnode_num, 128);
+    detail::propagate_bbox_128<C><<<grid_num, 128, 0, rt.stream.get()>>>(
+        depth, max_depth, vleaf_num, nodes);
+  }
+
+  OIBVHTreeView<C> t;
+  t.max_depth_ = max_depth;
+  t.skipped_depth_ = skipped_depth;
+  t.vleaf_num_ = vleaf_num;
+  t.colliders_ = std::move(colliders);
+  t.collider_ids_ = std::move(collider_ids);
+  t.nodes_ = std::move(nodes);
+
+  return t;
+}
+
+template <typename C>
+  requires IsCollider<C>
+template <typename OnFilter, typename OnCollision>
+  requires IsFilterCallback<OnFilter, C> && IsCollisionCallback<OnCollision, C>
+void OIBVHTree<C>::test_self_collision(const OnFilter& on_filter,
+                                       const OnCollision& on_collision,
+                                       CudaRuntime rt) {
+  if (colliders_.empty()) {
+    return;
+  }
+
+  // clang-format off
+    auto batch_traversal = [on_filter, on_collision, tree = view()]
+      __device__ (uint32_t i) {
+      traverse<OnFilter, OnCollision, true>(
+          tree.colliders[tree.collider_ids[i]], i, tree, on_filter, on_collision);
+    };
+  // clang-format on
+
+  // TODO: launch with block size 128 to improve perf.
+  cub::DeviceFor::Bulk(collider_ids_.size(), batch_traversal, rt.stream.get());
+}
+
+template <typename C>
+  requires IsCollider<C>
+template <typename OnFilter, typename OnCollision>
+  requires IsFilterCallback<OnFilter, C> && IsCollisionCallback<OnCollision, C>
+void OIBVHTree<C>::test_tree_collision(const OIBVHTree& other,
+                                       const OnFilter& on_filter,
+                                       const OnCollision& on_collision,
+                                       CudaRuntime rt) {
+  assert(this != &other);
+
+  if (colliders_.empty() || other.colliders_.empty()) {
+    return;
+  }
+
+  // clang-format off
+    auto batch_traversal = [on_filter, on_collision, ta = view(), tb =other.view()]
+      __device__ (uint32_t i) {
+      traverse<OnFilter, OnCollision, false>(
+          ta.colliders[ta.collider_ids[i]], 0, tb, on_filter, on_collision);
+    };
+  // clang-format on
+  cub::DeviceFor::Bulk(collider_ids_.size(), batch_traversal, rt.stream.get());
+}
 
 }  // namespace silk::cuda

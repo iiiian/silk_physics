@@ -64,6 +64,11 @@ inline void check_cusparse(cusparseStatus_t result, char const* const func,
   }
 }
 
+/// @brief Compute grid num given minimal thread num and a fixed block dim.
+constexpr int compute_grid_num(int thread_num, int block_dim) {
+  return (thread_num + block_dim - 1) / block_dim;
+}
+
 struct CudaRuntime {
   cu::stream_ref stream;
   cu::mr::resource_ref<cu::mr::device_accessible> mem_resource;
