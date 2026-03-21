@@ -30,16 +30,12 @@ concept IsCollider = requires(T t) {
 ///
 /// This function is called on device.
 template <typename T, typename C>
-concept IsFilterCallback =
+concept IsOnFilterCallback =
     std::convertible_to<std::function<bool(const C&, const C&)>, T>;
 
-// Collision callback accepts a colliding pair that has intersecting bbox and
-// pass the filter.
-///
-/// This function is called on device.
-template <typename T, typename C>
-concept IsCollisionCallback =
-    std::convertible_to<std::function<void(const C&, const C&)>, T>;
+template <typename C>
+  requires IsCollider<C>
+using CandidatePairs = AtomicBuffer<ctd::pair<const C*, const C*>>;
 
 struct BVHNode {
   Bbox bbox;
@@ -87,18 +83,16 @@ class OIBVHTree {
   }
 
   /// @brief Test self collision.
-  template <typename OnFilter, typename OnCollision>
-    requires IsFilterCallback<OnFilter, C> &&
-             IsCollisionCallback<OnCollision, C>
-  void test_self_collision(const OnFilter& on_filter,
-                           const OnCollision& on_collision, CudaRuntime rt);
+  template <typename OnFilter>
+    requires IsOnFilterCallback<OnFilter, C>
+  void test_self_collision(const OnFilter& on_filter, CudaRuntime rt,
+                           CandidatePairs<C>& out);
 
   /// @brief Test tree-tree collision.
-  template <typename OnFilter, typename OnCollision>
-    requires IsFilterCallback<OnFilter, C> &&
-             IsCollisionCallback<OnCollision, C>
+  template <typename OnFilter>
+    requires IsOnFilterCallback<OnFilter, C>
   void test_tree_collision(const OIBVHTree& other, const OnFilter& on_filter,
-                           const OnCollision& on_collision, CudaRuntime rt);
+                           CudaRuntime rt, CandidatePairs<C>& out);
 };
 
 namespace detail {
@@ -135,8 +129,7 @@ __device__ inline uint64_t morton_code_magic_bits(Vec3f origin,
     constexpr uint32_t CELL_ID_MAX = (1u << 21u) - 1u;
 
     float float_cell = (pos(i) - origin(i)) * inv_cell_length(i);
-    float_cell = max(float_cell, 0.0f);
-    float_cell = min(float_cell, static_cast<float>(CELL_ID_MAX));
+    float_cell = ctd::clamp(float_cell, 0.0f, static_cast<float>(CELL_ID_MAX));
     cell(i) = static_cast<uint32_t>(ctd::floor(float_cell));
   }
 
@@ -374,10 +367,10 @@ class SimpleStack {
 };
 
 /// @brief Traverse collider through the tree.
-template <typename C, typename OnFilter, typename OnCollision, bool dedup_self>
+template <typename C, typename OnFilter, bool dedup_self>
 __device__ void traverse(const C& collider, int dedup_id,
                          OIBVHTreeView<C> oibvh_tree, const OnFilter& on_filter,
-                         const OnCollision& on_collision) {
+                         CandidatePairs<C>& out) {
   const Bbox& bbox = collider.bbox;
   assert(!bbox.is_empty());
 
@@ -430,7 +423,12 @@ __device__ void traverse(const C& collider, int dedup_id,
         if (!on_filter(collider, leaf_collider)) {
           continue;
         }
-        on_collision(collider, leaf_collider);
+
+        // Skip if out buffer is full.
+        int out_idx = out.counter.fetch_add(1);
+        if (out_idx < out.data.size()) {
+          out.data[out_idx] = ctd::make_pair(&collider, &leaf_collider);
+        }
       }
     }
     // Descend.
@@ -456,7 +454,7 @@ OIBVHTree<C> OIBVHTree<C>::make(Bbox root_bbox, cu::device_buffer<C> colliders,
 
   // Compute cell dimension for morton code.
   Vec3f origin = root_bbox.min;
-  Vec3f extend = axpby(1.0f, root_bbox.max, -1.0f, root_bbox.min);
+  Vec3f extend = vsub(root_bbox.max, root_bbox.min);
   Vec3f inv_cell_length;
   for (int i = 0; i < 3; ++i) {
     constexpr float pow_21 = static_cast<float>(1u << 21);
@@ -552,49 +550,65 @@ OIBVHTree<C> OIBVHTree<C>::make(Bbox root_bbox, cu::device_buffer<C> colliders,
 
 template <typename C>
   requires IsCollider<C>
-template <typename OnFilter, typename OnCollision>
-  requires IsFilterCallback<OnFilter, C> && IsCollisionCallback<OnCollision, C>
+template <typename OnFilter>
+  requires IsOnFilterCallback<OnFilter, C>
 void OIBVHTree<C>::test_self_collision(const OnFilter& on_filter,
-                                       const OnCollision& on_collision,
-                                       CudaRuntime rt) {
+                                       CudaRuntime rt, CandidatePairs<C>& out) {
+  out.counter = 0;
   if (colliders_.empty()) {
     return;
   }
 
   // clang-format off
-    auto batch_traversal = [on_filter, on_collision, tree = view()]
+    auto batch_traversal = [&on_filter, &out, tree = view()]
       __device__ (uint32_t i) {
-      traverse<OnFilter, OnCollision, true>(
-          tree.colliders[tree.collider_ids[i]], i, tree, on_filter, on_collision);
+      traverse<OnFilter, true>(
+          tree.colliders[tree.collider_ids[i]], i, tree, on_filter, out);
     };
   // clang-format on
 
   // TODO: launch with block size 128 to improve perf.
   cub::DeviceFor::Bulk(collider_ids_.size(), batch_traversal, rt.stream.get());
+  // If buffer overlfow, resize then traverse again.
+  if (out.counter > out.data.size()) {
+    out.data = cu::make_buffer(rt.stream, rt.mem_resource, out.counter);
+    out.counter = 0;
+    cub::DeviceFor::Bulk(collider_ids_.size(), batch_traversal,
+                         rt.stream.get());
+  }
 }
 
 template <typename C>
   requires IsCollider<C>
-template <typename OnFilter, typename OnCollision>
-  requires IsFilterCallback<OnFilter, C> && IsCollisionCallback<OnCollision, C>
+template <typename OnFilter>
+  requires IsOnFilterCallback<OnFilter, C>
 void OIBVHTree<C>::test_tree_collision(const OIBVHTree& other,
                                        const OnFilter& on_filter,
-                                       const OnCollision& on_collision,
-                                       CudaRuntime rt) {
+                                       CudaRuntime rt, CandidatePairs<C>& out) {
   assert(this != &other);
+
+  out.counter = 0;
 
   if (colliders_.empty() || other.colliders_.empty()) {
     return;
   }
 
   // clang-format off
-    auto batch_traversal = [on_filter, on_collision, ta = view(), tb =other.view()]
+    auto batch_traversal = [&on_filter, &out, ta = view(), tb =other.view()]
       __device__ (uint32_t i) {
-      traverse<OnFilter, OnCollision, false>(
-          ta.colliders[ta.collider_ids[i]], 0, tb, on_filter, on_collision);
+      traverse<OnFilter, false>(
+          ta.colliders[ta.collider_ids[i]], 0, tb, on_filter, out);
     };
   // clang-format on
+
   cub::DeviceFor::Bulk(collider_ids_.size(), batch_traversal, rt.stream.get());
+  // If buffer overlfow, resize then traverse again.
+  int candidate_num = out.counter;
+  if (candidate_num > out.data.size()) {
+    out = AtomicBuffer<C>{candidate_num, rt};
+    cub::DeviceFor::Bulk(collider_ids_.size(), batch_traversal,
+                         rt.stream.get());
+  }
 }
 
 }  // namespace silk::cuda

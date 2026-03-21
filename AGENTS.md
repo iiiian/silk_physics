@@ -1,2 +1,3 @@
 - never modify any files without explicitly asking for permission
 - never execute any commands that will modify files without asking for permission
+- never ask follow up question

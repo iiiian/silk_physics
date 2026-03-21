@@ -65,7 +65,7 @@ std::optional<std::pair<float, float>> exact_edge_edge_uv(
   float x10dx10 = x10.squaredNorm();
   float x10dx32 = x10.dot(x32);
   float x32dx32 = x32.squaredNorm();
-  float x10dx21 = x10.dot(x20);
+  float x10dx20 = x10.dot(x20);
   float x32dx20 = x32.dot(x20);
   float det = x10dx10 * x32dx32 - x10dx32 * x10dx32;
 
@@ -107,7 +107,7 @@ std::optional<std::pair<float, float>> exact_edge_edge_uv(
   // lines. Then clamp if necessary.
 
   // Edge x0–x1 parameter.
-  float u = (x32dx32 * x10dx21 - x10dx32 * x32dx20) / det;
+  float u = (x32dx32 * x10dx20 - x10dx32 * x32dx20) / det;
   bool is_u_clamped = false;
   if (u < 0.0f) {
     u = 0.0f;
@@ -118,7 +118,7 @@ std::optional<std::pair<float, float>> exact_edge_edge_uv(
   }
 
   // Edge x2–x3 parameter.
-  float v = (x10dx32 * x10dx21 - x10dx10 * x32dx20) / det;
+  float v = (x10dx32 * x10dx20 - x10dx10 * x32dx20) / det;
   bool is_v_clamped = false;
   if (v < 0.0f) {
     v = 0.0f;

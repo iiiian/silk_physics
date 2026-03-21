@@ -4,6 +4,8 @@
 #include <cusparse.h>
 
 #include <cassert>
+#include <cuda/atomic>
+#include <cuda/buffer>
 #include <cuda/memory_resource>
 #include <cuda/stream>
 #include <stdexcept>
@@ -72,6 +74,17 @@ constexpr int compute_grid_num(int thread_num, int block_dim) {
 struct CudaRuntime {
   cu::stream_ref stream;
   cu::mr::resource_ref<cu::mr::device_accessible> mem_resource;
+};
+
+template <typename T>
+struct AtomicBuffer {
+  cu::atomic<int> counter;
+  cu::device_buffer<T> data;
+
+  AtomicBuffer(int num, CudaRuntime rt) {
+    counter = 0;
+    data = cu::make_buffer(rt.stream, rt.mem_resource, num, cu::no_init);
+  }
 };
 
 }  // namespace silk::cuda

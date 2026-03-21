@@ -86,11 +86,11 @@ class MatView {
     assert((row_start + row_num) <= m && "Row index out of range.");
     assert((col_start + col_num) <= n && "Col index out of range.");
 
-    auto row_range = ctd::make_pair(row_start, row_start + row_num);
-    auto col_range = ctd::make_pair(col_start, col_start + col_num);
-    auto new_mdspan = ctd::submdspan(mdspan, row_range, col_range);
-
-    return MatView<T, row_num, col_num>{new_mdspan};
+    int row_stride = mdspan.stride(0);
+    int col_stride = mdspan.stride(1);
+    T* data =
+        mdspan.data_handle() + row_start * row_stride + col_start * col_stride;
+    return MatView<T, row_num, col_num>{data, row_stride, col_stride};
   }
 
   __both__ constexpr MatView<T, 1, n> row(int row) const {
@@ -163,7 +163,9 @@ class Mat {
     return MatView<const T, m, n>::row_major(data.data());
   }
 
-  __both__ constexpr operator MatView<T, m, n>() const { return const_view(); }
+  __both__ constexpr operator MatView<const T, m, n>() const {
+    return const_view();
+  }
 
   __both__ constexpr T& operator()(int i, int j) { return view()(i, j); }
 
@@ -191,6 +193,19 @@ using Mat42f = Mat<float, 4, 2>;
 using Mat43f = Mat<float, 4, 3>;
 using Mat44f = Mat<float, 4, 4>;
 
+using Vec2fV = MatView<const float, 2, 1>;
+using Vec3fV = MatView<const float, 3, 1>;
+using Vec4fV = MatView<const float, 4, 1>;
+using Mat22fV = MatView<const float, 2, 2>;
+using Mat23fV = MatView<const float, 2, 3>;
+using Mat32fV = MatView<const float, 3, 2>;
+using Mat33fV = MatView<const float, 3, 3>;
+using Mat24fV = MatView<const float, 2, 4>;
+using Mat34fV = MatView<const float, 3, 4>;
+using Mat42fV = MatView<const float, 4, 2>;
+using Mat43fV = MatView<const float, 4, 3>;
+using Mat44fV = MatView<const float, 4, 4>;
+
 using Vec2i = Mat<int, 2, 1>;
 using Vec3i = Mat<int, 3, 1>;
 using Vec4i = Mat<int, 4, 1>;
@@ -204,6 +219,19 @@ using Mat42i = Mat<int, 4, 2>;
 using Mat43i = Mat<int, 4, 3>;
 using Mat44i = Mat<int, 4, 4>;
 
+using Vec2iV = MatView<const int, 2, 1>;
+using Vec3iV = MatView<const int, 3, 1>;
+using Vec4iV = MatView<const int, 4, 1>;
+using Mat22iV = MatView<const int, 2, 2>;
+using Mat23iV = MatView<const int, 2, 3>;
+using Mat32iV = MatView<const int, 3, 2>;
+using Mat33iV = MatView<const int, 3, 3>;
+using Mat24iV = MatView<const int, 2, 4>;
+using Mat34iV = MatView<const int, 3, 4>;
+using Mat42iV = MatView<const int, 4, 2>;
+using Mat43iV = MatView<const int, 4, 3>;
+using Mat44iV = MatView<const int, 4, 4>;
+
 using Vec2u = Mat<uint32_t, 2, 1>;
 using Vec3u = Mat<uint32_t, 3, 1>;
 using Vec4u = Mat<uint32_t, 4, 1>;
@@ -216,6 +244,19 @@ using Mat34u = Mat<uint32_t, 3, 4>;
 using Mat42u = Mat<uint32_t, 4, 2>;
 using Mat43u = Mat<uint32_t, 4, 3>;
 using Mat44u = Mat<uint32_t, 4, 4>;
+
+using Vec2uV = MatView<const uint32_t, 2, 1>;
+using Vec3uV = MatView<const uint32_t, 3, 1>;
+using Vec4uV = MatView<const uint32_t, 4, 1>;
+using Mat22uV = MatView<const uint32_t, 2, 2>;
+using Mat23uV = MatView<const uint32_t, 2, 3>;
+using Mat32uV = MatView<const uint32_t, 3, 2>;
+using Mat33uV = MatView<const uint32_t, 3, 3>;
+using Mat24uV = MatView<const uint32_t, 2, 4>;
+using Mat34uV = MatView<const uint32_t, 3, 4>;
+using Mat42uV = MatView<const uint32_t, 4, 2>;
+using Mat43uV = MatView<const uint32_t, 4, 3>;
+using Mat44uV = MatView<const uint32_t, 4, 4>;
 
 template <typename Dst, typename Src>
 __both__ constexpr void assign(Dst& dst, const Src& src) {
@@ -264,6 +305,20 @@ __both__ constexpr Mat<typename X::Scalar, X::M, X::N> axpb(
   return result;
 }
 
+template <typename X>
+__both__ constexpr Mat<typename X::Scalar, X::M, X::N> ax(typename X::Scalar a,
+                                                          const X& x) {
+  Mat<typename X::Scalar, X::M, X::N> result;
+#pragma unroll
+  for (int i = 0; i < X::M; ++i) {
+#pragma unroll
+    for (int j = 0; j < X::N; ++j) {
+      result(i, j) = a * x(i, j);
+    }
+  }
+  return result;
+}
+
 template <typename X, typename Y>
 __both__ constexpr X::Scalar dot(const X& x, const Y& y) {
   static_assert(ctd::is_same_v<typename X::Scalar, typename Y::Scalar>,
@@ -276,6 +331,19 @@ __both__ constexpr X::Scalar dot(const X& x, const Y& y) {
 #pragma unroll
     for (int j = 0; j < X::N; ++j) {
       result += x(i, j) * y(i, j);
+    }
+  }
+  return result;
+}
+
+template <typename X>
+__both__ constexpr X::Scalar squared_norm(const X& x) {
+  float result = 0.0f;
+#pragma unroll
+  for (int i = 0; i < X::M; ++i) {
+#pragma unroll
+    for (int j = 0; j < X::N; ++j) {
+      result += x(i, j) * x(i, j);
     }
   }
   return result;
@@ -332,6 +400,18 @@ template <typename X, typename Y>
 __both__ constexpr auto vmax(const X& x, const Y& y)
     -> Mat<typename X::Scalar, X::M, X::N> {
   return binary(x, y, [] __both__(float a, float b) { return a > b ? a : b; });
+}
+
+template <typename X, typename Y>
+__both__ constexpr auto vadd(const X& x, const Y& y)
+    -> Mat<typename X::Scalar, X::M, X::N> {
+  return binary(x, y, [] __both__(float a, float b) { return a + b; });
+}
+
+template <typename X, typename Y>
+__both__ constexpr auto vsub(const X& x, const Y& y)
+    -> Mat<typename X::Scalar, X::M, X::N> {
+  return binary(x, y, [] __both__(float a, float b) { return a - b; });
 }
 
 template <typename X, typename Y, typename Pred>
@@ -406,6 +486,14 @@ __both__ constexpr bool all_lt(const X& x, const Y& y) {
 template <typename X, typename Y>
 __both__ constexpr bool all_leq(const X& x, const Y& y) {
   return all(x, y, [] __both__(float a, float b) { return a <= b; });
+}
+
+__both__ constexpr Vec3f cross(Vec3fV x, Vec3fV y) {
+  Vec3f res;
+  res(0) = x(1) * y(2) - x(2) * y(1);
+  res(1) = x(2) * y(0) - x(0) * y(2);
+  res(2) = x(0) * y(1) - x(1) * y(0);
+  return res;
 }
 
 }  // namespace silk::cuda
