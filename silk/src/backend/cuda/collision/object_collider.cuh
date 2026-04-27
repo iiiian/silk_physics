@@ -1,10 +1,12 @@
 #pragma once
 
 #include <Eigen/Core>
+#include <cuda/std/span>
 
 #include "backend/cuda/collision/bbox.cuh"
 #include "backend/cuda/collision/broadphase.cuh"
 #include "backend/cuda/collision/mesh_collider.cuh"
+#include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/object_state.cuh"
 #include "backend/cuda/obstacle_position.hpp"
 #include "common/handle.hpp"
@@ -31,52 +33,51 @@ class ObjectCollider {
   // Surface friction coefficient for contact resolution.
   float friction;
   // Broadphase collision culling data struture
-
-  // TODO: impl
-  // KDTree<MeshCollider> mesh_collider_tree;
+  Buf<PointCollider> point_colliders;
+  OIBVHTree<TriangleCollider> triangle_collider_tree;
+  OIBVHTree<EdgeCollider> edge_collider_tree;
 
  public:
-  /// @brief Build a collider for a simulated (dynamic) object.
+  /// @brief Build a collider for dynamic object.
   ///
-  /// @param entity_handle Owning entity handle used to look the collider up.
-  /// @param config Collision parameters that control filtering and materials.
-  /// @param mesh Geometry source; positions are copied into collider buffers.
-  /// @param pin Pin data identifying vertices that should not move.
-  /// @param mass Per-degree-of-freedom mass vector used to compute inverse
-  /// mass.
-  /// @param state_offset Offset into the solver state array for this object.
+  /// @param[in] entity_handle ECS entity handle.
+  /// @param[in] config Collision config.
+  /// @param[in] mesh Object mesh.
+  /// @param[in] pin Object's pinned vertex indices.
+  /// @param[in] mass Object vertex mass vector.
+  /// @param[in] state_offset Object state offset into global state vector.
   ObjectCollider(Handle entity_handle, const CollisionConfig& config,
                  const TriMesh& mesh, const Pin& pin,
-                 const Eigen::VectorXf& mass, int state_offset);
+                 const Eigen::VectorXf& mass, int state_offset, CudaRuntime rt);
 
-  /// @brief Build a collider for a purely kinematic obstacle.
+  /// @brief Build a collider for pure obstacle.
   ///
-  /// @param entity_handle Owning entity handle used to look the collider up.
-  /// @param config Collision parameters that control filtering and materials.
-  /// @param mesh Geometry source; positions are copied into collider buffers.
+  /// @param[in] entity_handle ECS entity handle.
+  /// @param[in] config Collision config.
+  /// @param[in] mesh Object mesh.
   ObjectCollider(Handle entity_handle, const CollisionConfig& config,
-                 const TriMesh& mesh);
+                 const TriMesh& mesh, CudaRuntime rt);
 
-  /// @brief Sync collider geometry with a dynamic object's current state.
+  /// @brief Update collider from collision config and global state.
   ///
-  /// @param config Runtime collision controls (group toggles, restitution,
-  /// etc).
-  /// @param object_state Layout information for slicing into the global state.
-  /// @param global_curr_state Stacked xyz positions at the end of the step.
-  /// @param global_prev_state Stacked xyz positions at the start of the step.
-  void update(const CollisionConfig& config, const ObjectState& object_state,
-              const Eigen::VectorXf global_curr_state,
-              const Eigen::VectorXf global_prev_state);
+  /// @param[in] config Collision config.
+  /// @param[in] global_curr_state Global state vector.
+  /// @param[in] global_prev_state Global state vector.
+  void update(const CollisionConfig& config, ctd::span<const float> curr_state,
+              ctd::span<const float> prev_state, CudaRuntime rt);
 
-  /// @brief Sync collider geometry with a kinematic obstacle.
+  /// @brief Update collider from collision config and obstacle position.
   ///
-  /// @param config Runtime collision controls (group toggles, restitution,
-  /// etc).
-  /// @param obstacle_position Buffered obstacle poses and static state flags.
+  /// @param[in] config Collision config.
+  /// @param[in] obstacle_position Obstacle position.
   void update(const CollisionConfig& config,
               const ObstaclePosition& obstacle_position);
 
  private:
+  // Temp data for object collider bbox reduction.
+  Buf<char> device_reduce_temp_;
+  Buf<TriangleCollider> reduced_collider_;
+
   ObjectCollider() = default;
 };
 

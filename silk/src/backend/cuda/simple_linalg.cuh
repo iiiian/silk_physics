@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cuda/std/array>
+#include <cuda/std/limits>
 #include <cuda/std/mdspan>
 #include <cuda/std/type_traits>
 #include <cuda/std/utility>
@@ -141,6 +142,32 @@ class Mat {
     return result;
   }
 
+  __both__ static constexpr Mat max() {
+    Mat result;
+
+#pragma unroll
+    for (int i = 0; i < m; ++i) {
+#pragma unroll
+      for (int j = 0; j < n; ++j) {
+        result(i, j) = ctd::numeric_limits<T>::max();
+      }
+    }
+    return result;
+  }
+
+  __both__ static constexpr Mat min() {
+    Mat result;
+
+#pragma unroll
+    for (int i = 0; i < m; ++i) {
+#pragma unroll
+      for (int j = 0; j < n; ++j) {
+        result(i, j) = ctd::numeric_limits<T>::min();
+      }
+    }
+    return result;
+  }
+
   __both__ static constexpr Mat identity() {
     static_assert(m == n, "Identity ctor requires square matrix.");
     Mat result = zeros();
@@ -151,6 +178,26 @@ class Mat {
     }
 
     return result;
+  }
+
+  template <typename V>
+  static Mat vec_like(const V& vec) {
+    Mat result;
+    for (int i = 0; i < m * n; ++i) {
+      result(i) = vec(i);
+    }
+    return m;
+  }
+
+  template <typename M>
+  static Mat mat_like(const M& mat) {
+    Mat result;
+    for (int i = 0; i < m; ++i) {
+      for (int j = 0; j < n; ++j) {
+        result(i, j) = mat(i, j);
+      }
+    }
+    return m;
   }
 
   __both__ constexpr MatView<T, m, n> view() {
@@ -349,6 +396,19 @@ __both__ constexpr X::Scalar squared_norm(const X& x) {
   return result;
 }
 
+template <typename X>
+__both__ constexpr X::Scalar norm(const X& x) {
+  float result = 0.0f;
+#pragma unroll
+  for (int i = 0; i < X::M; ++i) {
+#pragma unroll
+    for (int j = 0; j < X::N; ++j) {
+      result += x(i, j) * x(i, j);
+    }
+  }
+  return sqrt(result);
+}
+
 template <typename X, typename Y>
 __both__ constexpr auto mat_mul(const X& x, const Y& y)
     -> Mat<typename X::Scalar, X::M, Y::N> {
@@ -412,6 +472,18 @@ template <typename X, typename Y>
 __both__ constexpr auto vsub(const X& x, const Y& y)
     -> Mat<typename X::Scalar, X::M, X::N> {
   return binary(x, y, [] __both__(float a, float b) { return a - b; });
+}
+
+template <typename X, typename Y>
+__both__ constexpr auto vmul(const X& x, const Y& y)
+    -> Mat<typename X::Scalar, X::M, X::N> {
+  return binary(x, y, [] __both__(float a, float b) { return a * b; });
+}
+
+template <typename X, typename Y>
+__both__ constexpr auto vdiv(const X& x, const Y& y)
+    -> Mat<typename X::Scalar, X::M, X::N> {
+  return binary(x, y, [] __both__(float a, float b) { return a / b; });
 }
 
 template <typename X, typename Y, typename Pred>

@@ -4,12 +4,15 @@
 #include <cusparse.h>
 
 #include <cassert>
+#include <cuda/algorithm>
 #include <cuda/atomic>
 #include <cuda/buffer>
 #include <cuda/memory_resource>
+#include <cuda/std/span>
 #include <cuda/stream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 // libcu++ cuda:: and cuda::std:: namespace conflicts with silk::cuda,
 // making it annoying to use. To remedy this, rename them to cu:: and ctd::.
@@ -66,25 +69,54 @@ inline void check_cusparse(cusparseStatus_t result, char const* const func,
   }
 }
 
-/// @brief Compute grid num given minimal thread num and a fixed block dim.
-constexpr int compute_grid_num(int thread_num, int block_dim) {
-  return (thread_num + block_dim - 1) / block_dim;
+/// @brief ceil(num/denom)
+constexpr int div_round_up(int num, int denom) {
+  return (num + denom - 1) / denom;
 }
 
 struct CudaRuntime {
   cu::stream_ref stream;
-  cu::mr::resource_ref<cu::mr::device_accessible> mem_resource;
+  cu::mr::resource_ref<cu::mr::device_accessible> mr;
+};
+
+/// @brief Nullable device buffer.
+/// It's very annoying device_buffer does not have default ctor.
+template <typename T>
+using Buf = ctd::optional<cu::device_buffer<T>>;
+
+template <typename T>
+struct DynSpan {
+  // please respect the counter with atomic ops.
+  int* counter = nullptr;
+  ctd::span<T> data;
 };
 
 template <typename T>
-struct AtomicBuffer {
-  cu::atomic<int> counter;
-  cu::device_buffer<T> data;
+cu::device_buffer<T> vec_like_to_device(ctd::span<const T> vec,
+                                        CudaRuntime rt) {
+  auto buffer = cu::make_buffer<T>(rt.stream, rt.mr, vec.size(), cu::no_init);
+  cu::copy_bytes(rt.stream, vec, buffer);
+}
 
-  AtomicBuffer(int num, CudaRuntime rt) {
-    counter = 0;
-    data = cu::make_buffer(rt.stream, rt.mem_resource, num, cu::no_init);
-  }
-};
+template <typename T>
+std::vector<T> vec_like_to_host(ctd::span<const T> vec, CudaRuntime rt) {
+  std::vector<T> buffer(vec.size());
+  cu::copy_bytes(rt.stream, vec, buffer);
+}
+
+template <typename T>
+T scalar_sync_load(const T* device_ptr, CudaRuntime rt) {
+  T result;
+  cudaMemcpyAsync(&result, device_ptr, sizeof(T), cudaMemcpyDeviceToHost,
+                  rt.stream.get());
+  rt.stream.sync();
+  return result;
+}
+
+template <typename T>
+void scalar_write(T* dst, T val, CudaRuntime rt) {
+  cudaMemcpyAsync(dst, &val, sizeof(T), cudaMemcpyHostToDevice,
+                  rt.stream.get());
+}
 
 }  // namespace silk::cuda

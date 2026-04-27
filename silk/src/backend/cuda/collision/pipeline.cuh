@@ -1,13 +1,9 @@
 #pragma once
 
 #include <cuda/buffer>
-#include <cuda/std/span>
-#include <vector>
 
 #include "backend/cuda/collision/bbox.cuh"
-#include "backend/cuda/collision/broadphase.cuh"
 #include "backend/cuda/collision/collision.cuh"
-#include "backend/cuda/collision/mesh_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/ecs.hpp"
 
@@ -34,26 +30,8 @@ class CollisionPipeline {
   /// @param dt Simulation timestep size in seconds.
   /// @return All collisions detected during the timestep.
   cu::device_buffer<Collision> find_collision(Registry& registry,
-                                              const Bbox& scene_bbox, float dt);
-
-  /// @brief Partial CCD update.
-  ///
-  /// Currently this is not used anywhere.
-  ///
-  /// @param global_state_t0 Global state vector at start of timestep
-  /// @param global_state_t1 Global state vector after position update
-  /// @param collisions Collision list to update with new contact data
-  void update_collision(ctd::span<const float> global_state_t0,
-                        ctd::span<const float> global_state_t1,
-                        ctd::span<const Collision> collisions) const;
-
- private:
-  /// @brief Numerical error tolerance for edge-edge CCD queries.
-  Vec3 scene_ee_err_;
-  /// @brief Numerical error tolerance for vertex-face CCD queries.
-  Vec3 scene_vf_err_;
-
-  CollisionCache<MeshCollider> mesh_ccache_;
+                                              const Bbox& scene_bbox, float dt,
+                                              CudaRuntime rt);
 };
 
 }  // namespace silk::cuda

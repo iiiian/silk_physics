@@ -27,10 +27,10 @@ ObjectState::ObjectState(int state_offset, ctd::span<const float> curr_state,
                          ctd::span<const float> state_velocity, CudaRuntime rt)
     : state_offset(state_offset),
       state_num(static_cast<int>(curr_state.size())),
-      curr_state(rt.stream, rt.mem_resource, curr_state),
-      state_velocity(rt.stream, rt.mem_resource, state_velocity),
-      perm(rt.stream, rt.mem_resource),
-      inv_perm(rt.stream, rt.mem_resource) {
+      curr_state(rt.stream, rt.mr, curr_state),
+      state_velocity(rt.stream, rt.mr, state_velocity),
+      perm(rt.stream, rt.mr),
+      inv_perm(rt.stream, rt.mr) {
   assert(curr_state.size() == state_velocity.size());
   assert(state_offset >= 0);
 }

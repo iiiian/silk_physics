@@ -18,7 +18,7 @@ cu::device_buffer<typename Derived::Scalar> host_eigen_to_device(
   const auto tmp = expr.derived().eval();
   size_t num = static_cast<size_t>(expr.size());
 
-  return cu::make_buffer(rt.stream, rt.mem_resource, {tmp.data(), num});
+  return cu::make_buffer(rt.stream, rt.mr, {tmp.data(), num});
 }
 
 }  // namespace silk::cuda

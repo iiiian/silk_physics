@@ -5,20 +5,46 @@
 
 namespace silk::cuda {
 
-enum class MeshColliderType { Point, Edge, Triangle };
-
-struct MeshCollider {
-  MeshColliderType type;
-  // vertex index
-  Vec3 index;
-  // vertex inverse mass
-  Vec3 inv_mass;
-  // position of vertex at t0, each row is a vertex
-  Mat33 position_t0;
-  // position of vertex at t1, each row is a vertex
-  Mat33 position_t1;
-
+struct PointCollider {
   Bbox bbox;
+  /// vertex index
+  int index;
+  /// vertex inverse mass
+  float inv_mass;
+  /// position of vertices at t0
+  Vec3f v0_t0;
+  /// position of vertices at t0
+  Vec3f v0_t1;
+};
+
+struct EdgeCollider {
+  Bbox bbox;
+  /// vertex index
+  Vec2i index;
+  /// vertex inverse mass
+  Vec2f inv_mass;
+  /// position of vertices at t0
+  Vec3f v0_t0;
+  Vec3f v1_t0;
+  /// position of vertices at t0
+  Vec3f v0_t1;
+  Vec3f v1_t1;
+};
+
+struct TriangleCollider {
+  Bbox bbox;
+  /// vertex index
+  Vec3i index;
+  /// vertex inverse mass
+  Vec3f inv_mass;
+  /// position of vertices at t0
+  Vec3f v0_t0;
+  Vec3f v1_t0;
+  Vec3f v2_t0;
+  /// position of vertices at t0
+  Vec3f v0_t1;
+  Vec3f v1_t1;
+  Vec3f v2_t1;
 };
 
 }  // namespace silk::cuda

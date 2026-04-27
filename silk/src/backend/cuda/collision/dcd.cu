@@ -7,14 +7,11 @@
 
 namespace silk::cuda {
 
-/// @brief Compute barycentric (u, v) of the point projected on the triangle.
-__both__ ctd::optional<ctd::pair<float, float>> exact_point_triangle_uv(
-    Mat34fV position, float eps) {
-  auto x0 = position.col(0);  // Point position.
-  auto x1 = position.col(1);  // Triangle vertex 0 position.
-  auto x2 = position.col(2);  // Triangle vertex 1 position.
-  auto x3 = position.col(3);  // Triangle vertex 2 position.
-
+__both__ ctd::optional<ctd::pair<float, float>> exact_pt_uv(const Vec3f& x0,
+                                                            const Vec3f& x1,
+                                                            const Vec3f& x2,
+                                                            const Vec3f& x3,
+                                                            float eps) {
   Vec3f x21 = vsub(x2, x1);
   Vec3f x31 = vsub(x3, x1);
   Vec3f x01 = vsub(x0, x1);
@@ -39,15 +36,16 @@ __both__ ctd::optional<ctd::pair<float, float>> exact_point_triangle_uv(
   return ctd::make_pair(b1, b2);
 }
 
-/// @brief Compute parameters (u, v) for the closest points on two edges.
-///
-/// See Real-Time Collision Detection ch. 5.1.9
-__both__ ctd::optional<ctd::pair<float, float>> exact_edge_edge_uv(
-    Mat34fV position, float eps) {
-  auto p1 = position.col(0);
-  auto q1 = position.col(1);
-  auto p2 = position.col(2);
-  auto q2 = position.col(3);
+__both__ ctd::optional<ctd::pair<float, float>> exact_ee_uv(const Vec3f& x0,
+                                                            const Vec3f& x1,
+                                                            const Vec3f& x2,
+                                                            const Vec3f& x3,
+                                                            float eps) {
+  auto& p1 = x0;
+  auto& q1 = x1;
+  auto& p2 = x2;
+  auto& q2 = x3;
+
   Vec3f d1 = vsub(q1, p1);
   Vec3f d2 = vsub(q2, p2);
   Vec3f r = vsub(p1, p2);

@@ -19,7 +19,7 @@ struct Collision {
   int state_offset_b;
 
   /// Vertex index.
-  Vec4 index;
+  Vec4i index;
 
   /// Time of impact in [0,1].
   float toi;
@@ -30,23 +30,29 @@ struct Collision {
   /// Collision constraint stiffness for solver.
   float stiffness;
 
-  /// Whether collision narrowphase use distance smaller than minimal
-  /// separation to resolve time of impact.
-  bool use_small_ms;
-
   /// Inverse mass for each vertex involved in collision. Value of 0 indicates
   /// vertex is pinned or belongs to obstacle.
-  Vec4 inv_mass;
+  Vec4f inv_mass;
 
   /// Primitive vertex positions.
-  /// Layout: [vertex0, vertex1, vertex2, vertex3] as row vectors.
-  Mat43 position_t0;
-  Mat43 position_t1;
+  Vec3f x0_t0;
+  Vec3f x1_t0;
+  Vec3f x2_t0;
+  Vec3f x3_t0;
+  Vec3f x0_t1;
+  Vec3f x1_t1;
+  Vec3f x2_t1;
+  Vec3f x3_t1;
 
-  /// Primitive vertex velocities before/after collision.
-  /// Layout: [vertex0, vertex1, vertex2, vertex3] as row vectors.
-  Mat43 velocity_t0;
-  Mat43 velocity_t1;
+  /// Primitive vertex velocities.
+  Vec3f v0_t0;
+  Vec3f v1_t0;
+  Vec3f v2_t0;
+  Vec3f v3_t0;
+  Vec3f v0_t1;
+  Vec3f v1_t1;
+  Vec3f v2_t1;
+  Vec3f v3_t1;
 };
 
 }  // namespace silk::cuda

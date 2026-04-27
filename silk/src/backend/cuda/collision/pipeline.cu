@@ -1,28 +1,19 @@
-#include "backend/cuda/collision/pipeline.hpp"
-
-#include <tbb/enumerable_thread_specific.h>
-#include <tbb/parallel_for.h>
-
-#include <Eigen/Core>
 #include <cassert>
-#include <vector>
 
-#include "backend/cuda/collision/broadphase.hpp"
-#include "backend/cuda/collision/collision.hpp"
-#include "backend/cuda/collision/interval_root_finder.hpp"
-#include "backend/cuda/collision/mesh_collider.hpp"
-#include "backend/cuda/collision/narrowphase.hpp"
-#include "backend/cuda/collision/object_collider.hpp"
+#include "backend/cpu/collision/broadphase.hpp"
+#include "backend/cuda/collision/broadphase.cuh"
+#include "backend/cuda/collision/ccd.cuh"
+#include "backend/cuda/collision/collision.cuh"
+#include "backend/cuda/collision/dcd.cuh"
+#include "backend/cuda/collision/object_collider.cuh"
+#include "backend/cuda/collision/pipeline.cuh"
+#include "backend/cuda/simple_linalg.cuh"
 #include "common/logger.hpp"
 
 namespace silk::cuda {
 
-/// @brief Filter function for object-level collision detection.
-///
-/// @param a First object collider
-/// @param b Second object collider
-/// @return true if collision should be tested, false to skip
-bool object_collision_filter(const ObjectCollider& a, const ObjectCollider& b) {
+__both__ bool object_collision_filter(const ObjectCollider& a,
+                                      const ObjectCollider& b) {
   // Collision rules:
   // - Group = -1 means collision is disabled completely
   // - Objects must belong to the same collision group otherwise
@@ -31,119 +22,71 @@ bool object_collision_filter(const ObjectCollider& a, const ObjectCollider& b) {
           !(a.state_offset == -1 && b.state_offset == -1));
 };
 
-/// @brief Filter function for mesh-level inter-object collision.
-///
-/// @param a First mesh collider
-/// @param b Second mesh collider
-/// @return True if collision should be tested, false to skip
-bool mesh_inter_collision_filter(const MeshCollider& a, const MeshCollider& b) {
-  // Enforces three filtering rules:
-  // 1. Only allows point-triangle and edge-edge collision types
-  // 2. Rejects collisions where all vertices are pinned (zero inverse mass)
-
-  if (a.type == MeshColliderType::Point &&
-      b.type == MeshColliderType::Triangle) {
-    bool is_both_pinned =
-        (a.inv_mass(0) + b.inv_mass(0) + b.inv_mass(1) + b.inv_mass(2) == 0.0f);
-    return (!is_both_pinned);
-  }
-
-  if (a.type == MeshColliderType::Triangle &&
-      b.type == MeshColliderType::Point) {
-    bool is_both_pinned =
-        (a.inv_mass(0) + a.inv_mass(1) + a.inv_mass(2) + b.inv_mass(0) == 0.0f);
-    return (!is_both_pinned);
-  }
-
-  if (a.type == MeshColliderType::Edge && b.type == MeshColliderType::Edge) {
-    bool is_both_pinned =
-        (a.inv_mass(0) + a.inv_mass(1) + b.inv_mass(0) + b.inv_mass(1) == 0.0f);
-    return (!is_both_pinned);
-  }
-  return false;
+__both__ bool tp_inter_collision_filter(const TriangleCollider& a,
+                                        const PointCollider& b) {
+  bool is_both_pinned =
+      ((b.inv_mass + a.inv_mass(0) + a.inv_mass(1) + a.inv_mass(2)) == 0.0f);
+  return !is_both_pinned;
 };
 
-/// @brief Filter function for mesh self-collision detection.
-///
-/// @param a First mesh primitive
-/// @param b Second mesh primitive
-/// @return true if collision should be tested
-bool mesh_self_collision_filter(const MeshCollider& a, const MeshCollider& b) {
-  // Enforces three filtering rules:
-  // 1. Only allows point-triangle and edge-edge collision types
-  // 2. Rejects collisions between topologically adjacent primitives
-  // 3. Rejects collisions where all vertices are pinned (zero inverse mass)
-
-  if (a.type == MeshColliderType::Point &&
-      b.type == MeshColliderType::Triangle) {
-    bool is_neighbor = (a.index(0) == b.index(0) || a.index(0) == b.index(1) ||
-                        a.index(0) == b.index(2));
-    bool is_both_pinned =
-        (a.inv_mass(0) + b.inv_mass(0) + b.inv_mass(1) + b.inv_mass(2) == 0.0f);
-    return (!is_neighbor && !is_both_pinned);
-  }
-
-  if (a.type == MeshColliderType::Triangle &&
-      b.type == MeshColliderType::Point) {
-    bool is_neighbor = (b.index(0) == a.index(0) || b.index(0) == a.index(1) ||
-                        b.index(0) == a.index(2));
-    bool is_both_pinned =
-        (a.inv_mass(0) + a.inv_mass(1) + a.inv_mass(2) + b.inv_mass(0) == 0.0f);
-    return (!is_neighbor && !is_both_pinned);
-  }
-
-  if (a.type == MeshColliderType::Edge && b.type == MeshColliderType::Edge) {
-    bool is_neighbor = (a.index(0) == b.index(0) || a.index(0) == b.index(1) ||
-                        a.index(1) == b.index(0) || a.index(1) == b.index(1));
-    bool is_both_pinned =
-        (a.inv_mass(0) + a.inv_mass(1) + b.inv_mass(0) + b.inv_mass(1) == 0.0f);
-    return (!is_neighbor && !is_both_pinned);
-  }
-
-  return false;
+__both__ bool tp_self_collision_filter(const TriangleCollider& a,
+                                       const PointCollider& b) {
+  bool is_both_pinned =
+      ((b.inv_mass + a.inv_mass(0) + a.inv_mass(1) + a.inv_mass(2)) == 0.0f);
+  bool is_neighbor =                 ba.index == a.index(2));
+                      
+  return !is_both_pinned && !is_neighbor;
 };
 
-std::vector<Collision> CollisionPipeline::find_collision(Registry& registry,
-                                                         const Bbox& scene_bbox,
-                                                         float dt) {
-  // Compute scene-dependent numerical error bounds for CCD robustness.
-  Eigen::Vector3f abs_max =
-      scene_bbox.min.cwiseAbs().cwiseMax(scene_bbox.max.cwiseAbs());
-  scene_ee_err_ = get_numerical_error(abs_max, false);
-  scene_vf_err_ = get_numerical_error(abs_max, true);
+__both__ bool ee_inter_collision_filter(const EdgeCollider& a,
+                                        const EdgeCollider& b) {
+  bool is_both_pinned =
+      ((a.inv_mass(0) + a.inv_mass(1) + b.inv_mass(0) + b.inv_mass(1)) == 0.0f);
+  return !is_both_pinned;
+};
 
-  tbb::enumerable_thread_specific<std::vector<Collision>> thread_collisions;
+__both__ bool ee_self_collision_filter(const EdgeCollider& a,
+                                       const EdgeCollider& b) {
+  bool is_both_pinned =
+      ((a.inv_mass(0) + a.inv_mass(1) + b.inv_mass(0) + b.inv_mass(1)) == 0.0f);
+  bool is_neighbor = (a.index(0) == b.index(0) || a.index(0) == b.index(1) ||
+                      a.index(1) == b.index(0) || a.index(1) == b.index(1));
+  return !is_both_pinned && !is_neighbor;
+};
+
+cu::device_buffer<Collision> CollisionPipeline::find_collision(
+    Registry& registry, const Bbox& scene_bbox, float dt, CudaRuntime rt) {
   std::vector<ObjectCollider>& object_colliders =
       registry.get_all<ObjectCollider>();
 
   // Three-stage collision detection for inter-object collisions:
-  // 1. Object-level broadphase using sweep-and-prune
-  // 2. Mesh-level broadphase using KD-tree spatial queries
-  // 3. Narrowphase using continuous collision detection
+  // 1. Object-level broadphase using sweep-and-prune on CPU.
+  // 2. Mesh-level broadphase using BVH-tree spatial queries on GPU.
+  // 3. Narrowphase using continuous collision detection on GPU.
 
   // Stage 1: Object broadphase using sweep-and-prune.
-  CollisionCache<ObjectCollider> object_ccache;
+  namespace cpu = ::silk::cpu;
+  cpu::CollisionCache<ObjectCollider> object_ccache;
   std::vector<int> object_proxies(object_colliders.size());
   for (int i = 0; i < object_colliders.size(); ++i) {
     object_proxies[i] = i;
   }
-  int axis = sap_optimal_axis<ObjectCollider>(
+  int axis = cpu::sap_optimal_axis<ObjectCollider>(
       object_colliders, object_proxies.data(), object_proxies.size());
-  sap_sort_proxies<ObjectCollider>(object_colliders, object_proxies.data(),
-                                   object_proxies.size(), axis);
-  sap_sorted_group_self_collision<ObjectCollider>(
+  cpu::sap_sort_proxies<ObjectCollider>(object_colliders, object_proxies.data(),
+                                        object_proxies.size(), axis);
+  cpu::sap_sorted_group_self_collision<ObjectCollider>(
       object_colliders, object_proxies.data(), object_proxies.size(), axis,
       object_collision_filter, object_ccache);
 
-  for (auto& ccache : object_ccache) {
-    auto& oa = ccache.first;
-    auto& ob = ccache.second;
-
-    // Stage 2: Mesh broadphase using hierarchical KD-tree traversal.
-    mesh_ccache_.clear();
-    KDTree<MeshCollider>::test_tree_collision(
-        oa->mesh_collider_tree, ob->mesh_collider_tree,
-        mesh_inter_collision_filter, mesh_ccache_);
+  auto tp_ccache = cu::make_buffer<ctd::pair<TriangleCollider, PointCollider>>(
+      rt.stream, rt.mr, 1000, cu::no_init);
+  auto ee_ccache = cu::make_buffer<ctd::pair<EdgeCollider, EdgeCollider>>(
+      rt.stream, rt.mr, 1000, cu::no_init);
+  for (auto& [oa, ob] : object_ccache) {
+    // Stage 2: Mesh broadphase using GPU BVH queries.
+    oa->triangle_collider_tree.test_ext_collision(ob->point_colliders, tp_inter_collision_filter, tp_ccache, rt);
+    oa->edge_collider_tree.test_ext_collision(ob->edge_collider_tree.get_colliders(), ee_inter_collision_filter, ee_ccache, rt);
 
     // Stage 3: Parallel narrowphase using continuous collision detection.
     int ccache_num = mesh_ccache_.size();
