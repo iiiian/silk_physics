@@ -133,10 +133,10 @@ __device__ Vec3f velocity_diff(const Vec3f& v_relative, const Vec3f& n,
 
 __device__ ctd::optional<Collision> pt_ccd(
     const PointCollider* point_collider,
-    const TriangleCollider* triangle_collider, float minimal_separation) {
+    const TriangleCollider* triangle_collider) {
   auto& p = point_collider;
   auto& t = triangle_collider;
-  auto& ms = minimal_separation;
+  float ms = ctd::min(p->minimal_separation, t->minimal_separation);
 
   float restitution = 0.5 * (p->restitution + t->restitution);
   float friction = 0.5 * (p->friction + t->friction);
@@ -209,7 +209,7 @@ __device__ ctd::optional<Collision> pt_ccd(
     c.index(2) = t->index(1);
     c.index(3) = t->index(2);
     c.toi = root(i);
-    c.minimal_separation = minimal_separation;
+    c.minimal_separation = ms;
     c.inv_mass = inv_mass;
 
     c.v0_t0 = d0;
@@ -225,12 +225,11 @@ __device__ ctd::optional<Collision> pt_ccd(
   }
 }
 
-__device__ ctd::optional<Collision> ee_ccd(const EdgeCollider* edge_collider_a,
-                                           const EdgeCollider* edge_collider_b,
-                                           float minimal_separation) {
+__device__ ctd::optional<Collision> ee_ccd(
+    const EdgeCollider* edge_collider_a, const EdgeCollider* edge_collider_b) {
   auto& ea = edge_collider_a;
   auto& eb = edge_collider_b;
-  auto& ms = minimal_separation;
+  float ms = ctd::min(ea->minimal_separation, eb->minimal_separation);
 
   float restitution = 0.5 * (ea->restitution + eb->restitution);
   float friction = 0.5 * (ea->friction + eb->friction);
@@ -304,7 +303,7 @@ __device__ ctd::optional<Collision> ee_ccd(const EdgeCollider* edge_collider_a,
     c.index(2) = eb->index(0);
     c.index(3) = eb->index(1);
     c.toi = root(i);
-    c.minimal_separation = minimal_separation;
+    c.minimal_separation = ms;
     c.inv_mass = inv_mass;
 
     c.v0_t0 = d0;

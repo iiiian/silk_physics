@@ -13,6 +13,8 @@ struct PointCollider {
   int state_offset;
   /// vertex index
   int index;
+  /// minimal separation distance used for CCD against this collider
+  float minimal_separation;
   /// Reflection param
   float restitution;
   /// Reflection param
@@ -31,6 +33,8 @@ struct EdgeCollider {
   int state_offset;
   /// vertex index
   Vec2i index;
+  /// minimal separation distance used for CCD against this collider
+  float minimal_separation;
   /// Reflection param
   float restitution;
   /// Reflection param
@@ -51,6 +55,8 @@ struct TriangleCollider {
   int state_offset;
   /// vertex index
   Vec3i index;
+  /// minimal separation distance used for CCD against this collider
+  float minimal_separation;
   /// Reflection param
   float restitution;
   /// Reflection param

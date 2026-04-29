@@ -10,10 +10,9 @@ namespace silk::cuda::collision {
 
 __device__ ctd::optional<Collision> pt_ccd(
     const PointCollider* point_collider,
-    const TriangleCollider* triangle_collider, float minimal_seperation);
+    const TriangleCollider* triangle_collider);
 
 __device__ ctd::optional<Collision> ee_ccd(const EdgeCollider* edge_collider_a,
-                                           const EdgeCollider* edge_collider_b,
-                                           float minimal_separation);
+                                           const EdgeCollider* edge_collider_b);
 
 }  // namespace silk::cuda::collision

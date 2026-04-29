@@ -14,14 +14,14 @@ namespace silk::cuda::collision {
 namespace {
 
 __global__ void batch_pt_ccd(ctd::span<PTCCache> pt_ccache,
-                             float minimal_seperation, DynSpan<Collision> out) {
+                             DynSpan<Collision> out) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
   if (tid > pt_ccache.size()) {
     return;
   }
 
   auto [t, p] = pt_ccache[tid];
-  auto c = pt_ccd(p, t, minimal_seperation);
+  auto c = pt_ccd(p, t);
   if (!c) {
     return;
   }
@@ -35,14 +35,14 @@ __global__ void batch_pt_ccd(ctd::span<PTCCache> pt_ccache,
 }
 
 __global__ void batch_ee_ccd(ctd::span<EECCache> ee_ccache,
-                             float minimal_seperation, DynSpan<Collision> out) {
+                             DynSpan<Collision> out) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
   if (tid > ee_ccache.size()) {
     return;
   }
 
   auto [ea, eb] = ee_ccache[tid];
-  auto c = ee_ccd(ea, eb, minimal_seperation);
+  auto c = ee_ccd(ea, eb);
   if (!c) {
     return;
   }
@@ -57,7 +57,7 @@ __global__ void batch_ee_ccd(ctd::span<EECCache> ee_ccache,
 
 }  // namespace
 
-void pt_narrowphase(ctd::span<PTCCache> pt_ccache, float minimal_seperation,
+void pt_narrowphase(ctd::span<PTCCache> pt_ccache,
                     cu::device_buffer<Collision>& out, int& fill,
                     CudaRuntime rt) {
   if (pt_ccache.empty()) {
@@ -68,8 +68,7 @@ void pt_narrowphase(ctd::span<PTCCache> pt_ccache, float minimal_seperation,
   DynSpan<Collision> dyn_out{.fill = d_fill.data(), .data = out};
 
   int grid_num = div_round_up(pt_ccache.size(), 128);
-  batch_pt_ccd<<<grid_num, 128, 0, rt.stream.get()>>>(
-      pt_ccache, minimal_seperation, dyn_out);
+  batch_pt_ccd<<<grid_num, 128, 0, rt.stream.get()>>>(pt_ccache, dyn_out);
 
   // If buffer overlfow, resize then try again.
   int old_fill = fill;
@@ -78,13 +77,11 @@ void pt_narrowphase(ctd::span<PTCCache> pt_ccache, float minimal_seperation,
     resize_buffer(fill + 1, out, rt);
     dyn_out.data = out;
     scalar_write(d_fill.data(), old_fill, rt);
-    batch_pt_ccd<<<grid_num, 128, 0, rt.stream.get()>>>(
-        pt_ccache, minimal_seperation, dyn_out);
+    batch_pt_ccd<<<grid_num, 128, 0, rt.stream.get()>>>(pt_ccache, dyn_out);
   }
 }
 
-void ee_narrowphase(ctd::span<EECCache> ee_ccache, float minimal_seperation,
-                    float restitution, float friction,
+void ee_narrowphase(ctd::span<EECCache> ee_ccache,
                     cu::device_buffer<Collision>& out, int& fill,
                     CudaRuntime rt) {
   if (ee_ccache.empty()) {
@@ -95,8 +92,7 @@ void ee_narrowphase(ctd::span<EECCache> ee_ccache, float minimal_seperation,
   DynSpan<Collision> dyn_out{.fill = d_fill.data(), .data = out};
 
   int grid_num = div_round_up(ee_ccache.size(), 128);
-  batch_ee_ccd<<<grid_num, 128, 0, rt.stream.get()>>>(
-      ee_ccache, minimal_seperation, dyn_out);
+  batch_ee_ccd<<<grid_num, 128, 0, rt.stream.get()>>>(ee_ccache, dyn_out);
 
   // If buffer overlfow, resize then try again.
   int old_fill = fill;
@@ -105,8 +101,7 @@ void ee_narrowphase(ctd::span<EECCache> ee_ccache, float minimal_seperation,
     resize_buffer(fill + 1, out, rt);
     dyn_out.data = out;
     scalar_write(d_fill.data(), old_fill, rt);
-    batch_ee_ccd<<<grid_num, 128, 0, rt.stream.get()>>>(
-        ee_ccache, minimal_seperation, dyn_out);
+    batch_ee_ccd<<<grid_num, 128, 0, rt.stream.get()>>>(ee_ccache, dyn_out);
   }
 }
 

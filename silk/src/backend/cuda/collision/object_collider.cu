@@ -16,7 +16,8 @@ namespace silk::cuda::collision {
 
 std::vector<PointCollider> make_point_colliders(
     const TriMesh& mesh, float bbox_padding, int state_offset,
-    float restitution, float friction, std::function<float(int)> get_inv_mass) {
+    float restitution, float friction, float minimal_separation,
+    std::function<float(int)> get_inv_mass) {
   auto& m = mesh;
   int point_num = m.V.rows();
   std::vector<PointCollider> point_colliders;
@@ -24,6 +25,7 @@ std::vector<PointCollider> make_point_colliders(
     PointCollider pc;
     pc.state_offset = state_offset;
     pc.index = i;
+    pc.minimal_separation = minimal_separation;
     pc.restitution = restitution;
     pc.friction = friction;
     pc.inv_mass = get_inv_mass(i);
@@ -42,7 +44,8 @@ std::vector<PointCollider> make_point_colliders(
 
 std::vector<EdgeCollider> make_edge_colliders(
     const TriMesh& mesh, float bbox_padding, int state_offset,
-    float restitution, float friction, std::function<float(int)> get_inv_mass) {
+    float restitution, float friction, float minimal_separation,
+    std::function<float(int)> get_inv_mass) {
   auto& m = mesh;
   int edge_num = m.E.rows();
   std::vector<EdgeCollider> edge_colliders;
@@ -50,6 +53,7 @@ std::vector<EdgeCollider> make_edge_colliders(
     EdgeCollider ec;
     ec.state_offset = state_offset;
     ec.index = Vec2i::vec_like(m.E.row(i));
+    ec.minimal_separation = minimal_separation;
     ec.restitution = restitution;
     ec.friction = friction;
     ec.inv_mass(0) = get_inv_mass(ec.index(0));
@@ -71,7 +75,8 @@ std::vector<EdgeCollider> make_edge_colliders(
 
 std::vector<TriangleCollider> make_triangle_colliders(
     const TriMesh& mesh, float bbox_padding, int state_offset,
-    float restitution, float friction, std::function<float(int)> get_inv_mass) {
+    float restitution, float friction, float minimal_separation,
+    std::function<float(int)> get_inv_mass) {
   auto& m = mesh;
   int face_num = m.F.rows();
   std::vector<TriangleCollider> triangle_colliders;
@@ -79,6 +84,7 @@ std::vector<TriangleCollider> make_triangle_colliders(
     TriangleCollider tc;
     tc.state_offset = state_offset;
     tc.index = Vec3i::vec_like(m.F.row(i));
+    tc.minimal_separation = minimal_separation;
     tc.restitution = restitution;
     tc.friction = friction;
     tc.inv_mass(0) = get_inv_mass(tc.index(0));
@@ -134,9 +140,9 @@ ObjectCollider ObjectCollider::from_physical(const CollisionConfig& config,
     return 1.0f / mass(index);
   };
 
-  auto host_triangle_colliders =
-      make_triangle_colliders(mesh, oc.bbox_padding, state_offset,
-                              c.restitution, c.friction, get_inv_mass);
+  auto host_triangle_colliders = make_triangle_colliders(
+      mesh, oc.bbox_padding, state_offset, c.restitution, c.friction,
+      c.minimal_separation, get_inv_mass);
   auto device_triangle_colliders =
       vec_like_to_device<TriangleCollider>(host_triangle_colliders, rt);
   oc.triangle_collider_tree = OIBVHTree<TriangleCollider>(
@@ -144,7 +150,7 @@ ObjectCollider ObjectCollider::from_physical(const CollisionConfig& config,
 
   auto host_edge_colliders =
       make_edge_colliders(mesh, oc.bbox_padding, state_offset, c.restitution,
-                          c.friction, get_inv_mass);
+                          c.friction, c.minimal_separation, get_inv_mass);
   auto device_edge_colliders =
       vec_like_to_device<EdgeCollider>(host_edge_colliders, rt);
   oc.edge_collider_tree =
@@ -152,14 +158,15 @@ ObjectCollider ObjectCollider::from_physical(const CollisionConfig& config,
 
   auto host_point_colliders =
       make_point_colliders(mesh, oc.bbox_padding, state_offset, c.restitution,
-                           c.friction, get_inv_mass);
-  auto point_colliders =
+                           c.friction, c.minimal_separation, get_inv_mass);
+  oc.point_colliders =
       vec_like_to_device<PointCollider>(host_point_colliders, rt);
 
   TriangleCollider reduced_triangle;
   reduced_triangle.bbox = oc.bbox;
   oc.reduced_collider_ =
       cu::make_buffer<TriangleCollider>(rt.stream, rt.mr, 1, reduced_triangle);
+  return oc;
 }
 
 ObjectCollider ObjectCollider::from_obstacle(const CollisionConfig& config,
@@ -182,28 +189,32 @@ ObjectCollider ObjectCollider::from_obstacle(const CollisionConfig& config,
   // Obstacles have infinite mass (zero inverse mass).
   auto get_inv_mass = [](int) { return 0.0f; };
 
-  auto host_triangle_colliders = make_triangle_colliders(
-      mesh, oc.bbox_padding, -1, c.restitution, c.friction, get_inv_mass);
+  auto host_triangle_colliders =
+      make_triangle_colliders(mesh, oc.bbox_padding, -1, c.restitution,
+                              c.friction, c.minimal_separation, get_inv_mass);
   auto device_triangle_colliders =
       vec_like_to_device<TriangleCollider>(host_triangle_colliders, rt);
   oc.triangle_collider_tree = OIBVHTree<TriangleCollider>(
       oc.bbox, std::move(device_triangle_colliders), rt);
 
-  auto host_edge_colliders = make_edge_colliders(
-      mesh, oc.bbox_padding, -1, c.restitution, c.friction, get_inv_mass);
+  auto host_edge_colliders =
+      make_edge_colliders(mesh, oc.bbox_padding, -1, c.restitution, c.friction,
+                          c.minimal_separation, get_inv_mass);
   auto device_edge_colliders =
       vec_like_to_device<EdgeCollider>(host_edge_colliders, rt);
   oc.edge_collider_tree =
       OIBVHTree<EdgeCollider>(oc.bbox, std::move(device_edge_colliders), rt);
 
-  auto host_point_colliders = make_point_colliders(
-      mesh, oc.bbox_padding, -1, c.restitution, c.friction, get_inv_mass);
-  auto point_colliders =
+  auto host_point_colliders =
+      make_point_colliders(mesh, oc.bbox_padding, -1, c.restitution, c.friction,
+                           c.minimal_separation, get_inv_mass);
+  oc.point_colliders =
       vec_like_to_device<PointCollider>(host_point_colliders, rt);
 
   TriangleCollider reduced_triangle;
   reduced_triangle.bbox = oc.bbox;
   oc.reduced_collider_ = cu::make_buffer(rt.stream, rt.mr, 1, reduced_triangle);
+  return oc;
 }
 
 void ObjectCollider::update(const CollisionConfig& config,
