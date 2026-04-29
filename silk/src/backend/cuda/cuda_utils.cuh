@@ -86,8 +86,8 @@ using Buf = ctd::optional<cu::device_buffer<T>>;
 
 template <typename T>
 struct DynSpan {
-  // please respect the counter with atomic ops.
-  int* counter = nullptr;
+  // please respect the fill counter with atomic ops.
+  int* fill = nullptr;
   ctd::span<T> data;
 };
 
