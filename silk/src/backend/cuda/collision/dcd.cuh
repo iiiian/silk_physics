@@ -5,7 +5,7 @@
 
 #include "backend/cuda/simple_linalg.cuh"
 
-namespace silk::cuda {
+namespace silk::cuda::collision {
 
 /// @brief Eval triangle uv.
 /// @param u param u.
@@ -57,4 +57,4 @@ __both__ ctd::optional<ctd::pair<float, float>> exact_ee_uv(const Vec3f& x0,
                                                             const Vec3f& x3,
                                                             float eps);
 
-}  // namespace silk::cuda
+}  // namespace silk::cuda::collision

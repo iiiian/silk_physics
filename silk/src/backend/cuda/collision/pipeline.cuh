@@ -7,7 +7,7 @@
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/ecs.hpp"
 
-namespace silk::cuda {
+namespace silk::cuda::collision {
 
 /// @brief Collision detection and resolution pipeline.
 class CollisionPipeline {
@@ -34,4 +34,4 @@ class CollisionPipeline {
                                               CudaRuntime rt);
 };
 
-}  // namespace silk::cuda
+}  // namespace silk::cuda::collision

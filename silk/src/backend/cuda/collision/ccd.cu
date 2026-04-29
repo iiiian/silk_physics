@@ -7,7 +7,7 @@
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/simple_linalg.cuh"
 
-namespace silk::cuda {
+namespace silk::cuda::collision {
 
 class CubicPoly {
  public:
@@ -27,7 +27,7 @@ class CubicPoly {
     float eval_left = eval(left);
     float eval_right = eval(right);
     if (eval_left * eval_right > 0.0f) {
-      return EMPTY;
+      return EMPTY_ROOT;
     }
 
 #pragma unroll
@@ -74,10 +74,10 @@ class CubicPoly {
   }
 };
 
-__both__ CubicPolyRoot solve_coplaner_poly(Vec3fV x1_t0, Vec3fV x2_t0,
-                                           Vec3fV x3_t0, Vec3fV x4_t0,
-                                           Vec3fV x1_t1, Vec3fV x2_t1,
-                                           Vec3fV x3_t1, Vec3fV x4_t1) {
+__both__ Vec3f solve_coplaner_poly(const Vec3f& x1_t0, const Vec3f& x2_t0,
+                                   const Vec3f& x3_t0, const Vec3f& x4_t0,
+                                   const Vec3f& x1_t1, const Vec3f& x2_t1,
+                                   const Vec3f& x3_t1, const Vec3f& x4_t1) {
   Vec3f p21 = vsub(x2_t0, x1_t0);
   Vec3f v21 = vsub(vsub(x2_t1, x1_t1), p21);
   Vec3f p31 = vsub(x3_t0, x1_t0);
@@ -99,9 +99,8 @@ __both__ CubicPolyRoot solve_coplaner_poly(Vec3fV x1_t0, Vec3fV x2_t0,
   return poly.find_root(0.0f, 1.0f);
 }
 
-Vec3f velocity_diff(const Vec3f& v_relative,
-                    const Vec3f& n, float ms,
-                    float restitution, float friction) {
+__device__ Vec3f velocity_diff(const Vec3f& v_relative, const Vec3f& n,
+                               float ms, float restitution, float friction) {
   float v_normal_norm = dot(v_relative, n);
   Vec3f v_normal = ax(v_normal_norm, n);
   Vec3f v_parallel = vsub(v_relative, v_normal);
@@ -109,7 +108,7 @@ Vec3f velocity_diff(const Vec3f& v_relative,
   float v_diff_norm_norm;
   // Two primitives are approaching each other normally.
   if (v_normal_norm > ms) {
-    v_diff_norm_norm = ax(1.0f, + restitution, v_normal_norm);
+    v_diff_norm_norm = (1.0 + restitution) * v_normal_norm;
   }
   // Two primitives are approaching each other very slowly.
   // Give an artificial velocity to ensure separation.
@@ -121,73 +120,67 @@ Vec3f velocity_diff(const Vec3f& v_relative,
   float v_parallel_norm = norm(v_parallel);
   float static_v_parallel_norm = friction * v_diff_norm_norm;
   if (v_parallel_norm < static_v_parallel_norm) {
-    return v_diff_norm_norm * n + v_parallel;
     return axpby(v_diff_norm_norm, n, 1.0f, v_parallel);
   }
 
   // Kinetic friction.
-  return axpby(v_diff_norm_norm, n, static_v_parallel_norm / v_parallel_norm, v_parallel);
-        
+  return axpby(v_diff_norm_norm, n, static_v_parallel_norm / v_parallel_norm,
+               v_parallel);
 }
 
-ctd::optional<Collision> pt_ccd(
- const PointCollider* point_collider,
- const TriangleCollider* triangle_collider,
- float min_sep,
- float restitution,
- float friction){
-
+__device__ ctd::optional<Collision> pt_ccd(
+    const PointCollider* point_collider,
+    const TriangleCollider* triangle_collider, float minimal_separation,
+    float restitution, float friction) {
   auto& p = point_collider;
   auto& t = triangle_collider;
+  auto& ms = minimal_separation;
 
-  Vec3f root = solve_coplaner_poly(p.v0_t0, p.v0_t1,
-                                   t.v0_t0, t.v0_t1,
-                                   t.v1_t0, t.v1_t1,
-                                   t.v2_t0, t.v2_t1);
+  Vec3f root = solve_coplaner_poly(p->v0_t0, p->v0_t1, t->v0_t0, t->v0_t1,
+                                   t->v1_t0, t->v1_t1, t->v2_t0, t->v2_t1);
 
-
-  auto& x0 = v0_t0;
-  auto& x1 = v0_t0;
-  auto& x2 = v1_t0;
-  auto& x3 = v2_t0;
-  Vec3f d0 = vsub(p.v0_t1, p.v0_t0);
-  Vec3f d1 = vsub(t.v0_t1, t.v0_t0);
-  Vec3f d2 = vsub(t.v1_t1, t.v1_t0);
-  Vec3f d3 = vsub(t.v2_t1, t.v2_t0);
-  for (int i=0;i<3;++i){
-    if (root(i) == CubicPoly::EMPTY){ return false; }
+  Vec3f d0 = vsub(p->v0_t1, p->v0_t0);
+  Vec3f d1 = vsub(t->v0_t1, t->v0_t0);
+  Vec3f d2 = vsub(t->v1_t1, t->v1_t0);
+  Vec3f d3 = vsub(t->v2_t1, t->v2_t0);
+  for (int i = 0; i < 3; ++i) {
+    if (root(i) == CubicPoly::EMPTY_ROOT) {
+      continue;
+    }
 
     // discrete collision detection.
-    Vec3f y0 = axpby(1.0f, x0, root(i), d0);
-    Vec3f y1 = axpby(1.0f, x1, root(i), d1);
-    Vec3f y2 = axpby(1.0f, x2, root(i), d2);
-    Vec3f y3 = axpby(1.0f, x3, root(i), d3);
-    
-    auto uv = exact_pt_uv(y0, y1, y2, y3);
-    if (!uv) {continue;}
+    Vec3f y0 = axpby(1.0f, p->v0_t0, root(i), d0);
+    Vec3f y1 = axpby(1.0f, t->v0_t0, root(i), d1);
+    Vec3f y2 = axpby(1.0f, t->v1_t0, root(i), d2);
+    Vec3f y3 = axpby(1.0f, t->v2_t0, root(i), d3);
 
-    float b1 = uv->first;
-    float b2 = uv->second;
+    auto uv = exact_pt_uv(y0, y1, y2, y3, 1e-20);
+    if (!uv) {
+      continue;
+    }
+    auto [u, v] = *uv;
 
     Vec3f pa = y0;
-    Vec3f pb = eval_triangle_parameter(b1, b2, y1, y2, y3);
+    Vec3f pb = eval_triangle_parameter(u, v, y1, y2, y3);
     Vec3f disp = vsub(pa, pb);
     float dist2 = dot(disp, disp);
-    if (dist2 > min_sep*min_sep) {continue;}
-    if (dist2 == 0.0f) {return ctd::nullopt;}
+    if (dist2 > ms * ms) {
+      continue;
+    }
+    if (dist2 == 0.0f) {
+      return ctd::nullopt;
+    }
 
     Vec3f va = d0;
-    Vec3f vb = eval_triangle_parameter(b1, b2, v1, v2, v3);
+    Vec3f vb = eval_triangle_parameter(u, v, d1, d2, d3);
     Vec3f v_rel = vsub(va, vb);
-    Vec3f n = disp / sqrt(dist2);
-
+    Vec3f n = ax(1.0 / sqrt(dist2), disp);
 
     // Total velocity change after collision.
-    Vec3f v_diff = velocity_diff(v_rel, n, min_sep, restitution, friction);
-
+    Vec3f v_diff = velocity_diff(v_rel, n, ms, restitution, friction);
 
     // Compute impulse weights.
-    Vec4f para = {1.0f, 1.0f - b1 - b2, b1, b2};
+    Vec4f para = {1.0f, 1.0f - u - v, u, v};
     Vec4f inv_mass;
     inv_mass(0) = point_collider->inv_mass;
     inv_mass(1) = triangle_collider->inv_mass(0);
@@ -195,13 +188,36 @@ ctd::optional<Collision> pt_ccd(
     inv_mass(3) = triangle_collider->inv_mass(2);
 
     float denom = 0.0f;
-    for (int i=0;i<4;++i){
+    for (int i = 0; i < 4; ++i) {
       denom += para(i) * para(i) * inv_mass(i);
     }
 
     Vec4f weight = ax(-1.0f / denom, vmul(para, inv_mass));
-  }
+    weight(0) *= -1.0f;
 
+    // Compute reflected velocity.
+    Collision c;
+    c.type = CollisionType::PointTriangle;
+    c.state_offset_a = point_collider->state_offset;
+    c.state_offset_b = triangle_collider->state_offset;
+
+    c.index(0) = point_collider->index;
+    c.index(1) = triangle_collider->index(0);
+    c.index(2) = triangle_collider->index(1);
+    c.index(3) = triangle_collider->index(2);
+    c.toi = root(i);
+    c.minimal_separation = minimal_separation;
+    c.inv_mass = inv_mass;
+
+    c.v0_t0 = d0;
+    c.v1_t0 = d1;
+    c.v2_t0 = d2;
+    c.v3_t0 = d3;
+    c.v0_t1 = axpby(weight(0), v_diff, 1.0, d0);
+    c.v1_t1 = axpby(weight(1), v_diff, 1.0, d1);
+    c.v2_t1 = axpby(weight(2), v_diff, 1.0, d2);
+    c.v3_t1 = axpby(weight(3), v_diff, 1.0, d3);
+  }
 }
 
-}  // namespace silk::cuda
+}  // namespace silk::cuda::collision

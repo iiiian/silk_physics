@@ -3,7 +3,7 @@
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/simple_linalg.cuh"
 
-namespace silk::cuda {
+namespace silk::cuda::collision {
 
 /// @brief Axis-aligned bounding box.
 /// The box is invalid if any element of min is smaller or equal to max;
@@ -34,4 +34,4 @@ class Bbox {
   __both__ bool is_empty() const { return any_geq(min, max); }
 };
 
-}  // namespace silk::cuda
+}  // namespace silk::cuda::collision

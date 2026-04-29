@@ -1,17 +1,13 @@
 #pragma once
 
-#include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/simple_linalg.cuh"
-#include "common/handle.hpp"
 
-namespace silk::cuda {
+namespace silk::cuda::collision {
 
 enum class CollisionType { PointTriangle, EdgeEdge };
 
 struct Collision {
   CollisionType type;
-  Handle entity_handle_a;
-  Handle entity_handle_b;
 
   /// Entity global state offset.
   /// Value of -1 indicates vertex belongs an obstacle.
@@ -55,4 +51,4 @@ struct Collision {
   Vec3f v3_t1;
 };
 
-}  // namespace silk::cuda
+}  // namespace silk::cuda::collision

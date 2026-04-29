@@ -10,7 +10,7 @@
 #include "backend/cuda/simple_linalg.cuh"
 #include "common/logger.hpp"
 
-namespace silk::cuda {
+namespace silk::cuda::collision {
 
 __both__ bool object_collision_filter(const ObjectCollider& a,
                                       const ObjectCollider& b) {
@@ -34,7 +34,7 @@ __both__ bool tp_self_collision_filter(const TriangleCollider& a,
   bool is_both_pinned =
       ((b.inv_mass + a.inv_mass(0) + a.inv_mass(1) + a.inv_mass(2)) == 0.0f);
   bool is_neighbor =                 ba.index == a.index(2));
-                      
+
   return !is_both_pinned && !is_neighbor;
 };
 
@@ -85,8 +85,11 @@ cu::device_buffer<Collision> CollisionPipeline::find_collision(
       rt.stream, rt.mr, 1000, cu::no_init);
   for (auto& [oa, ob] : object_ccache) {
     // Stage 2: Mesh broadphase using GPU BVH queries.
-    oa->triangle_collider_tree.test_ext_collision(ob->point_colliders, tp_inter_collision_filter, tp_ccache, rt);
-    oa->edge_collider_tree.test_ext_collision(ob->edge_collider_tree.get_colliders(), ee_inter_collision_filter, ee_ccache, rt);
+    oa->triangle_collider_tree.test_ext_collision(
+        ob->point_colliders, tp_inter_collision_filter, tp_ccache, rt);
+    oa->edge_collider_tree.test_ext_collision(
+        ob->edge_collider_tree.get_colliders(), ee_inter_collision_filter,
+        ee_ccache, rt);
 
     // Stage 3: Parallel narrowphase using continuous collision detection.
     int ccache_num = mesh_ccache_.size();
@@ -155,4 +158,4 @@ void CollisionPipeline::update_collision(
   }
 }
 
-}  // namespace silk::cuda
+}  // namespace silk::cuda::collision

@@ -181,23 +181,27 @@ class Mat {
   }
 
   template <typename V>
-  static Mat vec_like(const V& vec) {
+  __both__ static Mat vec_like(const V& vec) {
     Mat result;
     for (int i = 0; i < m * n; ++i) {
-      result(i) = vec(i);
+      if constexpr (requires { vec(i); }) {
+        result(i) = vec(i);
+      } else {
+        result(i) = vec[i];
+      }
     }
-    return m;
+    return result;
   }
 
   template <typename M>
-  static Mat mat_like(const M& mat) {
+  __both__ static Mat mat_like(const M& mat) {
     Mat result;
     for (int i = 0; i < m; ++i) {
       for (int j = 0; j < n; ++j) {
         result(i, j) = mat(i, j);
       }
     }
-    return m;
+    return result;
   }
 
   __both__ constexpr MatView<T, m, n> view() {

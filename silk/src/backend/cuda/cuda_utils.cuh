@@ -92,6 +92,13 @@ struct DynSpan {
 };
 
 template <typename T>
+void resize_buffer(size_t size, cu::device_buffer<T>& buf, CudaRuntime rt) {
+  auto new_buf = cu::make_buffer(rt.stream, rt.mr, size, cu::no_init);
+  cu::copy_bytes(rt.stream, buf, ctd::span{new_buf.data(), buf.size()});
+  buf = new_buf;
+}
+
+template <typename T>
 cu::device_buffer<T> vec_like_to_device(ctd::span<const T> vec,
                                         CudaRuntime rt) {
   auto buffer = cu::make_buffer<T>(rt.stream, rt.mr, vec.size(), cu::no_init);
@@ -105,7 +112,7 @@ std::vector<T> vec_like_to_host(ctd::span<const T> vec, CudaRuntime rt) {
 }
 
 template <typename T>
-T scalar_sync_load(const T* device_ptr, CudaRuntime rt) {
+T scalar_load(const T* device_ptr, CudaRuntime rt) {
   T result;
   cudaMemcpyAsync(&result, device_ptr, sizeof(T), cudaMemcpyDeviceToHost,
                   rt.stream.get());

@@ -3,10 +3,12 @@
 #include "backend/cuda/collision/bbox.cuh"
 #include "backend/cuda/simple_linalg.cuh"
 
-namespace silk::cuda {
+namespace silk::cuda::collision {
 
 struct PointCollider {
   Bbox bbox;
+  /// entity offset in global state
+  int state_offset;
   /// vertex index
   int index;
   /// vertex inverse mass
@@ -19,6 +21,8 @@ struct PointCollider {
 
 struct EdgeCollider {
   Bbox bbox;
+  /// entity offset in global state
+  int state_offset;
   /// vertex index
   Vec2i index;
   /// vertex inverse mass
@@ -33,6 +37,8 @@ struct EdgeCollider {
 
 struct TriangleCollider {
   Bbox bbox;
+  /// entity offset in global state
+  int state_offset;
   /// vertex index
   Vec3i index;
   /// vertex inverse mass
@@ -47,4 +53,4 @@ struct TriangleCollider {
   Vec3f v2_t1;
 };
 
-}  // namespace silk::cuda
+}  // namespace silk::cuda::collision

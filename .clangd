@@ -1,8 +1,8 @@
 CompileFlags:
-  Compiler: /usr/local/cuda-13.0/bin/nvcc
+  # Compiler: /usr/local/cuda-13.2/bin/nvcc
   Add:
-    - "-I/usr/local/cuda-13.0/include"
-    - "-I/usr/local/cuda-13.0/include/cccl"
+  #   - "-I/usr/local/cuda-13.0/include"
+  #   - "-I/usr/local/cuda-13.0/include/cccl"
   Remove:
     - "-rdc=true"
     - "-Xcompiler=*"
