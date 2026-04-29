@@ -23,10 +23,6 @@ class ObjectCollider {
   bool is_self_collision_on;
   bool is_physical;
   float bbox_padding;
-  // Collision restitution, in range [0, 1].
-  float restitution;
-  // Surface friction coefficient for contact resolution.
-  float friction;
   // Broadphase collision culling data struture
   Buf<PointCollider> point_colliders;
   OIBVHTree<TriangleCollider> triangle_collider_tree;

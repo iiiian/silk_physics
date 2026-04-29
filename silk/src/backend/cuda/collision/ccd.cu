@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cuda/std/algorithm>
+#include <cuda/std/cmath>
 #include <cuda/std/numeric>
 
 #include "backend/cuda/collision/ccd.cuh"
@@ -12,7 +13,6 @@ namespace silk::cuda::collision {
 class CubicPoly {
  public:
   static constexpr int BISECT_ITER = 6;
-  static constexpr float EMPTY_ROOT = ctd::numeric_limits<float>::max();
 
   float a;
   float b;
@@ -26,19 +26,22 @@ class CubicPoly {
 
     float eval_left = eval(left);
     float eval_right = eval(right);
+
+    // Be conservative. Right might be within minimal separation distance.
     if (eval_left * eval_right > 0.0f) {
-      return EMPTY_ROOT;
+      return right;
     }
 
-#pragma unroll
     for (int i = 0; i < BISECT_ITER; ++i) {
       float mid = 0.5f * (left + right);
       float eval_mid = eval(mid);
 
       if (eval_mid * eval_left <= 0.0f) {
         right = mid;
+        eval_right = eval_mid;
       } else {
         left = mid;
+        eval_left = eval_mid;
       }
     }
 
@@ -130,11 +133,13 @@ __device__ Vec3f velocity_diff(const Vec3f& v_relative, const Vec3f& n,
 
 __device__ ctd::optional<Collision> pt_ccd(
     const PointCollider* point_collider,
-    const TriangleCollider* triangle_collider, float minimal_separation,
-    float restitution, float friction) {
+    const TriangleCollider* triangle_collider, float minimal_separation) {
   auto& p = point_collider;
   auto& t = triangle_collider;
   auto& ms = minimal_separation;
+
+  float restitution = 0.5 * (p->restitution + t->restitution);
+  float friction = 0.5 * (p->friction + t->friction);
 
   Vec3f root = solve_coplaner_poly(p->v0_t0, p->v0_t1, t->v0_t0, t->v0_t1,
                                    t->v1_t0, t->v1_t1, t->v2_t0, t->v2_t1);
@@ -144,17 +149,14 @@ __device__ ctd::optional<Collision> pt_ccd(
   Vec3f d2 = vsub(t->v1_t1, t->v1_t0);
   Vec3f d3 = vsub(t->v2_t1, t->v2_t0);
   for (int i = 0; i < 3; ++i) {
-    if (root(i) == CubicPoly::EMPTY_ROOT) {
-      continue;
-    }
-
-    // discrete collision detection.
+    // Discrete collision detection.
     Vec3f y0 = axpby(1.0f, p->v0_t0, root(i), d0);
     Vec3f y1 = axpby(1.0f, t->v0_t0, root(i), d1);
     Vec3f y2 = axpby(1.0f, t->v1_t0, root(i), d2);
     Vec3f y3 = axpby(1.0f, t->v2_t0, root(i), d3);
 
     auto uv = exact_pt_uv(y0, y1, y2, y3, 1e-20);
+    // Degenerate triangle, ignore.
     if (!uv) {
       continue;
     }
@@ -167,6 +169,7 @@ __device__ ctd::optional<Collision> pt_ccd(
     if (dist2 > ms * ms) {
       continue;
     }
+    // If for some reason penetration occurs, best we can do is ignore it.
     if (dist2 == 0.0f) {
       return ctd::nullopt;
     }
@@ -182,10 +185,10 @@ __device__ ctd::optional<Collision> pt_ccd(
     // Compute impulse weights.
     Vec4f para = {1.0f, 1.0f - u - v, u, v};
     Vec4f inv_mass;
-    inv_mass(0) = point_collider->inv_mass;
-    inv_mass(1) = triangle_collider->inv_mass(0);
-    inv_mass(2) = triangle_collider->inv_mass(1);
-    inv_mass(3) = triangle_collider->inv_mass(2);
+    inv_mass(0) = p->inv_mass;
+    inv_mass(1) = t->inv_mass(0);
+    inv_mass(2) = t->inv_mass(1);
+    inv_mass(3) = t->inv_mass(2);
 
     float denom = 0.0f;
     for (int i = 0; i < 4; ++i) {
@@ -198,13 +201,13 @@ __device__ ctd::optional<Collision> pt_ccd(
     // Compute reflected velocity.
     Collision c;
     c.type = CollisionType::PointTriangle;
-    c.state_offset_a = point_collider->state_offset;
-    c.state_offset_b = triangle_collider->state_offset;
+    c.state_offset_a = p->state_offset;
+    c.state_offset_b = t->state_offset;
 
-    c.index(0) = point_collider->index;
-    c.index(1) = triangle_collider->index(0);
-    c.index(2) = triangle_collider->index(1);
-    c.index(3) = triangle_collider->index(2);
+    c.index(0) = p->index;
+    c.index(1) = t->index(0);
+    c.index(2) = t->index(1);
+    c.index(3) = t->index(2);
     c.toi = root(i);
     c.minimal_separation = minimal_separation;
     c.inv_mass = inv_mass;
@@ -217,6 +220,103 @@ __device__ ctd::optional<Collision> pt_ccd(
     c.v1_t1 = axpby(weight(1), v_diff, 1.0, d1);
     c.v2_t1 = axpby(weight(2), v_diff, 1.0, d2);
     c.v3_t1 = axpby(weight(3), v_diff, 1.0, d3);
+
+    return c;
+  }
+}
+
+__device__ ctd::optional<Collision> ee_ccd(const EdgeCollider* edge_collider_a,
+                                           const EdgeCollider* edge_collider_b,
+                                           float minimal_separation) {
+  auto& ea = edge_collider_a;
+  auto& eb = edge_collider_b;
+  auto& ms = minimal_separation;
+
+  float restitution = 0.5 * (ea->restitution + eb->restitution);
+  float friction = 0.5 * (ea->friction + eb->friction);
+
+  Vec3f root = solve_coplaner_poly(ea->v0_t0, ea->v0_t1, ea->v1_t0, ea->v1_t1,
+                                   eb->v0_t0, eb->v0_t1, eb->v1_t0, eb->v1_t1);
+
+  Vec3f d0 = vsub(ea->v0_t1, ea->v0_t0);
+  Vec3f d1 = vsub(ea->v1_t1, ea->v1_t0);
+  Vec3f d2 = vsub(eb->v0_t1, eb->v0_t0);
+  Vec3f d3 = vsub(eb->v1_t1, eb->v1_t0);
+  for (int i = 0; i < 3; ++i) {
+    // Discrete collision detection.
+    Vec3f y0 = axpby(1.0f, ea->v0_t0, root(i), d0);
+    Vec3f y1 = axpby(1.0f, ea->v1_t0, root(i), d1);
+    Vec3f y2 = axpby(1.0f, eb->v0_t0, root(i), d2);
+    Vec3f y3 = axpby(1.0f, eb->v1_t0, root(i), d3);
+
+    auto uv = exact_ee_uv(y0, y1, y2, y3, 1e-20);
+    // Degenerate edge, ignore.
+    if (!uv) {
+      continue;
+    }
+    auto [u, v] = *uv;
+
+    Vec3f pa = eval_edge_parameter(u, y0, y1);
+    Vec3f pb = eval_edge_parameter(v, y2, y3);
+    Vec3f disp = vsub(pa, pb);
+    float dist2 = dot(disp, disp);
+    if (dist2 > ms * ms) {
+      continue;
+    }
+    // If for some reason penetration occurs, best we can do is ignore it.
+    if (dist2 == 0.0f) {
+      return ctd::nullopt;
+    }
+
+    Vec3f va = eval_edge_parameter(u, d0, d1);
+    Vec3f vb = eval_edge_parameter(v, d2, d3);
+    Vec3f v_rel = vsub(va, vb);
+    Vec3f n = ax(1.0 / sqrt(dist2), disp);
+
+    // Total velocity change after collision.
+    Vec3f v_diff = velocity_diff(v_rel, n, ms, restitution, friction);
+
+    // Compute impulse weights.
+    Vec4f para = {1.0f, 1.0f - u - v, u, v};
+    Vec4f inv_mass;
+    inv_mass(0) = ea->inv_mass(0);
+    inv_mass(1) = ea->inv_mass(1);
+    inv_mass(2) = eb->inv_mass(0);
+    inv_mass(3) = eb->inv_mass(1);
+
+    float denom = 0.0f;
+    for (int i = 0; i < 4; ++i) {
+      denom += para(i) * para(i) * inv_mass(i);
+    }
+
+    Vec4f weight = ax(-1.0f / denom, vmul(para, inv_mass));
+    weight(0) *= -1.0f;
+    weight(1) *= -1.0f;
+
+    // Compute reflected velocity.
+    Collision c;
+    c.type = CollisionType::EdgeEdge;
+    c.state_offset_a = ea->state_offset;
+    c.state_offset_b = eb->state_offset;
+
+    c.index(0) = ea->index(0);
+    c.index(1) = eb->index(1);
+    c.index(2) = eb->index(0);
+    c.index(3) = eb->index(1);
+    c.toi = root(i);
+    c.minimal_separation = minimal_separation;
+    c.inv_mass = inv_mass;
+
+    c.v0_t0 = d0;
+    c.v1_t0 = d1;
+    c.v2_t0 = d2;
+    c.v3_t0 = d3;
+    c.v0_t1 = axpby(weight(0), v_diff, 1.0, d0);
+    c.v1_t1 = axpby(weight(1), v_diff, 1.0, d1);
+    c.v2_t1 = axpby(weight(2), v_diff, 1.0, d2);
+    c.v3_t1 = axpby(weight(3), v_diff, 1.0, d3);
+
+    return c;
   }
 }
 

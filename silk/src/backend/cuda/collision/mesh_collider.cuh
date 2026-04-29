@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cuda/std/utility>
+
 #include "backend/cuda/collision/bbox.cuh"
 #include "backend/cuda/simple_linalg.cuh"
 
@@ -11,6 +13,10 @@ struct PointCollider {
   int state_offset;
   /// vertex index
   int index;
+  /// Reflection param
+  float restitution;
+  /// Reflection param
+  float friction;
   /// vertex inverse mass
   float inv_mass;
   /// position of vertices at t0
@@ -25,6 +31,10 @@ struct EdgeCollider {
   int state_offset;
   /// vertex index
   Vec2i index;
+  /// Reflection param
+  float restitution;
+  /// Reflection param
+  float friction;
   /// vertex inverse mass
   Vec2f inv_mass;
   /// position of vertices at t0
@@ -41,6 +51,10 @@ struct TriangleCollider {
   int state_offset;
   /// vertex index
   Vec3i index;
+  /// Reflection param
+  float restitution;
+  /// Reflection param
+  float friction;
   /// vertex inverse mass
   Vec3f inv_mass;
   /// position of vertices at t0
@@ -52,5 +66,8 @@ struct TriangleCollider {
   Vec3f v1_t1;
   Vec3f v2_t1;
 };
+
+using PTCCache = ctd::pair<const TriangleCollider*, const PointCollider*>;
+using EECCache = ctd::pair<const EdgeCollider*, const EdgeCollider*>;
 
 }  // namespace silk::cuda::collision
