@@ -52,8 +52,7 @@ __both__ bool ee_self_collision_filter(const EdgeCollider& a,
   return !is_both_pinned && !is_neighbor;
 };
 
-int CollisionPipeline::find_collision(Registry& registry,
-                                      const Bbox& scene_bbox, float dt,
+int CollisionPipeline::find_collision(Registry& registry, float dt,
                                       cu::device_buffer<Collision>& collisions,
                                       CudaRuntime rt) {
   std::vector<ObjectCollider>& object_colliders =
@@ -64,7 +63,7 @@ int CollisionPipeline::find_collision(Registry& registry,
   // 2. Mesh-level broadphase using BVH-tree spatial queries on GPU.
   // 3. Narrowphase using continuous collision detection on GPU.
 
-  // Stage 1: Object broadphase using sweep-and-prune.
+  // State 1. Object level broadphase on CPU.
   namespace cpu = ::silk::cpu;
   cpu::CollisionCache<ObjectCollider> object_ccache;
   std::vector<int> object_proxies(object_colliders.size());
@@ -79,18 +78,20 @@ int CollisionPipeline::find_collision(Registry& registry,
       object_colliders, object_proxies.data(), object_proxies.size(), axis,
       object_collision_filter, object_ccache);
 
+  // Allocated device collision cache.
   auto pt_ccache =
       cu::make_buffer<ctd::pair<const TriangleCollider*, const PointCollider*>>(
-          rt.stream, rt.mr, init_broadphase_ccache_size, cu::no_init);
+          rt.stream, rt.mr, init_ccache_size, cu::no_init);
   int pt_ccache_fill = 0;
   auto ee_ccache =
       cu::make_buffer<ctd::pair<const EdgeCollider*, const EdgeCollider*>>(
-          rt.stream, rt.mr, init_broadphase_ccache_size, cu::no_init);
-  int collision_cache_fill = 0;
-
+          rt.stream, rt.mr, init_ccache_size, cu::no_init);
   int ee_ccache_fill = 0;
+  int collision_fill = 0;
+
+  // Stage 2-3. Gpu broadphase + narrowphase.
+
   for (auto& [oa, ob] : object_ccache) {
-    // Stage 2: Mesh broadphase using GPU BVH queries.
     oa->triangle_collider_tree
         .test_ext_collision<PointCollider, decltype(pt_inter_collision_filter)>(
             ob->point_colliders.value(), pt_inter_collision_filter, pt_ccache,
@@ -100,26 +101,24 @@ int CollisionPipeline::find_collision(Registry& registry,
             ob->edge_collider_tree.get_colliders(), ee_inter_collision_filter,
             ee_ccache, ee_ccache_fill, rt);
 
-    // Stage 3: Parallel narrowphase using continuous collision detection.
     if (pt_ccache_fill == pt_ccache.size()) {
-      // call narrowphase
+      pt_narrowphase(pt_ccache, collisions, collision_fill, rt);
       pt_ccache_fill = 0;
     }
     if (ee_ccache_fill == ee_ccache.size()) {
-      // call narrowphase
+      ee_narrowphase(ee_ccache, collisions, collision_fill, rt);
       ee_ccache_fill = 0;
     }
   }
 
   // Self-collision detection within individual objects.
-  // Uses same KD-tree + CCD approach but with stricter filtering.
+  // Uses same BVH-tree + CCD approach but with stricter filtering.
   for (auto& o : object_colliders) {
     // Skip pure obstacles and objects with self-collision disabled.
     if (!o.is_physical || !o.is_self_collision_on) {
       continue;
     }
 
-    // Self-collision broadphase using internal KD-tree traversal.
     o.triangle_collider_tree
         .test_ext_collision<PointCollider, decltype(pt_inter_collision_filter)>(
             o.point_colliders.value(), pt_inter_collision_filter, pt_ccache,
@@ -128,23 +127,23 @@ int CollisionPipeline::find_collision(Registry& registry,
                                              ee_ccache, ee_ccache_fill, rt);
 
     if (pt_ccache_fill == pt_ccache.size()) {
-      // call narrowphase
+      pt_narrowphase(pt_ccache, collisions, collision_fill, rt);
       pt_ccache_fill = 0;
     }
     if (ee_ccache_fill == ee_ccache.size()) {
-      // call narrowphase
+      ee_narrowphase(ee_ccache, collisions, collision_fill, rt);
       ee_ccache_fill = 0;
     }
   }
 
   if (pt_ccache_fill != 0) {
-    // call narrowphase
+    pt_narrowphase(pt_ccache, collisions, collision_fill, rt);
   }
   if (ee_ccache_fill != 0) {
-    // call narrowphase
+    ee_narrowphase(ee_ccache, collisions, collision_fill, rt);
   }
 
-  return collision_cache_fill;
+  return collision_fill;
 }
 
 }  // namespace silk::cuda::collision
