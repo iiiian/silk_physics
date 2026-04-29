@@ -142,7 +142,7 @@ ObjectCollider ObjectCollider::from_physical(const CollisionConfig& config,
 
   auto host_triangle_colliders = make_triangle_colliders(
       mesh, oc.bbox_padding, state_offset, c.restitution, c.friction,
-      c.minimal_separation, get_inv_mass);
+      oc.bbox_padding, get_inv_mass);
   auto device_triangle_colliders =
       vec_like_to_device<TriangleCollider>(host_triangle_colliders, rt);
   oc.triangle_collider_tree = OIBVHTree<TriangleCollider>(
@@ -150,7 +150,7 @@ ObjectCollider ObjectCollider::from_physical(const CollisionConfig& config,
 
   auto host_edge_colliders =
       make_edge_colliders(mesh, oc.bbox_padding, state_offset, c.restitution,
-                          c.friction, c.minimal_separation, get_inv_mass);
+                          c.friction, oc.bbox_padding, get_inv_mass);
   auto device_edge_colliders =
       vec_like_to_device<EdgeCollider>(host_edge_colliders, rt);
   oc.edge_collider_tree =
@@ -158,7 +158,7 @@ ObjectCollider ObjectCollider::from_physical(const CollisionConfig& config,
 
   auto host_point_colliders =
       make_point_colliders(mesh, oc.bbox_padding, state_offset, c.restitution,
-                           c.friction, c.minimal_separation, get_inv_mass);
+                           c.friction, oc.bbox_padding, get_inv_mass);
   oc.point_colliders =
       vec_like_to_device<PointCollider>(host_point_colliders, rt);
 
@@ -191,7 +191,7 @@ ObjectCollider ObjectCollider::from_obstacle(const CollisionConfig& config,
 
   auto host_triangle_colliders =
       make_triangle_colliders(mesh, oc.bbox_padding, -1, c.restitution,
-                              c.friction, c.minimal_separation, get_inv_mass);
+                              c.friction, oc.bbox_padding, get_inv_mass);
   auto device_triangle_colliders =
       vec_like_to_device<TriangleCollider>(host_triangle_colliders, rt);
   oc.triangle_collider_tree = OIBVHTree<TriangleCollider>(
@@ -199,7 +199,7 @@ ObjectCollider ObjectCollider::from_obstacle(const CollisionConfig& config,
 
   auto host_edge_colliders =
       make_edge_colliders(mesh, oc.bbox_padding, -1, c.restitution, c.friction,
-                          c.minimal_separation, get_inv_mass);
+                          oc.bbox_padding, get_inv_mass);
   auto device_edge_colliders =
       vec_like_to_device<EdgeCollider>(host_edge_colliders, rt);
   oc.edge_collider_tree =
@@ -207,7 +207,7 @@ ObjectCollider ObjectCollider::from_obstacle(const CollisionConfig& config,
 
   auto host_point_colliders =
       make_point_colliders(mesh, oc.bbox_padding, -1, c.restitution, c.friction,
-                           c.minimal_separation, get_inv_mass);
+                           oc.bbox_padding, get_inv_mass);
   oc.point_colliders =
       vec_like_to_device<PointCollider>(host_point_colliders, rt);
 
