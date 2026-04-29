@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cassert>
-#include <concepts>
 #include <cstdint>
 #include <cub/cub.cuh>
 #include <cuda/algorithm>
@@ -13,25 +12,12 @@
 #include <cuda/std/span>
 #include <cuda/std/utility>
 #include <cuda/warp>
-#include <functional>
 
 #include "backend/cuda/collision/bbox.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/simple_linalg.cuh"
 
 namespace silk::cuda::collision {
-
-/// @brief Collider type has member bbox of type Bbox.
-template <typename T>
-concept IsCollider = requires(T t) {
-  { t.bbox } -> ctd::convertible_to<Bbox>;
-};
-
-/// @brief Device filter that takes a pair of collider and return true if
-/// ignored.
-template <typename T, typename X, typename Y>
-concept IsFilter =
-    std::convertible_to<std::function<bool(const X&, const Y&)>, T>;
 
 template <typename X, typename Y>
 using CollisionCache = cu::device_buffer<ctd::pair<const X*, const Y*>>;
@@ -41,7 +27,6 @@ struct BVHNode {
 };
 
 template <typename X>
-  requires IsCollider<X>
 struct OIBVHTreeView {
   uint32_t max_depth;
   uint32_t skipped_depth;
@@ -53,7 +38,6 @@ struct OIBVHTreeView {
 };
 
 template <typename X>
-  requires IsCollider<X>
 class OIBVHTree {
  private:
   static constexpr uint32_t MAX_SKIP_LEVEL = 1;
@@ -101,18 +85,18 @@ class OIBVHTree {
   /// @brief Test self collision.
   /// @param filter Collision filter callback. True if ignore.
   /// @param out Output buffer. collision will be appended.
+  /// @param fill The actual size of out cache.
   template <typename Filter>
-    requires IsFilter<Filter, X, X>
   void test_self_collision(const Filter& filter, CollisionCache<X, X>& out,
-                           CudaRuntime rt);
+                           int& fill, CudaRuntime rt);
 
   /// @brief Test tree-tree collision.
   /// @param filter Collision filter callback. True if ignore.
   /// @param out Output buffer. collision will be appended.
+  /// @param fill The actual size of out cache.
   template <typename Y, typename Filter>
-    requires IsFilter<Filter, X, Y>
   void test_ext_collision(ctd::span<const Y> colliders, const Filter& filter,
-                          CollisionCache<X, Y>& out, CudaRuntime rt);
+                          CollisionCache<X, Y>& out, int& fill, CudaRuntime rt);
 };
 
 namespace detail {
@@ -159,7 +143,6 @@ __device__ inline uint64_t morton_code_magic_bits(Vec3f origin,
 
 /// @brief Compute morton code for all colliders.
 template <typename C>
-  requires IsCollider<C>
 void update_collider_morton_codes(const Bbox& root_bbox,
                                   ctd::span<const C> colliders,
                                   ctd::span<uint64_t> morton_out,
@@ -249,7 +232,6 @@ __global__ void init_leaf_bbox(uint32_t node_depth, uint32_t max_depth,
 ///
 /// Designed for block size of 128. Propagate 8 levels upward.
 template <typename C>
-  requires IsCollider<C>
 __global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
                                    uint32_t vleaf_num,
                                    ctd::span<BVHNode> nodes) {
@@ -418,7 +400,6 @@ class SimpleStack {
 
 /// @brief Traverse collider through the tree.
 template <typename X, typename Y, typename OnFilter, bool dedup_self>
-  requires IsCollider<X> && IsCollider<Y> && IsFilter<OnFilter, X, Y>
 __device__ void traverse(const X& collider, int dedup_id,
                          OIBVHTreeView<Y> oibvh_tree, const OnFilter& on_filter,
                          DynSpan<CollisionCache<X, Y>> out) {
@@ -476,8 +457,8 @@ __device__ void traverse(const X& collider, int dedup_id,
         }
 
         // Skip if out buffer is full.
-        cu::atomic_ref<int> counter{*out.counter};
-        int out_idx = counter.fetch_add(1);
+        cu::atomic_ref<int> fill{*out.fill};
+        int out_idx = fill.fetch_add(1);
         if (out_idx < out.data.size()) {
           out.data[out_idx] = ctd::make_pair(&collider, &leaf_collider);
         }
@@ -497,7 +478,6 @@ __device__ void traverse(const X& collider, int dedup_id,
 }  // namespace detail
 
 template <typename C>
-  requires IsCollider<C>
 OIBVHTree<C>::OIBVHTree(const Bbox& root_bbox, cu::device_buffer<C> colliders,
                         CudaRuntime rt) {
   assert(colliders.size() != 0);
@@ -590,7 +570,6 @@ OIBVHTree<C>::OIBVHTree(const Bbox& root_bbox, cu::device_buffer<C> colliders,
 }
 
 template <typename C>
-  requires IsCollider<C>
 void OIBVHTree<C>::update(const Bbox& root_bbox, CudaRuntime rt) {
   int collider_num = colliders_->size();
   if (collider_num == 0) {
@@ -624,22 +603,20 @@ void OIBVHTree<C>::update(const Bbox& root_bbox, CudaRuntime rt) {
 };
 
 template <typename X>
-  requires IsCollider<X>
 template <typename Filter>
-  requires IsFilter<Filter, X, X>
 void OIBVHTree<X>::test_self_collision(const Filter& filter,
-                                       CollisionCache<X, X>& out,
+                                       CollisionCache<X, X>& out, int& fill,
                                        CudaRuntime rt) {
   out.counter = 0;
   if (colliders_->empty()) {
     return;
   }
 
-  auto counter = cu::make_buffer<int>(rt.stream, rt.mr, 1, out.data());
-  DynSpan<CollisionCache<X, X>> dyn_out{.counter = counter.data(), .data = out};
+  auto d_fill = cu::make_buffer<int>(rt.stream, rt.mr, 1, fill);
+  DynSpan<CollisionCache<X, X>> dyn_out{.fill = d_fill.data(), .data = out};
 
   // clang-format off
-    auto batch_traversal = [&filter, dyn_out, tree = view()]
+    auto batch_traversal = [&filter, &dyn_out, tree = view()]
       __device__ (uint32_t i) {
       traverse<Filter, true>(
           tree.colliders[tree.collider_ids[i]], i, tree, filter, dyn_out);
@@ -649,23 +626,22 @@ void OIBVHTree<X>::test_self_collision(const Filter& filter,
   // TODO: launch with block size 128 to improve perf.
   cub::DeviceFor::Bulk(collider_ids_->size(), batch_traversal, rt.stream.get());
   // If buffer overlfow, resize then traverse again.
-  int host_counter = scalar_load(counter.data(), rt);
-  if (host_counter > out.data.size()) {
-    resize_buffer(host_counter, out, rt);
+  int old_fill = fill;
+  fill = scalar_load(d_fill.data(), rt);
+  if (fill > out.data.size()) {
+    resize_buffer(fill + 1, out, rt);
     dyn_out.data = out;
-    scalar_write(counter.data(), 0, rt);
+    scalar_write(d_fill.data(), old_fill, rt);
     cub::DeviceFor::Bulk(collider_ids_->size(), batch_traversal,
                          rt.stream.get());
   }
 }
 
 template <typename X>
-  requires IsCollider<X>
 template <typename Y, typename Filter>
-  requires IsFilter<Filter, X, Y>
 void OIBVHTree<X>::test_ext_collision(ctd::span<const Y> colliders,
                                       const Filter& filter,
-                                      CollisionCache<X, Y>& out,
+                                      CollisionCache<X, Y>& out, int& fill,
                                       CudaRuntime rt) {
   out.counter = 0;
 
@@ -673,26 +649,26 @@ void OIBVHTree<X>::test_ext_collision(ctd::span<const Y> colliders,
     return;
   }
 
-  auto counter = cu::make_buffer<int>(rt.stream, rt.mr, 1, 0);
-  DynSpan<CollisionCache<X, X>> dyn_out{.counter = counter.data(), .data = out};
+  auto d_fill = cu::make_buffer<int>(rt.stream, rt.mr, 1, fill);
+  DynSpan<CollisionCache<X, X>> dyn_out{.fill = d_fill.data(), .data = out};
 
   // clang-format off
-    auto batch_traversal = [&filter, out, colliders, t = view()]
+    auto batch_traversal = [&filter, &dyn_out, colliders, t = view()]
       __device__ (uint32_t i) {
       traverse<Filter, false>(
-          colliders[i], 0, t, filter, out);
+          colliders[i], 0, t, filter, dyn_out);
     };
   // clang-format on
 
   cub::DeviceFor::Bulk(colliders.size(), batch_traversal, rt.stream.get());
   // If buffer overlfow, resize then traverse again.
-  int host_counter = scalar_load(counter.data(), rt);
-  if (host_counter > out.data.size()) {
-    resize_buffer(host_counter, out, rt);
+  int old_fill = fill;
+  fill = scalar_load(d_fill.data(), rt);
+  if (fill > out.data.size()) {
+    resize_buffer(fill + 1, out, rt);
     dyn_out.data = out;
-    scalar_write(counter.data(), 0, rt);
-    cub::DeviceFor::Bulk(collider_ids_->size(), batch_traversal,
-                         rt.stream.get());
+    scalar_write(d_fill.data(), old_fill, rt);
+    cub::DeviceFor::Bulk(colliders.size(), batch_traversal, rt.stream.get());
   }
 }
 
