@@ -55,8 +55,7 @@ __both__ bool ee_self_collision_filter(const EdgeCollider& a,
 int CollisionPipeline::find_collision(Registry& registry, float dt,
                                       cu::device_buffer<Collision>& collisions,
                                       CudaRuntime rt) {
-  std::vector<ObjectCollider>& object_colliders =
-      registry.get_all<ObjectCollider>();
+  auto object_colliders = registry.get_all_components<ObjectCollider>();
 
   // Three-stage collision detection for inter-object collisions:
   // 1. Object-level broadphase using sweep-and-prune on CPU.

@@ -3,7 +3,7 @@
 #include <Eigen/Core>
 
 #include "backend/cuda/ecs.hpp"
-#include "backend/cuda/solver/barrier_constrain.hpp"
+#include "backend/cuda/solver/barrier_constrain.cuh"
 
 namespace silk::cuda {
 

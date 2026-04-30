@@ -1,7 +1,5 @@
 #pragma once
 
-#include <Eigen/Core>
-#include <cuda/buffer>
 #include <cuda/std/span>
 
 #include "backend/cuda/cuda_utils.cuh"
@@ -18,13 +16,13 @@ class ObjectState {
   int state_offset = 0;
   int state_num = 0;
 
-  cu::device_buffer<float> curr_state;
-  cu::device_buffer<float> state_velocity;
+  Buf<float> curr_state;
+  Buf<float> state_velocity;
 
   // Vertex permutation: new solver vertex index -> original mesh vertex index.
-  cu::device_buffer<int> perm;
+  Buf<int> perm;
   // Inverse permutation: original mesh vertex index -> new solver vertex index.
-  cu::device_buffer<int> inv_perm;
+  Buf<int> inv_perm;
 
   ObjectState(int state_offset, ctd::span<const float> curr_state,
               ctd::span<const float> state_velocity, CudaRuntime rt);

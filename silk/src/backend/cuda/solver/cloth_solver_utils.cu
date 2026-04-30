@@ -1,17 +1,15 @@
-#include "backend/cuda/solver/cloth_solver_utils.hpp"
-
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
 #include <cassert>
 
-#include "backend/cuda/collision/object_collider.hpp"
+#include "backend/cuda/collision/object_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
-#include "backend/cuda/device_vector.hpp"
-#include "backend/cuda/object_state.hpp"
+#include "backend/cuda/object_state.cuh"
 #include "backend/cuda/solver/a_jacobi_solver.hpp"
 #include "backend/cuda/solver/barrier_constrain.hpp"
 #include "backend/cuda/solver/cloth_solver_context.hpp"
 #include "backend/cuda/solver/cloth_solver_kernel.hpp"
+#include "backend/cuda/solver/cloth_solver_utils.cuh"
 #include "backend/cuda/solver/inexact_solver.hpp"
 #include "common/cloth_topology.hpp"
 #include "common/logger.hpp"

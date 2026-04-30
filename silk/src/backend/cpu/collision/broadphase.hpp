@@ -9,46 +9,12 @@
 #include <cassert>
 #include <cstring>
 #include <functional>
+#include <span>
 #include <vector>
 
 #include "backend/cpu/collision/bbox.hpp"
 
 namespace silk::cpu {
-
-/// Broad-phase collision detection using a KD-tree + Sweep-and-Prune (SAP).
-///
-/// Overview
-/// - Data structure: a variable-depth KD-tree whose internal nodes store a split
-///   plane (axis, position), and whose leaves store ranges of object proxies
-/// into a single in-order proxy array. Each object C must expose a member `bbox`
-/// of type `Bbox` representing its current AABB.
-/// - Update: the tree is updated in-place from the previous frame using a set of
-///   lightweight operators inspired by Serpa & Rodrigues 2019 (KD-tree + SAP):
-///   lift/refit, split, collapse, translate-plane, and a heuristic evaluate step
-///   (Cost vs Balance) to decide whether to keep or rework a node. This favors
-///   temporal coherence and avoids full rebuilds.
-/// - Query: candidate pairs are generated per node using SAP along the axis with
-///   the largest variance of collider centers. Node–node and node–external pairs
-///   are handled; work is parallelized with tbb tasks and accumulated in per-
-///   thread caches before merging.
-///
-/// Key invariants
-/// - `proxies_` holds all collider indices in a single array; each KDNode keeps
-///   a half-open range [proxy_start, proxy_end) into this array. A node’s
-///   `population` is the total number of proxies in its subtree.
-/// - Internal nodes have valid `axis` and `position` (split plane). Leaves do
-///   not get evaluated for plane quality and are split only when their proxy
-///   count exceeds NODE_PROXY_NUM_THRESHOLD.
-/// - `delay_offset` defers edits to child proxy ranges when lifting or moving
-///   proxies so parent edits can be applied lazily during pre-order traversal.
-///
-/// Notes
-/// - The evaluate() heuristic mirrors the Cost/Balance criteria from Serpa &
-///   Rodrigues, CGF 2019, normalizing the expected number of tests under ideal
-///   and worst splits to decide whether to keep the current plane.
-/// - `CollisionFilter` lets callers prune domain-knowledge pairs (e.g. static-
-///   static) before AABB checks without modifying the broad-phase logic.
-/// - Callers must update each collider's `bbox` before `update()`.
 
 // C stands for collider. A collider should have member bbox of type Bbox.
 
@@ -65,7 +31,7 @@ template <typename C>
 /// Returns pair(mean, variance) across x/y/z. Used to pick SAP axis and to
 /// translate planes toward the current distribution.
 std::pair<Eigen::Vector3f, Eigen::Vector3f> proxy_mean_variance(
-    const std::vector<C>& colliders, const int* proxies, int proxy_num) {
+    std::span<const C> colliders, const int* proxies, int proxy_num) {
   assert((proxy_num > 0));
 
   Eigen::Vector3f mean = Eigen::Vector3f::Zero();
@@ -84,7 +50,7 @@ std::pair<Eigen::Vector3f, Eigen::Vector3f> proxy_mean_variance(
 
 template <typename C>
 /// Select SAP axis as the one with maximal center variance for the group.
-int sap_optimal_axis(const std::vector<C>& colliders, const int* proxies,
+int sap_optimal_axis(std::span<const C> colliders, const int* proxies,
                      int proxy_num) {
   assert((proxy_num > 0));
 
@@ -96,8 +62,8 @@ int sap_optimal_axis(const std::vector<C>& colliders, const int* proxies,
 
 template <typename C>
 /// Select SAP axis considering two groups (bipartite), pooling variance.
-int sap_optimal_axis(const std::vector<C>& colliders_a, const int* proxies_a,
-                     int proxy_num_a, const std::vector<C>& colliders_b,
+int sap_optimal_axis(std::span<const C> colliders_a, const int* proxies_a,
+                     int proxy_num_a, std::span<const C> colliders_b,
                      const int* proxies_b, int proxy_num_b) {
   assert((proxy_num_a > 0));
   assert((proxy_num_b > 0));
@@ -119,8 +85,8 @@ int sap_optimal_axis(const std::vector<C>& colliders_a, const int* proxies_a,
 
 template <typename C>
 /// Sort proxies in-place by AABB min on `axis` for SAP.
-void sap_sort_proxies(const std::vector<C>& colliders, int* proxies,
-                      int proxy_num, int axis) {
+void sap_sort_proxies(std::span<const C> colliders, int* proxies, int proxy_num,
+                      int axis) {
   assert((proxy_num != 0));
 
   auto comp = [axis, &colliders](int a, int b) -> bool {
@@ -134,9 +100,9 @@ void sap_sort_proxies(const std::vector<C>& colliders, int* proxies,
 /// of pointers to colliders; caller may run additional checks. If flip is true,
 /// return pair [b, a] instead of [a, b].
 template <typename C, bool flip = false>
-void sap_sorted_collision(C& ca, std::vector<C>& colliders_b,
-                          const int* proxies_b, int proxy_num_b, int axis,
-                          CollisionFilter<C> filter, CollisionCache<C>& cache) {
+void sap_sorted_collision(C& ca, std::span<C> colliders_b, const int* proxies_b,
+                          int proxy_num_b, int axis, CollisionFilter<C> filter,
+                          CollisionCache<C>& cache) {
   assert((proxy_num_b != 0));
 
   for (int i = 0; i < proxy_num_b; ++i) {
@@ -165,9 +131,9 @@ void sap_sorted_collision(C& ca, std::vector<C>& colliders_b,
 
 template <typename C>
 /// SAP within one sorted group; each pair passes through `filter`.
-void sap_sorted_group_self_collision(std::vector<C>& colliders,
-                                     const int* proxies, int proxy_num,
-                                     int axis, CollisionFilter<C> filter,
+void sap_sorted_group_self_collision(std::span<C> colliders, const int* proxies,
+                                     int proxy_num, int axis,
+                                     CollisionFilter<C> filter,
                                      CollisionCache<C>& cache) {
   assert((proxy_num > 0));
 
@@ -180,9 +146,9 @@ void sap_sorted_group_self_collision(std::vector<C>& colliders,
 
 template <typename C>
 /// Bipartite SAP between two sorted groups.
-void sap_sorted_group_group_collision(std::vector<C>& colliders_a,
+void sap_sorted_group_group_collision(std::span<C> colliders_a,
                                       const int* proxies_a, int proxy_num_a,
-                                      std::vector<C>& colliders_b,
+                                      std::span<C> colliders_b,
                                       const int* proxies_b, int proxy_num_b,
                                       int axis, CollisionFilter<C> filter,
                                       CollisionCache<C>& cache) {
@@ -334,8 +300,8 @@ class KDTree {
   }
 
   /// Enumerate potentially colliding pairs within this tree.
-  /// - Uses SAP per node on the axis of largest variance; schedules node work as
-  ///   tbb tasks and merges per-thread caches into `cache`.
+  /// - Uses SAP per node on the axis of largest variance; schedules node work
+  ///   as tbb tasks and merges per-thread caches into `cache`.
   /// - `filter` is applied before AABB checks and can skip domain-excluded
   ///   pairs (e.g. static-static in incremental mode).
   void test_self_collision(CollisionFilter<C> filter,

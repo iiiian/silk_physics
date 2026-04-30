@@ -6,12 +6,14 @@
 #include <cassert>
 #include <cstring>
 
-#include "backend/cuda/collision/object_collider.hpp"
+#include "backend/cuda/collision/object_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/ecs.hpp"
-#include "backend/cuda/object_state.hpp"
+#include "backend/cuda/object_state.cuh"
 #include "backend/cuda/obstacle_position.hpp"
+#include "backend/cuda/solver/cloth_solver_context.cuh"
 #include "backend/cuda/solver/pipeline.hpp"
+#include "common/cloth_topology.hpp"
 #include "common/mesh.hpp"
 #include "common/pin.hpp"
 
