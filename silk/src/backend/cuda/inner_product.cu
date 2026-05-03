@@ -1,45 +1,42 @@
-#include "backend/cuda/inner_product.cuh"
-
+#include <cassert>
+#include <cub/cub.cuh>
 #include <cuda/algorithm>
 #include <cuda/atomic>
 #include <cuda/buffer>
 #include <cuda/std/span>
 
-#include <cub/cub.cuh>
-#include <cassert>
+#include "backend/cuda/inner_product.cuh"
 
 namespace silk::cuda {
 
-    namespace
-    {
-        __global__ void inner_product_kernel(
-            ctd::span<const float> a, ctd::span<const float> b, float *out)
-        {
-            int tid = blockDim.x * blockIdx.x + threadIdx.x;
+namespace {
 
-            float c = (tid < a.size()) ? a[tid] * b[tid] : 0.0f;
+__global__ void inner_product_kernel(ctd::span<const float> a,
+                                     ctd::span<const float> b, float *out) {
+  int tid = blockDim.x * blockIdx.x + threadIdx.x;
 
-            using BlockReduce = cub::BlockReduce<float, 128>;
-            __shared__ typename BlockReduce::TempStorage tmp;
+  float c = (tid < a.size()) ? a[tid] * b[tid] : 0.0f;
 
-            float reduced = BlockReduce(tmp).Sum(c);
+  using BlockReduce = cub::BlockReduce<float, 128>;
+  __shared__ typename BlockReduce::TempStorage tmp;
 
-            if (threadIdx.x == 0)
-            {
-                cu::atomic_ref<float> a_out{*out};
-                a_out.fetch_add(reduced, ctd::memory_order_relaxed);
-            }
-        }
-    } // namespace
+  float reduced = BlockReduce(tmp).Sum(c);
 
-    void inner_product(ctd::span<const float> a, ctd::span<const float> b,
-                       ctd::span<float> out, CudaRuntime rt)
-    {
-        assert(a.size() == b.size());
-        assert(out.size() == 1);
+  if (threadIdx.x == 0) {
+    cu::atomic_ref<float> a_out{*out};
+    a_out.fetch_add(reduced, ctd::memory_order_relaxed);
+  }
+}
+}  // namespace
 
-        cu::fill_bytes(rt.stream, out, 0);
-        int grid_num = div_round_up(a.size(), 128);
-        inner_product_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(a, b, out.data());
-    }
-} // namespace silk::cuda
+void inner_product(ctd::span<const float> a, ctd::span<const float> b,
+                   ctd::span<float> out, CudaRuntime rt) {
+  assert(a.size() == b.size());
+  assert(out.size() == 1);
+
+  cu::fill_bytes(rt.stream, out, 0);
+  int grid_num = div_round_up(a.size(), 128);
+  inner_product_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(a, b, out.data());
+}
+
+}  // namespace silk::cuda

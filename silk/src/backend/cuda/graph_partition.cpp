@@ -1,4 +1,4 @@
-#include "backend/cuda/graph_partition.cuh"
+#include "backend/cuda/graph_partition.hpp"
 
 #include <ckaminpar.h>
 

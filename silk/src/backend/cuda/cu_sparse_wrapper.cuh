@@ -9,157 +9,121 @@
 // --------------------------------------------------------------
 
 namespace silk::cuda {
-    class CuSparseHandle {
-    public:
-        cusparseHandle_t raw = nullptr;
 
-        CuSparseHandle() {
-            cusparseCreate(&raw);
-        }
+class CuSparseHandle {
+ public:
+  cusparseHandle_t raw = nullptr;
 
-        ~CuSparseHandle() {
-            if (raw != nullptr) {
-                cusparseDestroy(raw);
-            }
-        }
+  CuSparseHandle() { cusparseCreate(&raw); }
 
-        CuSparseHandle(const CuSparseHandle &) = delete;
-        CuSparseHandle(CuSparseHandle &&other) { swap(other); }
-        CuSparseHandle &operator=(const CuSparseHandle &) = delete;
-        CuSparseHandle &operator=(CuSparseHandle &&other)
-        {
-            swap(other);
-            return *this;
-        }
+  ~CuSparseHandle() {
+    if (raw != nullptr) {
+      cusparseDestroy(raw);
+    }
+  }
 
-    private:
-        void swap(CuSparseHandle &other)
-        {
-            std::swap(raw, other.raw);
-        }
-    };
+  CuSparseHandle(const CuSparseHandle &) = delete;
+  CuSparseHandle(CuSparseHandle &&other) { swap(other); }
+  CuSparseHandle &operator=(const CuSparseHandle &) = delete;
+  CuSparseHandle &operator=(CuSparseHandle &&other) {
+    swap(other);
+    return *this;
+  }
 
-    class CuSparseConstVec
-    {
-    public:
-        cusparseConstDnVecDescr_t raw = nullptr;
+ private:
+  void swap(CuSparseHandle &other) { std::swap(raw, other.raw); }
+};
 
-        CuSparseConstVec(ctd::span<const float> vec) {
-            cusparseCreateConstDnVec(&raw, vec.size(), vec.data(), CUDA_R_32F);
-        }
+class CuSparseConstVec {
+ public:
+  cusparseConstDnVecDescr_t raw = nullptr;
 
-        ~CuSparseConstVec() {
-            if (raw != nullptr) {
-                cusparseDestroyDnVec(raw);
-            }
-        }
+  CuSparseConstVec(ctd::span<const float> vec) {
+    cusparseCreateConstDnVec(&raw, vec.size(), vec.data(), CUDA_R_32F);
+  }
 
-        CuSparseConstVec(const CuSparseConstVec &) = delete;
-        CuSparseConstVec(CuSparseConstVec &&other) { swap(other); }
-        CuSparseConstVec &operator=(const CuSparseConstVec &) = delete;
-        CuSparseConstVec &operator=(CuSparseConstVec &&other)
-        {
-            swap(other);
-            return *this;
-        }
+  ~CuSparseConstVec() {
+    if (raw != nullptr) {
+      cusparseDestroyDnVec(raw);
+    }
+  }
 
-    private:
-        void swap(CuSparseConstVec &other)
-        {
-            std::swap(raw, other.raw);
-        }
-    };
+  CuSparseConstVec(const CuSparseConstVec &) = delete;
+  CuSparseConstVec(CuSparseConstVec &&other) { swap(other); }
+  CuSparseConstVec &operator=(const CuSparseConstVec &) = delete;
+  CuSparseConstVec &operator=(CuSparseConstVec &&other) {
+    swap(other);
+    return *this;
+  }
 
-    /// @brief Minimal RAII wrapper for CuSparse dense vector.
-    class CuSparseVec
-    {
-    public:
-        cusparseDnVecDescr_t raw = nullptr;
+ private:
+  void swap(CuSparseConstVec &other) { std::swap(raw, other.raw); }
+};
 
-        CuSparseVec(ctd::span<float> vec) {
-            cusparseCreateDnVec(&raw, vec.size(), vec.data(), CUDA_R_32F);
-        }
+/// @brief Minimal RAII wrapper for CuSparse dense vector.
+class CuSparseVec {
+ public:
+  cusparseDnVecDescr_t raw = nullptr;
 
-        ~CuSparseVec() {
-            if (raw != nullptr) {
-                cusparseDestroyDnVec(raw);
-            }
-        }
+  CuSparseVec(ctd::span<float> vec) {
+    cusparseCreateDnVec(&raw, vec.size(), vec.data(), CUDA_R_32F);
+  }
 
-        CuSparseVec(const CuSparseVec &) = delete;
-        CuSparseVec(CuSparseVec &&other) { swap(other); }
-        CuSparseVec &operator=(const CuSparseVec &) = delete;
-        CuSparseVec &operator=(CuSparseVec &&other)
-        {
-            swap(other);
-            return *this;
-        }
+  ~CuSparseVec() {
+    if (raw != nullptr) {
+      cusparseDestroyDnVec(raw);
+    }
+  }
 
-    private:
-        void swap(CuSparseVec &other)
-        {
-            std::swap(raw, other.raw);
-        }
-    };
+  CuSparseVec(const CuSparseVec &) = delete;
+  CuSparseVec(CuSparseVec &&other) { swap(other); }
+  CuSparseVec &operator=(const CuSparseVec &) = delete;
+  CuSparseVec &operator=(CuSparseVec &&other) {
+    swap(other);
+    return *this;
+  }
 
-    class CuSparseBSR
-    {
-    public:
-        cusparseConstSpMatDescr_t raw = nullptr;
+ private:
+  void swap(CuSparseVec &other) { std::swap(raw, other.raw); }
+};
 
-        CuSparseBSR() = default;
+class CuSparseBSR {
+ public:
+  cusparseConstSpMatDescr_t raw = nullptr;
 
-        CuSparseBSR(BSRView mat) {
-            if (mat.block_dim == 1) {
-                cusparseCreateConstCsr(&raw,
-                                       mat.dim,
-                                       mat.dim,
-                                       mat.non_zeros,
-                                       mat.rows.data(),
-                                       mat.cols.data(),
-                                       mat.vals.data(),
-                                       CUSPARSE_INDEX_32I,
-                                       CUSPARSE_INDEX_32I,
-                                       CUSPARSE_INDEX_BASE_ZERO,
-                                       CUDA_R_32F);
-            } else {
-                cusparseCreateConstBsr(&raw,
-                                       mat.dim,
-                                       mat.dim,
-                                       mat.non_zeros,
-                                       mat.block_dim,
-                                       mat.block_dim,
-                                       mat.rows.data(),
-                                       mat.cols.data(),
-                                       mat.vals.data(),
-                                       CUSPARSE_INDEX_32I,
-                                       CUSPARSE_INDEX_32I,
-                                       CUSPARSE_INDEX_BASE_ZERO,
-                                       CUDA_R_32F,
-                                       CUSPARSE_ORDER_ROW);
-            }
-        }
+  CuSparseBSR() = default;
 
-        ~CuSparseBSR() {
-            if (raw != nullptr) {
-                cusparseDestroySpMat(raw);
-            }
-        }
+  CuSparseBSR(BSRView mat) {
+    if (mat.block_dim == 1) {
+      cusparseCreateConstCsr(&raw, mat.dim, mat.dim, mat.non_zeros,
+                             mat.rows.data(), mat.cols.data(), mat.vals.data(),
+                             CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
+                             CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F);
+    } else {
+      cusparseCreateConstBsr(
+          &raw, mat.dim, mat.dim, mat.non_zeros, mat.block_dim, mat.block_dim,
+          mat.rows.data(), mat.cols.data(), mat.vals.data(), CUSPARSE_INDEX_32I,
+          CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F,
+          CUSPARSE_ORDER_ROW);
+    }
+  }
 
-        CuSparseBSR(const CuSparseBSR &) = delete;
-        CuSparseBSR(CuSparseBSR &&other) { swap(other); }
-        CuSparseBSR &operator=(const CuSparseBSR &) = delete;
-        CuSparseBSR &operator=(CuSparseBSR &&other)
-        {
-            swap(other);
-            return *this;
-        }
+  ~CuSparseBSR() {
+    if (raw != nullptr) {
+      cusparseDestroySpMat(raw);
+    }
+  }
 
-    private:
-        void swap(CuSparseBSR &other)
-        {
-            std::swap(raw, other.raw);
-        }
-    };
+  CuSparseBSR(const CuSparseBSR &) = delete;
+  CuSparseBSR(CuSparseBSR &&other) { swap(other); }
+  CuSparseBSR &operator=(const CuSparseBSR &) = delete;
+  CuSparseBSR &operator=(CuSparseBSR &&other) {
+    swap(other);
+    return *this;
+  }
 
-} // namespace silk::cuda
+ private:
+  void swap(CuSparseBSR &other) { std::swap(raw, other.raw); }
+};
+
+}  // namespace silk::cuda
