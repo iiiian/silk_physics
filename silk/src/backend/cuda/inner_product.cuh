@@ -2,11 +2,10 @@
 
 #include <cuda/buffer>
 #include <cuda/std/span>
-#include <polysolve/linear/mas_utils/CudaUtils.cuh>
+#include "backend/cuda/cuda_utils.cuh"
 
-namespace polysolve::linear::mas
-{
+namespace silk::cuda {
     /// @brief Compute inner product a dot b. Does not sync implicitly.
-    void inner_product(ctd::span<const double> a, ctd::span<const double> b,
-                       ctd::span<double> out, CudaRuntime rt);
-} // namespace polysolve::linear::mas
+    void inner_product(ctd::span<const float> a, ctd::span<const float> b,
+                       ctd::span<float> out, CudaRuntime rt);
+} // namespace silk::cuda

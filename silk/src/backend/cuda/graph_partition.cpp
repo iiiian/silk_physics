@@ -1,6 +1,4 @@
-#include <polysolve/linear/mas_utils/GraphPartition.hpp>
-
-#include <polysolve/linear/mas_utils/CudaUtils.cuh>
+#include "backend/cuda/graph_partition.cuh"
 
 #include <cassert>
 #include <cuda/std/span>
@@ -11,8 +9,7 @@
 
 #include <ckaminpar.h>
 
-namespace polysolve::linear::mas
-{
+namespace silk::cuda {
     void graph_partition(ctd::span<int> row_ptr,
                          ctd::span<int> cols,
                          ctd::span<int64_t> weights,
@@ -89,4 +86,4 @@ namespace polysolve::linear::mas
         }
     }
 
-} // namespace polysolve::linear::mas
+} // namespace silk::cuda

@@ -1,24 +1,22 @@
 #pragma once
 
-#include <polysolve/linear/mas_utils/CudaUtils.cuh>
-#include <polysolve/Types.hpp>
-
 #include <cstdint>
 #include <vector>
+#include <Eigen/SparseCore>
 
-namespace polysolve::linear::mas
-{
+#include "backend/cuda/cuda_utils.cuh"
+
+namespace silk::cuda {
     /// Host CSR adjacency for graph partitioning, built using CUDA.
     /// Self-excluding, with symmetrized + quantized positive integer weights.
-    class BSRAdjacency
-    {
+    class BSRAdjacency {
     public:
         BSRAdjacency() = default;
-        BSRAdjacency(const StiffnessMatrix &A, int block_dim, CudaRuntime rt);
+        BSRAdjacency(const Eigen::SparseMatrix<float> &a, int block_dim, CudaRuntime rt);
 
         std::vector<int> row_ptr;
         std::vector<int> cols;
         std::vector<int64_t> weights;
     };
 
-} // namespace polysolve::linear::mas
+} // namespace silk::cuda

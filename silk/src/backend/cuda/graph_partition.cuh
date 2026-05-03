@@ -4,10 +4,9 @@
 #include <cstdint>
 #include <vector>
 
-#include <polysolve/linear/mas_utils/CudaUtils.cuh>
+#include "backend/cuda/cuda_utils.cuh"
 
-namespace polysolve::linear::mas
-{
+namespace silk::cuda {
     /// @brief K-way graph partition.
     /// @param row_ptr[in] CSR graph topology. Will be modified!
     /// @param cols[in] CSR graph topology. Will be modified!
@@ -21,4 +20,4 @@ namespace polysolve::linear::mas
                          int max_part_size,
                          int &part_num,
                          std::vector<int> &part_id);
-} // namespace polysolve::linear::mas
+} // namespace silk::cuda

@@ -1,12 +1,11 @@
 #pragma once
 
-#include <polysolve/linear/mas_utils/BSRMatrix.hpp>
-#include <polysolve/linear/mas_utils/CudaUtils.cuh>
-
 #include <cuda/std/array>
 
-namespace polysolve::linear::mas
-{
+#include "backend/cuda/bsr_matrix.cuh"
+#include "backend/cuda/cuda_utils.cuh"
+
+namespace silk::cuda {
     // Our bank size is 32, so 4 coarse levels should cover 1M x 1M BSR matrix.
     constexpr int MAS_MAX_COARSE_LEVEL = 4;
     constexpr int MAS_LEVEL_COUNT = MAS_MAX_COARSE_LEVEL + 1;
@@ -17,8 +16,7 @@ namespace polysolve::linear::mas
     // Padded -> Coarse Space: map fine nodes to coarse space CCO (Connected components).
 
     /// @brief Real <-> Padded space mapping.
-    struct PaddedTopology
-    {
+    struct PaddedTopology {
         Buf<int> real_to_padded; ///< Real id to padded id.
         Buf<int> padded_to_real; ///< Padded id to real id. -1 = virtual padding.
         Buf<int> rows;           ///< CSR row ptr. Virtual nodes are not included.
@@ -27,8 +25,7 @@ namespace polysolve::linear::mas
         int padded_node_num = 0; ///< Padded space node num.
     };
 
-    struct CoarseSpace
-    {
+    struct CoarseSpace {
         /// Coarse space map (real id -> coarse space id) layout:
         /// | node0_lv0 node0_lv1 ... node0_lv_max | node1_lv0 ... node1_lv_max | ... |
         Buf<int> map;
@@ -38,11 +35,10 @@ namespace polysolve::linear::mas
         int level_num = 0;
     };
 
-    struct CoarseMatrices
-    {
+    struct CoarseMatrices {
         /// Packed upper triangular row major coarse space matrices (inverse hessian).
         /// | lv0_mat0 lv0_mat1 ... | lv1_mat0 ... | ... |
-        Buf<double> data;
+        Buf<float> data;
         /// Per coarse space level offset and counts.
         ctd::array<int, MAS_LEVEL_COUNT> matrix_offsets{};
         ctd::array<int, MAS_LEVEL_COUNT> matrix_counts{};
@@ -52,23 +48,20 @@ namespace polysolve::linear::mas
         int total_matrix_num = 0;
     };
 
-    struct CoarseVectors
-    {
+    struct CoarseVectors {
         /// | lv0 r | lv 1 r | ... |
-        Buf<double> multi_level_r;
+        Buf<float> multi_level_r;
         /// | lv0 z | lv 1 z | ... |
-        Buf<double> multi_level_z;
+        Buf<float> multi_level_z;
         /// Per coarse space level offset and counts.
         ctd::array<int, MAS_LEVEL_COUNT> level_offsets{};
         ctd::array<int, MAS_LEVEL_COUNT> level_sizes{};
         int total_level_nodes = 0;
     };
 
-    class MASPreconditioner
-    {
+    class MASPreconditioner {
     public:
-        bool empty() const
-        {
+        bool empty() const {
             return !initialized_;
         }
 
@@ -82,7 +75,7 @@ namespace polysolve::linear::mas
         /// @param r Residual.
         /// @param z Preconditioned residual.
         /// @param rt Cuda runtime.
-        void apply(ctd::span<const double> r, ctd::span<double> z, CudaRuntime rt);
+        void apply(ctd::span<const float> r, ctd::span<float> z, CudaRuntime rt);
 
     private:
         bool initialized_ = false;
@@ -93,4 +86,4 @@ namespace polysolve::linear::mas
         CoarseMatrices coarse_matrices_;
         CoarseVectors coarse_vectors_;
     };
-} // namespace polysolve::linear::mas
+} // namespace silk::cuda

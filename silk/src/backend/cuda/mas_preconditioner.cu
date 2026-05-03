@@ -1,4 +1,4 @@
-#include <polysolve/linear/mas_utils/MASPreconditioner.hpp>
+#include "backend/cuda/mas_preconditioner.cuh"
 
 // #ifndef SPDLOG_ACTIVE_LEVEL
 // #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
@@ -17,15 +17,15 @@
 #include <stdexcept>
 #include <cassert>
 
-namespace polysolve::linear::mas
+namespace silk::cuda
 {
     namespace
     {
         using clock = std::chrono::steady_clock;
 
-        double elapsed_seconds(const std::chrono::time_point<clock> &begin)
+        float elapsed_seconds(const std::chrono::time_point<clock> &begin)
         {
-            return std::chrono::duration<double>(clock::now() - begin).count();
+            return std::chrono::duration<float>(clock::now() - begin).count();
         }
 
         // This is not tunable.
@@ -36,7 +36,7 @@ namespace polysolve::linear::mas
         {
             int mat_dim;
             int mat_storage_size;
-            ctd::array<ctd::span<double>, MAS_LEVEL_COUNT> matrix_per_level;
+            ctd::array<ctd::span<float>, MAS_LEVEL_COUNT> matrix_per_level;
 
             CoarseMatricesRef(CoarseMatrices &mats)
             {
@@ -48,7 +48,7 @@ namespace polysolve::linear::mas
                 {
                     int level_size = mats.matrix_counts[i] * mats.mat_storage_size;
                     matrix_per_level[i] =
-                        ctd::span<double>(mats.data->data() + scalar_offset, level_size);
+                        ctd::span<float>(mats.data->data() + scalar_offset, level_size);
                     scalar_offset += level_size;
                 }
             }
@@ -384,13 +384,13 @@ namespace polysolve::linear::mas
             int real_node_num = real_to_padded.size();
             int max_bank_per_level = div_round_up(padded_node_num, BANK_SIZE);
             // Bank local CCO id.
-            auto local_cco_ids = safe_alloc<int>(padded_node_num, rt, "MAS coarse_space local_cco_ids");
-            auto cco_num_per_bank = safe_alloc<int>(max_bank_per_level, rt, "MAS coarse_space cco_num_per_bank");
+            auto local_cco_ids = alloc<int>(rt, padded_node_num);
+            auto cco_num_per_bank = alloc<int>(rt, max_bank_per_level);
             // Inclusive prefix sum of cco_num_per_bank.
             auto cco_num_per_bank_summed =
-                safe_alloc<int>(max_bank_per_level, rt, "MAS coarse_space cco_num_per_bank_summed");
+                alloc<int>(rt, max_bank_per_level);
             auto coarse_space_map =
-                safe_alloc<int>(real_node_num * MAS_MAX_COARSE_LEVEL, rt, "MAS coarse_space map");
+                alloc<int>(rt, real_node_num * MAS_MAX_COARSE_LEVEL);
 
             // Build coarse map level 0.
             int grid_num = div_round_up(padded_node_num, 128);
@@ -405,7 +405,7 @@ namespace polysolve::linear::mas
                                           cco_num_per_bank_summed.data(),
                                           max_bank_per_level,
                                           rt.stream.get());
-            auto cub_tmp = safe_alloc<char>(cub_tmp_size, rt, "MAS coarse_space cub_tmp");
+            auto cub_tmp = alloc<char>(rt, cub_tmp_size);
             cub::DeviceScan::InclusiveSum(cub_tmp.data(),
                                           cub_tmp_size,
                                           cco_num_per_bank.data(),
@@ -416,7 +416,7 @@ namespace polysolve::linear::mas
             aggregate_coarse_space_map_lv0<<<div_round_up(real_node_num, 128), 128, 0, rt.stream.get()>>>(
                 local_cco_ids, cco_num_per_bank, cco_num_per_bank_summed, real_to_padded, coarse_space_map);
 
-            int cco_num = device2host(cco_num_per_bank_summed.data() + max_bank_per_level - 1, rt);
+            int cco_num = scalar_load(cco_num_per_bank_summed.data() + max_bank_per_level - 1, rt);
             cco_nums[0] = cco_num;
             int level_num = 1;
 
@@ -425,7 +425,7 @@ namespace polysolve::linear::mas
             //  1. Build bank local neighbbor bit mask.
             //  2. Build bank local connectivity mask and find local CCO partition.
             //  3. Compute global CCO id and write to coarse space map.
-            auto neighbors = safe_alloc<uint32_t>(padded_node_num, rt, "MAS coarse_space neighbors");
+            auto neighbors = alloc<uint32_t>(rt, padded_node_num);
             for (int lv = 1; lv < MAS_MAX_COARSE_LEVEL; ++lv)
             {
                 cudaMemsetAsync(neighbors.data(), 0, cco_num * sizeof(uint32_t), rt.stream.get());
@@ -461,7 +461,7 @@ namespace polysolve::linear::mas
                     coarse_space_map);
 
                 // No more CCO to merge.
-                int next_cco_num = device2host(cco_num_per_bank_summed.data() + bank_num - 1, rt);
+                int next_cco_num = scalar_load(cco_num_per_bank_summed.data() + bank_num - 1, rt);
                 if (next_cco_num == cco_num)
                 {
                     break;
@@ -521,7 +521,7 @@ namespace polysolve::linear::mas
                     int mat_id = padded_i / BANK_SIZE;
                     int scalar_i_root = (padded_i % BANK_SIZE) * mat_in.block_dim;
                     int scalar_j_root = (padded_j % BANK_SIZE) * mat_in.block_dim;
-                    double *mat = mat_out.matrix_per_level[0].data() + mat_id * mat_out.mat_storage_size;
+                    float *mat = mat_out.matrix_per_level[0].data() + mat_id * mat_out.mat_storage_size;
                     for (int bi = 0; bi < mat_in.block_dim; ++bi)
                     {
                         for (int bj = 0; bj < mat_in.block_dim; ++bj)
@@ -539,7 +539,7 @@ namespace polysolve::linear::mas
                                 continue;
                             }
 
-                            double val = mat_in.vals[block_offset + bi * mat_in.block_dim + bj];
+                            float val = mat_in.vals[block_offset + bi * mat_in.block_dim + bj];
                             atomicAdd(mat + index_upper_mat(mat_out.mat_dim, row, col), val);
                         }
                     }
@@ -557,7 +557,7 @@ namespace polysolve::linear::mas
                     int mat_id = cco_i / BANK_SIZE;
                     int scalar_i_root = (cco_i % BANK_SIZE) * mat_in.block_dim;
                     int scalar_j_root = (cco_j % BANK_SIZE) * mat_in.block_dim;
-                    double *mat = mat_out.matrix_per_level[lv + 1].data() + mat_id * mat_out.mat_storage_size;
+                    float *mat = mat_out.matrix_per_level[lv + 1].data() + mat_id * mat_out.mat_storage_size;
                     for (int bi = 0; bi < mat_in.block_dim; ++bi)
                     {
                         for (int bj = 0; bj < mat_in.block_dim; ++bj)
@@ -575,7 +575,7 @@ namespace polysolve::linear::mas
                                 continue;
                             }
 
-                            double val = mat_in.vals[block_offset + bi * mat_in.block_dim + bj];
+                            float val = mat_in.vals[block_offset + bi * mat_in.block_dim + bj];
                             // When two different fine nodes collapse to the same coarse node,
                             // the coarse diagonal block must receive both A_ij and A_ji = A_ij^T.
                             if (tid != j && cco_i == cco_j)
@@ -590,8 +590,8 @@ namespace polysolve::linear::mas
         }
 
         __global__ void gather_multi_level_r(
-            ctd::span<const double> r,
-            ctd::span<double> multi_level_r,
+            ctd::span<const float> r,
+            ctd::span<float> multi_level_r,
             ctd::span<const int> real_to_padded,
             ctd::span<const int> coarse_space_map,
             ctd::array<int, MAS_LEVEL_COUNT> level_offsets,
@@ -629,19 +629,19 @@ namespace polysolve::linear::mas
         /// This is the main bottleneck of MAS preconditioner. But since we are vram bandwidth
         /// bound, there's nothing I could do. The compute / memory ratio is just too low.
         template <int N, int BLOCK>
-        __global__ void symv_upper_packed(const double *A_upper,
-                                          const double *x,
-                                          double *y)
+        __global__ void symv_upper_packed(const float *A_upper,
+                                          const float *x,
+                                          float *y)
         {
             int mat_id = blockIdx.x;
             int row = threadIdx.x;
             constexpr int L = N * (N + 1) / 2;
-            const double *Amat = A_upper + mat_id * L;
+            const float *Amat = A_upper + mat_id * L;
 
             // All threads in block load A and x into shared mem.
 
-            __shared__ double sx[N];
-            __shared__ double sA[L];
+            __shared__ float sx[N];
+            __shared__ float sA[L];
 
             for (int i = threadIdx.x; i < N; i += BLOCK)
             {
@@ -661,7 +661,7 @@ namespace polysolve::linear::mas
                 return;
             }
 
-            double sum = 0.0;
+            float sum = 0.0f;
             for (int col = 0; col < N; ++col)
             {
                 sum += sA[index_upper_mat(N, row, col)] * sx[col];
@@ -671,8 +671,8 @@ namespace polysolve::linear::mas
         }
 
         void apply_inverse(const CoarseMatrices &mats,
-                           ctd::span<const double> x,
-                           ctd::span<double> y,
+                           ctd::span<const float> x,
+                           ctd::span<float> y,
                            int block_dim,
                            CudaRuntime rt)
         {
@@ -711,8 +711,8 @@ namespace polysolve::linear::mas
         }
 
         __global__ void gather_multi_level_z(
-            ctd::span<const double> multi_level_z,
-            ctd::span<double> z,
+            ctd::span<const float> multi_level_z,
+            ctd::span<float> z,
             ctd::span<const int> real_to_padded,
             ctd::span<const int> coarse_space_map,
             ctd::array<int, MAS_LEVEL_COUNT> level_offsets,
@@ -744,7 +744,7 @@ namespace polysolve::linear::mas
             }
         }
 
-        __global__ void pad_zero_diagonal(double *mats, int mat_num, int mat_dim, int mat_storage_size)
+        __global__ void pad_zero_diagonal(float *mats, int mat_num, int mat_dim, int mat_storage_size)
         {
             int tid = blockDim.x * blockIdx.x + threadIdx.x;
             int total_diag = mat_num * mat_dim;
@@ -755,26 +755,26 @@ namespace polysolve::linear::mas
 
             int mat_id = tid / mat_dim;
             int row = tid % mat_dim;
-            double *mat = mats + mat_id * mat_storage_size;
-            double *diag = mat + index_upper_mat(mat_dim, row, row);
-            if (*diag == 0.0)
+            float *mat = mats + mat_id * mat_storage_size;
+            float *diag = mat + index_upper_mat(mat_dim, row, row);
+            if (*diag == 0.0f)
             {
-                *diag = 1.0;
+                *diag = 1.0f;
             }
         }
 
         /// @brief Invert a packed symmetric matrix in-place using symmetric Gauss-Jordan sweeps.
         template <int N>
-        __global__ void batched_invert_upper(double *d_matrices,
+        __global__ void batched_invert_upper(float *d_matrices,
                                              bool *success)
         {
             int mat_idx = blockIdx.x;
             constexpr int STORAGE = N * (N + 1) / 2;
-            double *d_A = d_matrices + mat_idx * STORAGE;
+            float *d_A = d_matrices + mat_idx * STORAGE;
 
-            __shared__ double s_A[STORAGE];
-            __shared__ double s_col[N];
-            __shared__ double s_pivot;
+            __shared__ float s_A[STORAGE];
+            __shared__ float s_col[N];
+            __shared__ float s_pivot;
             int tx = threadIdx.x;
 
             for (int i = tx; i < STORAGE; i += N)
@@ -788,7 +788,7 @@ namespace polysolve::linear::mas
                 if (tx == 0)
                 {
                     s_pivot = s_A[index_upper_mat(N, pivot, pivot)];
-                    if (!ctd::isfinite(s_pivot) || s_pivot == 0.0)
+                    if (!ctd::isfinite(s_pivot) || s_pivot == 0.0f)
                     {
                         *success = false;
                     }
@@ -799,7 +799,7 @@ namespace polysolve::linear::mas
                 {
                     if (tx == pivot)
                     {
-                        s_col[tx] = 0.0;
+                        s_col[tx] = 0.0f;
                     }
                     else
                     {
@@ -812,7 +812,7 @@ namespace polysolve::linear::mas
 
                 if (tx < N && tx != pivot)
                 {
-                    double a_ik = s_col[tx];
+                    float a_ik = s_col[tx];
                     for (int col = tx; col < N; ++col)
                     {
                         if (col == pivot)
@@ -820,7 +820,7 @@ namespace polysolve::linear::mas
                             continue;
                         }
 
-                        double updated =
+                        float updated =
                             s_A[index_upper_mat(N, tx, col)] - a_ik * s_col[col] / s_pivot;
                         if (!ctd::isfinite(updated))
                         {
@@ -833,7 +833,7 @@ namespace polysolve::linear::mas
 
                 if (tx == pivot)
                 {
-                    double updated = -1.0 / s_pivot;
+                    float updated = -1.0f / s_pivot;
                     if (!ctd::isfinite(updated))
                     {
                         *success = false;
@@ -845,7 +845,7 @@ namespace polysolve::linear::mas
                 }
                 else if (tx < N)
                 {
-                    double updated = s_col[tx] / s_pivot;
+                    float updated = s_col[tx] / s_pivot;
                     if (!ctd::isfinite(updated))
                     {
                         *success = false;
@@ -862,7 +862,7 @@ namespace polysolve::linear::mas
 
             for (int i = tx; i < STORAGE; i += N)
             {
-                double output = -s_A[i];
+                float output = -s_A[i];
                 if (!ctd::isfinite(output))
                 {
                     *success = false;
@@ -871,14 +871,14 @@ namespace polysolve::linear::mas
             }
         }
 
-        void invert_packed_matrices(double *mats, int mat_num, int block_dim, CudaRuntime rt)
+        void invert_packed_matrices(float *mats, int mat_num, int block_dim, CudaRuntime rt)
         {
             if (mat_num == 0)
             {
                 return;
             }
 
-            auto success = safe_alloc<bool>(1, true, rt, "MAS coarse_matrices invert_flag");
+            auto success = alloc<bool>(rt, 1, true);
 
             if (block_dim == 1)
             {
@@ -900,7 +900,7 @@ namespace polysolve::linear::mas
                 assert(false);
             }
 
-            bool host_success = device2host(success.data(), rt);
+            bool host_success = scalar_load(success.data(), rt);
             if (!host_success)
             {
                 throw std::runtime_error("[CudaPCG] MAS packed inverse failed.");
@@ -928,11 +928,10 @@ namespace polysolve::linear::mas
                 out.total_matrix_num += out.matrix_counts[i + 1];
             }
 
-            out.data = safe_alloc<double>(
-                out.total_matrix_num * out.mat_storage_size,
-                0.0,
+            out.data = alloc<float>(
                 rt,
-                "MAS coarse_matrices");
+                out.total_matrix_num * out.mat_storage_size,
+                0.0f);
             CoarseMatricesRef view{out};
 
             // Gather.
@@ -977,18 +976,18 @@ namespace polysolve::linear::mas
         int part_num = part_offsets.size() - 1;
         int padded_node_num = part_num * BANK_SIZE;
 
-        auto d_part_offsets = safe_alloc<int>(part_offsets.size(), rt, "MAS padded_topology part_offsets");
+        auto d_part_offsets = alloc<int>(rt, part_offsets.size());
         cu::copy_bytes(rt.stream, part_offsets, d_part_offsets);
 
         padded_topology_.node_num = node_num;
         padded_topology_.padded_node_num = padded_node_num;
-        padded_topology_.real_to_padded = safe_alloc<int>(node_num, -1, rt, "MAS padded_topology real_to_padded");
+        padded_topology_.real_to_padded = alloc<int>(rt, node_num, -1);
         padded_topology_.padded_to_real =
-            safe_alloc<int>(padded_node_num, -1, rt, "MAS padded_topology padded_to_real");
-        padded_topology_.rows = safe_alloc<int>(padded_node_num + 1, rt, "MAS padded_topology rows");
-        padded_topology_.cols = safe_alloc<int>(view.non_zeros, rt, "MAS padded_topology cols");
+            alloc<int>(rt, padded_node_num, -1);
+        padded_topology_.rows = alloc<int>(rt, padded_node_num + 1);
+        padded_topology_.cols = alloc<int>(rt, view.non_zeros);
 
-        auto read_num_per_row = safe_alloc<int>(padded_node_num, 0, rt, "MAS padded_topology read_num_per_row");
+        auto read_num_per_row = alloc<int>(rt, padded_node_num, 0);
         build_padded_maps<<<div_round_up(padded_node_num, 128), 128, 0, rt.stream.get()>>>(
             d_part_offsets,
             view.rows,
@@ -1004,14 +1003,14 @@ namespace polysolve::linear::mas
                                       padded_topology_.rows->data(),
                                       padded_node_num,
                                       rt.stream.get());
-        auto cub_tmp = safe_alloc<char>(cub_tmp_size, rt, "MAS padded_topology cub_tmp");
+        auto cub_tmp = alloc<char>(rt, cub_tmp_size);
         cub::DeviceScan::ExclusiveSum(cub_tmp.data(),
                                       cub_tmp_size,
                                       read_num_per_row.data(),
                                       padded_topology_.rows->data(),
                                       padded_node_num,
                                       rt.stream.get());
-        host2device(padded_topology_.rows->data() + padded_node_num, view.non_zeros, rt);
+        scalar_write(padded_topology_.rows->data() + padded_node_num, view.non_zeros, rt);
 
         fill_padded_cols<<<div_round_up(node_num, 128), 128, 0, rt.stream.get()>>>(
             view.rows,
@@ -1058,9 +1057,9 @@ namespace polysolve::linear::mas
         }
         int total_level_scalars = coarse_vectors_.total_level_nodes * block_dim_;
         coarse_vectors_.multi_level_r =
-            safe_alloc<double>(total_level_scalars, 0.0, rt, "MAS coarse_vectors r");
+            alloc<float>(rt, total_level_scalars, 0.0f);
         coarse_vectors_.multi_level_z =
-            safe_alloc<double>(total_level_scalars, 0.0, rt, "MAS coarse_vectors z");
+            alloc<float>(rt, total_level_scalars, 0.0f);
         rt.stream.sync();
         SPDLOG_TRACE("[MAS] [factorize_allocate_coarse_vectors] [{:.6f}]", elapsed_seconds(phase_begin));
         SPDLOG_TRACE("[MAS] [factorize_total] [{:.6f}]", elapsed_seconds(total_begin));
@@ -1069,8 +1068,8 @@ namespace polysolve::linear::mas
     }
 
     void MASPreconditioner::apply(
-        ctd::span<const double> r,
-        ctd::span<double> z,
+        ctd::span<const float> r,
+        ctd::span<float> z,
         CudaRuntime rt)
     {
         if (!initialized_)
@@ -1112,4 +1111,4 @@ namespace polysolve::linear::mas
             coarse_space_.level_num);
     }
 
-} // namespace polysolve::linear::mas
+} // namespace silk::cuda

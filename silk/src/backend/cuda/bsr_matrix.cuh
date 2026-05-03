@@ -1,14 +1,12 @@
 #pragma once
 
-#include <polysolve/linear/mas_utils/CudaUtils.cuh>
-#include <polysolve/Types.hpp>
-
 #include <cuda/std/span>
+#include <Eigen/SparseCore>
 
-namespace polysolve::linear::mas
-{
-    struct BSRView
-    {
+#include "backend/cuda/cuda_utils.cuh"
+
+namespace silk::cuda {
+    struct BSRView {
         int dim;                      //< BSR matrix dim.
         int block_dim;                //< dim of a block.
         int padded_block;             //< block id that is padded.
@@ -16,24 +14,22 @@ namespace polysolve::linear::mas
         int non_zeros;                //< BSR non-zeros.
         ctd::span<const int> rows;    //< BSR row ptr.
         ctd::span<const int> cols;    //< BSR cols.
-        ctd::span<const double> vals; //< BSR values.
+        ctd::span<const float> vals; //< BSR values.
     };
 
     /// @brief Block CSR matrix.
-    class BSRMatrix
-    {
+    class BSRMatrix {
     public:
         BSRMatrix() = default;
 
         /// @brief Build from host CSR matrix. Empty permutation implies identity.
         /// Sync stream before return.
-        BSRMatrix(const StiffnessMatrix &A,
+        BSRMatrix(const Eigen::SparseMatrix<float> &a,
                   int block_dim,
                   ctd::span<const int> permutation,
                   CudaRuntime rt);
 
-        BSRView view() const
-        {
+        BSRView view() const {
             return BSRView{
                 dim_,
                 block_dim_,
@@ -53,7 +49,7 @@ namespace polysolve::linear::mas
         int non_zeros_ = 0;
         Buf<int> rows_;
         Buf<int> cols_;
-        Buf<double> vals_;
+        Buf<float> vals_;
     };
 
-} // namespace polysolve::linear::mas
+} // namespace silk::cuda

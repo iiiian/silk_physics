@@ -1,29 +1,24 @@
 #pragma once
 
-#include <polysolve/linear/mas_utils/BSRMatrix.hpp>
-
 #include <cusparse.h>
+
+#include "backend/cuda/bsr_matrix.cuh"
 
 // --------------------------------------------------------------
 // RAII wrapper for varous cuSparse handle
 // --------------------------------------------------------------
 
-namespace polysolve::linear::mas
-{
-    class CuSparseHandle
-    {
+namespace silk::cuda {
+    class CuSparseHandle {
     public:
         cusparseHandle_t raw = nullptr;
 
-        CuSparseHandle()
-        {
+        CuSparseHandle() {
             cusparseCreate(&raw);
         }
 
-        ~CuSparseHandle()
-        {
-            if (raw != nullptr)
-            {
+        ~CuSparseHandle() {
+            if (raw != nullptr) {
                 cusparseDestroy(raw);
             }
         }
@@ -49,15 +44,12 @@ namespace polysolve::linear::mas
     public:
         cusparseConstDnVecDescr_t raw = nullptr;
 
-        CuSparseConstVec(ctd::span<const double> vec)
-        {
-            cusparseCreateConstDnVec(&raw, vec.size(), vec.data(), CUDA_R_64F);
+        CuSparseConstVec(ctd::span<const float> vec) {
+            cusparseCreateConstDnVec(&raw, vec.size(), vec.data(), CUDA_R_32F);
         }
 
-        ~CuSparseConstVec()
-        {
-            if (raw != nullptr)
-            {
+        ~CuSparseConstVec() {
+            if (raw != nullptr) {
                 cusparseDestroyDnVec(raw);
             }
         }
@@ -84,15 +76,12 @@ namespace polysolve::linear::mas
     public:
         cusparseDnVecDescr_t raw = nullptr;
 
-        CuSparseVec(ctd::span<double> vec)
-        {
-            cusparseCreateDnVec(&raw, vec.size(), vec.data(), CUDA_R_64F);
+        CuSparseVec(ctd::span<float> vec) {
+            cusparseCreateDnVec(&raw, vec.size(), vec.data(), CUDA_R_32F);
         }
 
-        ~CuSparseVec()
-        {
-            if (raw != nullptr)
-            {
+        ~CuSparseVec() {
+            if (raw != nullptr) {
                 cusparseDestroyDnVec(raw);
             }
         }
@@ -120,10 +109,8 @@ namespace polysolve::linear::mas
 
         CuSparseBSR() = default;
 
-        CuSparseBSR(BSRView mat)
-        {
-            if (mat.block_dim == 1)
-            {
+        CuSparseBSR(BSRView mat) {
+            if (mat.block_dim == 1) {
                 cusparseCreateConstCsr(&raw,
                                        mat.dim,
                                        mat.dim,
@@ -134,10 +121,8 @@ namespace polysolve::linear::mas
                                        CUSPARSE_INDEX_32I,
                                        CUSPARSE_INDEX_32I,
                                        CUSPARSE_INDEX_BASE_ZERO,
-                                       CUDA_R_64F);
-            }
-            else
-            {
+                                       CUDA_R_32F);
+            } else {
                 cusparseCreateConstBsr(&raw,
                                        mat.dim,
                                        mat.dim,
@@ -150,15 +135,13 @@ namespace polysolve::linear::mas
                                        CUSPARSE_INDEX_32I,
                                        CUSPARSE_INDEX_32I,
                                        CUSPARSE_INDEX_BASE_ZERO,
-                                       CUDA_R_64F,
+                                       CUDA_R_32F,
                                        CUSPARSE_ORDER_ROW);
             }
         }
 
-        ~CuSparseBSR()
-        {
-            if (raw != nullptr)
-            {
+        ~CuSparseBSR() {
+            if (raw != nullptr) {
                 cusparseDestroySpMat(raw);
             }
         }
@@ -179,4 +162,4 @@ namespace polysolve::linear::mas
         }
     };
 
-} // namespace polysolve::linear::mas
+} // namespace silk::cuda
