@@ -4,8 +4,8 @@
 
 namespace silk {
 
-class ClothConfig;
-class CollisionConfig;
+class ClothConfigPlus;
+class CollisionConfigPlus;
 class TriMesh;
 class Pin;
 class ClothTopology;
@@ -15,18 +15,18 @@ class ClothTopology;
 namespace silk::cuda {
 
 class ClothSolverContext;
-class ObjectState;
+class PhysicalState;
 class ObstaclePosition;
 class ObjectCollider;
 
 // clang-format off
-using Registry = ::silk::ecs::Registry<ClothConfig,
-                                       CollisionConfig,
+using Registry = ::silk::ecs::Registry<ClothConfigPlus,
+                                       CollisionConfigPlus,
                                        TriMesh,
                                        Pin,
                                        ClothTopology,
                                        ClothSolverContext,
-                                       ObjectState,
+                                       PhysicalState,
                                        ObstaclePosition,
                                        ObjectCollider>;
 // clang-format on

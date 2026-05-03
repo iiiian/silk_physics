@@ -7,9 +7,9 @@
 #include "backend/cuda/collision/broadphase.cuh"
 #include "backend/cuda/collision/mesh_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
+#include "common/config_plus.hpp"
 #include "common/mesh.hpp"
 #include "common/pin.hpp"
-#include "silk/silk.hpp"
 
 namespace silk::cuda::collision {
 
@@ -38,7 +38,7 @@ class ObjectCollider {
   /// @param[in] pin Object's pinned vertex indices.
   /// @param[in] mass Object vertex mass vector.
   /// @param[in] state_offset Object offset in global state.
-  static ObjectCollider from_physical(const CollisionConfig& config,
+  static ObjectCollider from_physical(const CollisionConfigPlus& config,
                                       const TriMesh& mesh, const Pin& pin,
                                       const Eigen::VectorXf& mass,
                                       int state_offset, CudaRuntime rt);
@@ -47,18 +47,30 @@ class ObjectCollider {
   ///
   /// @param[in] config Collision config.
   /// @param[in] mesh Object mesh.
-  static ObjectCollider from_obstacle(const CollisionConfig& config,
+  static ObjectCollider from_obstacle(const CollisionConfigPlus& config,
                                       const TriMesh& mesh, CudaRuntime rt);
 
-  /// @brief Update collider from collision config and state.
+  /// @brief Update collider collision config.
+  void update_collision_config(const CollisionConfigPlus& config,
+                               CudaRuntime rt);
+
+  /// @brief Update collider state (position).
+  void update_position(ctd::span<const float> curr_state,
+                       ctd::span<const float> prev_state, CudaRuntime rt);
+
+  /// @brief Update collider state offset.
+  void update_state_offset(int state_offset, CudaRuntime rt);
+
+  /// @brief Update collider collision config, position, and state.
   ///
   /// @param[in] config Collision config.
-  /// @param[in] curr_state State vector.
-  /// @param[in] prev_state State vector.
+  /// @param[in] curr_state state vector.
+  /// @param[in] prev_state state vector.
   /// @param[in] state_offset Object offset in global state. -1 means obstacle.
-  void update(const CollisionConfig& config, ctd::span<const float> curr_state,
-              ctd::span<const float> prev_state, int state_offset,
-              CudaRuntime rt);
+  void update_all(const CollisionConfigPlus& config,
+                  ctd::span<const float> curr_state,
+                  ctd::span<const float> prev_state, int state_offset,
+                  CudaRuntime rt);
 
  private:
   // Temp data for object collider bbox reduction.

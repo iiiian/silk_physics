@@ -108,7 +108,7 @@ Result CudaBackend::get_cloth_position(uint32_t handle,
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto obj_state = impl_->registry_.get<ObjectState>(e);
+  auto obj_state = impl_->registry_.get<PhysicalState>(e);
   if (obj_state) {
     if (position.size < obj_state->state_num) {
       return Result::error(ErrorCode::IncorrectPositionNum);

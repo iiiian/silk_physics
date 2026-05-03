@@ -80,7 +80,7 @@ class Registry {
     return (c.get(entity) != nullptr);
   }
 
-  /// @brief Return ptr to component T of entity. nullptr if not exists.
+  /// @brief Return ptr to entity component T. nullptr if not exists.
   template <typename T>
   T *get(uint32_t entity) {
     static_assert((std::is_same_v<T, C> || ...),
@@ -91,7 +91,7 @@ class Registry {
     return c.get(entity);
   }
 
-  /// @brief Return ptr to component T of entity. nullptr if not exists.
+  /// @brief Return ptr to entity component T. nullptr if not exists.
   template <typename T>
   const T *get(int entity) const {
     static_assert((std::is_same_v<T, C> || ...),

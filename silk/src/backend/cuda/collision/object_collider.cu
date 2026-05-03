@@ -217,10 +217,180 @@ ObjectCollider ObjectCollider::from_obstacle(const CollisionConfig& config,
   return oc;
 }
 
-void ObjectCollider::update(const CollisionConfig& config,
-                            ctd::span<const float> curr_state,
-                            ctd::span<const float> prev_state, int state_offset,
-                            CudaRuntime rt) {
+/// @brief Update collider collision config.
+void ObjectCollider::update_collision_config(const CollisionConfig& config,
+                                             CudaRuntime rt) {
+  // Update collision config.
+  auto& c = config;
+
+  group = (c.is_collision_on) ? c.group : -1;
+  is_self_collision_on = c.is_self_collision_on;
+
+  // Update triangle colliders.
+  auto triangle_colliders = triangle_collider_tree.get_colliders();
+  auto update_triangles_colliders = [triangle_colliders,
+                                     restitution = c.restitution,
+                                     friction = c.friction] __device__(int i) {
+    TriangleCollider& c = triangle_colliders[i];
+    c.restitution = restitution;
+    c.friction = friction;
+  };
+  cub::DeviceFor::Bulk(triangle_colliders.size(), update_triangles_colliders,
+                       rt.stream.get());
+
+  // Update edge colliders.
+  auto edge_colliders = edge_collider_tree.get_colliders();
+  auto update_edge_colliders = [edge_colliders, restitution = c.restitution,
+                                friction = c.friction] __device__(int i) {
+    EdgeCollider& c = edge_colliders[i];
+    c.restitution = restitution;
+    c.friction = friction;
+  };
+  cub::DeviceFor::Bulk(edge_colliders.size(), update_edge_colliders,
+                       rt.stream.get());
+
+  // Update point colliders.
+  ctd::span<PointCollider> point_colliders_span = *point_colliders;
+  auto update_point_colliders = [point_colliders_span,
+                                 restitution = c.restitution,
+                                 friction = c.friction] __device__(int i) {
+    PointCollider& c = point_colliders_span[i];
+    c.restitution = restitution;
+    c.friction = friction;
+  };
+  cub::DeviceFor::Bulk(point_colliders->size(), update_point_colliders,
+                       rt.stream.get());
+}
+
+/// @brief Update collider state (position).
+void ObjectCollider::update_position(ctd::span<const float> curr_state,
+                                     ctd::span<const float> prev_state,
+                                     CudaRuntime rt) {
+  // Update triangle colliders and root bbox.
+  auto triangle_colliders = triangle_collider_tree.get_colliders();
+  auto update_triangles_colliders = [triangle_colliders, prev_state, curr_state,
+                                     padding = bbox_padding] __device__(int i) {
+    TriangleCollider& c = triangle_colliders[i];
+    c.v0_t0 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
+    c.v1_t0 = Vec3f::vec_like(prev_state.subspan(3 * i + 3, 3));
+    c.v2_t0 = Vec3f::vec_like(prev_state.subspan(3 * i + 6, 3));
+    c.v0_t1 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
+    c.v1_t1 = Vec3f::vec_like(prev_state.subspan(3 * i + 3, 3));
+    c.v2_t1 = Vec3f::vec_like(prev_state.subspan(3 * i + 6, 3));
+
+    Bbox bbox;
+    Vec3f t0_min = vmin(vmin(c.v0_t0, c.v1_t0), c.v2_t0);
+    Vec3f t1_min = vmin(vmin(c.v0_t1, c.v1_t1), c.v2_t1);
+    bbox.min = vmin(t0_min, t1_min);
+    Vec3f t0_max = vmax(vmax(c.v0_t0, c.v1_t0), c.v2_t0);
+    Vec3f t1_max = vmax(vmax(c.v0_t1, c.v1_t1), c.v2_t1);
+    bbox.max = vmax(t0_max, t1_max);
+    c.bbox = Bbox::pad(bbox, padding);
+  };
+  auto merge_bbox = [] __device__(const TriangleCollider& a,
+                                  const TriangleCollider& b) {
+    TriangleCollider c;
+    c.bbox = Bbox::merge(a.bbox, b.bbox);
+    return c;
+  };
+
+  TriangleCollider init_reduce_collider;
+  init_reduce_collider.bbox.min = Vec3f::max();
+  init_reduce_collider.bbox.max = Vec3f::min();
+
+  size_t temp_size;
+  cub::DeviceReduce::TransformReduce(
+      nullptr, temp_size, triangle_colliders.data(), reduced_collider_->data(),
+      triangle_colliders.size(), merge_bbox, update_triangles_colliders,
+      init_reduce_collider, rt.stream.get());
+
+  if (!device_reduce_temp_ || device_reduce_temp_->size() < temp_size) {
+    device_reduce_temp_ =
+        cu::make_buffer<char>(rt.stream, rt.mr, temp_size, cu::no_init);
+  }
+  cub::DeviceReduce::TransformReduce(
+      device_reduce_temp_->data(), temp_size, triangle_colliders.data(),
+      reduced_collider_->data(), triangle_colliders.size(), merge_bbox,
+      update_triangles_colliders, init_reduce_collider, rt.stream.get());
+
+  bbox = scalar_load(&(reduced_collider_->data()->bbox), rt);
+
+  // Update edge colliders.
+  auto edge_colliders = edge_collider_tree.get_colliders();
+  auto update_edge_colliders = [edge_colliders, prev_state, curr_state,
+                                padding = bbox_padding] __device__(int i) {
+    EdgeCollider& c = edge_colliders[i];
+    c.v0_t0 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
+    c.v1_t0 = Vec3f::vec_like(prev_state.subspan(3 * i + 3, 3));
+    c.v0_t1 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
+    c.v1_t1 = Vec3f::vec_like(prev_state.subspan(3 * i + 3, 3));
+
+    Bbox bbox;
+    bbox.min = vmin(vmin(c.v0_t0, c.v1_t0), vmin(c.v0_t1, c.v1_t1));
+    bbox.max = vmax(vmax(c.v0_t0, c.v1_t0), vmax(c.v0_t1, c.v1_t1));
+    c.bbox = Bbox::pad(bbox, padding);
+  };
+  cub::DeviceFor::Bulk(edge_colliders.size(), update_edge_colliders,
+                       rt.stream.get());
+
+  // Update point colliders.
+  ctd::span<PointCollider> point_colliders_span = *point_colliders;
+  auto update_point_colliders = [point_colliders_span, prev_state, curr_state,
+                                 padding = bbox_padding] __device__(int i) {
+    PointCollider& c = point_colliders_span[i];
+    c.v0_t0 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
+    c.v0_t1 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
+
+    Bbox bbox;
+    bbox.min = vmin(c.v0_t0, c.v0_t1);
+    bbox.max = vmax(c.v0_t0, c.v0_t1);
+    c.bbox = Bbox::pad(bbox, padding);
+  };
+  cub::DeviceFor::Bulk(point_colliders->size(), update_point_colliders,
+                       rt.stream.get());
+
+  // Update BVH.
+  triangle_collider_tree.update(bbox, rt);
+  edge_collider_tree.update(bbox, rt);
+}
+
+/// @brief Update collider state offset.
+void ObjectCollider::update_state_offset(int state_offset, CudaRuntime rt) {
+  // Update triangle colliders and root bbox.
+  auto triangle_colliders = triangle_collider_tree.get_colliders();
+  auto update_triangles_colliders = [triangle_colliders,
+                                     state_offset] __device__(int i) {
+    TriangleCollider& c = triangle_colliders[i];
+    c.state_offset = state_offset;
+  };
+  cub::DeviceFor::Bulk(triangle_colliders.size(), update_triangles_colliders,
+                       rt.stream.get());
+
+  // Update edge colliders.
+  auto edge_colliders = edge_collider_tree.get_colliders();
+  auto update_edge_colliders = [edge_colliders,
+                                state_offset] __device__(int i) {
+    EdgeCollider& c = edge_colliders[i];
+    c.state_offset = state_offset;
+  };
+  cub::DeviceFor::Bulk(edge_colliders.size(), update_edge_colliders,
+                       rt.stream.get());
+
+  // Update point colliders.
+  ctd::span<PointCollider> point_colliders_span = *point_colliders;
+  auto update_point_colliders = [point_colliders_span,
+                                 state_offset] __device__(int i) {
+    PointCollider& c = point_colliders_span[i];
+    c.state_offset = state_offset;
+  };
+  cub::DeviceFor::Bulk(point_colliders->size(), update_point_colliders,
+                       rt.stream.get());
+}
+
+void ObjectCollider::update_all(const CollisionConfig& config,
+                                ctd::span<const float> curr_state,
+                                ctd::span<const float> prev_state,
+                                int state_offset, CudaRuntime rt) {
   // Update collision config.
   auto& c = config;
 

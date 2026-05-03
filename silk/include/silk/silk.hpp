@@ -57,7 +57,6 @@ struct MeshConfig {
 
 /// @brief Collision behavior configuration for entities.
 struct CollisionConfig {
- public:
   bool is_collision_on = true;       ///< Enable collision
   bool is_self_collision_on = true;  ///< Enable self-collision
   int group = 0;                     ///< Collision group
@@ -79,9 +78,9 @@ struct ClothConfig {
 
 /// @brief Solver backend selection
 enum class SolverBackend {
-  CPU,   ///< Use CPU solver (TBB parallel, default)
-  GPU,   ///< Use GPU solver (CUDA acceleration)
-  Auto   ///< Automatically select based on availability and mesh size
+  CPU,  ///< Use CPU solver (TBB parallel, default)
+  GPU,  ///< Use GPU solver (CUDA acceleration)
+  Auto  ///< Automatically select based on availability and mesh size
 };
 
 /// @brief Global simulation parameters.
@@ -162,7 +161,8 @@ class World {
   /// @param collision_config Collision settings
   /// @param mesh_config Triangle mesh definition
   /// @param pin_index Indices of vertices to pin in place (may be empty)
-  /// @param handle Output handle for the new cloth object. Set to zero if fails.
+  /// @param handle Output handle for the new cloth object. Set to zero if
+  /// fails.
   /// @return Success with valid handle, or error (InvalidMesh, TooManyBody)
   [[nodiscard]] Result add_cloth(ClothConfig cloth_config,
                                  CollisionConfig collision_config,

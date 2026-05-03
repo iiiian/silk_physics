@@ -10,7 +10,7 @@ struct TriMesh;
 
 namespace silk::cuda {
 
-class ObjectState {
+class PhysicalState {
  public:
   // The range of this object in the global state array.
   int state_offset = 0;
@@ -24,9 +24,9 @@ class ObjectState {
   // Inverse permutation: original mesh vertex index -> new solver vertex index.
   Buf<int> inv_perm;
 
-  ObjectState(int state_offset, ctd::span<const float> curr_state,
-              ctd::span<const float> state_velocity, CudaRuntime rt);
-  ObjectState(int state_offset, const ::silk::TriMesh& mesh);
+  PhysicalState(int state_offset, ctd::span<const float> curr_state,
+                ctd::span<const float> state_velocity, CudaRuntime rt);
+  PhysicalState(int state_offset, const ::silk::TriMesh& mesh);
 };
 
 }  // namespace silk::cuda

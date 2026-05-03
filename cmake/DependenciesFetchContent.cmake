@@ -59,12 +59,6 @@ FetchContent_Declare(
 )
 
 FetchContent_Declare(
-  Spectra
-  GIT_REPOSITORY https://github.com/yixuan/spectra.git
-  GIT_TAG 6841bcbacaa0f0a8446210314e682057a084be4e # release 1.2.0
-)
-
-FetchContent_Declare(
     nlohmann_json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
     GIT_TAG 55f93686c01528224f448c19128836e7df245f72 # version 3.12.0
@@ -96,6 +90,21 @@ FetchContent_Declare(
     GIT_TAG d84981c797eb186e45f883f85423df94f9ac8bf4 # version 3.2.1
 )
 
+set(KAMINPAR_BUILD_APPS OFF)
+set(KAMINPAR_BUILD_IO OFF)
+set(KAMINPAR_BUILD_WITH_SPARSEHASH OFF)
+set(KAMINPAR_BUILD_WITH_DEBUG_SYMBOLS OFF)
+set(KAMINPAR_64BIT_WEIGHTS ON)
+set(KAMINPAR_ENABLE_TIMERS OFF)
+# Below hack force kaminpar to use our vendored tbb
+set(KAMINPAR_DOWNLOAD_TBB ON)
+set(TBB_FOUND TRUE)
+FetchContent_Declare(
+    KaMinPar
+    GIT_REPOSITORY https://github.com/KaHIP/KaMinPar.git
+    GIT_TAG 00fa1ef4150b558a1260918fe8dc49dae048ea62 # version 3.7.3
+)
+
 
 FetchContent_MakeAvailable(
     Eigen3
@@ -103,9 +112,7 @@ FetchContent_MakeAvailable(
     SuiteSparse
     spdlog
     tbb
-    Spectra
 )
-add_library(Spectra::Spectra ALIAS Spectra)
 
 # The original libigl export library as igl::core, but vcpkg patch it to igl::igl_core.
 # So we check which one is available. 
@@ -118,7 +125,7 @@ else()
 endif()
 
 if (SILK_ENABLE_CUDA)
-    FetchContent_MakeAvailable(CCCL)
+    FetchContent_MakeAvailable(CCCL KaMinPar)
 endif()
 
 if(SILK_BUILD_DEMO)

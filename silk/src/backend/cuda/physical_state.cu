@@ -1,5 +1,3 @@
-#include "backend/cuda/object_state.cuh"
-
 #include <cuda_runtime_api.h>
 
 #include <cassert>
@@ -8,7 +6,8 @@
 
 #include "backend/cuda/collision/bbox.cuh"
 #include "backend/cuda/collision/broadphase.cuh"
-#include "backend/cuda/copy_vector_like.cuh"
+#include "backend/cuda/physical_state.cuh"
+// #include "backend/cuda/copy_vector_like.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "common/mesh.hpp"
 
@@ -16,26 +15,43 @@ namespace silk::cuda {
 
 namespace {
 
-struct VertexCollider {
-  Bbox bbox;
-  int vertex = 0;
-};
+// struct VertexCollider {
+//   Bbox bbox;
+//   int vertex = 0;
+// };
+
+__global__ void set_identity(ctd::span<int> out) {
+  int tid = blockDim.x * blockIdx.x + threadIdx.x;
+  if (tid >= out.size()) {
+    return;
+  }
+
+  out[tid] = tid;
+}
 
 }  // namespace
 
-ObjectState::ObjectState(int state_offset, ctd::span<const float> curr_state,
-                         ctd::span<const float> state_velocity, CudaRuntime rt)
-    : state_offset(state_offset),
-      state_num(static_cast<int>(curr_state.size())),
-      curr_state(rt.stream, rt.mr, curr_state),
-      state_velocity(rt.stream, rt.mr, state_velocity),
-      perm(rt.stream, rt.mr),
-      inv_perm(rt.stream, rt.mr) {
+PhysicalState::PhysicalState(int state_offset,
+                             ctd::span<const float> curr_state,
+                             ctd::span<const float> state_velocity,
+                             CudaRuntime rt) {
   assert(curr_state.size() == state_velocity.size());
   assert(state_offset >= 0);
+
+  this->state_offset = state_offset;
+  this->state_num = curr_state.size();
+  this->curr_state = vec_like_to_device(curr_state, rt);
+  this->state_velocity = vec_like_to_device(state_velocity, rt);
+  this->perm = cu::make_buffer<int>(rt.stream, rt.mr, state_num, cu::no_init);
+  this->inv_perm =
+      cu::make_buffer<int>(rt.stream, rt.mr, state_num, cu::no_init);
+
+  int grid_num = div_round_up(state_num, 128);
+  set_identity<<<grid_num, 128, 0, rt.stream.get()>>>(*perm);
+  set_identity<<<grid_num, 128, 0, rt.stream.get()>>>(*inv_perm);
 }
 
-ObjectState::ObjectState(int state_offset, const ::silk::TriMesh& mesh) {
+PhysicalState::PhysicalState(int state_offset, const ::silk::TriMesh& mesh) {
   assert(state_offset >= 0);
 
   // TODO: impl after broadphase fin

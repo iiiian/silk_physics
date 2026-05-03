@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Eigen/Core>
+#include <cstdint>
 
 #include "backend/cuda/ecs.hpp"
 #include "backend/cuda/solver/barrier_constrain.cuh"
@@ -9,7 +10,7 @@ namespace silk::cuda {
 
 void batch_reset_cloth_simulation(Registry& registry);
 
-bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
+bool prepare_cloth_simulation(Registry& registry, uint32_t& entity, float dt,
                               int state_offset);
 
 void batch_compute_cloth_invariant_rhs(Registry& registry, float* d_rhs);

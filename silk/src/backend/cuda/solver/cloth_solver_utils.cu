@@ -5,12 +5,16 @@
 #include "backend/cuda/collision/object_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/object_state.cuh"
-#include "backend/cuda/solver/a_jacobi_solver.hpp"
-#include "backend/cuda/solver/barrier_constrain.hpp"
-#include "backend/cuda/solver/cloth_solver_context.hpp"
-#include "backend/cuda/solver/cloth_solver_kernel.hpp"
+// #include "backend/cuda/solver/a_jacobi_solver.hpp"
+// #include "backend/cuda/solver/barrier_constrain.hpp"
+#include "backend/cuda/eigen_cuda_interop.cuh"
+#include "backend/cuda/solver/cloth_solver_context.cuh"
+#include "backend/cuda/solver/cloth_solver_kernel.cuh"
 #include "backend/cuda/solver/cloth_solver_utils.cuh"
-#include "backend/cuda/solver/inexact_solver.hpp"
+// #include "backend/cuda/solver/inexact_solver.hpp"
+#include <cuda/algorithm>
+#include <cuda/std/span>
+
 #include "common/cloth_topology.hpp"
 #include "common/logger.hpp"
 #include "common/mesh.hpp"
@@ -19,37 +23,44 @@
 
 namespace silk::cuda {
 
-void batch_reset_cloth_simulation(Registry& registry) {
-  for (Entity& e : registry.get_all_entities()) {
+namespace {
+
+__global__ void perm_then_assign(int vert_num, ctd::span<const float> V_ori,
+                                 ctd::span<const int> perm,
+                                 ctd::span<float> V_out) {
+  int tid = blockDim.x * blockIdx.x + threadIdx.x;
+  if (tid > vert_num) {
+    return;
+  }
+
+  int out_idx = perm[tid];
+#pragma unroll
+  for (int i = 0; i < 3; ++i) {
+    V_out[3 * out_idx + i] = V_ori[3 * tid + i];
+  }
+}
+}  // namespace
+
+void batch_reset_cloth_simulation(Registry& registry, CudaRuntime rt) {
+  auto entities = registry.get_entity_with_components<TriMesh, PhysicalState,
+                                                      ClothSolverContext>();
+  for (uint32_t e : entities) {
     auto mesh = registry.get<TriMesh>(e);
-    auto state = registry.get<ObjectState>(e);
+    auto state = registry.get<PhysicalState>(e);
     auto context = registry.get<ClothSolverContext>(e);
 
-    if (mesh && state && context) {
-      auto vec_V_orig = mesh->V.reshaped<Eigen::RowMajor>();
-      int vert_num = static_cast<int>(mesh->V.rows());
-      if (state->inv_perm.size() == vert_num &&
-          state->state_num == vec_V_orig.size()) {
-        Eigen::VectorXf vec_V_perm(state->state_num);
-        for (int v_old = 0; v_old < vert_num; ++v_old) {
-          int v_new = state->inv_perm(v_old);
-          auto dst_seq = Eigen::seqN(3 * v_new, 3);
-          auto src_seq = Eigen::seqN(3 * v_old, 3);
-          vec_V_perm(dst_seq) = vec_V_orig(src_seq);
-        }
-        CHECK_CUDA(cudaMemcpy(state->d_curr_state, vec_V_perm.data(),
-                              state->state_num * sizeof(float),
-                              cudaMemcpyHostToDevice));
-        Eigen::VectorXf zero = Eigen::VectorXf::Zero(state->state_num);
-        CHECK_CUDA(cudaMemcpy(state->d_state_velocity, zero.data(),
-                              state->state_num * sizeof(float),
-                              cudaMemcpyHostToDevice));
-      }
-    }
+    // Reset current position to mesh position.
+    auto d_V_ori = host_eigen_to_device(mesh->V, rt);
+    int vert_num = mesh->V.rows();
+    int grid_num = div_round_up(vert_num, 128);
+    perm_then_assign<<<grid_num, 128, 0, rt.stream.get()>>>(
+        vert_num, d_V_ori, *(state->perm), *(state->curr_state));
+    // Reset current velocity to zero.
+    cu::fill_bytes(rt.stream, *(state->state_velocity), 0);
   }
 }
 
-bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
+bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt,
                               int state_offset) {
   auto& e = entity;
 
@@ -61,9 +72,9 @@ bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
   // Cloth entity sanity check.
   assert(cloth_config && collision_config && mesh && pin);
 
-  auto state = registry.get<ObjectState>(e);
+  auto state = registry.get<PhysicalState>(e);
   if (!state) {
-    state = registry.set<ObjectState>(e, ObjectState{state_offset, *mesh});
+    state = registry.set<PhysicalState>(e, PhysicalState{state_offset, *mesh});
   } else {
     state->state_offset = state_offset;
   }
@@ -183,7 +194,7 @@ bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
 
 void compute_cloth_invariant_rhs(const ClothSolverContext& solver_context,
                                  const Pin& pin,
-                                 const ObjectState& object_state,
+                                 const PhysicalState& object_state,
                                  float* d_rhs) {
   auto& c = solver_context;
 
