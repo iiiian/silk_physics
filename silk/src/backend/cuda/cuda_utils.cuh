@@ -10,6 +10,8 @@
 #include <cuda/memory_resource>
 #include <cuda/std/span>
 #include <cuda/stream>
+#include <format>
+#include <source_location>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -69,15 +71,49 @@ inline void check_cusparse(cusparseStatus_t result, char const* const func,
   }
 }
 
+struct CudaRuntime {
+  cu::stream_ref stream;
+  cu::mr::resource_ref<cu::mr::device_accessible> mr;
+};
+
+class CudaOOM : public std::runtime_error {
+ public:
+  using std::runtime_error::runtime_error;
+};
+
 /// @brief ceil(num/denom)
 constexpr int div_round_up(int num, int denom) {
   return (num + denom - 1) / denom;
 }
 
-struct CudaRuntime {
-  cu::stream_ref stream;
-  cu::mr::resource_ref<cu::mr::device_accessible> mr;
-};
+/// Throw meaningful error if allocation fails.
+template <typename T, typename V = ::cuda::no_init_t>
+cu::device_buffer<T> alloc(
+    CudaRuntime rt, size_t n, V init_val = cu::no_init,
+    std::source_location location = std::source_location::current()) {
+  size_t requested_bytes = n * sizeof(T);
+  // Only catch cu::cuda_error with status() = cudaErrorMemoryAllocation
+  try {
+    return cu::make_buffer<T>(rt.stream, rt.mr, n, init_val);
+  } catch (const CudaOOM&) {
+    throw;
+  } catch (const cu::cuda_error& err) {
+    if (err.status() != cudaErrorMemoryAllocation) {
+      throw;
+    }
+  }
+
+  size_t free_bytes = 0;
+  size_t total_bytes = 0;
+  cudaMemGetInfo(&free_bytes, &total_bytes);
+  constexpr size_t MB = 1024ull * 1024ull;
+  size_t requested_mb = div_round_up(requested_bytes, MB);
+  size_t free_mb = div_round_up(free_bytes, MB);
+  throw CudaOOM(
+      std::format("Fail to alllocate {} MB at {}: line {} {}. Only {} MB left.",
+                  requested_mb, location.file_name(), location.line(),
+                  location.function_name(), free_mb));
+}
 
 /// @brief Nullable device buffer.
 /// It's very annoying device_buffer does not have default ctor.
@@ -93,7 +129,7 @@ struct DynSpan {
 
 template <typename T>
 void resize_buffer(size_t size, cu::device_buffer<T>& buf, CudaRuntime rt) {
-  auto new_buf = cu::make_buffer(rt.stream, rt.mr, size, cu::no_init);
+  auto new_buf = alloc<T>(rt, size);
   cu::copy_bytes(rt.stream, buf, ctd::span{new_buf.data(), buf.size()});
   buf = new_buf;
 }
@@ -101,8 +137,9 @@ void resize_buffer(size_t size, cu::device_buffer<T>& buf, CudaRuntime rt) {
 template <typename T>
 cu::device_buffer<T> vec_like_to_device(ctd::span<const T> vec,
                                         CudaRuntime rt) {
-  auto buffer = cu::make_buffer<T>(rt.stream, rt.mr, vec.size(), cu::no_init);
+  auto buffer = alloc<T>(rt, vec.size());
   cu::copy_bytes(rt.stream, vec, buffer);
+  return buffer;
 }
 
 template <typename T>

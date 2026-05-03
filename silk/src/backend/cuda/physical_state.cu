@@ -42,9 +42,8 @@ PhysicalState::PhysicalState(int state_offset,
   this->state_num = curr_state.size();
   this->curr_state = vec_like_to_device(curr_state, rt);
   this->state_velocity = vec_like_to_device(state_velocity, rt);
-  this->perm = cu::make_buffer<int>(rt.stream, rt.mr, state_num, cu::no_init);
-  this->inv_perm =
-      cu::make_buffer<int>(rt.stream, rt.mr, state_num, cu::no_init);
+  this->perm = alloc<int>(rt, state_num);
+  this->inv_perm = alloc<int>(rt, state_num);
 
   int grid_num = div_round_up(state_num, 128);
   set_identity<<<grid_num, 128, 0, rt.stream.get()>>>(*perm);

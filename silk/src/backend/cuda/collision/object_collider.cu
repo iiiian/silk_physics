@@ -164,8 +164,7 @@ ObjectCollider ObjectCollider::from_physical(const CollisionConfig& config,
 
   TriangleCollider reduced_triangle;
   reduced_triangle.bbox = oc.bbox;
-  oc.reduced_collider_ =
-      cu::make_buffer<TriangleCollider>(rt.stream, rt.mr, 1, reduced_triangle);
+  oc.reduced_collider_ = alloc<TriangleCollider>(rt, 1, reduced_triangle);
   return oc;
 }
 
@@ -213,7 +212,7 @@ ObjectCollider ObjectCollider::from_obstacle(const CollisionConfig& config,
 
   TriangleCollider reduced_triangle;
   reduced_triangle.bbox = oc.bbox;
-  oc.reduced_collider_ = cu::make_buffer(rt.stream, rt.mr, 1, reduced_triangle);
+  oc.reduced_collider_ = alloc<TriangleCollider>(rt, 1, reduced_triangle);
   return oc;
 }
 
@@ -305,8 +304,7 @@ void ObjectCollider::update_position(ctd::span<const float> curr_state,
       init_reduce_collider, rt.stream.get());
 
   if (!device_reduce_temp_ || device_reduce_temp_->size() < temp_size) {
-    device_reduce_temp_ =
-        cu::make_buffer<char>(rt.stream, rt.mr, temp_size, cu::no_init);
+    device_reduce_temp_ = alloc<char>(rt, temp_size);
   }
   cub::DeviceReduce::TransformReduce(
       device_reduce_temp_->data(), temp_size, triangle_colliders.data(),
@@ -441,8 +439,7 @@ void ObjectCollider::update_all(const CollisionConfig& config,
       init_reduce_collider, rt.stream.get());
 
   if (!device_reduce_temp_ || device_reduce_temp_->size() < temp_size) {
-    device_reduce_temp_ =
-        cu::make_buffer<char>(rt.stream, rt.mr, temp_size, cu::no_init);
+    device_reduce_temp_ = alloc<char>(rt, temp_size);
   }
   cub::DeviceReduce::TransformReduce(
       device_reduce_temp_->data(), temp_size, triangle_colliders.data(),

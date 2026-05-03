@@ -79,12 +79,11 @@ int CollisionPipeline::find_collision(Registry& registry, float dt,
 
   // Allocated device collision cache.
   auto pt_ccache =
-      cu::make_buffer<ctd::pair<const TriangleCollider*, const PointCollider*>>(
-          rt.stream, rt.mr, init_ccache_size, cu::no_init);
+      alloc<ctd::pair<const TriangleCollider*, const PointCollider*>>(
+          rt, init_ccache_size);
   int pt_ccache_fill = 0;
-  auto ee_ccache =
-      cu::make_buffer<ctd::pair<const EdgeCollider*, const EdgeCollider*>>(
-          rt.stream, rt.mr, init_ccache_size, cu::no_init);
+  auto ee_ccache = alloc<ctd::pair<const EdgeCollider*, const EdgeCollider*>>(
+      rt, init_ccache_size);
   int ee_ccache_fill = 0;
   int collision_fill = 0;
 

@@ -510,31 +510,26 @@ OIBVHTree<C>::OIBVHTree(const Bbox& root_bbox, cu::device_buffer<C> colliders,
   int collider_num = colliders.size();
 
   // Make unsorted collider ids.
-  auto unsorted_collider_ids =
-      cu::make_buffer<int>(rt.stream, rt.mr, collider_num, cu::no_init);
+  auto unsorted_collider_ids = alloc<int>(rt, collider_num);
   auto fill_ids = [id = unsorted_collider_ids.data()] __device__(int i) {
     id[i] = i;
   };
   cub::DeviceFor::Bulk(collider_num, fill_ids, rt.stream.get());
 
   // Make unsorted morton codes.
-  auto unsorted_mortons =
-      cu::make_buffer<uint64_t>(rt.stream, rt.mr, collider_num, cu::no_init);
+  auto unsorted_mortons = alloc<uint64_t>(rt, collider_num);
   update_collider_morton_codes<C>(root_bbox, colliders, unsorted_mortons, rt);
 
   // Radix sort id based on morton code.
-  auto sorted_mortons =
-      cu::make_buffer<uint64_t>(rt.stream, rt.mr, collider_num, cu::no_init);
-  auto collider_ids =
-      cu::make_buffer<int>(rt.stream, rt.mr, collider_num, cu::no_init);
+  auto sorted_mortons = alloc<uint64_t>(rt, collider_num);
+  auto collider_ids = alloc<int>(rt, collider_num);
   // Allocate radix sort temp.
   size_t radix_sort_temp_size;
   cub::DeviceRadixSort::SortPairs(
       nullptr, radix_sort_temp_size, unsorted_mortons.data(),
       sorted_mortons.data(), unsorted_collider_ids.data(), collider_ids.data(),
       collider_num, 0, sizeof(uint64_t) * 8, rt.stream.get());
-  auto radix_temp = cu::make_buffer<char>(rt.stream, rt.mr,
-                                          radix_sort_temp_size, cu::no_init);
+  auto radix_temp = alloc<char>(rt, radix_sort_temp_size);
 
   cub::DeviceRadixSort::SortPairs(
       radix_temp.data(), radix_sort_temp_size, unsorted_mortons.data(),
@@ -558,8 +553,7 @@ OIBVHTree<C>::OIBVHTree(const Bbox& root_bbox, cu::device_buffer<C> colliders,
 
   // Allocate and fill the nodes.
   BVHNode empty_node = {.bbox = {}};
-  auto nodes =
-      cu::make_buffer<BVHNode>(rt.stream, rt.mr, skipped_rnode_num, empty_node);
+  auto nodes = alloc<BVHNode>(rt, skipped_rnode_num, empty_node);
 
   assert(skipped_rleaf_num > 0);
   int grid_num = div_round_up(skipped_rleaf_num, 128);
@@ -636,7 +630,7 @@ void OIBVHTree<X>::test_self_collision(const Filter& filter,
     return;
   }
 
-  auto d_fill = cu::make_buffer<int>(rt.stream, rt.mr, 1, fill);
+  auto d_fill = alloc<int>(rt, 1, fill);
   DynSpan<CollisionCache<X, X>> dyn_out{.fill = d_fill.data(), .data = out};
   auto tree = view();
   int grid_num = div_round_up(collider_ids_->size(), 128);
@@ -667,7 +661,7 @@ void OIBVHTree<X>::test_ext_collision(ctd::span<const Y> colliders,
     return;
   }
 
-  auto d_fill = cu::make_buffer<int>(rt.stream, rt.mr, 1, fill);
+  auto d_fill = alloc<int>(rt, 1, fill);
   DynSpan<CollisionCache<X, Y>> dyn_out{.fill = d_fill.data(), .data = out};
   auto tree = view();
   int grid_num = div_round_up(colliders.size(), 128);

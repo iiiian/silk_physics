@@ -64,7 +64,7 @@ void pt_narrowphase(ctd::span<PTCCache> pt_ccache,
     return;
   }
 
-  auto d_fill = cu::make_buffer<int>(rt.stream, rt.mr, 1, fill);
+  auto d_fill = alloc<int>(rt, 1, fill);
   DynSpan<Collision> dyn_out{.fill = d_fill.data(), .data = out};
 
   int grid_num = div_round_up(pt_ccache.size(), 128);
@@ -88,7 +88,7 @@ void ee_narrowphase(ctd::span<EECCache> ee_ccache,
     return;
   }
 
-  auto d_fill = cu::make_buffer<int>(rt.stream, rt.mr, 1, fill);
+  auto d_fill = alloc<int>(rt, 1, fill);
   DynSpan<Collision> dyn_out{.fill = d_fill.data(), .data = out};
 
   int grid_num = div_round_up(ee_ccache.size(), 128);
