@@ -1,7 +1,8 @@
 #pragma once
 
-#include <backend/cuda/cuda_utils.cuh>
 #include <cuda/buffer>
+
+#include "backend/cuda/namespace_alias.hpp"
 
 namespace silk::cuda {
 

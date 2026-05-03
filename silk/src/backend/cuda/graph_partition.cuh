@@ -4,7 +4,7 @@
 #include <cuda/std/span>
 #include <vector>
 
-#include "backend/cuda/cuda_utils.cuh"
+#include "backend/cuda/namespace_alias.hpp"
 
 namespace silk::cuda {
 

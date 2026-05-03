@@ -8,6 +8,8 @@
 #include <thread>
 #include <vector>
 
+#include "backend/cuda/cuda_utils.cuh"
+
 namespace silk::cuda {
 
 void graph_partition(ctd::span<int> row_ptr, ctd::span<int> cols,
