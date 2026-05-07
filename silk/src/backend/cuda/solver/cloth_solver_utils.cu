@@ -1,13 +1,16 @@
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
 #include <cassert>
+#include <memory>
 
 #include "backend/cuda/collision/object_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
-#include "backend/cuda/object_state.cuh"
+#include "backend/cuda/mesh_partition.cuh"
+#include "backend/cuda/physical_state.cuh"
 // #include "backend/cuda/solver/a_jacobi_solver.hpp"
 // #include "backend/cuda/solver/barrier_constrain.hpp"
 #include "backend/cuda/eigen_cuda_interop.cuh"
+#include "backend/cuda/graph_partition.hpp"
 #include "backend/cuda/solver/cloth_solver_context.cuh"
 #include "backend/cuda/solver/cloth_solver_kernel.cuh"
 #include "backend/cuda/solver/cloth_solver_utils.cuh"
@@ -25,167 +28,141 @@ namespace silk::cuda {
 
 namespace {
 
-__global__ void perm_then_assign(int vert_num, ctd::span<const float> V_ori,
-                                 ctd::span<const int> perm,
-                                 ctd::span<float> V_out) {
-  int tid = blockDim.x * blockIdx.x + threadIdx.x;
-  if (tid > vert_num) {
-    return;
+TriMesh build_permuted_mesh(const TriMesh& mesh, ctd::span<int> perm,
+                            ctd::span<int> inv_perm) {
+  TriMesh perm_mesh = mesh;
+  int vert_num = mesh.V.rows();
+  for (int i = 0; i < vert_num; ++i) {
+    int old_idx = perm[i];
+    perm_mesh.V.row(i) = mesh.V.row(old_idx);
+  }
+  for (int i = 0; i < mesh.E.rows(); ++i) {
+    perm_mesh.E(i, 0) = inv_perm[mesh.E(i, 0)];
+    perm_mesh.E(i, 1) = inv_perm[mesh.E(i, 1)];
+  }
+  for (int i = 0; i < mesh.F.rows(); ++i) {
+    perm_mesh.F(i, 0) = inv_perm[mesh.F(i, 0)];
+    perm_mesh.F(i, 1) = inv_perm[mesh.F(i, 1)];
+    perm_mesh.F(i, 2) = inv_perm[mesh.F(i, 2)];
+  }
+  return perm_mesh;
+}
+
+Pin build_permuted_pin(const Pin& pin, ctd::span<int> perm,
+                       ctd::span<int> inv_perm) {
+  Pin perm_pin = pin;
+
+  if (!pin.is_all_pinned) {
+    for (int i = 0; i < pin.index.size(); ++i) {
+      perm_pin.index(i) = perm[pin.index(i)];
+    }
+    return perm_pin;
   }
 
-  int out_idx = perm[tid];
-#pragma unroll
-  for (int i = 0; i < 3; ++i) {
-    V_out[3 * out_idx + i] = V_ori[3 * tid + i];
+  for (int i = 0; i < pin.curr_position.size() / 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      int old_id = inv_perm[i];
+      perm_pin.curr_position(3 * i + j) = pin.curr_position(3 * old_id + j);
+      perm_pin.prev_position(3 * i + j) = pin.prev_position(3 * old_id + j);
+    }
   }
 }
+
 }  // namespace
 
-void batch_reset_cloth_simulation(Registry& registry, CudaRuntime rt) {
-  auto entities = registry.get_entity_with_components<TriMesh, PhysicalState,
-                                                      ClothSolverContext>();
+void batch_reset_cloth_simulation(ObjRegistry& registry, CudaRuntime rt) {
+  auto entities =
+      registry.get_entity_with_components<TriMesh, PhysicalState, MeshPartition,
+                                          ClothSolverContext>();
   for (uint32_t e : entities) {
     auto mesh = registry.get<TriMesh>(e);
+    auto part = registry.get<MeshPartition>(e);
     auto state = registry.get<PhysicalState>(e);
     auto context = registry.get<ClothSolverContext>(e);
 
     // Reset current position to mesh position.
-    auto d_V_ori = host_eigen_to_device(mesh->V, rt);
-    int vert_num = mesh->V.rows();
-    int grid_num = div_round_up(vert_num, 128);
-    perm_then_assign<<<grid_num, 128, 0, rt.stream.get()>>>(
-        vert_num, d_V_ori, *(state->perm), *(state->curr_state));
+    auto original_pos = host_eigen_to_device(mesh->V, rt);
+    part->permute(original_pos, *state->curr_state, rt);
     // Reset current velocity to zero.
     cu::fill_bytes(rt.stream, *(state->state_velocity), 0);
   }
 }
 
-bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt,
-                              int state_offset) {
+bool prepare_cloth_simulation(ObjRegistry& registry, uint32_t entity, float dt,
+                              int state_offset, CudaRuntime rt) {
   auto& e = entity;
 
   auto cloth_config = registry.get<ClothConfig>(e);
-  auto collision_config = registry.get<CollisionConfig>(e);
+  auto collision_config = registry.get<CollisionConfigPlus>(e);
   auto mesh = registry.get<TriMesh>(e);
   auto pin = registry.get<Pin>(e);
 
   // Cloth entity sanity check.
   assert(cloth_config && collision_config && mesh && pin);
 
+  auto part = registry.get<MeshPartition>(e);
+  if (!part) {
+    part = registry.set(e, MeshPartition{*mesh, rt});
+  }
+  assert(part != nullptr);
+
   auto state = registry.get<PhysicalState>(e);
   if (!state) {
-    state = registry.set<PhysicalState>(e, PhysicalState{state_offset, *mesh});
+    auto mesh_pos = host_eigen_to_device(mesh->V, rt);
+    auto perm_pos = alloc<float>(rt, mesh->V.rows());
+    part->permute(mesh_pos, perm_pos, rt);
+    PhysicalState tmp;
+    tmp.state_offset = state_offset;
+    tmp.state_num = perm_pos.size();
+    tmp.curr_state = std::move(perm_pos);
+    tmp.state_velocity = alloc<float>(rt, tmp.state_num, 0);
+    state = registry.set<PhysicalState>(e, std::move(tmp));
   } else {
     state->state_offset = state_offset;
   }
   assert(state != nullptr);
 
+  std::unique_ptr<TriMesh> perm_mesh;
+  std::unique_ptr<Pin> perm_pin;
+
   auto topology = registry.get<ClothTopology>(e);
   if (!topology) {
-    // Build a permuted mesh for topology and solver context.
-    const auto& perm = state->perm;
-    const auto& inv_perm = state->inv_perm;
-    TriMesh perm_mesh;
-    int vert_num = static_cast<int>(mesh->V.rows());
-    perm_mesh.V.resize(vert_num, 3);
-    for (int i = 0; i < vert_num; ++i) {
-      int old_idx = perm(i);
-      perm_mesh.V.row(i) = mesh->V.row(old_idx);
+    if (!perm_mesh) {
+      perm_mesh = std::make_unique<TriMesh>(
+          build_permuted_mesh(*mesh, part->h_perm, part->h_inv_perm));
     }
-    perm_mesh.E.resizeLike(mesh->E);
-    for (int i = 0; i < mesh->E.rows(); ++i) {
-      perm_mesh.E(i, 0) = inv_perm(mesh->E(i, 0));
-      perm_mesh.E(i, 1) = inv_perm(mesh->E(i, 1));
-    }
-    perm_mesh.F.resizeLike(mesh->F);
-    for (int i = 0; i < mesh->F.rows(); ++i) {
-      perm_mesh.F(i, 0) = inv_perm(mesh->F(i, 0));
-      perm_mesh.F(i, 1) = inv_perm(mesh->F(i, 1));
-      perm_mesh.F(i, 2) = inv_perm(mesh->F(i, 2));
-    }
-    perm_mesh.avg_edge_length = mesh->avg_edge_length;
-
-    topology =
-        registry.set<ClothTopology>(e, ClothTopology(*cloth_config, perm_mesh));
+    topology = registry.set<ClothTopology>(
+        e, ClothTopology{*cloth_config, *perm_mesh});
   }
   assert(topology != nullptr);
 
   auto context = registry.get<ClothSolverContext>(e);
   if (!(context && context->dt == dt)) {
-    // Rebuild permuted mesh consistently with topology/state.
-    const auto& perm = state->perm;
-    const auto& inv_perm = state->inv_perm;
-    TriMesh perm_mesh;
-    int vert_num = static_cast<int>(mesh->V.rows());
-    perm_mesh.V.resize(vert_num, 3);
-    for (int i = 0; i < vert_num; ++i) {
-      int old_idx = perm(i);
-      perm_mesh.V.row(i) = mesh->V.row(old_idx);
-    }
-    perm_mesh.E.resizeLike(mesh->E);
-    for (int i = 0; i < mesh->E.rows(); ++i) {
-      perm_mesh.E(i, 0) = inv_perm(mesh->E(i, 0));
-      perm_mesh.E(i, 1) = inv_perm(mesh->E(i, 1));
-    }
-    perm_mesh.F.resizeLike(mesh->F);
-    for (int i = 0; i < mesh->F.rows(); ++i) {
-      perm_mesh.F(i, 0) = inv_perm(mesh->F(i, 0));
-      perm_mesh.F(i, 1) = inv_perm(mesh->F(i, 1));
-      perm_mesh.F(i, 2) = inv_perm(mesh->F(i, 2));
-    }
-    perm_mesh.avg_edge_length = mesh->avg_edge_length;
-
     context = registry.set<ClothSolverContext>(
-        e, ClothSolverContext{*cloth_config, perm_mesh, *topology, *pin, *state,
-                              dt});
+        e, ClothSolverContext{*cloth_config, *topology, dt, rt});
   }
   assert(context != nullptr);
 
+  using ObjectCollider = ::silk::cuda::collision::ObjectCollider;
   auto collider = registry.get<ObjectCollider>(e);
   if (!collider) {
-    // Build permuted mesh for collision to align vertex indices with solver
-    // state layout.
-    const auto& perm = state->perm;
-    const auto& inv_perm = state->inv_perm;
-    TriMesh perm_mesh;
-    int vert_num = static_cast<int>(mesh->V.rows());
-    perm_mesh.V.resize(vert_num, 3);
-    for (int i = 0; i < vert_num; ++i) {
-      int old_idx = perm(i);
-      perm_mesh.V.row(i) = mesh->V.row(old_idx);
+    if (!perm_mesh) {
+      perm_mesh = std::make_unique<TriMesh>(
+          build_permuted_mesh(*mesh, part->h_perm, part->h_inv_perm));
     }
-    perm_mesh.E.resizeLike(mesh->E);
-    for (int i = 0; i < mesh->E.rows(); ++i) {
-      perm_mesh.E(i, 0) = inv_perm(mesh->E(i, 0));
-      perm_mesh.E(i, 1) = inv_perm(mesh->E(i, 1));
+    if (!perm_pin) {
+      perm_pin = std::make_unique<Pin>(
+          build_permuted_pin(*pin, part->h_perm, part->h_inv_perm));
     }
-    perm_mesh.F.resizeLike(mesh->F);
-    for (int i = 0; i < mesh->F.rows(); ++i) {
-      perm_mesh.F(i, 0) = inv_perm(mesh->F(i, 0));
-      perm_mesh.F(i, 1) = inv_perm(mesh->F(i, 1));
-      perm_mesh.F(i, 2) = inv_perm(mesh->F(i, 2));
-    }
-    perm_mesh.avg_edge_length = mesh->avg_edge_length;
-
     // Per-vertex mass in permuted indexing for collision.
-    Eigen::VectorXf collider_mass(vert_num);
-    for (int v_new = 0; v_new < vert_num; ++v_new) {
-      collider_mass(v_new) = cloth_config->density * topology->mass(v_new);
-    }
+    Eigen::VectorXf collider_mass = cloth_config->density * topology->mass;
 
-    // Build a permuted pin description for collision (stored only locally).
-    Pin perm_pin = *pin;
-    perm_pin.index.resize(pin->index.size());
-    for (int i = 0; i < pin->index.size(); ++i) {
-      int v_old = pin->index(i);
-      perm_pin.index(i) = state->inv_perm(v_old);
-    }
-
-    auto new_collider = ObjectCollider(e.self, *collision_config, perm_mesh,
-                                       perm_pin, collider_mass, state_offset);
+    auto new_collider =
+        ObjectCollider::from_physical(*collision_config, *perm_mesh, *perm_pin,
+                                      collider_mass, state_offset, rt);
     collider = registry.set<ObjectCollider>(e, std::move(new_collider));
   } else {
-    collider->state_offset = state_offset;
+    collider->update_state_offset(state_offset, rt);
   }
   assert(collider != nullptr);
 
@@ -194,7 +171,7 @@ bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt,
 
 void compute_cloth_invariant_rhs(const ClothSolverContext& solver_context,
                                  const Pin& pin,
-                                 const PhysicalState& object_state,
+                                 const PhysicalState& physical_state,
                                  float* d_rhs) {
   auto& c = solver_context;
 
@@ -202,7 +179,7 @@ void compute_cloth_invariant_rhs(const ClothSolverContext& solver_context,
   Eigen::VectorXf pin_rhs = Eigen::VectorXf::Zero(c.state_num);
   for (int i = 0; i < pin.index.size(); ++i) {
     int v_old = pin.index(i);
-    int v_new = object_state.inv_perm(v_old);
+    int v_new = physical_state.inv_perm(v_old);
     pin_rhs(Eigen::seqN(3 * v_new, 3)) =
         pin.pin_stiffness * pin.position(Eigen::seqN(3 * i, 3));
   }
@@ -213,7 +190,7 @@ void compute_cloth_invariant_rhs(const ClothSolverContext& solver_context,
   vector_add(c.state_num, d_rhs, c.d_C0, d_rhs);
 }
 
-void batch_compute_cloth_invariant_rhs(Registry& registry, float* d_rhs) {
+void batch_compute_cloth_invariant_rhs(ObjRegistry& registry, float* d_rhs) {
   for (Entity& e : registry.get_all_entities()) {
     auto state = registry.get<ObjectState>(e);
     auto context = registry.get<ClothSolverContext>(e);
@@ -246,7 +223,7 @@ bool compute_cloth_outer_loop(const float* d_state,
   return true;
 }
 
-bool batch_compute_cloth_outer_loop(Registry& registry, const float* d_state,
+bool batch_compute_cloth_outer_loop(ObjRegistry& registry, const float* d_state,
                                     const float* d_state_velocity,
                                     const BarrierConstrain& barrier_constrain,
                                     const Eigen::Vector3f& state_acceleration,
@@ -302,7 +279,7 @@ bool compute_cloth_inner_loop(const ClothConfig& config,
   return true;
 }
 
-bool batch_compute_cloth_inner_loop(Registry& registry,
+bool batch_compute_cloth_inner_loop(ObjRegistry& registry,
                                     const float* d_outer_rhs,
                                     const BarrierConstrain& barrier_constrain,
                                     float* d_state) {

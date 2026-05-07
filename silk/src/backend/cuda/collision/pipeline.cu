@@ -52,7 +52,7 @@ __both__ bool ee_self_collision_filter(const EdgeCollider& a,
   return !is_both_pinned && !is_neighbor;
 };
 
-int CollisionPipeline::find_collision(Registry& registry, float dt,
+int CollisionPipeline::find_collision(ObjRegistry& registry, float dt,
                                       cu::device_buffer<Collision>& collisions,
                                       CudaRuntime rt) {
   auto object_colliders = registry.get_all_components<ObjectCollider>();

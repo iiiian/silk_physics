@@ -20,7 +20,7 @@
 namespace silk::cuda {
 
 struct CudaBackend::Impl {
-  Registry registry_;
+  ObjRegistry registry_;
   SolverPipeline solver_pipeline_;
 };
 

@@ -16,19 +16,4 @@ struct CollisionConfigPlus {
   float friction = 0.3f;             ///< Coefficient of friction [0,1]
 };
 
-struct ClothConfigPlus {
-  // Additional fields.
-  bool is_updated = true;
-
-  // Original config.
-  /// In-plane stretching resistance (higher = stiffer)
-  float elastic_stiffness = 100.0f;
-  /// Out-of-plane bending resistance (higher = stiffer)
-  float bending_stiffness = 0.0001f;
-  /// Mass density per unit area
-  float density = 0.1f;
-  /// Velocity damping factor [0,1] (higher = more damping)
-  float damping = 0.01f;
-};
-
 }  // namespace silk

@@ -112,7 +112,7 @@ std::vector<TriangleCollider> make_triangle_colliders(
   return triangle_colliders;
 }
 
-ObjectCollider ObjectCollider::from_physical(const CollisionConfig& config,
+ObjectCollider ObjectCollider::from_physical(const CollisionConfigPlus& config,
                                              const TriMesh& mesh,
                                              const Pin& pin,
                                              const Eigen::VectorXf& mass,
@@ -168,7 +168,7 @@ ObjectCollider ObjectCollider::from_physical(const CollisionConfig& config,
   return oc;
 }
 
-ObjectCollider ObjectCollider::from_obstacle(const CollisionConfig& config,
+ObjectCollider ObjectCollider::from_obstacle(const CollisionConfigPlus& config,
                                              const TriMesh& mesh,
                                              CudaRuntime rt) {
   auto& c = config;

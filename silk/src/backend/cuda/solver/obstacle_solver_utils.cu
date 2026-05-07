@@ -10,7 +10,7 @@
 
 namespace silk::cuda {
 
-void batch_reset_obstacle_simulation(Registry& registry) {
+void batch_reset_obstacle_simulation(ObjRegistry& registry) {
   auto obstacles =
       registry.get_entity_with_components<TriMesh, ObstaclePosition>();
   for (uint32_t e : obstacles) {
@@ -25,7 +25,7 @@ void batch_reset_obstacle_simulation(Registry& registry) {
   }
 }
 
-void prepare_obstacle_simulation(Registry& registry, uint32_t& entity,
+void prepare_obstacle_simulation(ObjRegistry& registry, uint32_t& entity,
                                  CudaRuntime rt) {
   auto& e = entity;
 

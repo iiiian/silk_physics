@@ -41,10 +41,11 @@ class ClothTopology {
   RMatrixX3f C0;
 
  public:
+  ClothTopology() = default;
   ClothTopology(const ClothConfig& config, const TriMesh& mesh);
 
   // Since Eigen::SparseMatrix lacks noexcept move ctor, explicitly
-  // delete copy ctor to avoid error when used in containers like std::vector.
+  // delete copy ctor to avoid error in containers like std::vector.
   ClothTopology(const ClothTopology&) = delete;
   ClothTopology(ClothTopology&&) = default;
   ClothTopology& operator=(const ClothTopology&) = delete;
