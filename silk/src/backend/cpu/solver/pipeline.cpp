@@ -21,7 +21,7 @@ namespace silk::cpu {
 
 void SolverPipeline::clear(Registry& registry) {
   for (Entity& e : registry.get_all_entities()) {
-    registry.remove<ClothTopology>(e);
+    registry.remove<ClothAssemblyL2Cache>(e);
     registry.remove<ClothSolverContext>(e);
     registry.remove<ObjectState>(e);
     registry.remove<ObjectCollider>(e);

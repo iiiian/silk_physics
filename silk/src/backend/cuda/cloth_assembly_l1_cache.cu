@@ -1,13 +1,13 @@
 #include <Eigen/Core>
 
 // #include "backend/cuda/copy_vector_like.hpp"
+#include "backend/cuda/cloth_assembly_l1_cache.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/eigen_cuda_interop.cuh"
 #include "backend/cuda/physical_state.cuh"
-#include "backend/cuda/solver/cloth_solver_context.cuh"
 #include "backend/cuda/solver/compute_subspace_u.hpp"
 #include "backend/cuda/sparse_matrix_interop.hpp"
-#include "common/cloth_topology.hpp"
+#include "common/cloth_assembly_l2_cache.hpp"
 #include "common/eigen_utils.hpp"
 #include "common/logger.hpp"
 #include "common/mesh.hpp"
@@ -16,9 +16,9 @@
 
 namespace silk::cuda {
 
-ClothSolverContext::ClothSolverContext(const ClothConfig& config,
-                                       const ClothTopology& topology, float dt,
-                                       CudaRuntime rt) {
+ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
+                                           const ClothAssemblyL2Cache& topology,
+                                           float dt, CudaRuntime rt) {
   auto& c = config;
   auto& t = topology;
   int state_num = 3 * t.mass.size();
@@ -63,7 +63,7 @@ ClothSolverContext::ClothSolverContext(const ClothConfig& config,
   this->jacobian_ops = vec_like_to_device<float>(h_jacobian_ops, rt);
   this->C0 = host_eigen_to_device(
       (c.bending_stiffness * t.C0).reshaped<Eigen::RowMajor>(), rt);
-  this->H = BSRMatrix{h_H, 3, {}, rt};
+  this->SS_sum = BSRMatrix{h_H, 3, {}, rt};
 }
 
 }  // namespace silk::cuda

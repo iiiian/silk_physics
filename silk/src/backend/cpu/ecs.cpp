@@ -8,7 +8,7 @@
 #include "backend/cpu/object_state.hpp"
 #include "backend/cpu/obstacle_position.hpp"
 #include "backend/cpu/solver/cloth_solver_context.hpp"
-#include "common/cloth_topology.hpp"
+#include "common/cloth_assembly_l2_cache.hpp"
 #include "common/manager.hpp"
 #include "common/mesh.hpp"
 #include "common/pin.hpp"

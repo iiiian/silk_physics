@@ -13,7 +13,7 @@
 #include "backend/cuda/obstacle_position.hpp"
 #include "backend/cuda/solver/cloth_solver_context.cuh"
 #include "backend/cuda/solver/pipeline.hpp"
-#include "common/cloth_topology.hpp"
+#include "common/cloth_assembly_l2_cache.hpp"
 #include "common/mesh.hpp"
 #include "common/pin.hpp"
 
@@ -160,7 +160,7 @@ Result CudaBackend::set_cloth_config(uint32_t handle, ClothConfig config) {
     return Result::error(ErrorCode::InvalidHandle);
   }
   *cloth_config = config;
-  impl_->registry_.remove<ClothSolverContext>(*e);
+  impl_->registry_.remove<ClothAssemblyL1Cache>(*e);
   impl_->registry_.remove<ObjectCollider>(*e);
   return Result::ok();
 }
@@ -206,7 +206,7 @@ Result CudaBackend::set_cloth_pin_index(uint32_t handle,
     pin->index = {};
     pin->position = {};
   }
-  impl_->registry_.remove<ClothSolverContext>(*e);
+  impl_->registry_.remove<ClothAssemblyL1Cache>(*e);
   impl_->registry_.remove<ObjectCollider>(*e);
   return Result::ok();
 }

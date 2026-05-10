@@ -7,11 +7,11 @@ class ClothConfig;
 class CollisionConfigPlus;
 class TriMesh;
 class Pin;
-class ClothTopology;
+class ClothAssemblyL2Cache;
 }  // namespace silk
 
 namespace silk::cuda {
-class ClothSolverContext;
+class ClothAssemblyL1Cache;
 class PhysicalState;
 class ObstaclePosition;
 class MeshPartition;
@@ -29,8 +29,8 @@ using ObjRegistry = ::silk::ecs::Registry<ClothConfig,
                                           TriMesh,
                                           MeshPartition,
                                           Pin,
-                                          ClothTopology,
-                                          ClothSolverContext,
+                                          ClothAssemblyL2Cache,
+                                          ClothAssemblyL1Cache,
                                           PhysicalState,
                                           ObstaclePosition,
                                           collision::ObjectCollider>;

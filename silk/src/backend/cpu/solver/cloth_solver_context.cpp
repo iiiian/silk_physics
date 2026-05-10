@@ -4,7 +4,7 @@
 #include <optional>
 
 #include "backend/cpu/solver/cholmod_utils.hpp"
-#include "common/cloth_topology.hpp"
+#include "common/cloth_assembly_l2_cache.hpp"
 #include "common/eigen_utils.hpp"
 #include "common/logger.hpp"
 #include "common/pin.hpp"
@@ -13,8 +13,8 @@
 namespace silk::cpu {
 
 std::optional<ClothSolverContext> ClothSolverContext::make_cloth_solver_context(
-    const ClothConfig& config, const ClothTopology& topology, const Pin& pin,
-    float dt) {
+    const ClothConfig& config, const ClothAssemblyL2Cache& topology,
+    const Pin& pin, float dt) {
   auto& c = config;
   auto& t = topology;
   int state_num = 3 * t.mass.size();

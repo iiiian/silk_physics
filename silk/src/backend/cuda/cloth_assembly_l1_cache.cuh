@@ -2,7 +2,7 @@
 
 #include "backend/cuda/bsr_matrix.cuh"
 #include "backend/cuda/cuda_utils.cuh"
-#include "common/cloth_topology.hpp"
+#include "common/cloth_assembly_l2_cache.hpp"
 #include "silk/silk.hpp"
 
 namespace silk::cuda {
@@ -11,7 +11,7 @@ namespace silk::cuda {
 ///
 /// Notation:
 /// state_num = 3 * vertex num.
-class ClothSolverContext {
+class ClothAssemblyL1Cache {
  public:
   float dt;
   int state_num = 0;
@@ -19,12 +19,13 @@ class ClothSolverContext {
   Buf<float> area;
   Buf<float> jacobian_ops;
   Buf<float> C0;
-  BSRMatrix H;
+  BSRMatrix SS_sum;
 
  public:
-  ClothSolverContext() = default;
-  ClothSolverContext(const ClothConfig& config, const ClothTopology& topology,
-                     float dt, CudaRuntime rt);
+  ClothAssemblyL1Cache() = default;
+  ClothAssemblyL1Cache(const ClothConfig& config,
+                       const ClothAssemblyL2Cache& topology, float dt,
+                       CudaRuntime rt);
 };
 
 }  // namespace silk::cuda

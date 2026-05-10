@@ -18,7 +18,7 @@
 #include <cuda/algorithm>
 #include <cuda/std/span>
 
-#include "common/cloth_topology.hpp"
+#include "common/cloth_assembly_l2_cache.hpp"
 #include "common/logger.hpp"
 #include "common/mesh.hpp"
 #include "common/pin.hpp"
@@ -73,7 +73,7 @@ Pin build_permuted_pin(const Pin& pin, ctd::span<int> perm,
 void batch_reset_cloth_simulation(ObjRegistry& registry, CudaRuntime rt) {
   auto entities =
       registry.get_entity_with_components<TriMesh, PhysicalState, MeshPartition,
-                                          ClothSolverContext>();
+                                          ClothAssemblyL1Cache>();
   for (uint32_t e : entities) {
     auto mesh = registry.get<TriMesh>(e);
     auto part = registry.get<MeshPartition>(e);
@@ -125,21 +125,21 @@ bool prepare_cloth_simulation(ObjRegistry& registry, uint32_t entity, float dt,
   std::unique_ptr<TriMesh> perm_mesh;
   std::unique_ptr<Pin> perm_pin;
 
-  auto topology = registry.get<ClothTopology>(e);
+  auto topology = registry.get<ClothAssemblyL2Cache>(e);
   if (!topology) {
     if (!perm_mesh) {
       perm_mesh = std::make_unique<TriMesh>(
           build_permuted_mesh(*mesh, part->h_perm, part->h_inv_perm));
     }
-    topology = registry.set<ClothTopology>(
-        e, ClothTopology{*cloth_config, *perm_mesh});
+    topology = registry.set<ClothAssemblyL2Cache>(
+        e, ClothAssemblyL2Cache{*cloth_config, *perm_mesh});
   }
   assert(topology != nullptr);
 
-  auto context = registry.get<ClothSolverContext>(e);
+  auto context = registry.get<ClothAssemblyL1Cache>(e);
   if (!(context && context->dt == dt)) {
-    context = registry.set<ClothSolverContext>(
-        e, ClothSolverContext{*cloth_config, *topology, dt, rt});
+    context = registry.set<ClothAssemblyL1Cache>(
+        e, ClothAssemblyL1Cache{*cloth_config, *topology, dt, rt});
   }
   assert(context != nullptr);
 
@@ -169,7 +169,7 @@ bool prepare_cloth_simulation(ObjRegistry& registry, uint32_t entity, float dt,
   return true;
 }
 
-void compute_cloth_invariant_rhs(const ClothSolverContext& solver_context,
+void compute_cloth_invariant_rhs(const ClothAssemblyL1Cache& solver_context,
                                  const Pin& pin,
                                  const PhysicalState& physical_state,
                                  float* d_rhs) {
@@ -210,7 +210,7 @@ bool compute_cloth_outer_loop(const float* d_state,
                               const float* d_barrier_lhs,
                               const float* d_barrier_rhs,
                               const Eigen::Vector3f& state_acceleration,
-                              ClothSolverContext& solver_context,
+                              ClothAssemblyL1Cache& solver_context,
                               float* d_rhs) {
   auto& s = solver_context;
 
@@ -250,7 +250,7 @@ bool batch_compute_cloth_outer_loop(ObjRegistry& registry, const float* d_state,
 }
 
 bool compute_cloth_inner_loop(const ClothConfig& config,
-                              const ClothSolverContext& solver_context,
+                              const ClothAssemblyL1Cache& solver_context,
                               const BarrierConstrain& barrier_constrain,
                               int state_offset, const float* d_outer_rhs,
                               float* d_state) {

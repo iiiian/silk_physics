@@ -1,4 +1,4 @@
-#include "common/cloth_topology.hpp"
+#include "common/cloth_assembly_l2_cache.hpp"
 
 #include <igl/cotmatrix.h>
 #include <igl/doublearea.h>
@@ -68,7 +68,8 @@ Eigen::Matrix<float, 6, 9> triangle_jacobian_operator(
   return Eigen::KroneckerProduct(B, Eigen::Matrix3f::Identity());
 }
 
-ClothTopology::ClothTopology(const ClothConfig& config, const TriMesh& mesh) {
+ClothAssemblyL2Cache::ClothAssemblyL2Cache(const ClothConfig& config,
+                                           const TriMesh& mesh) {
   const TriMesh& m = mesh;
 
   int vert_num = m.V.rows();

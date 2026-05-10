@@ -30,7 +30,7 @@ namespace silk {
   X(::silk::CollisionConfig, collision_config)             \
   X(::silk::TriMesh, tri_mesh)                             \
   X(::silk::Pin, pin)                                      \
-  X(::silk::ClothTopology, cloth_topology)                 \
+  X(::silk::ClothTopology, cloth_assembly_l2_cache)                 \
   X(::silk::cpu::ClothSolverContext, cloth_solver_context) \
   X(::silk::cpu::ObjectState, object_state)                \
   X(::silk::cpu::ObstaclePosition, obstacle_position)      \
@@ -40,7 +40,7 @@ class ClothConfig;
 class CollisionConfig;
 class TriMesh;
 class Pin;
-class ClothTopology;
+class ClothAssemblyL2Cache;
 
 namespace cpu {
 class ClothSolverContext;

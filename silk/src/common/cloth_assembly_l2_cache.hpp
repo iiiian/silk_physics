@@ -19,7 +19,7 @@ namespace silk {
 /// vnum = number of vertices.
 /// fnum = number of faces.
 /// state_num = 3 * vnum.
-class ClothTopology {
+class ClothAssemblyL2Cache {
  public:
   // Voronoi vertex mass of length vnum (no density applied).
   Eigen::VectorXf mass;
@@ -41,15 +41,15 @@ class ClothTopology {
   RMatrixX3f C0;
 
  public:
-  ClothTopology() = default;
-  ClothTopology(const ClothConfig& config, const TriMesh& mesh);
+  ClothAssemblyL2Cache() = default;
+  ClothAssemblyL2Cache(const ClothConfig& config, const TriMesh& mesh);
 
   // Since Eigen::SparseMatrix lacks noexcept move ctor, explicitly
   // delete copy ctor to avoid error in containers like std::vector.
-  ClothTopology(const ClothTopology&) = delete;
-  ClothTopology(ClothTopology&&) = default;
-  ClothTopology& operator=(const ClothTopology&) = delete;
-  ClothTopology& operator=(ClothTopology&&) = default;
+  ClothAssemblyL2Cache(const ClothAssemblyL2Cache&) = delete;
+  ClothAssemblyL2Cache(ClothAssemblyL2Cache&&) = default;
+  ClothAssemblyL2Cache& operator=(const ClothAssemblyL2Cache&) = delete;
+  ClothAssemblyL2Cache& operator=(ClothAssemblyL2Cache&&) = default;
 };
 
 }  // namespace silk

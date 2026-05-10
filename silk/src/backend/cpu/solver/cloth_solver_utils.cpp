@@ -15,7 +15,7 @@
 #include "backend/cpu/solver/barrier_constrain.hpp"
 #include "backend/cpu/solver/cholmod_utils.hpp"
 #include "backend/cpu/solver/cloth_solver_context.hpp"
-#include "common/cloth_topology.hpp"
+#include "common/cloth_assembly_l2_cache.hpp"
 #include "common/logger.hpp"
 #include "common/mesh.hpp"
 #include "common/pin.hpp"
@@ -66,10 +66,10 @@ bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
   }
   assert(state != nullptr);
 
-  auto topology = registry.get<ClothTopology>(e);
+  auto topology = registry.get<ClothAssemblyL2Cache>(e);
   if (!topology) {
-    topology =
-        registry.set<ClothTopology>(e, ClothTopology(*cloth_config, *mesh));
+    topology = registry.set<ClothAssemblyL2Cache>(
+        e, ClothAssemblyL2Cache(*cloth_config, *mesh));
   }
   assert(topology != nullptr);
 
@@ -217,7 +217,7 @@ bool batch_compute_cloth_outer_loop(
 /// Inner loop: Project in-plane elastic constraints followed by a global linear
 /// solve using the cached factorization.
 bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
-                              const ClothTopology& topology,
+                              const ClothAssemblyL2Cache& topology,
                               const ClothSolverContext& solver_context,
                               Eigen::Ref<const Eigen::VectorXf> state,
                               Eigen::Ref<const Eigen::VectorXf> outer_rhs,
@@ -294,7 +294,7 @@ bool batch_compute_cloth_inner_loop(Registry& registry,
   for (Entity& e : registry.get_all_entities()) {
     auto config = registry.get<ClothConfig>(e);
     auto mesh = registry.get<TriMesh>(e);
-    auto topology = registry.get<ClothTopology>(e);
+    auto topology = registry.get<ClothAssemblyL2Cache>(e);
     auto solver_context = registry.get<ClothSolverContext>(e);
     auto state = registry.get<ObjectState>(e);
 

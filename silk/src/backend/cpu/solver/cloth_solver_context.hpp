@@ -4,7 +4,7 @@
 #include <optional>
 
 #include "backend/cpu/solver/cholmod_utils.hpp"
-#include "common/cloth_topology.hpp"
+#include "common/cloth_assembly_l2_cache.hpp"
 #include "common/pin.hpp"
 #include "silk/silk.hpp"
 
@@ -44,8 +44,8 @@ class ClothSolverContext {
   ///
   ///  Returns std::nullopt if analysis/factorization fails.
   static std::optional<ClothSolverContext> make_cloth_solver_context(
-      const ClothConfig& config, const ClothTopology& topology, const Pin& pin,
-      float dt);
+      const ClothConfig& config, const ClothAssemblyL2Cache& topology,
+      const Pin& pin, float dt);
 
  private:
   ClothSolverContext() = default;
