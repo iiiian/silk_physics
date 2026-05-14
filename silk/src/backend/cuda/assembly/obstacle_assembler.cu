@@ -1,4 +1,4 @@
-#include "backend/cuda/solver/obstacle_solver_utils.cuh"
+#include "backend/cuda/assembly/obstacle_assembler.cuh"
 
 #include <cuda/buffer>
 
@@ -9,10 +9,10 @@
 #include "common/mesh.hpp"
 #include "common/pin.hpp"
 
-namespace silk::cuda {
+namespace silk::cuda::assembly {
 
-void prepare_obstacle_simulation(ObjRegistry& registry, uint32_t& entity,
-                                 CudaRuntime rt) {
+void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
+                       CudaRuntime rt) {
   auto& e = entity;
 
   auto config = registry.get<CollisionConfigPlus>(e);
@@ -53,4 +53,4 @@ void prepare_obstacle_simulation(ObjRegistry& registry, uint32_t& entity,
   }
 }
 
-}  // namespace silk::cuda
+}  // namespace silk::cuda::assembly

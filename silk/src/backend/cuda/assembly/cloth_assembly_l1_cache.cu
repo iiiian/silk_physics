@@ -9,9 +9,10 @@
 #include "common/logger.hpp"
 #include "silk/silk.hpp"
 
-namespace silk::cuda {
+namespace silk::cuda::assembly {
 
 ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
+                                           const MeshPartition& partition,
                                            const ClothAssemblyL2Cache& l2_cache,
                                            float dt, CudaRuntime rt) {
   auto& c = config;
@@ -71,6 +72,8 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
   this->weighted_jacobian_ops = vec_like_to_device<float>(h_jacobian_ops, rt);
   this->mass = vec_like_to_device<float>(h_mass, rt);
   this->weighted_AA = BSRMatrix{h_AA, 3, {}, rt};
+  this->part_offsets =
+      vec_like_to_device<int>(partition.h_partition_offsets, rt);
 }
 
-}  // namespace silk::cuda
+}  // namespace silk::cuda::assembly

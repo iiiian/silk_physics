@@ -103,11 +103,17 @@ void MASCGSolver::spmv(ctd::span<const float> x, ctd::span<float> y,
                  CUSPARSE_SPMV_ALG_DEFAULT,
                  spmv_workspace_->data());
   // clang-format on
+
+  auto add_diag = [diag = diag_, x, y] __device__(int idx) {
+    y[idx] += diag[idx] * x[idx];
+  };
+  cub::DeviceFor::Bulk(diag_.size(), add_diag, rt.stream.get());
 }
 
-void MASCGSolver::factorize(BSRView A, ctd::span<const int> part_offset,
+void MASCGSolver::factorize(DynamicBSRView A, ctd::span<const int> part_offset,
                             CudaRuntime rt) {
-  assert(A.dim != 0);
+  assert(A.mat.dim != 0);
+  assert(A.diag.size() == A.mat.dim * A.mat.block_dim);
 
   auto total_begin = clock::now();
 
@@ -119,7 +125,8 @@ void MASCGSolver::factorize(BSRView A, ctd::span<const int> part_offset,
 
   phase_begin = clock::now();
 
-  fine_dim_ = A.dim * A.block_dim;
+  fine_dim_ = A.mat.dim * A.mat.block_dim;
+  diag_ = A.diag;
   r_ = alloc<float>(rt, fine_dim_);
   p_ = alloc<float>(rt, fine_dim_);
   z_ = alloc<float>(rt, fine_dim_);
@@ -136,7 +143,7 @@ void MASCGSolver::factorize(BSRView A, ctd::span<const int> part_offset,
 
   // Allocates buffers for CuSparse.
   phase_begin = clock::now();
-  setup_cusparse(A, rt);
+  setup_cusparse(A.mat, rt);
   rt.stream.sync();
 
   SPDLOG_TRACE("[factorize_cusparse] [{:.6f}]", elapsed(phase_begin));

@@ -5,7 +5,7 @@
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/ecs.hpp"
 
-namespace silk::cuda {
+namespace silk::cuda::assembly {
 
 void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
                     int state_offset, CudaRuntime rt);
@@ -24,4 +24,4 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
 //                                     const BarrierConstrain&
 //                                     barrier_constrain, float* d_state);
 
-}  // namespace silk::cuda
+}  // namespace silk::cuda::assembly

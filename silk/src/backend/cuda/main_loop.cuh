@@ -9,10 +9,10 @@
 
 namespace silk::cuda {
 
-enum class ADMMError { NothingToSolve };
-
-class ADMMSolver {
+class MainLoop {
  public:
+  enum class Error { NothingToSolve };
+
   Vec3f const_acceleration = {0.0f, 0.0f, -1.0f};
   int max_inner_iteration = 100;
   int max_outer_iteration = 100;
@@ -25,7 +25,7 @@ class ADMMSolver {
  public:
   // void clear(ObjRegistry& registry);
   // void reset(ObjRegistry& registry);
-  std::optional<ADMMError> step(ObjRegistry& registry, CudaRuntime rt);
+  std::optional<Error> step(ObjRegistry& registry, CudaRuntime rt);
 
  private:
   // Bbox compute_scene_bbox(ObjRegistry& registry);

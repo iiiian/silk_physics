@@ -5,6 +5,7 @@
 #include "backend/cuda/assembly/cloth_assembly_l1_cache.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/cusparse_wrapper.hpp"
+#include "backend/cuda/solver/mas_cg_solver.cuh"
 
 namespace silk::cuda::solver {
 
@@ -22,7 +23,9 @@ class ClothADMMHelper {
   CuSparseHandle cusparse_handle_;
   Buf<char> cusparse_workspace_;
   // Other tmp.
-  Buf<float> float_tmp;
+  Buf<float> float_tmp_;
+
+  MASCGSolver linear_solver_;
 
  public:
   ClothADMMHelper() = default;

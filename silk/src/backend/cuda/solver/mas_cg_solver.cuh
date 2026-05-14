@@ -32,8 +32,9 @@ class MASCGSolver {
   MASPreconditioner mas_precond_;
 
   CuSparseHandle cusparse_handle_;
-  CuSparseBSR cusparse_A_;
   Buf<char> spmv_workspace_;
+  CuSparseBSR cusparse_A_;       //< Static part of A.
+  ctd::span<const float> diag_;  //< Dynamic diagonal update of A.
 
   // PCG variables.
   Buf<float> r_;
@@ -50,9 +51,10 @@ class MASCGSolver {
 
  public:
   /// @brief Init solver. Must be called before solve.
-  /// @param A  Input matrix.
+  /// @param A Input matrix and scalar diagonal update.
   /// @param part_offset CSR mesh partition offset.
-  void factorize(BSRView A, ctd::span<const int> part_offset, CudaRuntime rt);
+  void factorize(DynamicBSRView A, ctd::span<const int> part_offset,
+                 CudaRuntime rt);
 
   /// @brief Solve linear system Ax=b.
   /// https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf

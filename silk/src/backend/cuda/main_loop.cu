@@ -1,4 +1,4 @@
-#include "backend/cuda/solver/pipeline.cuh"
+#include "backend/cuda/main_loop.cuh"
 
 #include <Eigen/Core>
 #include <cmath>
@@ -6,13 +6,13 @@
 #include <cuda/algorithm>
 #include <optional>
 
+#include "backend/cuda/assembly/cloth_assembler.cuh"
+#include "backend/cuda/assembly/obstacle_assembler.cuh"
 #include "backend/cuda/collision/object_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/ecs.hpp"
 #include "backend/cuda/obstacle_position.hpp"
 #include "backend/cuda/physical_state.cuh"
-#include "backend/cuda/solver/cloth_solver_utils.cuh"
-#include "backend/cuda/solver/obstacle_solver_utils.cuh"
 #include "common/logger.hpp"
 #include "silk/silk.hpp"
 
@@ -21,30 +21,26 @@ namespace silk::cuda {
 namespace {
 
 /// @brief Lazily init all entity and collect solver state into global array.
-std::optional<ADMMError> init(ObjRegistry& registry,
-                              cu::device_buffer<float>& global_state,
-                              cu::device_buffer<float>& global_velocity,
-                              float dt, CudaRuntime rt) {
+std::optional<MainLoop::Error> init(ObjRegistry& registry,
+                                    cu::device_buffer<float>& global_state,
+                                    cu::device_buffer<float>& global_velocity,
+                                    float dt, CudaRuntime rt) {
   int state_num = 0;
   for (uint32_t e : registry.get_all_entities()) {
     auto cloth_config = registry.get<ClothConfig>(e);
     if (cloth_config) {
-      prepare_cloth_simulation(registry, e, dt, state_num, rt);
+      assembly::assemble_cloth(registry, e, dt, state_num, rt);
       auto state = registry.get<PhysicalState>(e);
       assert(state);
       state_num += state->state_num;
       continue;
     }
 
-    auto obstacle_position = registry.get<ObstaclePosition>(e);
-    if (obstacle_position) {
-      prepare_obstacle_simulation(registry, e, rt);
-      continue;
-    }
+    assembly::assemble_obstacle(registry, e, rt);
   }
 
   if (state_num == 0) {
-    return ADMMError::NothingToSolve;
+    return MainLoop::Error::NothingToSolve;
   }
 
   // Gather all object state into a continuous global state array.
@@ -95,8 +91,8 @@ std::optional<ADMMError> init(ObjRegistry& registry,
 //   batch_reset_obstacle_simulation(registry);
 // }
 
-std::optional<ADMMError> ADMMSolver::step(ObjRegistry& registry,
-                                          CudaRuntime rt) {
+std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
+                                              CudaRuntime rt) {
   SPDLOG_DEBUG("solver step");
 
   auto global_state = alloc<float>(rt, 0);
@@ -114,14 +110,18 @@ std::optional<ADMMError> ADMMSolver::step(ObjRegistry& registry,
   // BarrierConstrain barrier{state_num};
   float remaining_step = 1.0f;
   // Bbox scene_bbox = compute_scene_bbox(registry);
-  auto init_rhs = alloc<float>(rt, state_num);
+  auto lhs_diag = alloc<float>(rt, state_num, 0);
+  auto rhs = alloc<float>(rt, state_num, 0);
+  // auto init_rhs = alloc<float>(rt, state_num);
   // batch_compute_cloth_invariant_rhs(registry, init_rhs);
-  auto outer_rhs = alloc<float>(rt, state_num);
+  // auto outer_rhs = alloc<float>(rt, state_num);
 
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
-    CHECK_CUDA(cudaMemcpy(outer_rhs, init_rhs, state_num * sizeof(float),
-                          cudaMemcpyDeviceToDevice));
-    compute_barrier_constrain(curr_state, collisions, barrier);
+    // CHECK_CUDA(cudaMemcpy(outer_rhs, init_rhs, state_num * sizeof(float),
+    //                       cudaMemcpyDeviceToDevice));
+    // compute_barrier_constrain(curr_state, collisions, barrier);
+    cu::fill_bytes(rt.stream, lhs_diag, 0);
+    cu::fill_bytes(rt.stream, rhs, 0);
 
     // Prediction based on linear velocity.
     predict(state_num, dt, const_acceleration(0), const_acceleration(1),

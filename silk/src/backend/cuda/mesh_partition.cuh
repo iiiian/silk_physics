@@ -15,14 +15,14 @@ class MeshPartition {
   /// Host inverse vertex permutation from partition sorted to original.
   /// Maps permuted vertex id -> original id.
   std::vector<int> h_inv_perm;
+  /// Host CSR style partition offset after permutation.
+  std::vector<int> h_partition_offsets;
   /// Device vertex permutation form original order to patition sorted.
   /// Maps original vertex id -> permuted vertex id.
   Buf<int> d_perm;
   /// Device inverse vertex permutation from partition sorted to original.
   /// Maps permuted vertex id -> original id.
   Buf<int> d_inv_perm;
-  /// Device CSR style partition offset after permutation.
-  Buf<int> d_partition_offsets;
 
   MeshPartition() = default;
   MeshPartition(const TriMesh& mesh, CudaRuntime rt);

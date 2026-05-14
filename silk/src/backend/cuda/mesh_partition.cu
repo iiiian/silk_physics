@@ -1,3 +1,5 @@
+#include "backend/cuda/mesh_partition.cuh"
+
 #include <cuda_runtime.h>
 
 #include <Eigen/SparseCore>
@@ -7,7 +9,6 @@
 
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/graph_partition.hpp"
-#include "backend/cuda/mesh_partition.cuh"
 #include "common/mesh.hpp"
 
 namespace silk::cuda {
@@ -67,16 +68,16 @@ MeshPartition::MeshPartition(const TriMesh& mesh, CudaRuntime rt) {
   graph_partition(row_ptr, cols, {}, 32, part_num, part_id);
 
   // Count per partition vert num + prefix sum.
-  std::vector<int> h_offsets(part_num + 1, 0);
+  h_partition_offsets = std::vector(part_num + 1, 0);
   for (int vid = 0; vid < vert_num; ++vid) {
-    h_offsets[part_id[vid] + 1] += 1;
+    h_partition_offsets[part_id[vid] + 1] += 1;
   }
   for (int part = 0; part < part_num; ++part) {
-    h_offsets[part + 1] += h_offsets[part];
+    h_partition_offsets[part + 1] += h_partition_offsets[part];
   }
 
   // Build permutation.
-  std::vector<int> tmp = h_offsets;
+  std::vector<int> tmp = h_partition_offsets;
   h_perm.resize(vert_num);
   for (int vid = 0; vid < vert_num; ++vid) {
     int part = part_id[vid];
@@ -92,11 +93,9 @@ MeshPartition::MeshPartition(const TriMesh& mesh, CudaRuntime rt) {
 
   d_perm = alloc<int>(rt, vert_num);
   d_inv_perm = alloc<int>(rt, vert_num);
-  d_partition_offsets = alloc<int>(rt, part_num + 1);
 
   cu::copy_bytes(rt.stream, h_perm, *d_perm);
   cu::copy_bytes(rt.stream, h_inv_perm, *d_inv_perm);
-  cu::copy_bytes(rt.stream, h_offsets, *d_partition_offsets);
   rt.stream.sync();
 }
 

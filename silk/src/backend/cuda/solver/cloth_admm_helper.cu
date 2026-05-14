@@ -329,12 +329,17 @@ void ClothADMMHelper::solve_main_var(const ClothAssemblyL1Cache& l1_cache,
       l1_cache.face_num, l1_cache.penalty, *l1_cache.faces,
       *l1_cache.weighted_jacobian_ops, *uy_, *y_, rhs);
 
-  if (!float_tmp) {
-    float_tmp = alloc<float>(rt, rhs.size());
+  if (!float_tmp_) {
+    float_tmp_ = alloc<float>(rt, rhs.size());
   }
   assemble_bending_rhs(l1_cache.penalty, l1_cache.weighted_laplacian_ops.view(),
                        *uz_, *z_, cusparse_handle_, *cusparse_workspace_,
-                       *float_tmp, rhs, rt);
+                       *float_tmp_, rhs, rt);
+
+  DynamicBSRView dyn_A{lhs_diag, l1_cache.weighted_AA.view()};
+  linear_solver_.factorize(dyn_A, *l1_cache.part_offsets, rt);
+  auto status = linear_solver_.solve(rhs, state, rt);
+  // TODO: handle failure.
 }
 
 }  // namespace silk::cuda::solver

@@ -21,7 +21,7 @@
 #include "common/pin.hpp"
 #include "silk/silk.hpp"
 
-namespace silk::cuda {
+namespace silk::cuda::assembly {
 
 namespace {
 
@@ -126,8 +126,8 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
   // Prepare L1 assembly cache.
   auto l1_cache = registry.get<ClothAssemblyL1Cache>(e);
   if (!(l1_cache && l1_cache->dt == dt)) {
-    l1_cache =
-        registry.set(e, ClothAssemblyL1Cache{*cloth_config, *l2_cache, dt, rt});
+    l1_cache = registry.set(
+        e, ClothAssemblyL1Cache{*cloth_config, *part, *l2_cache, dt, rt});
   }
   assert(l1_cache != nullptr);
 
@@ -307,4 +307,4 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
 //   return true;
 // }
 
-}  // namespace silk::cuda
+}  // namespace silk::cuda::assembly

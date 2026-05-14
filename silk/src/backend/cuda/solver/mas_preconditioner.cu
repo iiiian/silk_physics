@@ -485,19 +485,21 @@ __both__ int index_upper_mat(int dim, int i, int j) {
 }
 
 /// @brief Build coarse space matrices by accumulating padded space hessian.
-__global__ void fill_coarse_matrices(BSRView mat_in, CoarseMatricesRef mat_out,
+__global__ void fill_coarse_matrices(DynamicBSRView mat_in,
+                                     CoarseMatricesRef mat_out,
                                      ctd::span<const int> coarse_space_map,
                                      ctd::span<const int> real_to_padded,
                                      int coarse_level_num) {
+  BSRView mat = mat_in.mat;
   int tid = blockDim.x * blockIdx.x + threadIdx.x;  // global thread id
-  if (tid >= mat_in.dim) {
+  if (tid >= mat.dim) {
     return;
   }
 
   int padded_i = real_to_padded[tid];
-  int block_size = mat_in.block_dim * mat_in.block_dim;
-  for (int nz = mat_in.rows[tid]; nz < mat_in.rows[tid + 1]; ++nz) {
-    int j = mat_in.cols[nz];
+  int block_size = mat.block_dim * mat.block_dim;
+  for (int nz = mat.rows[tid]; nz < mat.rows[tid + 1]; ++nz) {
+    int j = mat.cols[nz];
     // Assume input mat is symmetric (Which is required by CG anyway). Skip
     // lower.
     if (tid > j) {
@@ -509,12 +511,12 @@ __global__ void fill_coarse_matrices(BSRView mat_in, CoarseMatricesRef mat_out,
     // Padded space matrices.
     if (padded_i / BANK_SIZE == padded_j / BANK_SIZE) {
       int mat_id = padded_i / BANK_SIZE;
-      int scalar_i_root = (padded_i % BANK_SIZE) * mat_in.block_dim;
-      int scalar_j_root = (padded_j % BANK_SIZE) * mat_in.block_dim;
-      float *mat = mat_out.matrix_per_level[0].data() +
-                   mat_id * mat_out.mat_storage_size;
-      for (int bi = 0; bi < mat_in.block_dim; ++bi) {
-        for (int bj = 0; bj < mat_in.block_dim; ++bj) {
+      int scalar_i_root = (padded_i % BANK_SIZE) * mat.block_dim;
+      int scalar_j_root = (padded_j % BANK_SIZE) * mat.block_dim;
+      float *out_mat = mat_out.matrix_per_level[0].data() +
+                       mat_id * mat_out.mat_storage_size;
+      for (int bi = 0; bi < mat.block_dim; ++bi) {
+        for (int bj = 0; bj < mat.block_dim; ++bj) {
           int row = scalar_i_root + bi;
           int col = scalar_j_root + bj;
           // Write upper part of coarse matrix only.
@@ -526,8 +528,8 @@ __global__ void fill_coarse_matrices(BSRView mat_in, CoarseMatricesRef mat_out,
             continue;
           }
 
-          float val = mat_in.vals[block_offset + bi * mat_in.block_dim + bj];
-          atomicAdd(mat + index_upper_mat(mat_out.mat_dim, row, col), val);
+          float val = mat.vals[block_offset + bi * mat.block_dim + bj];
+          atomicAdd(out_mat + index_upper_mat(mat_out.mat_dim, row, col), val);
         }
       }
     }
@@ -540,12 +542,12 @@ __global__ void fill_coarse_matrices(BSRView mat_in, CoarseMatricesRef mat_out,
       }
 
       int mat_id = cco_i / BANK_SIZE;
-      int scalar_i_root = (cco_i % BANK_SIZE) * mat_in.block_dim;
-      int scalar_j_root = (cco_j % BANK_SIZE) * mat_in.block_dim;
-      float *mat = mat_out.matrix_per_level[lv + 1].data() +
-                   mat_id * mat_out.mat_storage_size;
-      for (int bi = 0; bi < mat_in.block_dim; ++bi) {
-        for (int bj = 0; bj < mat_in.block_dim; ++bj) {
+      int scalar_i_root = (cco_i % BANK_SIZE) * mat.block_dim;
+      int scalar_j_root = (cco_j % BANK_SIZE) * mat.block_dim;
+      float *out_mat = mat_out.matrix_per_level[lv + 1].data() +
+                       mat_id * mat_out.mat_storage_size;
+      for (int bi = 0; bi < mat.block_dim; ++bi) {
+        for (int bj = 0; bj < mat.block_dim; ++bj) {
           int row = scalar_i_root + bi;
           int col = scalar_j_root + bj;
           // Write upper part of coarse matrix only.
@@ -557,15 +559,39 @@ __global__ void fill_coarse_matrices(BSRView mat_in, CoarseMatricesRef mat_out,
             continue;
           }
 
-          float val = mat_in.vals[block_offset + bi * mat_in.block_dim + bj];
+          float val = mat.vals[block_offset + bi * mat.block_dim + bj];
           // When two different fine nodes collapse to the same coarse node,
           // the coarse diagonal block must receive both A_ij and A_ji = A_ij^T.
           if (tid != j && cco_i == cco_j) {
-            val += mat_in.vals[block_offset + bj * mat_in.block_dim + bi];
+            val += mat.vals[block_offset + bj * mat.block_dim + bi];
           }
-          atomicAdd(mat + index_upper_mat(mat_out.mat_dim, row, col), val);
+          atomicAdd(out_mat + index_upper_mat(mat_out.mat_dim, row, col), val);
         }
       }
+    }
+  }
+
+  // Handle diagonal update.
+  for (int bi = 0; bi < mat.block_dim; ++bi) {
+    int scalar_id = tid * mat.block_dim + bi;
+    if (scalar_id >= mat_in.diag.size()) {
+      continue;
+    }
+
+    float val = mat_in.diag[scalar_id];
+    int mat_id = padded_i / BANK_SIZE;
+    int row = (padded_i % BANK_SIZE) * mat.block_dim + bi;
+    float *padded_mat =
+        mat_out.matrix_per_level[0].data() + mat_id * mat_out.mat_storage_size;
+    atomicAdd(padded_mat + index_upper_mat(mat_out.mat_dim, row, row), val);
+
+    for (int lv = 0; lv < coarse_level_num; ++lv) {
+      int cco_id = coarse_space_map[tid * MAS_MAX_COARSE_LEVEL + lv];
+      mat_id = cco_id / BANK_SIZE;
+      row = (cco_id % BANK_SIZE) * mat.block_dim + bi;
+      float *coarse_mat = mat_out.matrix_per_level[lv + 1].data() +
+                          mat_id * mat_out.mat_storage_size;
+      atomicAdd(coarse_mat + index_upper_mat(mat_out.mat_dim, row, row), val);
     }
   }
 }
@@ -818,9 +844,11 @@ void invert_packed_matrices(float *mats, int mat_num, int block_dim,
 }
 
 /// @brief Build symmetric upper triangular coarse space matrices.
-CoarseMatrices build_sym_coarse_matrices(const CoarseSpace &cs, BSRView mat,
+CoarseMatrices build_sym_coarse_matrices(const CoarseSpace &cs,
+                                         DynamicBSRView mat_in,
                                          ctd::span<const int> real_to_padded,
                                          int padded_node_num, CudaRuntime rt) {
+  BSRView mat = mat_in.mat;
   CoarseMatrices out;
   out.mat_dim = BANK_SIZE * mat.block_dim;
   out.mat_storage_size = out.mat_dim * (out.mat_dim + 1) / 2;
@@ -841,7 +869,7 @@ CoarseMatrices build_sym_coarse_matrices(const CoarseSpace &cs, BSRView mat,
   // Gather.
   int grid_num = div_round_up(mat.dim, 128);
   fill_coarse_matrices<<<grid_num, 128, 0, rt.stream.get()>>>(
-      mat, view, *cs.map, real_to_padded, cs.level_num);
+      mat_in, view, *cs.map, real_to_padded, cs.level_num);
 
   // Pad diagonal.
   int total_diag = out.total_matrix_num * out.mat_dim;
@@ -857,20 +885,22 @@ CoarseMatrices build_sym_coarse_matrices(const CoarseSpace &cs, BSRView mat,
 }
 }  // namespace
 
-void MASPreconditioner::factorize(BSRView A, ctd::span<const int> part_offsets,
+void MASPreconditioner::factorize(DynamicBSRView A,
+                                  ctd::span<const int> part_offsets,
                                   CudaRuntime rt) {
   assert(part_offsets.size() >= 2);
-  assert(A.block_dim >= 1 && A.block_dim <= 3);
-  assert(part_offsets.back() == A.dim);
+  assert(A.mat.block_dim >= 1 && A.mat.block_dim <= 3);
+  assert(part_offsets.back() == A.mat.dim);
+  assert(A.diag.size() == A.mat.dim * A.mat.block_dim);
 
   initialized_ = false;
-  block_dim_ = A.block_dim;
+  block_dim_ = A.mat.block_dim;
 
   auto total_begin = clock::now();
   auto phase_begin = clock::now();
 
   // Build padded topology.
-  padded_topology_ = build_padded_topology(A, part_offsets, rt);
+  padded_topology_ = build_padded_topology(A.mat, part_offsets, rt);
   rt.stream.sync();
   SPDLOG_TRACE("[factorize_build_padded_topology] [{:.6f}]",
                elapsed(phase_begin));

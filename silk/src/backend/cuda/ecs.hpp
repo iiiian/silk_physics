@@ -12,7 +12,6 @@ class InitialState;
 }  // namespace silk
 
 namespace silk::cuda {
-class ClothAssemblyL1Cache;
 class ClothADMMHelper;
 class PhysicalState;
 class ObstaclePosition;
@@ -21,6 +20,10 @@ class MeshPartition;
 
 namespace silk::cuda::collision {
 class ObjectCollider;
+}
+
+namespace silk::cuda::assembly {
+class ClothAssemblyL1Cache;
 }
 
 namespace silk::cuda::solver {
@@ -37,11 +40,12 @@ using ObjRegistry = ::silk::ecs::Registry<ClothConfig,
                                           Pin,
                                           InitialState,
                                           ClothAssemblyL2Cache,
-                                          ClothAssemblyL1Cache,
-                                          ClothADMMHelper,
                                           PhysicalState,
                                           ObstaclePosition,
-                                          collision::ObjectCollider>;
+                                          collision::ObjectCollider,
+                                          assembly::ClothAssemblyL1Cache,
+                                          solver::ClothADMMHelper
+                                          >;
 // clang-format on
 
 }  // namespace silk::cuda
