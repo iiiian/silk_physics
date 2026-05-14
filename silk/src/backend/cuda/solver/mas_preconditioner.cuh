@@ -5,11 +5,11 @@
 #include "backend/cuda/bsr_matrix.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 
-namespace silk::cuda {
+namespace silk::cuda::solver {
 
 // Our bank size is 32, so 4 coarse levels should cover 1M x 1M BSR matrix.
 constexpr int MAS_MAX_COARSE_LEVEL = 4;
-constexpr int MAS_LEVEL_COUNT = MAS_MAX_COARSE_LEVEL + 1;
+constexpr int MAS_LEVEL_NUM = MAS_MAX_COARSE_LEVEL + 1;
 
 // Topology enhanced MAS has 2 levels of mapping:
 // Real -> Padded: virtual nodes are inserted so each partition resides in one
@@ -44,9 +44,9 @@ struct CoarseMatrices {
   /// Packed upper triangular row major coarse space matrices (inverse hessian).
   /// | lv0_mat0 lv0_mat1 ... | lv1_mat0 ... | ... |
   Buf<float> data;
-  /// Per coarse space level offset and counts.
-  ctd::array<int, MAS_LEVEL_COUNT> matrix_offsets{};
-  ctd::array<int, MAS_LEVEL_COUNT> matrix_counts{};
+  /// Per coarse space level offset and num.
+  ctd::array<int, MAS_LEVEL_NUM> matrix_offsets{};
+  ctd::array<int, MAS_LEVEL_NUM> matrix_nums{};
   /// We support block dim 1,2,3. So coarse space mat dim should be 32,64,96.
   int mat_dim = 0;
   int mat_storage_size = 0;
@@ -58,9 +58,9 @@ struct CoarseVectors {
   Buf<float> multi_level_r;
   /// | lv0 z | lv 1 z | ... |
   Buf<float> multi_level_z;
-  /// Per coarse space level offset and counts.
-  ctd::array<int, MAS_LEVEL_COUNT> level_offsets{};
-  ctd::array<int, MAS_LEVEL_COUNT> level_sizes{};
+  /// Per coarse space level offset and num.
+  ctd::array<int, MAS_LEVEL_NUM> level_offsets{};
+  ctd::array<int, MAS_LEVEL_NUM> level_nums{};
   int total_level_nodes = 0;
 };
 
@@ -90,4 +90,4 @@ class MASPreconditioner {
   CoarseVectors coarse_vectors_;
 };
 
-}  // namespace silk::cuda
+}  // namespace silk::cuda::solver

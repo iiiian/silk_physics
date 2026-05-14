@@ -1,9 +1,5 @@
 #include "backend/cuda/solver/mas_preconditioner.cuh"
 
-// #ifndef SPDLOG_ACTIVE_LEVEL
-// #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
-// #endif
-
 #include <spdlog/spdlog.h>
 
 #include <cassert>
@@ -15,13 +11,15 @@
 #include <cuda/std/utility>
 #include <stdexcept>
 
-namespace silk::cuda {
+#include "common/compiler_builtin.hpp"
+
+namespace silk::cuda::solver {
 
 namespace {
 
 using clock = std::chrono::steady_clock;
 
-float elapsed_seconds(const std::chrono::time_point<clock> &begin) {
+float elapsed(const std::chrono::time_point<clock> &begin) {
   return std::chrono::duration<float>(clock::now() - begin).count();
 }
 
@@ -32,15 +30,15 @@ constexpr int BANK_SIZE = 32;
 struct CoarseMatricesRef {
   int mat_dim;
   int mat_storage_size;
-  ctd::array<ctd::span<float>, MAS_LEVEL_COUNT> matrix_per_level;
+  ctd::array<ctd::span<float>, MAS_LEVEL_NUM> matrix_per_level;
 
   CoarseMatricesRef(CoarseMatrices &mats) {
     mat_dim = mats.mat_dim;
     mat_storage_size = mats.mat_storage_size;
 
     int scalar_offset = 0;
-    for (int i = 0; i < MAS_LEVEL_COUNT; ++i) {
-      int level_size = mats.matrix_counts[i] * mats.mat_storage_size;
+    for (int i = 0; i < MAS_LEVEL_NUM; ++i) {
+      int level_size = mats.matrix_nums[i] * mats.mat_storage_size;
       matrix_per_level[i] =
           ctd::span<float>(mats.data->data() + scalar_offset, level_size);
       scalar_offset += level_size;
@@ -142,7 +140,7 @@ __global__ void build_local_cco_lv0(ctd::span<const int> row_ptr,
   int row_begin = row_ptr[tid];
   int row_end = row_ptr[tid + 1];
   uint32_t neighbor = (1u << lid);
-  int out_of_bank_neighbor_count = 0;
+  int out_of_bank_neighbor_num = 0;
   for (int n = row_begin; n < row_end; ++n) {
     int neighbor_vid = cols[n];
     int neighbor_bid = neighbor_vid / BANK_SIZE;
@@ -151,13 +149,13 @@ __global__ void build_local_cco_lv0(ctd::span<const int> row_ptr,
     } else {
       // Compact topology to remove in-bank neighbors so we can skip
       // additional filtering when building future coarse spaces.
-      cols[row_begin + out_of_bank_neighbor_count] = neighbor_vid;
-      ++out_of_bank_neighbor_count;
+      cols[row_begin + out_of_bank_neighbor_num] = neighbor_vid;
+      ++out_of_bank_neighbor_num;
     }
   }
-  if (row_begin + out_of_bank_neighbor_count < row_end) {
+  if (row_begin + out_of_bank_neighbor_num < row_end) {
     // -1 denotes neighbor list ending.
-    cols[row_begin + out_of_bank_neighbor_count] = -1;
+    cols[row_begin + out_of_bank_neighbor_num] = -1;
   }
   neighbors[btid] = neighbor;
   __syncwarp();
@@ -216,7 +214,7 @@ __global__ void build_neighbor_masks_lvx(int level,
   int real_id = padded_to_real[tid];
   int cco_id = get_coarse_space_id(coarse_space_map, real_id, level - 1);
   uint32_t neighbor = (1u << (cco_id % BANK_SIZE));
-  int out_of_bank_neighbor_count = 0;
+  int out_of_bank_neighbor_num = 0;
   for (int n = row_begin; n < row_end; ++n) {
     int neighbor_vid = cols[n];
     if (neighbor_vid == -1) {
@@ -229,12 +227,12 @@ __global__ void build_neighbor_masks_lvx(int level,
     if (cco_id / BANK_SIZE == neighbor_cco_id / BANK_SIZE) {
       neighbor |= (1u << (neighbor_cco_id % BANK_SIZE));
     } else {
-      cols[row_begin + out_of_bank_neighbor_count] = neighbor_vid;
-      ++out_of_bank_neighbor_count;
+      cols[row_begin + out_of_bank_neighbor_num] = neighbor_vid;
+      ++out_of_bank_neighbor_num;
     }
   }
-  if (row_begin + out_of_bank_neighbor_count < row_end) {
-    cols[row_begin + out_of_bank_neighbor_count] = -1;
+  if (row_begin + out_of_bank_neighbor_num < row_end) {
+    cols[row_begin + out_of_bank_neighbor_num] = -1;
   }
 
   atomicOr(neighbors.data() + cco_id, neighbor);
@@ -367,8 +365,8 @@ CoarseSpace build_coarse_space(ctd::span<const int> row_ptr,
       cub_tmp.data(), cub_tmp_size, cco_num_per_bank.data(),
       cco_num_per_bank_summed.data(), max_bank_per_level, rt.stream.get());
 
-  aggregate_coarse_space_map_lv0<<<div_round_up(real_node_num, 128), 128, 0,
-                                   rt.stream.get()>>>(
+  grid_num = div_round_up(real_node_num, 128);
+  aggregate_coarse_space_map_lv0<<<grid_num, 128, 0, rt.stream.get()>>>(
       local_cco_ids, cco_num_per_bank, cco_num_per_bank_summed, real_to_padded,
       coarse_space_map);
 
@@ -402,8 +400,8 @@ CoarseSpace build_coarse_space(ctd::span<const int> row_ptr,
     cub::DeviceScan::InclusiveSum(
         cub_tmp.data(), cub_tmp_size, cco_num_per_bank.data(),
         cco_num_per_bank_summed.data(), bank_num, rt.stream.get());
-    aggregate_coarse_space_map_lvx<<<div_round_up(real_node_num, 128), 128, 0,
-                                     rt.stream.get()>>>(
+    grid_num = div_round_up(real_node_num, 128);
+    aggregate_coarse_space_map_lvx<<<grid_num, 128, 0, rt.stream.get()>>>(
         lv, ctd::span<const int>(local_cco_ids.data(), cco_num),
         ctd::span<const int>(cco_num_per_bank.data(), bank_num),
         ctd::span<const int>(cco_num_per_bank_summed.data(), bank_num),
@@ -525,7 +523,7 @@ __global__ void fill_coarse_matrices(BSRView mat_in, CoarseMatricesRef mat_out,
 __global__ void gather_multi_level_r(
     ctd::span<const float> r, ctd::span<float> multi_level_r,
     ctd::span<const int> real_to_padded, ctd::span<const int> coarse_space_map,
-    ctd::array<int, MAS_LEVEL_COUNT> level_offsets, int block_dim,
+    ctd::array<int, MAS_LEVEL_NUM> level_offsets, int block_dim,
     int coarse_level_num) {
   int real_id = blockDim.x * blockIdx.x + threadIdx.x;
   if (real_id >= real_to_padded.size()) {
@@ -617,7 +615,7 @@ void apply_inverse(const CoarseMatrices &mats, ctd::span<const float> x,
 __global__ void gather_multi_level_z(
     ctd::span<const float> multi_level_z, ctd::span<float> z,
     ctd::span<const int> real_to_padded, ctd::span<const int> coarse_space_map,
-    ctd::array<int, MAS_LEVEL_COUNT> level_offsets, int block_dim,
+    ctd::array<int, MAS_LEVEL_NUM> level_offsets, int block_dim,
     int coarse_level_num) {
   int real_id = blockDim.x * blockIdx.x + threadIdx.x;
   if (real_id >= real_to_padded.size()) {
@@ -759,11 +757,12 @@ void invert_packed_matrices(float *mats, int mat_num, int block_dim,
     batched_invert_upper<96>
         <<<mat_num, 96, 0, rt.stream.get()>>>(mats, success.data());
   } else {
-    assert(false);
+    SILK_UNREACHABLE();
   }
 
-  bool host_success = scalar_load(success.data(), rt);
-  if (!host_success) {
+  bool h_success = scalar_load(success.data(), rt);
+  // Should not happen.
+  if (!h_success) {
     throw std::runtime_error("MAS packed inverse failed.");
   }
 }
@@ -777,12 +776,12 @@ CoarseMatrices build_sym_coarse_matrices(const CoarseSpace &cs, BSRView mat,
   out.mat_storage_size = out.mat_dim * (out.mat_dim + 1) / 2;
   out.total_matrix_num = 0;
   out.matrix_offsets[0] = 0;
-  out.matrix_counts[0] = padded_node_num / BANK_SIZE;
-  out.total_matrix_num += out.matrix_counts[0];
+  out.matrix_nums[0] = padded_node_num / BANK_SIZE;
+  out.total_matrix_num += out.matrix_nums[0];
   for (int i = 0; i < cs.level_num; ++i) {
     out.matrix_offsets[i + 1] = out.total_matrix_num;
-    out.matrix_counts[i + 1] = div_round_up(cs.cco_nums[i], BANK_SIZE);
-    out.total_matrix_num += out.matrix_counts[i + 1];
+    out.matrix_nums[i + 1] = div_round_up(cs.cco_nums[i], BANK_SIZE);
+    out.total_matrix_num += out.matrix_nums[i + 1];
   }
 
   out.data =
@@ -796,7 +795,8 @@ CoarseMatrices build_sym_coarse_matrices(const CoarseSpace &cs, BSRView mat,
 
   // Pad diagonal.
   int total_diag = out.total_matrix_num * out.mat_dim;
-  pad_zero_diagonal<<<div_round_up(total_diag, 128), 128, 0, rt.stream.get()>>>(
+  grid_num = div_round_up(total_diag, 128);
+  pad_zero_diagonal<<<grid_num, 128, 0, rt.stream.get()>>>(
       out.data->data(), out.total_matrix_num, out.mat_dim,
       out.mat_storage_size);
 
@@ -836,30 +836,39 @@ void MASPreconditioner::factorize(BSRView A, ctd::span<const int> part_offsets,
   padded_topology_.cols = alloc<int>(rt, A.non_zeros);
 
   auto read_num_per_row = alloc<int>(rt, padded_node_num, 0);
-  build_padded_maps<<<div_round_up(padded_node_num, 128), 128, 0,
-                      rt.stream.get()>>>(
+  int grid_num = div_round_up(padded_node_num, 128);
+  build_padded_maps<<<grid_num, 128, 0, rt.stream.get()>>>(
       d_part_offsets, A.rows, *(padded_topology_.real_to_padded),
       *(padded_topology_.padded_to_real), read_num_per_row);
 
   // Build padded space row_ptr.
   size_t cub_tmp_size = 0;
-  cub::DeviceScan::ExclusiveSum(nullptr, cub_tmp_size, read_num_per_row.data(),
-                                padded_topology_.rows->data(), padded_node_num,
+  // clang-format off
+  cub::DeviceScan::ExclusiveSum(nullptr,
+                                cub_tmp_size,
+                                read_num_per_row.data(),
+                                padded_topology_.rows->data(),
+                                padded_node_num,
                                 rt.stream.get());
   auto cub_tmp = alloc<char>(rt, cub_tmp_size);
-  cub::DeviceScan::ExclusiveSum(
-      cub_tmp.data(), cub_tmp_size, read_num_per_row.data(),
-      padded_topology_.rows->data(), padded_node_num, rt.stream.get());
+  cub::DeviceScan::ExclusiveSum(cub_tmp.data(),
+                                cub_tmp_size,
+                                read_num_per_row.data(),
+                                padded_topology_.rows->data(),
+                                padded_node_num,
+                                rt.stream.get());
+  // clang-format on
+
   scalar_write(padded_topology_.rows->data() + padded_node_num, A.non_zeros,
                rt);
-
-  fill_padded_cols<<<div_round_up(node_num, 128), 128, 0, rt.stream.get()>>>(
+  grid_num = div_round_up(node_num, 128);
+  fill_padded_cols<<<grid_num, 128, 0, rt.stream.get()>>>(
       A.rows, A.cols, *(padded_topology_.real_to_padded),
       *(padded_topology_.rows), *(padded_topology_.cols));
 
   rt.stream.sync();
-  SPDLOG_TRACE("[MAS] [factorize_build_padded_topology_device] [{:.6f}]",
-               elapsed_seconds(phase_begin));
+  SPDLOG_TRACE("[factorize_build_padded_topology] [{:.6f}]",
+               elapsed(phase_begin));
 
   // Build coarse space hierarchy.
   phase_begin = clock::now();
@@ -868,8 +877,7 @@ void MASPreconditioner::factorize(BSRView A, ctd::span<const int> part_offsets,
                          *(padded_topology_.real_to_padded),
                          *(padded_topology_.padded_to_real), rt);
   rt.stream.sync();
-  SPDLOG_TRACE("[MAS] [factorize_build_coarse_space] [{:.6f}]",
-               elapsed_seconds(phase_begin));
+  SPDLOG_TRACE("[factorize_build_coarse_space] [{:.6f}]", elapsed(phase_begin));
 
   // Build coarse space matrices by 1. gather coarse space hessian from fine
   // nodes 2. invert
@@ -878,29 +886,29 @@ void MASPreconditioner::factorize(BSRView A, ctd::span<const int> part_offsets,
       coarse_space_, A, *(padded_topology_.real_to_padded),
       padded_topology_.padded_node_num, rt);
   rt.stream.sync();
-  SPDLOG_TRACE("[MAS] [factorize_build_coarse_matrices] [{:.6f}]",
-               elapsed_seconds(phase_begin));
+  SPDLOG_TRACE("[factorize_build_coarse_matrices] [{:.6f}]",
+               elapsed(phase_begin));
 
   // Allocate memory for coarse space residual (r) and preconditioned residual
   // (z).
   phase_begin = clock::now();
   coarse_vectors_.level_offsets[0] = 0;
-  coarse_vectors_.level_sizes[0] = padded_topology_.padded_node_num;
+  coarse_vectors_.level_nums[0] = padded_topology_.padded_node_num;
   coarse_vectors_.total_level_nodes = padded_topology_.padded_node_num;
   for (int i = 0; i < coarse_space_.level_num; ++i) {
     coarse_vectors_.level_offsets[i + 1] = coarse_vectors_.total_level_nodes;
-    coarse_vectors_.level_sizes[i + 1] =
-        coarse_matrices_.matrix_counts[i + 1] * BANK_SIZE;
-    coarse_vectors_.total_level_nodes += coarse_vectors_.level_sizes[i + 1];
+    coarse_vectors_.level_nums[i + 1] =
+        coarse_matrices_.matrix_nums[i + 1] * BANK_SIZE;
+    coarse_vectors_.total_level_nodes += coarse_vectors_.level_nums[i + 1];
   }
   int total_level_scalars = coarse_vectors_.total_level_nodes * block_dim_;
   coarse_vectors_.multi_level_r = alloc<float>(rt, total_level_scalars, 0.0f);
   coarse_vectors_.multi_level_z = alloc<float>(rt, total_level_scalars, 0.0f);
   rt.stream.sync();
-  SPDLOG_TRACE("[MAS] [factorize_allocate_coarse_vectors] [{:.6f}]",
-               elapsed_seconds(phase_begin));
-  SPDLOG_TRACE("[MAS] [factorize_total] [{:.6f}]",
-               elapsed_seconds(total_begin));
+
+  SPDLOG_TRACE("[factorize_allocate_coarse_vectors] [{:.6f}]",
+               elapsed(phase_begin));
+  SPDLOG_TRACE("[factorize_total] [{:.6f}]", elapsed(total_begin));
 
   initialized_ = true;
 }
@@ -928,4 +936,4 @@ void MASPreconditioner::apply(ctd::span<const float> r, ctd::span<float> z,
       coarse_space_.level_num);
 }
 
-}  // namespace silk::cuda
+}  // namespace silk::cuda::solver

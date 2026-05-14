@@ -1,16 +1,10 @@
-// #include "MASSolver.hpp"
+#include "backend/cuda/solver/mas_cg_solver.cuh"
 
-#include <Eigen/Core>
 #include <chrono>
 #include <cub/cub.cuh>
 #include <cuda/algorithm>
-#include <cuda/devices>
-#include <cuda/memory_pool>
 #include <cuda/std/cmath>
-#include <cuda/std/optional>
 #include <cuda/std/span>
-#include <cuda/stream>
-#include <stdexcept>
 
 #include "backend/cuda/bsr_matrix.cuh"
 #include "backend/cuda/cuda_utils.cuh"
@@ -25,7 +19,7 @@ namespace {
 
 using clock = std::chrono::steady_clock;
 
-float elapsed_seconds(const std::chrono::time_point<clock> &begin) {
+float elapsed(const std::chrono::time_point<clock> &begin) {
   return std::chrono::duration<float>(clock::now() - begin).count();
 }
 
@@ -62,262 +56,199 @@ void axpby(float h_alpha, const float *d_alpha, float h_beta,
 
 }  // namespace
 
-class MASCGSolver {
- public:
-  int block_dim_ = 3;  ///< BSR block dim.
-  int max_iter_ = 1e5;
-  int true_residual_period_ = 4;
-  float abs_tol_ = 1e-20;
-  float rel_tol_ = 1e-6;
-  bool use_preconditioned_residual_norm_ = false;
+void MASCGSolver::setup_cusparse(BSRView A, CudaRuntime rt) {
+  cusparse_A_ = CuSparseBSR(A);
 
-  int dim_ = 0;           ///< Input matrix A dim.
-  int permuted_dim_ = 0;  ///< Dim with block padding.
-  int iterations_ = 0;
-  float residual_norm_ = 0.0;
+  float alpha = 1.0;
+  float beta = 0.0;
+  // As long as size match, x and y doesnt matters.
+  CuSparseConstVec x(*r_);
+  CuSparseVec y(*z_);
+  size_t workspace_size = 0;
 
-  CuSparseHandle cusparse_handle_;
+  cusparseSetStream(cusparse_handle_.raw, rt.stream.get());
+  // clang-format off
+    cusparseSpMV_bufferSize(cusparse_handle_.raw,
+                            CUSPARSE_OPERATION_NON_TRANSPOSE,
+                            &alpha,
+                            cusparse_A_.raw,
+                            x.raw,
+                            &beta,
+                            y.raw,
+                            CUDA_R_32F,
+                            CUSPARSE_SPMV_ALG_DEFAULT,
+                            &workspace_size);
+  // clang-format on
 
-  MASPreconditioner mas_precond_;
-  CuSparseBSR sparse_A_;      ///< CuSparse handle of A.
-  Buf<char> spmv_workspace_;  ///< CuSparse temp.
+  spmv_workspace_ = alloc<char>(rt, workspace_size);
+}
 
-  // PCG variables.
-  Buf<float> x_;
-  Buf<float> b_;
-  Buf<float> r_;
-  Buf<float> p_;
-  Buf<float> z_;
-  Buf<float> Ap_;
-  Buf<char> reduction_storage_;
-  Buf<float> scalar_rz_;
-  Buf<float> scalar_pAp_;
-  Buf<float> scalar_alpha_;
-  Buf<float> scalar_beta_;
-  Buf<float> scalar_rz_old_;
-  Buf<float> scalar_rr_;
+void MASCGSolver::spmv(ctd::span<const float> x, ctd::span<float> y,
+                       CudaRuntime rt) {
+  float alpha = 1.0;
+  float beta = 0.0;
+  CuSparseConstVec x_desc(x);
+  CuSparseVec y_desc(y);
 
- public:
-  // Allocate cusparse workspace buffer.
-  void setup_cusparse(BSRView A, CudaRuntime rt) {
-    sparse_A_ = CuSparseBSR(A);
+  cusparseSetStream(cusparse_handle_.raw, rt.stream.get());
+  // clang-format off
+    cusparseSpMV(cusparse_handle_.raw,
+                 CUSPARSE_OPERATION_NON_TRANSPOSE,
+                 &alpha,
+                 cusparse_A_.raw,
+                 x_desc.raw,
+                 &beta,
+                 y_desc.raw,
+                 CUDA_R_32F,
+                 CUSPARSE_SPMV_ALG_DEFAULT,
+                 spmv_workspace_->data());
+  // clang-format on
+}
 
-    float alpha = 1.0;
-    float beta = 0.0;
-    CuSparseConstVec x_desc(*x_);
-    CuSparseVec y_desc(*Ap_);
-    size_t workspace_size = 0;
-
-    cusparseSetStream(cusparse_handle_.raw, rt.stream.get());
-    cusparseSpMV_bufferSize(
-        cusparse_handle_.raw, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha,
-        sparse_A_.raw, x_desc.raw, &beta, y_desc.raw, CUDA_R_32F,
-        CUSPARSE_SPMV_ALG_DEFAULT, &workspace_size);
-
-    spmv_workspace_ = alloc<char>(rt, workspace_size);
-  }
-
-  void spmv(ctd::span<const float> x, ctd::span<float> y, CudaRuntime rt) {
-    float alpha = 1.0;
-    float beta = 0.0;
-    CuSparseConstVec x_desc(x);
-    CuSparseVec y_desc(y);
-
-    cusparseSetStream(cusparse_handle_.raw, rt.stream.get());
-    cusparseSpMV(cusparse_handle_.raw, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha,
-                 sparse_A_.raw, x_desc.raw, &beta, y_desc.raw, CUDA_R_32F,
-                 CUSPARSE_SPMV_ALG_DEFAULT, spmv_workspace_->data());
-  }
-
-  void factorize(BSRView A, ctd::span<const int> part_offset, CudaRuntime rt) {
-    auto total_begin = clock::now();
-    int block_n = div_round_up(A.dim, block_dim_);
-
-    // We do:
-    // 1. K-way graph parition.
-    // 2. Build permutation based on partition.
-    // 3. Initialize MAS preconditioner.
-    // 4. Allocates buffer for PCG loop.
-
-    dim_ = A.dim;
-
-    // Initialize MAS.
-    auto phase_begin = clock::now();
-    // TODO: pass part offset.
-    mas_precond_.factorize(A, part_offset, rt);
-    rt.stream.sync();
-    SPDLOG_TRACE("[MAS] [factorize_mas] [{:.6f}]",
-                 elapsed_seconds(phase_begin));
-
-    phase_begin = clock::now();
-
-    x_ = alloc<float>(rt, permuted_dim_);
-    b_ = alloc<float>(rt, permuted_dim_);
-    r_ = alloc<float>(rt, permuted_dim_);
-    p_ = alloc<float>(rt, permuted_dim_);
-    z_ = alloc<float>(rt, permuted_dim_);
-    Ap_ = alloc<float>(rt, permuted_dim_);
-
-    scalar_rz_ = alloc<float>(rt, 1);
-    scalar_pAp_ = alloc<float>(rt, 1);
-    scalar_alpha_ = alloc<float>(rt, 1);
-    scalar_beta_ = alloc<float>(rt, 1);
-    scalar_rz_old_ = alloc<float>(rt, 1);
-    scalar_rr_ = alloc<float>(rt, 1);
-    rt.stream.sync();
-    SPDLOG_TRACE("[MAS] [factorize_device_buffers] [{:.6f}]",
-                 elapsed_seconds(phase_begin));
-
-    // Allocates buffers for CuSparse.
-    phase_begin = clock::now();
-    setup_cusparse(rt);
-    rt.stream.sync();
-    SPDLOG_TRACE("[MAS] [factorize_cusparse] [{:.6f}]",
-                 elapsed_seconds(phase_begin));
-    SPDLOG_TRACE("[MAS] [factorize_total] [{:.6f}]",
-                 elapsed_seconds(total_begin));
-  }
-
-  void solve(const Eigen::Ref<const Eigen::VectorXd> b,
-             Eigen::Ref<Eigen::VectorXd> x) {
-    CudaRuntime rt{*default_stream_, default_mem_pool_->as_ref()};
-
-    cu::copy_bytes(rt.stream, ctd::span<const float>(b.data(), dim_),
-                   ctd::span<float>(r_->data(), dim_));
-    cu::fill_bytes(rt.stream,
-                   ctd::span<float>(r_->data() + dim_, permuted_dim_ - dim_),
-                   0);
-    permute_vector(*r_, *b_, *d_inv_permutation_, A_.view().block_dim, rt);
-
-    // The solver sometimes fails to converge if we use input x as initial
-    // value. Maybe the caller does not initialize x properly? Set initial x to
-    // zero to work around this issue for now.
-    cu::fill_bytes(rt.stream, *x_, 0);
-
-    pcg_solve(rt);
-
-    permute_vector(*x_, *r_, *d_permutation_, A_.view().block_dim, rt);
-
-    cu::copy_bytes(rt.stream, ctd::span<const float>(r_->data(), dim_),
-                   ctd::span<float>(x.data(), dim_));
-    rt.stream.sync();
-  }
-
-  void apply_preconditioner(ctd::span<const float> r, ctd::span<float> z,
+void MASCGSolver::factorize(BSRView A, ctd::span<const int> part_offset,
                             CudaRuntime rt) {
-    mas_precond_.apply(r, z, rt);
-    return;
+  assert(A.dim != 0);
+
+  auto total_begin = clock::now();
+
+  // Initialize MAS.
+  auto phase_begin = clock::now();
+  mas_precond_.factorize(A, part_offset, rt);
+  rt.stream.sync();
+  SPDLOG_TRACE("[factorize_mas] [{:.6f}]", elapsed(phase_begin));
+
+  phase_begin = clock::now();
+
+  fine_dim_ = A.dim * A.block_dim;
+  r_ = alloc<float>(rt, fine_dim_);
+  p_ = alloc<float>(rt, fine_dim_);
+  z_ = alloc<float>(rt, fine_dim_);
+  Ap_ = alloc<float>(rt, fine_dim_);
+
+  scalar_rz_ = alloc<float>(rt, 1);
+  scalar_pAp_ = alloc<float>(rt, 1);
+  scalar_alpha_ = alloc<float>(rt, 1);
+  scalar_beta_ = alloc<float>(rt, 1);
+  scalar_rz_old_ = alloc<float>(rt, 1);
+  scalar_rr_ = alloc<float>(rt, 1);
+  rt.stream.sync();
+  SPDLOG_TRACE("[factorize_device_buffers] [{:.6f}]", elapsed(phase_begin));
+
+  // Allocates buffers for CuSparse.
+  phase_begin = clock::now();
+  setup_cusparse(A, rt);
+  rt.stream.sync();
+
+  SPDLOG_TRACE("[factorize_cusparse] [{:.6f}]", elapsed(phase_begin));
+  SPDLOG_TRACE("[factorize_total] [{:.6f}]", elapsed(total_begin));
+}
+
+/// https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
+MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
+                                       ctd::span<float> x, CudaRuntime rt) {
+  assert(b.size() == fine_dim_);
+  assert(x.size() == fine_dim_);
+
+  // Compute initial residual r = b-Ax.
+  spmv(x, *r_, rt);
+  axpby(1.0, nullptr, -1.0, nullptr, b, *r_, rt);
+
+  // Compute z = M^-1 r.
+  mas_precond_.apply(*r_, *z_, rt);
+  // Initial search direction p = z;
+  cu::copy_bytes(rt.stream, *z_, *p_);
+
+  // Compute rz = r^T M^-1 r.
+  inner_product(*r_, *z_, *scalar_rz_, rt);
+  float rz0 = scalar_load(scalar_rz_->data(), rt);
+  if (ctd::isnan(rz0) || !ctd::isfinite(rz0)) {
+    return Status::InvalidInitialResidual;
   }
 
-  /// https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
-  void pcg_solve(CudaRuntime rt) {
-    // Compute initial residual r = b-Ax.
-    spmv(*x_, *r_, rt);
-    axpby(1.0, nullptr, -1.0, nullptr, *b_, *r_, rt);
+  // Compute rr = r^T r.
+  float rr0 = 0.0;
+  if (!use_preconditioned_residual_norm_) {
+    inner_product(*r_, *r_, *scalar_rr_, rt);
+    rr0 = scalar_load(scalar_rr_->data(), rt);
+  }
 
-    // Compute z = M^-1 r.
-    apply_preconditioner(*r_, *z_, rt);
-    // Initial search direction p = z;
-    cu::copy_bytes(rt.stream, *z_, *p_);
+  Status status = Status::ReachAbsTol;
+  auto iter_window_begin = clock::now();
+  for (int k = 1; k <= max_iter_; ++k) {
+    // Compute Ap = A p.
+    spmv(*p_, *Ap_, rt);
+    // Compute pAp = p^T * A * p.
+    inner_product(*p_, *Ap_, *scalar_pAp_, rt);
+    // Compute alpha = (r M^-1 r) / (p^T A p).
+    scalar_division(*scalar_rz_, *scalar_pAp_, *scalar_alpha_, rt);
+    // Compute x = x + alpha A p.
+    axpby(1.0, scalar_alpha_->data(), 1.0, nullptr, *p_, x, rt);
 
-    // Compute rz = r^T M^-1 r.
-    inner_product(*r_, *z_, *scalar_rz_, rt);
-    const float rz0 = device2host(scalar_rz_->data(), rt);
-    if (ctd::isnan(rz0) || !ctd::isfinite(rz0)) {
-      throw std::runtime_error("[MAS] Invalid initial residual.");
+    // Compute residual b-Ax directly.
+    if (k % true_residual_period_ == 0) {
+      spmv(x, *r_, rt);
+      axpby(1.0, nullptr, -1.0, nullptr, b, *r_, rt);
+    }
+    // Compute residual update using r' = r - alpha A p.
+    // This saves one spmv but accumulates floating point error overtime.
+    else {
+      axpby(-1.0, scalar_alpha_->data(), 1.0, nullptr, *Ap_, *r_, rt);
     }
 
-    // Compute rr = r^T r.
-    float rr0 = 0.0;
-    if (!use_preconditioned_residual_norm_) {
-      inner_product(*r_, *r_, *scalar_rr_, rt);
-      rr0 = device2host(scalar_rr_->data(), rt);
+    // Compute z = M^-1 r.
+    mas_precond_.apply(*r_, *z_, rt);
+
+    // Compute rz = r M^-1 r.
+    cu::copy_bytes(rt.stream, *scalar_rz_, *scalar_rz_old_);
+    inner_product(*r_, *z_, *scalar_rz_, rt);
+
+    iterations_ = k;
+
+    // Check convergence every 10 iterations.
+    if (k % 10 == 0) {
+      if (use_preconditioned_residual_norm_) {
+        float rz_new = scalar_load(scalar_rz_->data(), rt);
+        residual_norm_ = ctd::sqrt(rz_new);
+        if (rz_new <= rel_tol_ * rel_tol_ * rz0 ||
+            rz_new <= abs_tol_ * abs_tol_) {
+          status = (rz_new <= abs_tol_ * abs_tol_) ? Status::ReachAbsTol
+                                                   : Status::ReachRelTol;
+          break;
+        }
+      } else {
+        inner_product(*r_, *r_, *scalar_rr_, rt);
+        float rr = scalar_load(scalar_rr_->data(), rt);
+        residual_norm_ = ctd::sqrt(rr);
+        if (rr <= rel_tol_ * rel_tol_ * rr0 || rr <= abs_tol_ * abs_tol_) {
+          status = (rr <= abs_tol_ * abs_tol_) ? Status::ReachAbsTol
+                                               : Status::ReachRelTol;
+          break;
+        }
+      }
     }
 
     // debug logging
-    auto iter_window_begin = clock::now();
-    for (int k = 1; k <= max_iter_; ++k) {
-      // Compute Ap = A p.
-      spmv(*p_, *Ap_, rt);
-      // Compute pAp = p^T * A * p.
-      inner_product(*p_, *Ap_, *scalar_pAp_, rt);
-      // Compute alpha = (r M^-1 r) / (p^T A p).
-      scalar_division(*scalar_rz_, *scalar_pAp_, *scalar_alpha_, rt);
-      // Compute x = x + alpha A p.
-      axpby(1.0, scalar_alpha_->data(), 1.0, nullptr, *p_, *x_, rt);
-
-      // Compute residual b-Ax directly.
-      if (k % true_residual_period_ == 0) {
-        spmv(*x_, *r_, rt);
-        axpby(1.0, nullptr, -1.0, nullptr, *b_, *r_, rt);
-      }
-      // Compute residual update using r' = r - alpha A p.
-      // This saves one spmv but accumulates floating point error overtime.
-      else {
-        axpby(-1.0, scalar_alpha_->data(), 1.0, nullptr, *Ap_, *r_, rt);
-      }
-
-      // Compute z = M^-1 r.
-      apply_preconditioner(*r_, *z_, rt);
-
-      // Compute rz = r M^-1 r.
-      cu::copy_bytes(rt.stream, *scalar_rz_, *scalar_rz_old_);
-      inner_product(*r_, *z_, *scalar_rz_, rt);
-
-      iterations_ = k;
-      bool converged = false;
-
-      // Check convergence every 10 iterations.
-      if (k % 10 == 0) {
-        if (use_preconditioned_residual_norm_) {
-          float rz_new = device2host(scalar_rz_->data(), rt);
-          residual_norm_ = ctd::sqrt(rz_new);
-          if (rz_new <= rel_tol_ * rel_tol_ * rz0 ||
-              rz_new <= abs_tol_ * abs_tol_) {
-            status_ = (rz_new <= abs_tol_ * abs_tol_)
-                          ? MASSolverStatus::ReachAbsoluteTolerance
-                          : MASSolverStatus::ReachRelativeTolerance;
-            converged = true;
-          }
-        } else {
-          inner_product(*r_, *r_, *scalar_rr_, rt);
-          float rr = device2host(scalar_rr_->data(), rt);
-          residual_norm_ = ctd::sqrt(rr);
-          if (rr <= rel_tol_ * rel_tol_ * rr0 || rr <= abs_tol_ * abs_tol_) {
-            status_ = (rr <= abs_tol_ * abs_tol_)
-                          ? MASSolverStatus::ReachAbsoluteTolerance
-                          : MASSolverStatus::ReachRelativeTolerance;
-            converged = true;
-          }
-        }
-      }
-
-      // debug logging
-      if (k % 100 == 0) {
-        rt.stream.sync();
-        SPDLOG_TRACE("[MAS] [pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]",
-                     elapsed_seconds(iter_window_begin), k, residual_norm_);
-        iter_window_begin = clock::now();
-      }
-
-      if (converged) {
-        break;
-      }
-
-      // Compute beta = rz / rz_old.
-      scalar_division(*scalar_rz_, *scalar_rz_old_, *scalar_beta_, rt);
-      // Compute direction update p' = M^-1 r + beta p.
-      axpby(1.0, nullptr, 1.0, scalar_beta_->data(), *z_, *p_, rt);
+    if (k % 100 == 0) {
+      rt.stream.sync();
+      SPDLOG_TRACE("[pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]",
+                   elapsed(iter_window_begin), iterations_, residual_norm_);
+      iter_window_begin = clock::now();
     }
 
-    if (iterations_ == max_iter_) {
-      status_ = MASSolverStatus::ReachMaxIterations;
-    }
-
-    SPDLOG_TRACE("[MAS] [pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]",
-                 elapsed_seconds(iter_window_begin), iterations_,
-                 residual_norm_);
+    // Compute beta = rz / rz_old.
+    scalar_division(*scalar_rz_, *scalar_rz_old_, *scalar_beta_, rt);
+    // Compute direction update p' = M^-1 r + beta p.
+    axpby(1.0, nullptr, 1.0, scalar_beta_->data(), *z_, *p_, rt);
   }
-};
+
+  if (iterations_ == max_iter_) {
+    status = Status::ReachMaxIter;
+  }
+
+  SPDLOG_TRACE("[pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]",
+               elapsed(iter_window_begin), iterations_, residual_norm_);
+
+  return status;
+}
 
 }  // namespace silk::cuda::solver

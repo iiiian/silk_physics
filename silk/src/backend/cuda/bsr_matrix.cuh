@@ -18,6 +18,11 @@ struct BSRView {
   ctd::span<const float> vals;  //< BSR values.
 };
 
+struct DynamicBSRView {
+  ctd::span<const float> diag;
+  BSRView mat;
+};
+
 /// @brief Block CSR matrix.
 class BSRMatrix {
  public:
@@ -29,8 +34,16 @@ class BSRMatrix {
             ctd::span<const int> permutation, CudaRuntime rt);
 
   BSRView view() const {
-    return BSRView{dim_,       block_dim_, padded_block_, padded_scalar_num_,
-                   non_zeros_, *rows_,     *cols_,        *vals_};
+    // clang-format off
+    return BSRView{dim_,
+                   block_dim_,
+                   padded_block_,
+                   padded_scalar_num_,
+                   non_zeros_,
+                   *rows_,
+                   *cols_,
+                   *vals_};
+    // clang-format on
   }
 
  private:
@@ -42,11 +55,6 @@ class BSRMatrix {
   Buf<int> rows_;
   Buf<int> cols_;
   Buf<float> vals_;
-};
-
-struct DynamicBSRMatrix {
-  Buf<float> diag;
-  BSRMatrix mat;
 };
 
 }  // namespace silk::cuda
