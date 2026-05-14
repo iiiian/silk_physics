@@ -73,8 +73,7 @@ class MASPreconditioner {
   /// @param A Input matrix sorted by graph partition.
   /// @param part_offsets Graph paritition offset. CSR row ptr style.
   /// @param rt Cuda runtime.
-  void factorize(const BSRMatrix &A, ctd::span<const int> part_offsets,
-                 CudaRuntime rt);
+  void factorize(BSRView A, ctd::span<const int> part_offsets, CudaRuntime rt);
 
   /// @brief Apply MAS preconditioner.
   /// @param r Residual.
@@ -84,7 +83,6 @@ class MASPreconditioner {
 
  private:
   bool initialized_ = false;
-  int vector_size_ = 0;
   int block_dim_ = 0;
   PaddedTopology padded_topology_;
   CoarseSpace coarse_space_;

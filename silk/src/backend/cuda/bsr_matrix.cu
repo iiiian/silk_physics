@@ -1,3 +1,5 @@
+#include "backend/cuda/bsr_matrix.cuh"
+
 #include <Eigen/SparseCore>
 #include <cassert>
 #include <cstdint>
@@ -9,12 +11,11 @@
 #include <stdexcept>
 #include <type_traits>
 
-#include "backend/cuda/bsr_matrix.cuh"
+#include "backend/cuda/cuda_utils.cuh"
 
 namespace silk::cuda {
 
 namespace {
-
 // Key bit layout:
 // | block row idx (32) | block col idx (32) |
 
@@ -127,6 +128,18 @@ __global__ void extract_block_rows(ctd::span<const uint64_t> unique_keys,
   block_rows[tid] = key_to_row(unique_keys[tid]);
 }
 
+__global__ void histogram(ctd::span<const int> samples, ctd::span<int> hist,
+                          int num_bins
+
+) {
+  for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < samples.size();
+       i += blockDim.x * gridDim.x) {
+    int sample = samples[i];
+    assert(sample >= 0 && sample < num_bins);
+    atomicAdd(&hist[sample], 1);
+  }
+}
+
 __global__ void fill_bsr_cols_vals(int block_dim,
                                    ctd::span<const uint64_t> unique_keys,
                                    ctd::span<const int> payload_offsets,
@@ -150,7 +163,7 @@ __global__ void fill_bsr_cols_vals(int block_dim,
     int offset = payload_to_local_offset(payload);
     // We pad diagonal entry to 1.0 for trailing blocks.
     float val = payload_to_is_padding(payload)
-                    ? 1.0f
+                    ? 1.0
                     : csc_vals[payload_to_nnz_index(payload)];
     bsr_vals[base + offset] = val;
   }
@@ -163,8 +176,8 @@ int build_bsr_from_csc(const Eigen::SparseMatrix<float> &A_csc, int block_dim,
   const int rows_num = A_csc.rows();
   const int cols_num = A_csc.cols();
   const int nnz = A_csc.nonZeros();
-  int dim_blocks = div_round_up(rows_num, block_dim);
-  int padded = block_dim * dim_blocks - rows_num;
+  int bsr_dim = div_round_up(rows_num, block_dim);
+  int padded = block_dim * bsr_dim - rows_num;
   int nnz_total = nnz + padded;
 
   // Upload input CSC to device.
@@ -205,7 +218,7 @@ int build_bsr_from_csc(const Eigen::SparseMatrix<float> &A_csc, int block_dim,
   Buf<uint64_t> keys_in = alloc<uint64_t>(rt, nnz_total);
   Buf<uint64_t> payloads_in = alloc<uint64_t>(rt, nnz_total);
   build_keys_payloads<<<div_round_up(nnz_total, 128), 128, 0,
-                        rt.stream.get()>>>(nnz, padded, block_dim, dim_blocks,
+                        rt.stream.get()>>>(nnz, padded, block_dim, bsr_dim,
                                            d_perm_ptr, *col_of_nnz, *d_row_idx,
                                            *keys_in, *payloads_in);
   col_of_nnz->destroy();
@@ -257,7 +270,10 @@ int build_bsr_from_csc(const Eigen::SparseMatrix<float> &A_csc, int block_dim,
   // ---------------------------------------------------------------------------
 
   Buf<uint64_t> unique_keys = alloc<uint64_t>(rt, nnz_total);
-  Buf<int> counts = alloc<int>(rt, nnz_total);
+
+  // We later use this buffer to do exlcusive sum for CSR offsets.
+  // Thus the size is nnz_total + 1.
+  Buf<int> counts = alloc<int>(rt, nnz_total + 1);
   Buf<int> num_runs = alloc<int>(rt, 1);
 
   size_t rle_tmp_size = 0;
@@ -283,22 +299,19 @@ int build_bsr_from_csc(const Eigen::SparseMatrix<float> &A_csc, int block_dim,
                        rt.stream.get()>>>(
       ctd::span<const uint64_t>(unique_keys->data(), nnz_blocks), *block_rows);
   // Histogram count nnz block per row.
-  Buf<int> hist = alloc<int>(rt, dim_blocks + 1, 0);
-  size_t hist_tmp_size = 0;
-  cub::DeviceHistogram::HistogramEven(
-      nullptr, hist_tmp_size, block_rows->data(), hist->data(), dim_blocks + 1,
-      0, dim_blocks, nnz_blocks, rt.stream.get());
-  cub::DeviceHistogram::HistogramEven(
-      make_cub_tmp(hist_tmp_size), hist_tmp_size, block_rows->data(),
-      hist->data(), dim_blocks + 1, 0, dim_blocks, nnz_blocks, rt.stream.get());
+  Buf<int> hist = alloc<int>(rt, bsr_dim + 1, 0);
+  // As of 20260507, CCCL v3.0.0 histogram has a out-of-bound memory write bug.
+  // If in the bug is fixed in the future you shall replace the homebrew
+  // histogram.
+  histogram<<<div_round_up(nnz_blocks, 128), 128, 0, rt.stream.get()>>>(
+      *block_rows, *hist, bsr_dim);
   // Exclusive scan compute CSR row ptr.
-  out_rows = alloc<int>(rt, dim_blocks + 1);
+  out_rows = alloc<int>(rt, bsr_dim + 1);
   size_t scan_tmp_size = 0;
   cub::DeviceScan::ExclusiveSum(nullptr, scan_tmp_size, hist->data(),
-                                out_rows->data(), dim_blocks + 1,
-                                rt.stream.get());
+                                out_rows->data(), bsr_dim + 1, rt.stream.get());
   cub::DeviceScan::ExclusiveSum(make_cub_tmp(scan_tmp_size), scan_tmp_size,
-                                hist->data(), out_rows->data(), dim_blocks + 1,
+                                hist->data(), out_rows->data(), bsr_dim + 1,
                                 rt.stream.get());
   block_rows->destroy();
   hist->destroy();
@@ -322,7 +335,7 @@ int build_bsr_from_csc(const Eigen::SparseMatrix<float> &A_csc, int block_dim,
 
   // Fill cols and vals.
   out_cols = alloc<int>(rt, nnz_blocks);
-  out_vals = alloc<float>(rt, nnz_blocks * block_dim * block_dim, 0.0f);
+  out_vals = alloc<float>(rt, nnz_blocks * block_dim * block_dim, 0.0);
   fill_bsr_cols_vals<<<div_round_up(nnz_blocks, 128), 128, 0,
                        rt.stream.get()>>>(
       block_dim, ctd::span<const uint64_t>(unique_keys->data(), nnz_blocks),
@@ -341,13 +354,11 @@ int build_bsr_from_csc(const Eigen::SparseMatrix<float> &A_csc, int block_dim,
 BSRMatrix::BSRMatrix(const Eigen::SparseMatrix<float> &A, int block_dim,
                      ctd::span<const int> permutation, CudaRuntime rt) {
   static_assert(std::is_same_v<Eigen::SparseMatrix<float>::StorageIndex, int>,
-                "Only support int32 index type.");
-  assert(A.cols() == A.rows() && A.cols() != 0 && A.rows() != 0 &&
-         A.nonZeros() != 0);
-  assert(A.cols() <= std::numeric_limits<int>::max() &&
-         A.rows() <= std::numeric_limits<int>::max() &&
-         A.nonZeros() <= std::numeric_limits<int>::max());
-  assert(block_dim >= 1 && block_dim <= 3);
+                "MAS only support int32 index type.");
+  if (A.nonZeros() > std::numeric_limits<int>::max()) {
+    throw std::runtime_error(
+        "[MAS] A is too large. Non-zero number exceeding int32 max.");
+  }
 
   // if A is not compressed. Copy and compress.
   const Eigen::SparseMatrix<float> *A_csc = &A;

@@ -1,29 +1,15 @@
+#include "backend/cuda/solver/obstacle_solver_utils.cuh"
+
 #include <cuda/buffer>
 
 #include "backend/cuda/collision/object_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/ecs.hpp"
 #include "backend/cuda/eigen_cuda_interop.cuh"
-#include "backend/cuda/obstacle_position.hpp"
-#include "backend/cuda/solver/obstacle_solver_utils.cuh"
 #include "common/mesh.hpp"
+#include "common/pin.hpp"
 
 namespace silk::cuda {
-
-void batch_reset_obstacle_simulation(ObjRegistry& registry) {
-  auto obstacles =
-      registry.get_entity_with_components<TriMesh, ObstaclePosition>();
-  for (uint32_t e : obstacles) {
-    auto mesh = registry.get<TriMesh>(e);
-    auto position = registry.get<ObstaclePosition>(e);
-
-    if (mesh && position) {
-      position->is_static = false;
-      position->is_static_twice = false;
-      position->curr_position = mesh->V.reshaped<Eigen::RowMajor>();
-    }
-  }
-}
 
 void prepare_obstacle_simulation(ObjRegistry& registry, uint32_t& entity,
                                  CudaRuntime rt) {
@@ -31,10 +17,10 @@ void prepare_obstacle_simulation(ObjRegistry& registry, uint32_t& entity,
 
   auto config = registry.get<CollisionConfigPlus>(e);
   auto mesh = registry.get<TriMesh>(e);
-  auto position = registry.get<ObstaclePosition>(e);
+  auto pin = registry.get<Pin>(e);
 
   // Obstacle entity sanity check.
-  assert(config && mesh && position);
+  assert(config && mesh && pin);
 
   // Ensure collider exists and is up-to-date
   using ObjectCollider = collision::ObjectCollider;
@@ -50,20 +36,20 @@ void prepare_obstacle_simulation(ObjRegistry& registry, uint32_t& entity,
     config->is_updated = false;
   }
 
-  if (position->is_static_twice) {
+  if (pin->is_static_twice) {
     // No-op.
-  } else if (position->is_static) {
+  } else if (pin->is_static) {
     // Static once. Update position.
-    auto d_pos = host_eigen_to_device(position->curr_position, rt);
+    auto d_pos = host_eigen_to_device(pin->curr_position, rt);
     collider->update_position(d_pos, d_pos, rt);
-    position->is_static_twice = true;
+    pin->is_static_twice = true;
   } else {
     // Dynamic. Update position.
-    auto d_prev = host_eigen_to_device(position->prev_position, rt);
-    auto d_curr = host_eigen_to_device(position->curr_position, rt);
+    auto d_prev = host_eigen_to_device(pin->prev_position, rt);
+    auto d_curr = host_eigen_to_device(pin->curr_position, rt);
     collider->update_position(d_curr, d_prev, rt);
-    std::swap(position->curr_position, position->prev_position);
-    position->is_static = true;
+    std::swap(pin->curr_position, pin->prev_position);
+    pin->is_static = true;
   }
 }
 

@@ -109,6 +109,10 @@ class MatView {
     return MatView<T, n, m>{mdspan.data_handle(), mdspan.stride(1),
                             mdspan.stride(0)};
   }
+
+  __both__ constexpr MatView<T, n * m, 1> vectorize() const {
+    return MatView<T, n * m, 1>{mdspan.data_handle(), n * m, 1};
+  }
 };
 
 /// @brief Row major dense matrix.
@@ -564,7 +568,7 @@ __both__ constexpr bool all_leq(const X& x, const Y& y) {
   return all(x, y, [] __both__(float a, float b) { return a <= b; });
 }
 
-__both__ constexpr Vec3f cross(Vec3fV x, Vec3fV y) {
+__both__ Vec3f cross(Vec3fV x, Vec3fV y) {
   Vec3f res;
   res(0) = x(1) * y(2) - x(2) * y(1);
   res(1) = x(2) * y(0) - x(0) * y(2);

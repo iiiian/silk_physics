@@ -27,18 +27,23 @@ class ClothAssemblyL2Cache {
   // Per-face area vector of length fnum.
   Eigen::VectorXf area;
 
+  // Faces (fnum x 3).
+  RMatrixX3i F;
+
   // Inverse-mass-weighted cotangent matrix for bending energy (vnum x vnum).
   Eigen::SparseMatrix<float> CWC;
+
+  // Cotangent matrix to compute curvature.
+  Eigen::SparseMatrix<float> laplacian_ops;
+
+  // Rest curvature per vertex (vnum x 3).
+  RMatrixX3f C0;
 
   // Area-weighted in-plane elastic matrix (state_num x state_num).
   Eigen::SparseMatrix<float> JWJ;
 
-  // Per-face 6x9 Jacobian operators for in-plane elasticity; order matches
-  // TriMesh::F.
+  // Per-face 6x9 Jacobian operators for in-plane elasticity.
   std::vector<Eigen::Matrix<float, 6, 9>> jacobian_ops;
-
-  // Rest curvature per vertex (vnum x 3).
-  RMatrixX3f C0;
 
  public:
   ClothAssemblyL2Cache() = default;

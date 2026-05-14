@@ -75,9 +75,17 @@ ClothAssemblyL2Cache::ClothAssemblyL2Cache(const ClothConfig& config,
   int vert_num = m.V.rows();
   int face_num = m.F.rows();
 
+  // Mass.
   Eigen::SparseMatrix<float> voroni_mass;
   igl::massmatrix(m.V, m.F, igl::MASSMATRIX_TYPE_VORONOI, voroni_mass);
   mass = voroni_mass.diagonal();
+
+  // Triangle area.
+  igl::doublearea(m.V, m.F, area);
+  area /= 2;
+
+  // Faces.
+  F = mesh.F;
 
   // Cotangent matrix.
   Eigen::SparseMatrix<float> C;
@@ -90,15 +98,16 @@ ClothAssemblyL2Cache::ClothAssemblyL2Cache(const ClothConfig& config,
     W.coeffRef(i, i) = 1.0f / voroni_mass.coeff(i, i);
   }
 
-  // Bending energy.
+  // Bending energy CWC.
   CWC = C.transpose() * W * C;
+
+  // Laplacian ops.
+  laplacian_ops = std::move(C);
+
+  // Rest curvature C0.
   C0 = CWC * m.V;
 
-  // Triangle area.
-  igl::doublearea(m.V, m.F, area);
-  area /= 2;
-
-  // In‑plane deformation energy.
+  // In‑plane deformation energy JWJ and jacobian ops.
   std::vector<Eigen::Triplet<float>> JWJ_triplets;
   for (int f = 0; f < face_num; ++f) {
     Eigen::Matrix<float, 6, 9> jop = triangle_jacobian_operator(

@@ -39,7 +39,7 @@ class CuSparseConstVec {
   cusparseConstDnVecDescr_t raw = nullptr;
 
   CuSparseConstVec(ctd::span<const float> vec) {
-    cusparseCreateConstDnVec(&raw, vec.size(), vec.data(), CUDA_R_32F);
+    cusparseCreateConstDnVec(&raw, vec.size(), vec.data(), CUDA_R_64F);
   }
 
   ~CuSparseConstVec() {
@@ -66,7 +66,7 @@ class CuSparseVec {
   cusparseDnVecDescr_t raw = nullptr;
 
   CuSparseVec(ctd::span<float> vec) {
-    cusparseCreateDnVec(&raw, vec.size(), vec.data(), CUDA_R_32F);
+    cusparseCreateDnVec(&raw, vec.size(), vec.data(), CUDA_R_64F);
   }
 
   ~CuSparseVec() {

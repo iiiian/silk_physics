@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <limits>
 #include <random>
+#include <ranges>
 #include <span>
 #include <tuple>
 #include <unordered_set>
@@ -51,18 +52,16 @@ class Registry {
     entities_.erase(entity);
   }
 
+  auto get_all_entities() const { return entities_ | std::views::all; }
+
   /// @brief Gather all entities with compoents T...
   /// @tparam T All required components.
   /// @return Vector of entity id.
   template <typename... T>
-  std::vector<uint32_t> get_entity_with_components() const {
-    std::vector<uint32_t> ret;
-    for (uint32_t e : entities_) {
-      if ((has_component<T>(e) && ...)) {
-        ret.push_back(e);
-      }
-    }
-    return ret;
+  auto get_entity_with_components() const {
+    return entities_ | std::views::filter([this](uint32_t e) {
+             return (has_component<T>(e) && ...);
+           });
   }
 
   // -----------------------------------------------------

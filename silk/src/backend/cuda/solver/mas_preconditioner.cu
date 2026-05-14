@@ -1,4 +1,4 @@
-#include "backend/cuda/mas_preconditioner.cuh"
+#include "backend/cuda/solver/mas_preconditioner.cuh"
 
 // #ifndef SPDLOG_ACTIVE_LEVEL
 // #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
@@ -6,10 +6,8 @@
 
 #include <spdlog/spdlog.h>
 
-#include <algorithm>
 #include <cassert>
 #include <chrono>
-#include <cmath>
 #include <cub/cub.cuh>
 #include <cuda/algorithm>
 #include <cuda/std/array>
@@ -809,27 +807,21 @@ CoarseMatrices build_sym_coarse_matrices(const CoarseSpace &cs, BSRView mat,
 }
 }  // namespace
 
-void MASPreconditioner::factorize(const BSRMatrix &A,
-                                  ctd::span<const int> part_offsets,
+void MASPreconditioner::factorize(BSRView A, ctd::span<const int> part_offsets,
                                   CudaRuntime rt) {
   assert(part_offsets.size() >= 2);
 
-  BSRView view = A.view();
-  assert(view.block_dim >= 1 && view.block_dim <= 3);
-  assert(part_offsets.back() == view.dim);
-  for (int i = 0; i + 1 < static_cast<int>(part_offsets.size()); ++i) {
-    assert(part_offsets[i + 1] - part_offsets[i] <= BANK_SIZE);
-  }
+  assert(A.block_dim >= 1 && A.block_dim <= 3);
+  assert(part_offsets.back() == A.dim);
 
   initialized_ = false;
-  block_dim_ = view.block_dim;
-  vector_size_ = view.dim * view.block_dim;
+  block_dim_ = A.block_dim;
 
   auto total_begin = clock::now();
   auto phase_begin = clock::now();
 
   // Build padded topology.
-  int node_num = view.dim;
+  int node_num = A.dim;
   int part_num = part_offsets.size() - 1;
   int padded_node_num = part_num * BANK_SIZE;
 
@@ -841,12 +833,12 @@ void MASPreconditioner::factorize(const BSRMatrix &A,
   padded_topology_.real_to_padded = alloc<int>(rt, node_num, -1);
   padded_topology_.padded_to_real = alloc<int>(rt, padded_node_num, -1);
   padded_topology_.rows = alloc<int>(rt, padded_node_num + 1);
-  padded_topology_.cols = alloc<int>(rt, view.non_zeros);
+  padded_topology_.cols = alloc<int>(rt, A.non_zeros);
 
   auto read_num_per_row = alloc<int>(rt, padded_node_num, 0);
   build_padded_maps<<<div_round_up(padded_node_num, 128), 128, 0,
                       rt.stream.get()>>>(
-      d_part_offsets, view.rows, *(padded_topology_.real_to_padded),
+      d_part_offsets, A.rows, *(padded_topology_.real_to_padded),
       *(padded_topology_.padded_to_real), read_num_per_row);
 
   // Build padded space row_ptr.
@@ -858,11 +850,11 @@ void MASPreconditioner::factorize(const BSRMatrix &A,
   cub::DeviceScan::ExclusiveSum(
       cub_tmp.data(), cub_tmp_size, read_num_per_row.data(),
       padded_topology_.rows->data(), padded_node_num, rt.stream.get());
-  scalar_write(padded_topology_.rows->data() + padded_node_num, view.non_zeros,
+  scalar_write(padded_topology_.rows->data() + padded_node_num, A.non_zeros,
                rt);
 
   fill_padded_cols<<<div_round_up(node_num, 128), 128, 0, rt.stream.get()>>>(
-      view.rows, view.cols, *(padded_topology_.real_to_padded),
+      A.rows, A.cols, *(padded_topology_.real_to_padded),
       *(padded_topology_.rows), *(padded_topology_.cols));
 
   rt.stream.sync();
@@ -883,7 +875,7 @@ void MASPreconditioner::factorize(const BSRMatrix &A,
   // nodes 2. invert
   phase_begin = clock::now();
   coarse_matrices_ = build_sym_coarse_matrices(
-      coarse_space_, view, *(padded_topology_.real_to_padded),
+      coarse_space_, A, *(padded_topology_.real_to_padded),
       padded_topology_.padded_node_num, rt);
   rt.stream.sync();
   SPDLOG_TRACE("[MAS] [factorize_build_coarse_matrices] [{:.6f}]",
@@ -916,7 +908,7 @@ void MASPreconditioner::factorize(const BSRMatrix &A,
 void MASPreconditioner::apply(ctd::span<const float> r, ctd::span<float> z,
                               CudaRuntime rt) {
   assert(initialized_);
-  assert(r.size() == z.size() || r.size() == vector_size_);
+  assert(r.size() == z.size());
 
   cu::fill_bytes(rt.stream, *(coarse_vectors_.multi_level_r), 0);
   cu::fill_bytes(rt.stream, *(coarse_vectors_.multi_level_z), 0);

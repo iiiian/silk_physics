@@ -2,29 +2,31 @@
 # Library config
 # -------------------------------------------------
 
-set(SILK_SOURCES 
-    src/backend/cpu/collision/bbox.cpp
-    src/backend/cpu/collision/ccd.cpp
-    src/backend/cpu/collision/interval.cpp
-    src/backend/cpu/collision/interval_root_finder.cpp
-    src/backend/cpu/collision/narrowphase.cpp
-    src/backend/cpu/collision/object_collider.cpp
-    src/backend/cpu/collision/pipeline.cpp
-    src/backend/cpu/cpu_backend.cpp
-    src/backend/cpu/ecs.cpp
-    src/backend/cpu/solver/cholmod_utils.cpp
-    src/backend/cpu/solver/cloth_solver_context.cpp
-    src/backend/cpu/solver/cloth_solver_utils.cpp
-    src/backend/cpu/solver/obstacle_solver_utils.cpp
-    src/backend/cpu/solver/pipeline.cpp
-    src/common/cloth_topology.cpp
-    src/common/mesh.cpp
-    src/common/result.cpp
-    src/common/world.cpp
-    src/common/check_cuda_support.cpp
-)
+file(GLOB_RECURSE SILK_SOURCES "src/*.cpp" "src/*.cu"  "src/*.hpp" "src/*.cuh" )
 
-file(GLOB_RECURSE SILK_CUDA_SOURCES "src/*.cpp" "src/*.cu"  "src/*.hpp" "src/*.cuh" )
+# set(SILK_SOURCES 
+#     src/backend/cpu/collision/bbox.cpp
+#     src/backend/cpu/collision/ccd.cpp
+#     src/backend/cpu/collision/interval.cpp
+#     src/backend/cpu/collision/interval_root_finder.cpp
+#     src/backend/cpu/collision/narrowphase.cpp
+#     src/backend/cpu/collision/object_collider.cpp
+#     src/backend/cpu/collision/pipeline.cpp
+#     src/backend/cpu/cpu_backend.cpp
+#     src/backend/cpu/ecs.cpp
+#     src/backend/cpu/solver/cholmod_utils.cpp
+#     src/backend/cpu/solver/cloth_solver_context.cpp
+#     src/backend/cpu/solver/cloth_solver_utils.cpp
+#     src/backend/cpu/solver/obstacle_solver_utils.cpp
+#     src/backend/cpu/solver/pipeline.cpp
+#     src/common/cloth_topology.cpp
+#     src/common/mesh.cpp
+#     src/common/result.cpp
+#     src/common/world.cpp
+#     src/common/check_cuda_support.cpp
+# )
+#
+# file(GLOB_RECURSE SILK_CUDA_SOURCES "src/*.cpp" "src/*.cu"  "src/*.hpp" "src/*.cuh" )
 
 add_library(silk ${SILK_SOURCES})
 add_library(silk::silk ALIAS silk)
@@ -72,7 +74,7 @@ target_link_libraries(
 
 if(SILK_ENABLE_CUDA)
   target_link_libraries(silk PRIVATE CUDA::cudart CUDA::cusparse CCCL::CCCL KaMinPar::KaMinPar)
-    target_sources(silk PRIVATE ${SILK_CUDA_SOURCES})
+    # target_sources(silk PRIVATE ${SILK_CUDA_SOURCES})
 endif()
 
 # -------------------------------------------------

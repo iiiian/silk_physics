@@ -14,17 +14,24 @@ namespace silk::cuda {
 class ClothAssemblyL1Cache {
  public:
   float dt;
-  int state_num = 0;
-  Buf<float> mass;
-  Buf<float> area;
-  Buf<float> jacobian_ops;
+  float penalty;
+  int vert_num;
+  int face_num;
+  int state_num;
+  float elastic_stiffness;
+  float bending_stiffness;
+
+  Buf<int> faces;
+  BSRMatrix weighted_laplacian_ops;
   Buf<float> C0;
-  BSRMatrix SS_sum;
+  Buf<float> weighted_jacobian_ops;
+  Buf<float> mass;
+  BSRMatrix weighted_AA;
 
  public:
   ClothAssemblyL1Cache() = default;
   ClothAssemblyL1Cache(const ClothConfig& config,
-                       const ClothAssemblyL2Cache& topology, float dt,
+                       const ClothAssemblyL2Cache& l2_cache, float dt,
                        CudaRuntime rt);
 };
 
