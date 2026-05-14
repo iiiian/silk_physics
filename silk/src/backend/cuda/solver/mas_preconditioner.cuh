@@ -30,8 +30,7 @@ struct PaddedTopology {
 
 struct CoarseSpace {
   /// Coarse space map (real id -> coarse space id) layout:
-  /// | node0_lv0 node0_lv1 ... node0_lv_max | node1_lv0 ... node1_lv_max | ...
-  /// |
+  /// | node0_lv0 ... node0_lv_max | node1_lv0 ... node1_lv_max | ... |
   Buf<int> map;
   /// CCO numbers per coarse space level.
   ctd::array<int, MAS_MAX_COARSE_LEVEL> cco_nums{};

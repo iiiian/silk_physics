@@ -62,12 +62,15 @@ __global__ void build_padded_maps(ctd::span<const int> part_offsets,
   int part_end = part_offsets[part + 1];
   int part_size = part_end - part_begin;
 
+  // Real nodes.
   if (local < part_size) {
     int real_id = part_begin + local;
     real_to_padded[real_id] = padded_id;
     padded_to_real[padded_id] = real_id;
     real_num_per_row[padded_id] = bsr_rows[real_id + 1] - bsr_rows[real_id];
-  } else {
+  }
+  // Virtual padding.
+  else {
     padded_to_real[padded_id] = -1;
     real_num_per_row[padded_id] = 0;
   }
@@ -90,6 +93,53 @@ __global__ void fill_padded_cols(ctd::span<const int> bsr_rows,
     padded_cols[dst] = real_to_padded[bsr_cols[n]];
     ++dst;
   }
+}
+
+PaddedTopology build_padded_topology(BSRView A,
+                                     ctd::span<const int> part_offsets,
+                                     CudaRuntime rt) {
+  int node_num = A.dim;
+  int part_num = part_offsets.size() - 1;
+  int padded_node_num = part_num * BANK_SIZE;
+
+  PaddedTopology topo;
+  topo.node_num = node_num;
+  topo.padded_node_num = padded_node_num;
+  topo.real_to_padded = alloc<int>(rt, node_num, -1);
+  topo.padded_to_real = alloc<int>(rt, padded_node_num, -1);
+  topo.rows = alloc<int>(rt, padded_node_num + 1);
+  topo.cols = alloc<int>(rt, A.non_zeros);
+
+  auto real_num_per_row = alloc<int>(rt, padded_node_num, 0);
+  int grid_num = div_round_up(padded_node_num, 128);
+  build_padded_maps<<<grid_num, 128, 0, rt.stream.get()>>>(
+      part_offsets, A.rows, *(topo.real_to_padded), *(topo.padded_to_real),
+      real_num_per_row);
+
+  // Build padded space row_ptr.
+  size_t cub_tmp_size = 0;
+  // clang-format off
+  cub::DeviceScan::ExclusiveSum(nullptr,
+                                cub_tmp_size,
+                                real_num_per_row.data(),
+                                topo.rows->data(),
+                                padded_node_num,
+                                rt.stream.get());
+  auto cub_tmp = alloc<char>(rt, cub_tmp_size);
+  cub::DeviceScan::ExclusiveSum(cub_tmp.data(),
+                                cub_tmp_size,
+                                real_num_per_row.data(),
+                                topo.rows->data(),
+                                padded_node_num,
+                                rt.stream.get());
+  // clang-format on
+
+  scalar_write(topo.rows->data() + padded_node_num, A.non_zeros, rt);
+  grid_num = div_round_up(node_num, 128);
+  fill_padded_cols<<<grid_num, 128, 0, rt.stream.get()>>>(
+      A.rows, A.cols, *(topo.real_to_padded), *(topo.rows), *(topo.cols));
+
+  return topo;
 }
 
 /// @brief Get coarse space CCO id.
@@ -810,7 +860,6 @@ CoarseMatrices build_sym_coarse_matrices(const CoarseSpace &cs, BSRView mat,
 void MASPreconditioner::factorize(BSRView A, ctd::span<const int> part_offsets,
                                   CudaRuntime rt) {
   assert(part_offsets.size() >= 2);
-
   assert(A.block_dim >= 1 && A.block_dim <= 3);
   assert(part_offsets.back() == A.dim);
 
@@ -821,51 +870,7 @@ void MASPreconditioner::factorize(BSRView A, ctd::span<const int> part_offsets,
   auto phase_begin = clock::now();
 
   // Build padded topology.
-  int node_num = A.dim;
-  int part_num = part_offsets.size() - 1;
-  int padded_node_num = part_num * BANK_SIZE;
-
-  auto d_part_offsets = alloc<int>(rt, part_offsets.size());
-  cu::copy_bytes(rt.stream, part_offsets, d_part_offsets);
-
-  padded_topology_.node_num = node_num;
-  padded_topology_.padded_node_num = padded_node_num;
-  padded_topology_.real_to_padded = alloc<int>(rt, node_num, -1);
-  padded_topology_.padded_to_real = alloc<int>(rt, padded_node_num, -1);
-  padded_topology_.rows = alloc<int>(rt, padded_node_num + 1);
-  padded_topology_.cols = alloc<int>(rt, A.non_zeros);
-
-  auto read_num_per_row = alloc<int>(rt, padded_node_num, 0);
-  int grid_num = div_round_up(padded_node_num, 128);
-  build_padded_maps<<<grid_num, 128, 0, rt.stream.get()>>>(
-      d_part_offsets, A.rows, *(padded_topology_.real_to_padded),
-      *(padded_topology_.padded_to_real), read_num_per_row);
-
-  // Build padded space row_ptr.
-  size_t cub_tmp_size = 0;
-  // clang-format off
-  cub::DeviceScan::ExclusiveSum(nullptr,
-                                cub_tmp_size,
-                                read_num_per_row.data(),
-                                padded_topology_.rows->data(),
-                                padded_node_num,
-                                rt.stream.get());
-  auto cub_tmp = alloc<char>(rt, cub_tmp_size);
-  cub::DeviceScan::ExclusiveSum(cub_tmp.data(),
-                                cub_tmp_size,
-                                read_num_per_row.data(),
-                                padded_topology_.rows->data(),
-                                padded_node_num,
-                                rt.stream.get());
-  // clang-format on
-
-  scalar_write(padded_topology_.rows->data() + padded_node_num, A.non_zeros,
-               rt);
-  grid_num = div_round_up(node_num, 128);
-  fill_padded_cols<<<grid_num, 128, 0, rt.stream.get()>>>(
-      A.rows, A.cols, *(padded_topology_.real_to_padded),
-      *(padded_topology_.rows), *(padded_topology_.cols));
-
+  padded_topology_ = build_padded_topology(A, part_offsets, rt);
   rt.stream.sync();
   SPDLOG_TRACE("[factorize_build_padded_topology] [{:.6f}]",
                elapsed(phase_begin));
