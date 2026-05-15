@@ -16,7 +16,7 @@ class World::Impl {
   std::unique_ptr<IBackend> backend;
 };
 
-World::World() : impl_() {}
+World::World() : impl_(std::make_unique<Impl>()) {}
 
 World::~World() = default;
 
@@ -45,6 +45,9 @@ Result World::init(Backend backend) {
 }
 
 Result World::set_global_config(GlobalConfig config) {
+  if (!impl_->backend) {
+    return Result::error(ErrorCode::NotInitialized);
+  }
   return impl_->backend->set_global_config(config);
 }
 
