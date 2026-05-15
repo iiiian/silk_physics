@@ -60,6 +60,19 @@ __global__ void eval_kernel(ctd::span<const bool> indicator,
   }
 }
 
+__global__ void enforce_kernel(ctd::span<const bool> indicator,
+                               ctd::span<const float> target,
+                               ctd::span<float> state) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid >= indicator.size()) {
+    return;
+  }
+
+  if (indicator[tid]) {
+    state[tid] = target[tid];
+  }
+}
+
 }  // namespace
 
 void EqualityConstraints::merge(const EqualityConstraints& other,
@@ -88,6 +101,12 @@ void EqualityConstraints::eval(ctd::span<float> lhs_diag, ctd::span<float> rhs,
   int grid_num = div_round_up(indicator.size(), 128);
   eval_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
       indicator, target, penalty, lagrange_mul, lhs_diag, rhs);
+}
+
+void EqualityConstraints::enforce(ctd::span<float> state, CudaRuntime rt) {
+  int grid_num = div_round_up(indicator.size(), 128);
+  enforce_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(indicator, target,
+                                                        state);
 }
 
 }  // namespace silk::cuda::solver

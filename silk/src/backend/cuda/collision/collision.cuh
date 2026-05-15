@@ -23,9 +23,6 @@ struct Collision {
   /// Minimum separation distance to maintain between primitives.
   float minimal_separation;
 
-  /// Collision constraint stiffness for solver.
-  float stiffness;
-
   /// Inverse mass for each vertex involved in collision. Value of 0 indicates
   /// vertex is pinned or belongs to obstacle.
   Vec4f inv_mass;

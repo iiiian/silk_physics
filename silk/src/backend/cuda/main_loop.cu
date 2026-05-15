@@ -16,8 +16,8 @@
 #include "backend/cuda/collision/object_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/ecs.hpp"
-#include "backend/cuda/eigen_cuda_interop.cuh"
 #include "backend/cuda/physical_state.cuh"
+#include "backend/cuda/solver/barrier_constraints.cuh"
 #include "backend/cuda/solver/cloth_admm_helper.cuh"
 #include "backend/cuda/solver/equality_constraints.cuh"
 #include "backend/cuda/solver/pin_constraints.cuh"
@@ -254,20 +254,6 @@ __global__ void mix(float w, ctd::span<const float> a, ctd::span<const float> b,
 
 }  // namespace
 
-// void ADMMSolver::clear(ObjRegistry& registry) {
-//   for (Entity& e : registry.get_all_entities()) {
-//     registry.remove<ClothTopology>(e);
-//     registry.remove<ClothSolverContext>(e);
-//     registry.remove<ObjectState>(e);
-//     registry.remove<ObjectCollider>(e);
-//   }
-// }
-//
-// void ADMMSolver::reset(ObjRegistry& registry) {
-//   batch_reset_cloth_simulation(registry);
-//   batch_reset_obstacle_simulation(registry);
-// }
-
 std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
                                               CudaRuntime rt) {
   SPDLOG_DEBUG("solver step");
@@ -282,7 +268,6 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
 
   int state_num = curr_state.size();
   auto next_state = alloc<float>(rt, state_num);
-  auto tmp = alloc<float>(rt, state_num);
   float remaining_step = 1.0f;
   auto lhs_diag = alloc<float>(rt, state_num, 0);
   auto rhs = alloc<float>(rt, state_num, 0);
@@ -293,11 +278,9 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
       alloc<collision::Collision>(rt, init_narrowphase_cache_size);
   auto pin_constraints =
       solver::gather_pin_constraints(registry, state_num, rt);
+  std::optional<solver::EqualityConstraints> barrier_constraints;
 
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
-    cu::fill_bytes(rt.stream, lhs_diag, 0);
-    cu::fill_bytes(rt.stream, rhs, 0);
-
     // Prediction based on linear velocity.
     int grid_num = div_round_up(state_num / 3, 128);
     predict<<<grid_num, 128, 0, rt.stream.get()>>>(
@@ -309,16 +292,10 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     compute_inertia_mod<<<grid_num, 128, 0, rt.stream.get()>>>(
         dt, curr_state, state_velocity, const_acceleration, inertia_mod);
 
-    cu::copy_bytes(rt.stream, curr_state, tmp);
-
-    // if (!collisions.empty()) {
-    //   enforce_barrier_constrain(barrier, d_next_state);
-    //   cudaDeviceSynchronize();
-    //   CHECK_CUDA(cudaGetLastError());
-    // }
-
-    // TODO: setup all constraints (collision missing)
     pin_constraints.reset_lagrange_mul(rt);
+    if (barrier_constraints) {
+      barrier_constraints->reset_lagrange_mul(rt);
+    }
 
     // Inner loop: solve until the state update is small relative to scene size.
     float init_norm = 0;
@@ -330,6 +307,9 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
         cu::fill_bytes(rt.stream, lhs_diag, 0);
         cu::fill_bytes(rt.stream, rhs, 0);
         pin_constraints.eval(lhs_diag, rhs, rt);
+        if (barrier_constraints) {
+          barrier_constraints->eval(lhs_diag, rhs, rt);
+        }
         // TODO: dynamic rel_tol
         update_main(registry, linear_rel_tol, lhs_diag, rhs, inertia_mod,
                     next_state, rt);
@@ -337,6 +317,9 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
 
       update_aux_and_lagrange_mul(registry, max_lagrange_mul, next_state, rt);
       pin_constraints.update_lagrange_mul(next_state, rt);
+      if (barrier_constraints) {
+        barrier_constraints->update_lagrange_mul(next_state, rt);
+      }
 
       auto [min, max] = min_max(next_state, rt);
       // float dist = compute_L2_distance(state_num, tmp, d_next_state, tmp);
@@ -358,19 +341,15 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
         SPDLOG_DEBUG("||dx|| < {}, NL loop terminate", norm);
         break;
       }
-
-      // CHECK_CUDA(cudaMemcpy(d_buffer, d_next_state, state_num *
-      // sizeof(float),
-      //                       cudaMemcpyDeviceToDevice));
     }
 
     // Project to barrier targets to prevent accumulation of small violations,
     // which could otherwise cause zero-TOI contacts in later steps.
-    // if (!collisions.empty()) {
-    //   enforce_barrier_constrain(barrier, d_next_state);
-    //   cudaDeviceSynchronize();
-    //   CHECK_CUDA(cudaGetLastError());
-    // }
+    // TODO: maybe not required anymore?
+    pin_constraints.enforce(next_state, rt);
+    if (barrier_constraints) {
+      barrier_constraints->enforce(next_state, rt);
+    }
 
     // Full collision update.
     for (uint32_t e :
@@ -428,6 +407,9 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
       collisions[i].toi -= delta;
     };
     cub::DeviceFor::Bulk(collisions.size(), update_all_toi, rt.stream.get());
+
+    barrier_constraints =
+        solver::gather_barrier_constraints(state_num, collisions, rt);
   }
 
   // Write solution back to registry
@@ -441,110 +423,6 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
   }
 
   return std::nullopt;
-}
-
-// collision::Bbox ADMMSolver::compute_scene_bbox(ObjRegistry& registry) {
-//   auto& colliders = registry.get_all<ObjectCollider>();
-//   assert(!colliders.empty());
-//
-//   Bbox bbox = colliders[0].bbox;
-//   for (auto& c : colliders) {
-//     bbox.merge_inplace(c.bbox);
-//   }
-//
-//   return bbox;
-// }
-
-void ADMMSolver::compute_barrier_constrain(
-    const Eigen::VectorXf& state, const std::vector<Collision>& collisions,
-    BarrierConstrain& barrier) {
-  assert(state.size() == barrier.state_num);
-
-  int state_num = state.size();
-  if (collisions.empty()) {
-    barrier.constrain_num = 0;
-    CHECK_CUDA(cudaMemset(barrier.d_lhs, 0, state_num * sizeof(float)));
-    CHECK_CUDA(cudaMemset(barrier.d_rhs, 0, state_num * sizeof(float)));
-    CHECK_CUDA(cudaDeviceSynchronize());
-    return;
-  }
-
-  int constrain_num = 0;
-  Eigen::VectorXf lhs = Eigen::VectorXf::Zero(state_num);
-  Eigen::VectorXf rhs = Eigen::VectorXf::Zero(state_num);
-
-  for (auto& c : collisions) {
-    // Zero stiffness is not expected currently; kept for future
-    // non-distance-barrier update.
-    if (c.stiffness == 0.0f) {
-      continue;
-    }
-
-    Eigen::Vector4i offset = 3 * c.index;
-    if (c.type == CollisionType::PointTriangle) {
-      offset(0) += c.state_offset_a;
-      offset(1) += c.state_offset_b;
-      offset(2) += c.state_offset_b;
-      offset(3) += c.state_offset_b;
-    } else {
-      offset(0) += c.state_offset_a;
-      offset(1) += c.state_offset_a;
-      offset(2) += c.state_offset_b;
-      offset(3) += c.state_offset_b;
-    }
-
-    for (int i = 0; i < 4; ++i) {
-      // If inverse mass is 0, this is either a pinned vertex or an obstacle.
-      if (c.inv_mass(i) == 0.0f) {
-        continue;
-      }
-
-      auto seq = Eigen::seqN(offset(i), 3);
-      Eigen::Vector3f position_t0 = state(seq);
-      Eigen::Vector3f reflection;
-
-      // Compute collision reflection as target of barrier constrain.
-      if (c.use_small_ms) {
-        // If use_small_ms is true that means CCD detects zero toi under normal
-        // minimal separation and fallbacks to a smaller one to get non-zero
-        // toi. Thus we assume true toi = 0 and compute reflection aggressively.
-        reflection = position_t0 + c.velocity_t1.col(i);
-      } else {
-        reflection = position_t0 + c.toi * c.velocity_t0.col(i) +
-                     (1.0f - c.toi) * c.velocity_t1.col(i);
-      }
-
-      lhs(seq) += c.stiffness * Eigen::Vector3f::Ones();
-      rhs(seq) += c.stiffness * reflection;
-      // mark affected coordinate entries in lhs/rhs; indices will be
-      // compacted after accumulation based on non-zero lhs entries
-      constrain_num += 3;
-    }
-  }
-
-  // No constraints accumulated; early exit
-  // Keep parity with CPU path: if no collisions, constrain_num stays 0 earlier
-  // but we already returned in that case. Here we assert on compacted size.
-  assert(constrain_num != 0);
-  // Build compact index list by counting non-zeros in lhs
-  std::vector<int> h_indices;
-  h_indices.reserve(state_num);
-  for (int i = 0; i < state_num; ++i) {
-    if (lhs(i) != 0.0f) {
-      h_indices.push_back(i);
-    }
-  }
-  barrier.constrain_num = static_cast<int>(h_indices.size());
-  assert(barrier.constrain_num != 0);
-  if (barrier.constrain_num > 0) {
-    CHECK_CUDA(cudaMemcpy(barrier.d_index, h_indices.data(),
-                          barrier.constrain_num * sizeof(int),
-                          cudaMemcpyHostToDevice));
-  }
-  CHECK_CUDA(cudaMemcpy(barrier.d_lhs, lhs.data(), state_num * sizeof(float),
-                        cudaMemcpyHostToDevice));
-  CHECK_CUDA(cudaMemcpy(barrier.d_rhs, rhs.data(), state_num * sizeof(float),
-                        cudaMemcpyHostToDevice));
 }
 
 }  // namespace silk::cuda

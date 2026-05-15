@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cuda/buffer>
 #include <cuda/std/span>
 
 #include "backend/cuda/collision/collision.cuh"

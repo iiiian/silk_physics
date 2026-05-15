@@ -46,6 +46,7 @@ class EqualityConstraints {
   void update_lagrange_mul(ctd::span<const float> state, CudaRuntime rt);
   void eval(ctd::span<float> lhs_diag, ctd::span<float> rhs,
             CudaRuntime rt) const;
+  void enforce(ctd::span<float> state, CudaRuntime rt);
 };
 
 }  // namespace silk::cuda::solver
