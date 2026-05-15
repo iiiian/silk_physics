@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <span>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace silk::ecs {

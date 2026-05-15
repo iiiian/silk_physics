@@ -7,6 +7,7 @@
 #include <ranges>
 #include <span>
 #include <tuple>
+#include <type_traits>
 #include <unordered_set>
 
 #include "ecs/component_storage.hpp"
@@ -33,7 +34,7 @@ class Registry {
 
   size_t entity_num() const { return entities_.size(); };
 
-  bool has_entity(uint32_t entity) { return entities_.contains(entity); }
+  bool has_entity(uint32_t entity) const { return entities_.contains(entity); }
 
   uint32_t make_entity() {
     // I don't think registry will be near full.
@@ -41,11 +42,14 @@ class Registry {
     do {
       std::random_device rd;
       std::mt19937 engine(rd());
+      // In legacy ECS zero implies invalid/empty entity.
+      // Some demo code still depends on this behavior.
       std::uniform_int_distribution<uint32_t> dist(
-          0, std::numeric_limits<uint32_t>::max());
+          1, std::numeric_limits<uint32_t>::max());
       entity = dist(engine);
     } while (entities_.contains(entity));
 
+    entities_.insert(entity);
     return entity;
   }
 
@@ -94,7 +98,7 @@ class Registry {
 
   /// @brief Return ptr to entity component T. nullptr if not exists.
   template <typename T>
-  const T *get(int entity) const {
+  const T *get(uint32_t entity) const {
     static_assert((std::is_same_v<T, C> || ...),
                   "T is not a component type, double check T appears as "
                   "template argument in registry declaration.");
@@ -149,12 +153,15 @@ class Registry {
   }
 
   /// @brief Set/Replace component T of entity.
-  /// @return Pointer to newly modified component.
+  /// @return Pointer to newly modified component. nullptr if entity is invalid.
   template <typename T>
   T *set(uint32_t entity, T component) {
     static_assert((std::is_same_v<T, C> || ...),
                   "T is not a component type, double check T appears as "
                   "template argument in registry declaration.");
+    if (!has_entity(entity)) {
+      return nullptr;
+    }
 
     auto &c = std::get<ComponentStorage<T>>(components_);
     return c.set(entity, std::move(component));
