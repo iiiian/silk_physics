@@ -61,11 +61,11 @@ int main(int argc, char** argv) {
 
   // Normalize backend option
   for (auto& ch : backend_opt) ch = static_cast<char>(::tolower(ch));
-  silk::Backend backend_sel = silk::Backend::Cpu;
+  silk::Backend backend_sel = silk::Backend::CPU;
   if (backend_opt == "cpu") {
-    backend_sel = silk::Backend::Cpu;
+    backend_sel = silk::Backend::CPU;
   } else if (backend_opt == "cuda") {
-    backend_sel = silk::Backend::Gpu;
+    backend_sel = silk::Backend::GPU;
   } else {
     spdlog::error("Invalid backend '{}'. Allowed: cpu, cuda.", backend_opt);
     return 1;
@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
     py::options::groundPlaneMode = py::GroundPlaneMode::None;
 
     Demo demo_app;
-    if (!demo_app.set_backend(backend_sel)) {
+    if (!demo_app.init(backend_sel)) {
       return 1;
     }
     if (sim_config) {

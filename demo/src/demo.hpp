@@ -29,9 +29,9 @@ class Demo {
   Demo();
   void run();
   void apply_config(const SimConfig& config);
-  // Set simulation backend for the internal silk world.
+  // Initialize the internal silk world.
   // Returns false if the requested backend is unavailable.
-  bool set_backend(silk::Backend backend);
+  bool init(silk::Backend backend);
 
  private:
   void draw();

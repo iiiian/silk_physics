@@ -45,12 +45,14 @@ void Demo::apply_config(const SimConfig& config) {
   config_widget_.apply_config_to_gui(config);
 }
 
-bool Demo::set_backend(silk::Backend backend) {
-  silk::Result r = ctx_.silk_world.set_backend(backend);
+bool Demo::init(silk::Backend backend) {
+  silk::Result r = ctx_.silk_world.init(backend);
   if (!r) {
-    spdlog::error("Failed to set backend. Error: {}", r.to_string());
+    spdlog::error("Failed to initialize Silk world. Error: {}",
+                  r.to_string());
     return false;
   }
-  spdlog::info("Backend set to {}", backend == silk::Backend::Cpu ? "CPU" : "CUDA");
+  spdlog::info("Silk world initialized with {} backend",
+               backend == silk::Backend::CPU ? "CPU" : "CUDA");
   return true;
 }

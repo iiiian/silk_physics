@@ -366,8 +366,8 @@ silk::GlobalConfig make_global_config(const config::Global& global_cfg) {
 void headless_run(const SimConfig& sim_config, const std::string& out_path,
                   silk::Backend backend) {
   silk::World world;
-  // Select backend before creating any objects or running solver
-  if (!world.set_backend(backend)) {
+  // Initialize backend before creating any objects or running solver.
+  if (!world.init(backend)) {
     spdlog::error(
         "Requested backend not available. Rebuild with CUDA or select CPU.");
     return;
