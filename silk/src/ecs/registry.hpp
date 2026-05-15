@@ -42,7 +42,7 @@ class Registry {
       std::uniform_int_distribution<uint32_t> dist(
           0, std::numeric_limits<uint32_t>::max());
       entity = dist(engine);
-    } while (!entities_.contains(entity));
+    } while (entities_.contains(entity));
 
     return entity;
   }
