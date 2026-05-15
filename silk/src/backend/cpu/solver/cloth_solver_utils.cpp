@@ -7,6 +7,7 @@
 #include <Eigen/Geometry>
 #include <Eigen/SparseCore>
 #include <cassert>
+#include <cstdint>
 #include <optional>
 #include <unsupported/Eigen/KroneckerProduct>
 
@@ -23,8 +24,14 @@
 
 namespace silk::cpu {
 
+namespace {
+
+constexpr float CPU_PIN_PENALTY = 1e4f;
+
+}  // namespace
+
 void batch_reset_cloth_simulation(Registry& registry) {
-  for (Entity& e : registry.get_all_entities()) {
+  for (uint32_t e : registry.get_all_entities()) {
     auto mesh = registry.get<TriMesh>(e);
     auto state = registry.get<ObjectState>(e);
     auto context = registry.get<ClothSolverContext>(e);
@@ -41,9 +48,9 @@ void batch_reset_cloth_simulation(Registry& registry) {
   }
 }
 
-bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
+bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt,
                               int state_offset) {
-  auto& e = entity;
+  uint32_t e = entity;
 
   auto cloth_config = registry.get<ClothConfig>(e);
   auto collision_config = registry.get<CollisionConfig>(e);
@@ -60,7 +67,7 @@ bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
     new_state.state_num = 3 * mesh->V.rows();
     new_state.curr_state = mesh->V.reshaped<Eigen::RowMajor>();
     new_state.state_velocity = Eigen::VectorXf::Zero(new_state.state_num);
-    state = registry.set<ObjectState>(e, std::move(new_state));
+    state = registry.set(e, std::move(new_state));
   } else {
     state->state_offset = state_offset;
   }
@@ -68,8 +75,7 @@ bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
 
   auto topology = registry.get<ClothAssemblyL2Cache>(e);
   if (!topology) {
-    topology = registry.set<ClothAssemblyL2Cache>(
-        e, ClothAssemblyL2Cache(*cloth_config, *mesh));
+    topology = registry.set(e, ClothAssemblyL2Cache(*cloth_config, *mesh));
   }
   assert(topology != nullptr);
 
@@ -82,15 +88,16 @@ bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
     if (!new_context) {
       return false;
     }
-    context = registry.set<ClothSolverContext>(e, std::move(*new_context));
+    context = registry.set(e, std::move(*new_context));
   }
   assert(context != nullptr);
 
   auto collider = registry.get<ObjectCollider>(e);
   if (!collider) {
-    auto new_collider = ObjectCollider(e.self, *collision_config, *mesh, *pin,
-                                       context->mass, state_offset);
-    collider = registry.set<ObjectCollider>(e, std::move(new_collider));
+    auto new_collider =
+        ObjectCollider(e, *collision_config, *mesh, *pin, context->mass,
+                       state_offset);
+    collider = registry.set(e, std::move(new_collider));
   } else {
     collider->state_offset = state_offset;
   }
@@ -107,7 +114,7 @@ void compute_cloth_invariant_rhs(const ClothSolverContext& solver_context,
   // set pin rhs
   for (int i = 0; i < pin.index.size(); ++i) {
     rhs(Eigen::seqN(3 * pin.index(i), 3)) =
-        pin.pin_stiffness * pin.position(Eigen::seqN(3 * i, 3));
+        CPU_PIN_PENALTY * pin.curr_position(Eigen::seqN(3 * i, 3));
   }
 
   // set rest curvature rhs
@@ -116,7 +123,7 @@ void compute_cloth_invariant_rhs(const ClothSolverContext& solver_context,
 
 void batch_compute_cloth_invariant_rhs(Registry& registry,
                                        Eigen::VectorXf& rhs) {
-  for (Entity& e : registry.get_all_entities()) {
+  for (uint32_t e : registry.get_all_entities()) {
     auto state = registry.get<ObjectState>(e);
     auto context = registry.get<ClothSolverContext>(e);
     auto pin = registry.get<Pin>(e);
@@ -196,7 +203,7 @@ bool batch_compute_cloth_outer_loop(
     const Eigen::VectorXf& global_state_velocity,
     const Eigen::VectorXf& global_state_acceleration,
     const BarrierConstrain& barrier_constrain, Eigen::VectorXf& rhs) {
-  for (Entity& e : registry.get_all_entities()) {
+  for (uint32_t e : registry.get_all_entities()) {
     auto obj_state = registry.get<ObjectState>(e);
     auto dynamic_data = registry.get<ClothSolverContext>(e);
 
@@ -291,7 +298,7 @@ bool batch_compute_cloth_inner_loop(Registry& registry,
                                     const Eigen::VectorXf& global_state,
                                     const Eigen::VectorXf& outer_rhs,
                                     Eigen::VectorXf& solution) {
-  for (Entity& e : registry.get_all_entities()) {
+  for (uint32_t e : registry.get_all_entities()) {
     auto config = registry.get<ClothConfig>(e);
     auto mesh = registry.get<TriMesh>(e);
     auto topology = registry.get<ClothAssemblyL2Cache>(e);

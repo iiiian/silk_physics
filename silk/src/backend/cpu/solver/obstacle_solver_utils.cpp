@@ -1,5 +1,8 @@
 #include "backend/cpu/solver/obstacle_solver_utils.hpp"
 
+#include <cstdint>
+#include <utility>
+
 #include "backend/cpu/collision/object_collider.hpp"
 #include "backend/cpu/ecs.hpp"
 #include "backend/cpu/obstacle_position.hpp"
@@ -9,7 +12,7 @@
 namespace silk::cpu {
 
 void batch_reset_obstacle_simulation(Registry& registry) {
-  for (Entity& e : registry.get_all_entities()) {
+  for (uint32_t e : registry.get_all_entities()) {
     auto mesh = registry.get<TriMesh>(e);
     auto position = registry.get<ObstaclePosition>(e);
 
@@ -21,8 +24,8 @@ void batch_reset_obstacle_simulation(Registry& registry) {
   }
 }
 
-void prepare_obstacle_simulation(Registry& registry, Entity& entity) {
-  auto& e = entity;
+void prepare_obstacle_simulation(Registry& registry, uint32_t entity) {
+  uint32_t e = entity;
 
   auto config = registry.get<CollisionConfig>(e);
   auto mesh = registry.get<TriMesh>(e);
@@ -34,8 +37,8 @@ void prepare_obstacle_simulation(Registry& registry, Entity& entity) {
   // Ensure collider exists and is up-to-date
   auto collider = registry.get<ObjectCollider>(e);
   if (!collider) {
-    auto new_collider = ObjectCollider(e.self, *config, *mesh);
-    collider = registry.set<ObjectCollider>(e, std::move(new_collider));
+    auto new_collider = ObjectCollider(e, *config, *mesh);
+    collider = registry.set(e, std::move(new_collider));
   }
   assert(collider != nullptr);
   collider->update(*config, *position);

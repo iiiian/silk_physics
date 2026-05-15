@@ -1,8 +1,8 @@
 #pragma once
 
-#include <Eigen/Core>
+#include <cstdint>
 
-#include "common/handle.hpp"
+#include <Eigen/Core>
 
 namespace silk::cpu {
 
@@ -10,8 +10,8 @@ enum class CollisionType { PointTriangle, EdgeEdge };
 
 struct Collision {
   CollisionType type;
-  Handle entity_handle_a;
-  Handle entity_handle_b;
+  uint32_t entity_a;
+  uint32_t entity_b;
 
   /// Entity global state offset.
   /// Value of -1 indicates vertex belongs an obstacle.

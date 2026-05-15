@@ -12,6 +12,12 @@
 
 namespace silk::cpu {
 
+namespace {
+
+constexpr float CPU_PIN_PENALTY = 1e4f;
+
+}  // namespace
+
 std::optional<ClothSolverContext> ClothSolverContext::make_cloth_solver_context(
     const ClothConfig& config, const ClothAssemblyL2Cache& topology,
     const Pin& pin, float dt) {
@@ -31,9 +37,10 @@ std::optional<ClothSolverContext> ClothSolverContext::make_cloth_solver_context(
                                          H_triplets, Symmetry::Upper);
   for (int i = 0; i < pin.index.size(); ++i) {
     int offset = 3 * pin.index(i);
-    H_triplets.emplace_back(offset, offset, pin.pin_stiffness);
-    H_triplets.emplace_back(offset + 1, offset + 1, pin.pin_stiffness);
-    H_triplets.emplace_back(offset + 2, offset + 2, pin.pin_stiffness);
+    float stiffness = CPU_PIN_PENALTY;
+    H_triplets.emplace_back(offset, offset, stiffness);
+    H_triplets.emplace_back(offset + 1, offset + 1, stiffness);
+    H_triplets.emplace_back(offset + 2, offset + 2, stiffness);
   }
   Eigen::SparseMatrix<float> H{state_num, state_num};
   H.setFromTriplets(H_triplets.begin(), H_triplets.end());

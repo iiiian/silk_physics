@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include <Eigen/Core>
 
 #include "backend/cpu/collision/bbox.hpp"
@@ -7,7 +9,6 @@
 #include "backend/cpu/collision/mesh_collider.hpp"
 #include "backend/cpu/object_state.hpp"
 #include "backend/cpu/obstacle_position.hpp"
-#include "common/handle.hpp"
 #include "common/mesh.hpp"
 #include "common/pin.hpp"
 #include "silk/silk.hpp"
@@ -16,7 +17,7 @@ namespace silk::cpu {
 
 class ObjectCollider {
  public:
-  Handle entity_handle;
+  uint32_t entity;
   // If state offset = -1, this is a pure collider with no associated physics
   // state.
   int state_offset;
@@ -36,22 +37,22 @@ class ObjectCollider {
  public:
   /// @brief Build a collider for a simulated (dynamic) object.
   ///
-  /// @param entity_handle Owning entity handle used to look the collider up.
+  /// @param entity Owning entity id used to look the collider up.
   /// @param config Collision parameters that control filtering and materials.
   /// @param mesh Geometry source; positions are copied into collider buffers.
   /// @param pin Pin data identifying vertices that should not move.
   /// @param mass Per-degree-of-freedom mass vector used to compute inverse mass.
   /// @param state_offset Offset into the solver state array for this object.
-  ObjectCollider(Handle entity_handle, const CollisionConfig& config,
+  ObjectCollider(uint32_t entity, const CollisionConfig& config,
                  const TriMesh& mesh, const Pin& pin,
                  const Eigen::VectorXf& mass, int state_offset);
 
   /// @brief Build a collider for a purely kinematic obstacle.
   ///
-  /// @param entity_handle Owning entity handle used to look the collider up.
+  /// @param entity Owning entity id used to look the collider up.
   /// @param config Collision parameters that control filtering and materials.
   /// @param mesh Geometry source; positions are copied into collider buffers.
-  ObjectCollider(Handle entity_handle, const CollisionConfig& config,
+  ObjectCollider(uint32_t entity, const CollisionConfig& config,
                  const TriMesh& mesh);
 
   /// @brief Sync collider geometry with a dynamic object's current state.

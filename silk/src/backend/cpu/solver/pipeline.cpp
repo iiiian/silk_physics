@@ -1,6 +1,7 @@
 #include "backend/cpu/collision/pipeline.hpp"
 
 #include <Eigen/Core>
+#include <cstdint>
 #include <vector>
 
 #include "backend/cpu/collision/bbox.hpp"
@@ -18,15 +19,6 @@
 #include "silk/silk.hpp"
 
 namespace silk::cpu {
-
-void SolverPipeline::clear(Registry& registry) {
-  for (Entity& e : registry.get_all_entities()) {
-    registry.remove<ClothAssemblyL2Cache>(e);
-    registry.remove<ClothSolverContext>(e);
-    registry.remove<ObjectState>(e);
-    registry.remove<ObjectCollider>(e);
-  }
-}
 
 void SolverPipeline::reset(Registry& registry) {
   batch_reset_cloth_simulation(registry);
@@ -114,7 +106,7 @@ bool SolverPipeline::step(Registry& registry) {
     }
 
     // Full collision update.
-    for (Entity& e : registry.get_all_entities()) {
+    for (uint32_t e : registry.get_all_entities()) {
       auto config = registry.get<CollisionConfig>(e);
       auto state = registry.get<ObjectState>(e);
       auto collider = registry.get<ObjectCollider>(e);
@@ -157,7 +149,7 @@ bool SolverPipeline::step(Registry& registry) {
   }
 
   // Write solution back to registry
-  for (auto& state : registry.get_all<ObjectState>()) {
+  for (auto& state : registry.get_all_components<ObjectState>()) {
     auto seq = Eigen::seqN(state.state_offset, state.state_num);
     state.curr_state = curr_state(seq);
     state.state_velocity = state_velocity(seq);
@@ -169,7 +161,7 @@ bool SolverPipeline::step(Registry& registry) {
 // Lazily init all entity and collect solver state into global array.
 bool SolverPipeline::init(Registry& registry, ObjectState& global_state) {
   int state_num = 0;
-  for (Entity& e : registry.get_all_entities()) {
+  for (uint32_t e : registry.get_all_entities()) {
     auto cloth_config = registry.get<ClothConfig>(e);
     if (cloth_config) {
       if (!prepare_cloth_simulation(registry, e, dt, state_num)) {
@@ -196,7 +188,7 @@ bool SolverPipeline::init(Registry& registry, ObjectState& global_state) {
   global_state.curr_state.resize(state_num);
   global_state.state_velocity.resize(state_num);
 
-  for (Entity& e : registry.get_all_entities()) {
+  for (uint32_t e : registry.get_all_entities()) {
     auto state = registry.get<ObjectState>(e);
     if (!state) {
       continue;

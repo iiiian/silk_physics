@@ -26,9 +26,6 @@ class SolverPipeline {
   CollisionPipeline collision_pipeline;
 
  public:
-  /// @brief Remove all solver components from entities and clear caches.
-  void clear(Registry& registry);
-
   /// @brief Reset simulation to initial state.
   void reset(Registry& registry);
 

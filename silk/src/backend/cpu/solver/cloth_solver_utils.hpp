@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include <Eigen/Core>
 
 #include "backend/cpu/ecs.hpp"
@@ -13,16 +15,16 @@ namespace silk::cpu {
 void batch_reset_cloth_simulation(Registry& registry);
 
 /// Prepare cloths for solver stepping at a given time step.
-///  Ensures `ClothTopology`, `ClothSolverContext`, `ObjectState`, and
+///  Ensures `ClothAssemblyL2Cache`, `ClothSolverContext`, `ObjectState`, and
 /// `CpuObjectCollider` exist and are valid.
 ///
 ///  @param registry ECS storage for all components.
-///  @param entity ECS cloth entity.
+///  @param entity ECS cloth entity id.
 ///  @param dt       Time step in seconds
 ///  @param state_offset Object state offset.
 ///  @return false on factorization failure (e.g., non‑SPD system), true
 ///          otherwise.
-bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
+bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt,
                               int state_offset);
 
 /// Assemble step-invariant initial RHS for all cloth entities.

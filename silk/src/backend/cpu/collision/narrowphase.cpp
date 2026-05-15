@@ -290,8 +290,8 @@ std::optional<Collision> point_triangle_collision(
   c.velocity_t1 = c.velocity_t0 + v_diff * weight.transpose();
 
   c.type = CollisionType::PointTriangle;
-  c.entity_handle_a = oa.entity_handle;
-  c.entity_handle_b = ob.entity_handle;
+  c.entity_a = oa.entity;
+  c.entity_b = ob.entity;
   c.state_offset_a = oa.state_offset;
   c.state_offset_b = ob.state_offset;
   c.index(0) = ma.index(0);
@@ -419,8 +419,8 @@ std::optional<Collision> edge_edge_collision(
   c.velocity_t1 = c.velocity_t0 + v_diff * weight.transpose();
 
   c.type = CollisionType::EdgeEdge;
-  c.entity_handle_a = oa.entity_handle;
-  c.entity_handle_b = ob.entity_handle;
+  c.entity_a = oa.entity;
+  c.entity_b = ob.entity;
   c.state_offset_a = oa.state_offset;
   c.state_offset_b = ob.state_offset;
   c.index(Eigen::seqN(0, 2)) = ma.index(Eigen::seqN(0, 2));
