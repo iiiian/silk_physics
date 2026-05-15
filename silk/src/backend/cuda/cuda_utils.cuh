@@ -8,10 +8,10 @@
 #include <cuda/atomic>
 #include <cuda/buffer>
 #include <cuda/memory_resource>
+#include <cuda/std/source_location>
 #include <cuda/std/span>
 #include <cuda/stream>
 #include <format>
-#include <source_location>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -85,7 +85,7 @@ constexpr int div_round_up(int num, int denom) {
 template <typename T, typename V = ::cuda::no_init_t>
 cu::device_buffer<T> alloc(
     CudaRuntime rt, size_t n, V init_val = cu::no_init,
-    std::source_location location = std::source_location::current()) {
+    ctd::source_location location = ctd::source_location::current()) {
   size_t requested_bytes = n * sizeof(T);
   // Only catch cu::cuda_error with status() = cudaErrorMemoryAllocation
   try {

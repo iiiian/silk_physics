@@ -21,6 +21,7 @@ namespace silk {
 /// expanding this enum.
 enum class ErrorCode {
   Unknown,
+  NotInitialized,
   InvalidConfig,
   TooManyBody,
   InvalidHandle,

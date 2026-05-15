@@ -14,12 +14,6 @@
 
 namespace silk {
 
-/// Backend selection for the simulation world.
-enum class Backend { Cpu, Gpu };
-
-// Internal backend interface (defined in source tree)
-class IBackend;
-
 /// @brief Non-owning view over contiguous array data.
 /// @tparam T Element type
 template <typename T>
@@ -76,13 +70,6 @@ struct ClothConfig {
   float damping = 0.01f;
 };
 
-/// @brief Solver backend selection
-enum class SolverBackend {
-  CPU,  ///< Use CPU solver (TBB parallel, default)
-  GPU,  ///< Use GPU solver (CUDA acceleration)
-  Auto  ///< Automatically select based on availability and mesh size
-};
-
 /// @brief Global simulation parameters.
 struct GlobalConfig {
   /// Constant acceleration in X direction
@@ -99,26 +86,22 @@ struct GlobalConfig {
 
   /// Time step size in seconds
   float dt = 1.0f / 60.0f;
-
-  /// Solver backend selection (CPU, GPU, or Auto)
-  SolverBackend solver_backend = SolverBackend::CPU;
 };
+
+/// Backend selection for the simulation world.
+enum class Backend { CPU, GPU };
 
 /// @brief Main simulation world managing all physics entities and systems.
 class World {
- public:
-  class IBackend;
-
  private:
-  std::unique_ptr<IBackend> backend_;
+  class Impl;
+  std::unique_ptr<Impl> impl_;
 
  public:
   World();
+  ~World();
   World(const World&) = delete;
   World(World&&);
-
-  ~World();
-
   World& operator=(const World&) = delete;
   World& operator=(World&&);
 
@@ -126,10 +109,10 @@ class World {
   // Global API
   // ---------------------------------------
 
-  /// @brief Select computation backend (CPU or GPU).
-  /// Defaults to CPU. Switching clears current simulation state.
-  /// @return Success or NoCudaSupport if GPU backend is unavailable.
-  [[nodiscard]] Result set_backend(Backend backend);
+  /// @brief Initialize simulation backend.
+  /// @param backend Simulation backend.
+  /// @return Success or failure result
+  [[nodiscard]] Result init(Backend backend);
 
   /// @brief Configure global simulation parameters.
   /// @param config Global physics settings (gravity, timestep, solver limits)
@@ -139,7 +122,9 @@ class World {
   /// @brief Remove all objects and simulation data.
   void clear();
 
+  // ---------------------------------------
   // Solver API
+  // ---------------------------------------
 
   /// @brief Advance simulation by one timestep.
   ///
@@ -150,7 +135,9 @@ class World {
   /// @return Success result
   [[nodiscard]] Result solver_reset();
 
+  // ---------------------------------------
   // Cloth API
+  // ---------------------------------------
 
   /// @brief Create a new cloth object in the simulation.
   ///

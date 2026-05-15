@@ -5,7 +5,7 @@
 
 namespace silk::cuda {
 
-class CudaBackend : public World::IBackend {
+class CudaBackend : public IBackend {
  private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
@@ -20,7 +20,6 @@ class CudaBackend : public World::IBackend {
 
   // Global API
   Result set_global_config(GlobalConfig config) override;
-  void clear() override;
 
   // Solver API
   Result solver_step() override;

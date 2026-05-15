@@ -33,7 +33,6 @@ class MainLoop {
   int init_narrowphase_cache_size = 1000;
 
  public:
-  // void clear(ObjRegistry& registry);
   // void reset(ObjRegistry& registry);
   std::optional<Error> step(ObjRegistry& registry, CudaRuntime rt);
 };

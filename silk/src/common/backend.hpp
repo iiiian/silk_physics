@@ -4,13 +4,12 @@
 
 namespace silk {
 
-class World::IBackend {
+class IBackend {
  public:
   virtual ~IBackend() = default;
 
   // Global API
   virtual Result set_global_config(GlobalConfig config) = 0;
-  virtual void clear() = 0;
 
   // Solver API
   virtual Result solver_step() = 0;

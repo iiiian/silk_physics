@@ -5,23 +5,35 @@
 #include <Eigen/Core>
 #include <cassert>
 #include <cstring>
+#include <cuda/devices>
+#include <cuda/memory_pool>
+#include <cuda/stream>
 
-#include "backend/cuda/collision/object_collider.cuh"
+// #include "backend/cuda/collision/object_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
+// #include "backend/cuda/ecs.hpp"
+// #include "backend/cuda/object_state.cuh"
+// #include "backend/cuda/obstacle_position.hpp"
+// #include "backend/cuda/solver/cloth_solver_context.cuh"
+// #include "backend/cuda/solver/pipeline.hpp"
+// #include "common/cloth_assembly_l2_cache.hpp"
 #include "backend/cuda/ecs.hpp"
-#include "backend/cuda/object_state.cuh"
-#include "backend/cuda/obstacle_position.hpp"
-#include "backend/cuda/solver/cloth_solver_context.cuh"
-#include "backend/cuda/solver/pipeline.hpp"
-#include "common/cloth_assembly_l2_cache.hpp"
+#include "backend/cuda/main_loop.cuh"
 #include "common/mesh.hpp"
 #include "common/pin.hpp"
 
 namespace silk::cuda {
 
+namespace {
+CudaRuntime init_cuda_runtime() {}
+}
+
 struct CudaBackend::Impl {
+  std::optional<cu::device_ref> device;
+  std::optional<cu::stream> stream;
+  std::optional<cu::device_memory_pool> mr;
   ObjRegistry registry_;
-  SolverPipeline solver_pipeline_;
+  MainLoop main_loop_;
 };
 
 CudaBackend::CudaBackend() : impl_(std::make_unique<Impl>()) {}
@@ -30,28 +42,28 @@ CudaBackend::~CudaBackend() = default;
 
 Result CudaBackend::set_global_config(GlobalConfig config) {
   auto& c = config;
-  impl_->solver_pipeline_.const_acceleration = {
-      c.acceleration_x, c.acceleration_y, c.acceleration_z};
-  impl_->solver_pipeline_.dt = c.dt;
-  impl_->solver_pipeline_.max_outer_iteration = c.max_outer_iteration;
-  impl_->solver_pipeline_.max_inner_iteration = c.max_inner_iteration;
+  impl_->main_loop_.const_acceleration = {c.acceleration_x, c.acceleration_y,
+                                          c.acceleration_z};
+  impl_->main_loop_.dt = c.dt;
+  impl_->main_loop_.max_outer_iteration = c.max_outer_iteration;
+  impl_->main_loop_.max_inner_iteration = c.max_inner_iteration;
   return Result::ok();
 }
 
 void CudaBackend::clear() {
-  impl_->solver_pipeline_.clear(impl_->registry_);
-  impl_->registry_.clear();
+  impl_->main_loop_ = {};
+  impl_->registry_ = {};
 }
 
 Result CudaBackend::solver_step() {
-  if (!impl_->solver_pipeline_.step(impl_->registry_)) {
-    return Result::error(ErrorCode::Unknown);
-  }
-  return Result::ok();
+  auto err = impl_->main_loop_.step(impl_->registry_, );
+  return Result::error(ErrorCode::Unknown);
+}
+return Result::ok();
 }
 
 Result CudaBackend::solver_reset() {
-  impl_->solver_pipeline_.reset(impl_->registry_);
+  impl_->main_loop_.reset(impl_->registry_);
   return Result::ok();
 }
 
