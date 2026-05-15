@@ -82,10 +82,10 @@ class ComponentStorage {
   }
 
   /// @brief Returns mutable reference to dense component array.
-  std::span<T>& data() { return data_; }
+  std::span<T> data() { return data_; }
 
   /// @brief Returns immutable reference to dense component array.
-  std::span<const T>& data() const { return data_; }
+  std::span<const T> data() const { return data_; }
 };
 
 }  // namespace silk::ecs

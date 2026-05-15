@@ -33,6 +33,8 @@ class Registry {
 
   size_t entity_num() const { return entities_.size(); };
 
+  bool has_entity(uint32_t entity) { return entities_.contains(entity); }
+
   uint32_t make_entity() {
     // I don't think registry will be near full.
     uint32_t entity;
