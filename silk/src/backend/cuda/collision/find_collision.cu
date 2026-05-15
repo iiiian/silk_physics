@@ -1,11 +1,12 @@
+#include "backend/cuda/collision/find_collision.cuh"
+
 #include <cassert>
 
-#include "backend/cpu/collision/broadphase.hpp"
 #include "backend/cuda/collision/broadphase.cuh"
 #include "backend/cuda/collision/collision.cuh"
 #include "backend/cuda/collision/narrowphase.cuh"
 #include "backend/cuda/collision/object_collider.cuh"
-#include "backend/cuda/collision/pipeline.cuh"
+#include "backend/cuda/ecs.hpp"
 
 namespace silk::cuda::collision {
 
@@ -52,9 +53,9 @@ __both__ bool ee_self_collision_filter(const EdgeCollider& a,
   return !is_both_pinned && !is_neighbor;
 };
 
-int CollisionPipeline::find_collision(ObjRegistry& registry, float dt,
-                                      cu::device_buffer<Collision>& collisions,
-                                      CudaRuntime rt) {
+int find_collision(ObjRegistry& registry, float dt,
+                   int init_broadphase_cache_size,
+                   cu::device_buffer<Collision>& collisions, CudaRuntime rt) {
   auto object_colliders = registry.get_all_components<ObjectCollider>();
 
   // Three-stage collision detection for inter-object collisions:
@@ -80,10 +81,10 @@ int CollisionPipeline::find_collision(ObjRegistry& registry, float dt,
   // Allocated device collision cache.
   auto pt_ccache =
       alloc<ctd::pair<const TriangleCollider*, const PointCollider*>>(
-          rt, init_ccache_size);
+          rt, init_broadphase_cache_size);
   int pt_ccache_fill = 0;
   auto ee_ccache = alloc<ctd::pair<const EdgeCollider*, const EdgeCollider*>>(
-      rt, init_ccache_size);
+      rt, init_broadphase_cache_size);
   int ee_ccache_fill = 0;
   int collision_fill = 0;
 

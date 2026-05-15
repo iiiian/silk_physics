@@ -18,11 +18,11 @@ class MASCGSolver {
     InvalidInitialResidual,
   };
 
-  int max_iter_ = 1e5;            //< Max iterations.
-  int true_residual_period_ = 4;  //< Iterations to compute true residual b-Ax.
-  float abs_tol_ = 1e-20;         //< Absolute tolerance.
-  float rel_tol_ = 1e-4;          //< Relative tolerance.
-  bool use_preconditioned_residual_norm_ = false;
+  int max_iter = 1e5;            //< Max iterations.
+  int true_residual_period = 4;  //< Iterations to compute true residual b-Ax.
+  float abs_tol = 1e-20;         //< Absolute tolerance.
+  float rel_tol = 1e-4;          //< Relative tolerance.
+  bool use_preconditioned_residual_norm = false;
 
  private:
   int fine_dim_ = 0;  //< A.dim * A.block_dim.

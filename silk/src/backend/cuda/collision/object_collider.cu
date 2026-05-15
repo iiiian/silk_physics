@@ -1,3 +1,5 @@
+#include "backend/cuda/collision/object_collider.cuh"
+
 #include <cuda_runtime.h>
 
 #include <cub/cub.cuh>
@@ -6,7 +8,6 @@
 #include <vector>
 
 #include "backend/cuda/collision/mesh_collider.cuh"
-#include "backend/cuda/collision/object_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "common/mesh.hpp"
 #include "common/pin.hpp"
@@ -217,7 +218,7 @@ ObjectCollider ObjectCollider::from_obstacle(const CollisionConfigPlus& config,
 }
 
 /// @brief Update collider collision config.
-void ObjectCollider::update_collision_config(const CollisionConfig& config,
+void ObjectCollider::update_collision_config(const CollisionConfigPlus& config,
                                              CudaRuntime rt) {
   // Update collision config.
   auto& c = config;
@@ -385,7 +386,7 @@ void ObjectCollider::update_state_offset(int state_offset, CudaRuntime rt) {
                        rt.stream.get());
 }
 
-void ObjectCollider::update_all(const CollisionConfig& config,
+void ObjectCollider::update_all(const CollisionConfigPlus& config,
                                 ctd::span<const float> curr_state,
                                 ctd::span<const float> prev_state,
                                 int state_offset, CudaRuntime rt) {

@@ -17,6 +17,7 @@ namespace {
 // clang-format off
 __global__ void solve_and_update_elastic_aux(
     int face_num,
+    float max_lagrange_mul,
     float elastic_stiffness,
     float penalty,
     ctd::span<const int> faces,
@@ -96,13 +97,14 @@ __global__ void solve_and_update_elastic_aux(
   int mul_offset = tid * 6;
 #pragma unroll
   for (int i = 0; i < 6; ++i) {
-    lagrange_mul[mul_offset + i] = u(i) + delta(i);
+    lagrange_mul[mul_offset + i] = min(u(i) + delta(i), max_lagrange_mul);
   }
 }
 
 // clang-format off
 void solve_and_update_bending_aux(
     int vert_num,
+    float max_lagrange_mul,
     float bending_stiffness,
     float penalty,
     ctd::span<const float> position,
@@ -148,10 +150,10 @@ void solve_and_update_bending_aux(
   cub::DeviceFor::Bulk(aux_var.size(), compute_aux_var, rt.stream.get());
 
   // Update lagrange multiplers.
-  auto update_mul = [lagrange_mul, laplacians, aux_var,
-                     penalty] __device__(int i) {
+  auto update_mul = [lagrange_mul, laplacians, aux_var, penalty,
+                     max_lagrange_mul] __device__(int i) {
     float delta = penalty * (laplacians[i] - aux_var[i]);
-    lagrange_mul[i] += delta;
+    lagrange_mul[i] = min(lagrange_mul[i] + delta, max_lagrange_mul);
   };
   cub::DeviceFor::Bulk(lagrange_mul.size(), update_mul, rt.stream.get());
 }
@@ -166,7 +168,7 @@ __global__ void assemble_inertia(int vert_num, float dt,
     return;
   }
 
-  lhs_diag[tid] += mass[tid] / (dt * dt) * x[tid] + inertia_mod[tid];
+  lhs_diag[tid] += mass[tid] * (1.0 / (dt * dt) * x[tid] + inertia_mod[tid]);
 }
 
 // clang-format off
@@ -295,8 +297,8 @@ void ClothADMMHelper::reset_aux_lagrange_mul(CudaRuntime rt) {
 }
 
 void ClothADMMHelper::update_aux_var_and_lagrange_mul(
-    const ClothAssemblyL1Cache& l1_cache, ctd::span<const float> state,
-    CudaRuntime rt) {
+    float max_lagrange_mul, const assembly::ClothAssemblyL1Cache& l1_cache,
+    ctd::span<const float> state, CudaRuntime rt) {
   int grid_num = div_round_up(l1_cache.face_num, 128);
   solve_and_update_elastic_aux<<<grid_num, 128, 0, rt.stream.get()>>>(
       l1_cache.face_num, l1_cache.elastic_stiffness, l1_cache.penalty,
@@ -309,11 +311,11 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
       *cusparse_workspace_, *laplacians_, *uz_, *z_, rt);
 }
 
-void ClothADMMHelper::solve_main_var(const ClothAssemblyL1Cache& l1_cache,
-                                     ctd::span<const float> extern_lhs,
-                                     ctd::span<const float> extern_rhs,
-                                     ctd::span<const float> inertia_mod,
-                                     ctd::span<float> state, CudaRuntime rt) {
+void ClothADMMHelper::solve_main_var(
+    float rel_tol, const assembly::ClothAssemblyL1Cache& l1_cache,
+    ctd::span<const float> extern_lhs, ctd::span<const float> extern_rhs,
+    ctd::span<const float> inertia_mod, ctd::span<float> state,
+    CudaRuntime rt) {
   auto lhs_diag = alloc<float>(rt, l1_cache.state_num);
   cu::copy_bytes(rt.stream, extern_lhs, lhs_diag);
   auto rhs = alloc<float>(rt, l1_cache.state_num);
@@ -338,6 +340,7 @@ void ClothADMMHelper::solve_main_var(const ClothAssemblyL1Cache& l1_cache,
 
   DynamicBSRView dyn_A{lhs_diag, l1_cache.weighted_AA.view()};
   linear_solver_.factorize(dyn_A, *l1_cache.part_offsets, rt);
+  linear_solver_.rel_tol = rel_tol;
   auto status = linear_solver_.solve(rhs, state, rt);
   // TODO: handle failure.
 }

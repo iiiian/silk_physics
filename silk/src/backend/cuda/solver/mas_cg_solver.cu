@@ -174,14 +174,14 @@ MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
 
   // Compute rr = r^T r.
   float rr0 = 0.0;
-  if (!use_preconditioned_residual_norm_) {
+  if (!use_preconditioned_residual_norm) {
     inner_product(*r_, *r_, *scalar_rr_, rt);
     rr0 = scalar_load(scalar_rr_->data(), rt);
   }
 
   Status status = Status::ReachAbsTol;
   auto iter_window_begin = clock::now();
-  for (int k = 1; k <= max_iter_; ++k) {
+  for (int k = 1; k <= max_iter; ++k) {
     // Compute Ap = A p.
     spmv(*p_, *Ap_, rt);
     // Compute pAp = p^T * A * p.
@@ -192,7 +192,7 @@ MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
     axpby(1.0, scalar_alpha_->data(), 1.0, nullptr, *p_, x, rt);
 
     // Compute residual b-Ax directly.
-    if (k % true_residual_period_ == 0) {
+    if (k % true_residual_period == 0) {
       spmv(x, *r_, rt);
       axpby(1.0, nullptr, -1.0, nullptr, b, *r_, rt);
     }
@@ -213,22 +213,21 @@ MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
 
     // Check convergence every 10 iterations.
     if (k % 10 == 0) {
-      if (use_preconditioned_residual_norm_) {
+      if (use_preconditioned_residual_norm) {
         float rz_new = scalar_load(scalar_rz_->data(), rt);
         residual_norm_ = ctd::sqrt(rz_new);
-        if (rz_new <= rel_tol_ * rel_tol_ * rz0 ||
-            rz_new <= abs_tol_ * abs_tol_) {
-          status = (rz_new <= abs_tol_ * abs_tol_) ? Status::ReachAbsTol
-                                                   : Status::ReachRelTol;
+        if (rz_new <= rel_tol * rel_tol * rz0 || rz_new <= abs_tol * abs_tol) {
+          status = (rz_new <= abs_tol * abs_tol) ? Status::ReachAbsTol
+                                                 : Status::ReachRelTol;
           break;
         }
       } else {
         inner_product(*r_, *r_, *scalar_rr_, rt);
         float rr = scalar_load(scalar_rr_->data(), rt);
         residual_norm_ = ctd::sqrt(rr);
-        if (rr <= rel_tol_ * rel_tol_ * rr0 || rr <= abs_tol_ * abs_tol_) {
-          status = (rr <= abs_tol_ * abs_tol_) ? Status::ReachAbsTol
-                                               : Status::ReachRelTol;
+        if (rr <= rel_tol * rel_tol * rr0 || rr <= abs_tol * abs_tol) {
+          status = (rr <= abs_tol * abs_tol) ? Status::ReachAbsTol
+                                             : Status::ReachRelTol;
           break;
         }
       }
@@ -248,7 +247,7 @@ MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
     axpby(1.0, nullptr, 1.0, scalar_beta_->data(), *z_, *p_, rt);
   }
 
-  if (iterations_ == max_iter_) {
+  if (iterations_ == max_iter) {
     status = Status::ReachMaxIter;
   }
 

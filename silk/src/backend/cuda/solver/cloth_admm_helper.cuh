@@ -33,11 +33,12 @@ class ClothADMMHelper {
 
   void reset_aux_lagrange_mul(CudaRuntime rt);
 
-  void update_aux_var_and_lagrange_mul(const ClothAssemblyL1Cache& l1_cache,
-                                       ctd::span<const float> state,
-                                       CudaRuntime rt);
+  void update_aux_var_and_lagrange_mul(
+      float max_lagrange_mul, const assembly::ClothAssemblyL1Cache& l1_cache,
+      ctd::span<const float> state, CudaRuntime rt);
 
-  void solve_main_var(const ClothAssemblyL1Cache& l1_cache,
+  void solve_main_var(float rel_tol,
+                      const assembly::ClothAssemblyL1Cache& l1_cache,
                       ctd::span<const float> extern_lhs,
                       ctd::span<const float> extern_rhs,
                       ctd::span<const float> inertia_mod,
