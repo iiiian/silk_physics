@@ -2,51 +2,16 @@
 # Library config
 # -------------------------------------------------
 
-set(SILK_SOURCES
-    src/backend/cpu/collision/ccd.cpp
-    src/backend/cpu/collision/interval.cpp
-    src/backend/cpu/collision/interval_root_finder.cpp
-    src/backend/cpu/collision/narrowphase.cpp
-    src/backend/cpu/collision/object_collider.cpp
-    src/backend/cpu/collision/pipeline.cpp
-    src/backend/cpu/cpu_backend.cpp
-    src/backend/cpu/pin.cpp
-    src/backend/cpu/solver/cholmod_utils.cpp
-    src/backend/cpu/solver/cloth_solver_context.cpp
-    src/backend/cpu/solver/cloth_solver_utils.cpp
-    src/backend/cpu/solver/obstacle_solver_utils.cpp
-    src/backend/cpu/solver/pipeline.cpp
-    src/common/check_cuda_support.cpp
-    src/common/cloth_assembly_l2_cache.cpp
-    src/common/mesh.cpp
-    src/common/result.cpp
-    src/common/world.cpp
+file(GLOB_RECURSE SILK_SOURCES
+    include/*.hpp include/*.cpp
+    src/common/*.hpp src/common/*.cpp
+    src/ecs/*.hpp src/ecs/*.cpp
+    src/backend/cpu/*.hpp src/backend/cpu/*.cpp
 )
 
-set(SILK_CUDA_SOURCES
-    src/backend/cuda/assembly/cloth_assembler.cu
-    src/backend/cuda/assembly/cloth_assembly_l1_cache.cu
-    src/backend/cuda/assembly/obstacle_assembler.cu
-    src/backend/cuda/bsr_matrix.cu
-    src/backend/cuda/collision/ccd.cu
-    src/backend/cuda/collision/dcd.cu
-    src/backend/cuda/collision/find_collision.cu
-    src/backend/cuda/collision/narrowphase.cu
-    src/backend/cuda/collision/object_collider.cu
-    src/backend/cuda/cuda_backend.cu
-    src/backend/cuda/graph_partition.cpp
-    src/backend/cuda/main_loop.cu
-    src/backend/cuda/mesh_partition.cu
-    src/backend/cuda/pin.cpp
-    src/backend/cuda/physical_state.cu
-    src/backend/cuda/solver/barrier_constraints.cu
-    src/backend/cuda/solver/cloth_admm_helper.cu
-    src/backend/cuda/solver/equality_constraints.cu
-    src/backend/cuda/solver/inner_product.cu
-    src/backend/cuda/solver/mas_cg_solver.cu
-    src/backend/cuda/solver/mas_preconditioner.cu
-    src/backend/cuda/solver/pin_constraints.cu
-    src/backend/cuda/solver/svd.cu
+file(GLOB_RECURSE SILK_CUDA_SOURCES
+    src/backend/cuda/*.hpp src/backend/cuda/*.cpp
+    src/backend/cuda/*.cuh src/backend/cuda/*.cu
 )
 
 add_library(silk ${SILK_SOURCES})

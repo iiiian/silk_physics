@@ -6,6 +6,7 @@
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/ecs.hpp"
 #include "backend/cuda/pin.hpp"
+#include "common/initial_state.hpp"
 #include "common/mesh.hpp"
 
 namespace silk::cuda {
@@ -16,10 +17,18 @@ void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
 
   auto config = registry.get<CollisionConfigPlus>(e);
   auto mesh = registry.get<TriMesh>(e);
-  auto pin_position = registry.get<PinPosition>(e);
+  auto init_state = registry.get<InitialState>(e);
+  auto pin_index = registry.get<PinIndex>(e);
 
   // Obstacle entity sanity check.
-  assert(config && mesh && pin_position);
+  assert(config && mesh && init_state && pin_index);
+
+  auto pin_pos = registry.get<PinPosition>(e);
+  if (!pin_pos) {
+    std::span<const float> pos_span(init_state->position.data(),
+                                    init_state->position.size());
+    registry.set(e, PinPosition{*pin_index, pos_span});
+  }
 
   // Ensure collider exists and is up-to-date
   auto collider = registry.get<ObjectCollider>(e);

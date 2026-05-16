@@ -115,14 +115,14 @@ Result CudaBackend::add_cloth(ClothConfig cloth_config,
       return Result::error(ErrorCode::InvalidPin);
     }
   }
-  PinIndex pin_index{pin_index};
+  PinIndex pin{pin_index};
 
   uint32_t e = impl_->registry_.make_entity();
   impl_->registry_.set(e, std::move(cloth_config));
   impl_->registry_.set(e, std::move(collision_config));
   impl_->registry_.set(e, std::move(*tri_mesh));
   impl_->registry_.set(e, std::move(init_state));
-  impl_->registry_.set(e, std::move(pin_index));
+  impl_->registry_.set(e, std::move(pin));
 
   handle = e;
   return Result::ok();

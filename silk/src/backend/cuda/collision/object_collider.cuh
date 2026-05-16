@@ -9,6 +9,7 @@
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/pin.hpp"
 #include "common/config_plus.hpp"
+#include "common/initial_state.hpp"
 #include "common/mesh.hpp"
 
 namespace silk::cuda {
@@ -40,6 +41,7 @@ class ObjectCollider {
   /// @param[in] state_offset Object offset in global state.
   static ObjectCollider from_physical(const CollisionConfigPlus& config,
                                       const TriMesh& mesh, const PinIndex& pin,
+                                      const InitialState& init_state,
                                       const Eigen::VectorXf& mass,
                                       int state_offset, CudaRuntime rt);
 
@@ -48,7 +50,9 @@ class ObjectCollider {
   /// @param[in] config Collision config.
   /// @param[in] mesh Object mesh.
   static ObjectCollider from_obstacle(const CollisionConfigPlus& config,
-                                      const TriMesh& mesh, CudaRuntime rt);
+                                      const TriMesh& mesh,
+                                      const InitialState& init_state,
+                                      CudaRuntime rt);
 
   /// @brief Update collider collision config.
   void update_collision_config(const CollisionConfigPlus& config,

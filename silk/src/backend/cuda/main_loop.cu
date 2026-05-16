@@ -419,6 +419,16 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     cu::copy_bytes(rt.stream, local_vel, *phy_state.state_velocity);
   }
 
+  // Update pin position static status.
+  for (auto& pin : registry.get_all_components<PinPosition>()) {
+    pin.prev_position = pin.curr_position;
+    if (pin.is_static) {
+      pin.is_static_twice = true;
+    } else {
+      pin.is_static = true;
+    }
+  }
+
   return std::nullopt;
 }
 

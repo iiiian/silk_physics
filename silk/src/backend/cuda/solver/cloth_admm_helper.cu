@@ -301,14 +301,15 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
     ctd::span<const float> state, CudaRuntime rt) {
   int grid_num = div_round_up(l1_cache.face_num, 128);
   solve_and_update_elastic_aux<<<grid_num, 128, 0, rt.stream.get()>>>(
-      l1_cache.face_num, l1_cache.elastic_stiffness, l1_cache.penalty,
-      *l1_cache.faces, state, *l1_cache.weighted_jacobian_ops, *jacobians_,
-      *uy_, *y_);
+      l1_cache.face_num, max_lagrange_mul, l1_cache.elastic_stiffness,
+      l1_cache.penalty, *l1_cache.faces, state, *l1_cache.weighted_jacobian_ops,
+      *jacobians_, *uy_, *y_);
 
   solve_and_update_bending_aux(
-      l1_cache.vert_num, l1_cache.bending_stiffness, l1_cache.penalty, state,
-      l1_cache.weighted_laplacian_ops.view(), *l1_cache.C0, cusparse_handle_,
-      *cusparse_workspace_, *laplacians_, *uz_, *z_, rt);
+      l1_cache.vert_num, max_lagrange_mul, l1_cache.bending_stiffness,
+      l1_cache.penalty, state, l1_cache.weighted_laplacian_ops.view(),
+      *l1_cache.C0, cusparse_handle_, *cusparse_workspace_, *laplacians_, *uz_,
+      *z_, rt);
 }
 
 void ClothADMMHelper::solve_main_var(float rel_tol,

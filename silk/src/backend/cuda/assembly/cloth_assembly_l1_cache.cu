@@ -24,13 +24,6 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
 
   // Assemble H matrix.
   std::vector<Eigen::Triplet<float>> AA_triplets;
-  // Inertia term.
-  Eigen::VectorXf M = 1.0f / (dt * dt) * c.density * l2.mass;
-  for (int i = 0; i < M.size(); ++i) {
-    AA_triplets.emplace_back(3 * i, 3 * i, M(i));
-    AA_triplets.emplace_back(3 * i + 1, 3 * i + 1, M(i));
-    AA_triplets.emplace_back(3 * i + 2, 3 * i + 2, M(i));
-  }
   // Elastic term.
   append_triplets_from_sparse(l2.JWJ, 0, 0, c.elastic_stiffness, AA_triplets);
   // Bending term.

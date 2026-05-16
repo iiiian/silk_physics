@@ -116,6 +116,7 @@ std::vector<TriangleCollider> make_triangle_colliders(
 ObjectCollider ObjectCollider::from_physical(const CollisionConfigPlus& config,
                                              const TriMesh& mesh,
                                              const PinIndex& pin,
+                                             const InitialState& init_state,
                                              const Eigen::VectorXf& mass,
                                              int state_offset, CudaRuntime rt) {
   auto& c = config;
