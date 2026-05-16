@@ -10,6 +10,8 @@ static std::string error_to_string(ErrorCode error) {
   switch (error) {
     case ErrorCode::Unknown:
       return "Unknown";
+    case ErrorCode::NotInitialized:
+      return "NotInitialized";
     case ErrorCode::InvalidConfig:
       return "InvalidConfig";
     case ErrorCode::TooManyBody:

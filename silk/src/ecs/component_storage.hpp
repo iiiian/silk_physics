@@ -64,8 +64,8 @@ class ComponentStorage {
     size_t idx = map_.at(entity);
     // component is at the back, remove directly.
     if (idx == data_.size() - 1) {
-      data_.resize(idx);
-      inv_map_.resize(idx);
+      data_.pop_back();
+      inv_map_.pop_back();
       map_.erase(entity);
     }
     // swap then remove.
@@ -73,9 +73,8 @@ class ComponentStorage {
       std::swap(data_[idx], data_.back());
       std::swap(inv_map_[idx], inv_map_.back());
       map_.at(inv_map_[idx]) = idx;
-      size_t new_size = data_.size() - 1;
-      data_.resize(new_size);
-      inv_map_.resize(new_size);
+      data_.pop_back();
+      inv_map_.pop_back();
       map_.erase(entity);
     }
 
