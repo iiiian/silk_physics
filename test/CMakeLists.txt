@@ -25,19 +25,6 @@ target_compile_definitions(
 )
 
 add_executable(
-    manager_test
-    manager_test.cpp
-)
-target_include_directories(
-    manager_test
-    PRIVATE ${SILK_DIR}
-)
-target_link_libraries(
-    manager_test
-    PRIVATE Catch2::Catch2WithMain
-)
-
-add_executable(
     sap_kd_tree_test
     sap_kd_tree_test.cpp
     collision_broadphase_test_utils.cpp
@@ -130,7 +117,6 @@ include(CTest)
 include(Catch)
 
 set(SILK_TEST_TARGETS
-    manager_test
     sap_test
     sap_kd_tree_test
     sap_benchmark

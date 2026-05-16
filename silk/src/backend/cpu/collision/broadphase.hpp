@@ -63,6 +63,12 @@ int sap_optimal_axis(std::span<const C> colliders, const int* proxies,
 }
 
 template <typename C>
+int sap_optimal_axis(const std::vector<C>& colliders, const int* proxies,
+                     int proxy_num) {
+  return sap_optimal_axis(std::span<const C>(colliders), proxies, proxy_num);
+}
+
+template <typename C>
 /// Select SAP axis considering two groups (bipartite), pooling variance.
 int sap_optimal_axis(std::span<const C> colliders_a, const int* proxies_a,
                      int proxy_num_a, std::span<const C> colliders_b,
@@ -86,6 +92,15 @@ int sap_optimal_axis(std::span<const C> colliders_a, const int* proxies_a,
 }
 
 template <typename C>
+int sap_optimal_axis(const std::vector<C>& colliders_a, const int* proxies_a,
+                     int proxy_num_a, const std::vector<C>& colliders_b,
+                     const int* proxies_b, int proxy_num_b) {
+  return sap_optimal_axis(std::span<const C>(colliders_a), proxies_a,
+                          proxy_num_a, std::span<const C>(colliders_b),
+                          proxies_b, proxy_num_b);
+}
+
+template <typename C>
 /// Sort proxies in-place by AABB min on `axis` for SAP.
 void sap_sort_proxies(std::span<const C> colliders, int* proxies, int proxy_num,
                       int axis) {
@@ -95,6 +110,12 @@ void sap_sort_proxies(std::span<const C> colliders, int* proxies, int proxy_num,
     return (colliders[a].bbox.min(axis) < colliders[b].bbox.min(axis));
   };
   pdqsort_branchless(proxies, proxies + proxy_num, comp);
+}
+
+template <typename C>
+void sap_sort_proxies(const std::vector<C>& colliders, int* proxies,
+                      int proxy_num, int axis) {
+  sap_sort_proxies(std::span<const C>(colliders), proxies, proxy_num, axis);
 }
 
 /// Sweep one object against a sorted list on `axis`.
@@ -147,6 +168,15 @@ void sap_sorted_group_self_collision(std::span<C> colliders, const int* proxies,
 }
 
 template <typename C, typename FilterT>
+void sap_sorted_group_self_collision(std::vector<C>& colliders,
+                                     const int* proxies, int proxy_num,
+                                     int axis, const FilterT& filter,
+                                     CollisionCache<C>& cache) {
+  sap_sorted_group_self_collision(std::span<C>(colliders), proxies, proxy_num,
+                                  axis, filter, cache);
+}
+
+template <typename C, typename FilterT>
 /// Bipartite SAP between two sorted groups.
 void sap_sorted_group_group_collision(std::span<C> colliders_a,
                                       const int* proxies_a, int proxy_num_a,
@@ -175,6 +205,19 @@ void sap_sorted_group_group_collision(std::span<C> colliders_a,
       ++b;
     }
   }
+}
+
+template <typename C, typename FilterT>
+void sap_sorted_group_group_collision(std::vector<C>& colliders_a,
+                                      const int* proxies_a, int proxy_num_a,
+                                      std::vector<C>& colliders_b,
+                                      const int* proxies_b, int proxy_num_b,
+                                      int axis, const FilterT& filter,
+                                      CollisionCache<C>& cache) {
+  sap_sorted_group_group_collision(std::span<C>(colliders_a), proxies_a,
+                                   proxy_num_a, std::span<C>(colliders_b),
+                                   proxies_b, proxy_num_b, axis, filter,
+                                   cache);
 }
 
 /// Node of the broad-phase KD-tree.
