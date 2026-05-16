@@ -1,8 +1,7 @@
 #pragma once
 
-#include <cstdint>
-
 #include <Eigen/Core>
+#include <cstdint>
 
 #include "backend/cpu/collision/bbox.hpp"
 #include "backend/cpu/collision/broadphase.hpp"
@@ -41,7 +40,8 @@ class ObjectCollider {
   /// @param config Collision parameters that control filtering and materials.
   /// @param mesh Geometry source; positions are copied into collider buffers.
   /// @param pin Pin data identifying vertices that should not move.
-  /// @param mass Per-degree-of-freedom mass vector used to compute inverse mass.
+  /// @param mass Per-degree-of-freedom mass vector used to compute inverse
+  /// mass.
   /// @param state_offset Offset into the solver state array for this object.
   ObjectCollider(uint32_t entity, const CollisionConfig& config,
                  const TriMesh& mesh, const Pin& pin,
@@ -57,7 +57,8 @@ class ObjectCollider {
 
   /// @brief Sync collider geometry with a dynamic object's current state.
   ///
-  /// @param config Runtime collision controls (group toggles, restitution, etc).
+  /// @param config Runtime collision controls (group toggles, restitution,
+  /// etc).
   /// @param object_state Layout information for slicing into the global state.
   /// @param global_curr_state Stacked xyz positions at the end of the step.
   /// @param global_prev_state Stacked xyz positions at the start of the step.
@@ -67,7 +68,8 @@ class ObjectCollider {
 
   /// @brief Sync collider geometry with a kinematic obstacle.
   ///
-  /// @param config Runtime collision controls (group toggles, restitution, etc).
+  /// @param config Runtime collision controls (group toggles, restitution,
+  /// etc).
   /// @param obstacle_position Buffered obstacle poses and static state flags.
   void update(const CollisionConfig& config,
               const ObstaclePosition& obstacle_position);

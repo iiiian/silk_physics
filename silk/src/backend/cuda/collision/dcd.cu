@@ -1,8 +1,9 @@
+#include "backend/cuda/collision/dcd.cuh"
+
 #include <cuda/std/algorithm>
 #include <cuda/std/optional>
 #include <cuda/std/utility>
 
-#include "backend/cuda/collision/dcd.cuh"
 #include "backend/cuda/simple_linalg.cuh"
 
 namespace silk::cuda::collision {

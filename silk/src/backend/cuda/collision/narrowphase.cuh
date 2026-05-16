@@ -16,7 +16,8 @@ namespace silk::cuda::collision {
 /// @param fill The actual size of out buffer. 0 -> empty, out.size() -> full.
 /// @param rt Cuda runtime.
 void pt_narrowphase(ctd::span<PTCCache> pt_ccache,
-                    cu::device_buffer<Collision>& out, int& fill, CudaRuntime rt);
+                    cu::device_buffer<Collision>& out, int& fill,
+                    CudaRuntime rt);
 
 /// @brief Batch edge edge narrowphase.
 /// @param pt_ccache Candidate pairs.
@@ -24,6 +25,7 @@ void pt_narrowphase(ctd::span<PTCCache> pt_ccache,
 /// @param fill The actual size of out buffer. 0 -> empty, out.size() -> full.
 /// @param rt Cuda runtime.
 void ee_narrowphase(ctd::span<EECCache> ee_ccache,
-                    cu::device_buffer<Collision>& out, int& fill, CudaRuntime rt);
+                    cu::device_buffer<Collision>& out, int& fill,
+                    CudaRuntime rt);
 
 }  // namespace silk::cuda::collision

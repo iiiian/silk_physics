@@ -10,8 +10,8 @@ namespace silk::cpu {
 
 /// Compute the earliest narrow-phase collision between two mesh collider
 /// pairs over the interval [0, dt]. Uses Tight Inclusion CCD to assemble a
-/// Collision with time of impact, per-vertex impulse weights, and post-collision
-/// velocity deltas.
+/// Collision with time of impact, per-vertex impulse weights, and
+/// post-collision velocity deltas.
 ///
 /// @param oa Object collider for A.
 /// @param ma Mesh collider for A.

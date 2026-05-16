@@ -35,7 +35,8 @@ struct CCDResult {
 /// @param[in] ms Minimum separation distance for CCD.
 /// @param[in] tolerance Distance tolerance used to bound co-domain (typ. 1e-6).
 /// @param[in] max_itr Max bisection iterations; -1 disables early stop.
-/// @param[in] no_zero_toi If true, refines to avoid returning t=0 when possible.
+/// @param[in] no_zero_toi If true, refines to avoid returning t=0 when
+/// possible.
 /// @return Populated CCDResult on collision; std::nullopt otherwise.
 std::optional<CCDResult> edge_edge_ccd(
     const Eigen::Vector3f &ea0_t0, const Eigen::Vector3f &ea1_t0,
@@ -62,7 +63,8 @@ std::optional<CCDResult> edge_edge_ccd(
 /// @param[in] ms Minimum separation distance for CCD.
 /// @param[in] tolerance Distance tolerance used to bound co-domain (typ. 1e-6).
 /// @param[in] max_itr Max bisection iterations; -1 disables early stop.
-/// @param[in] no_zero_toi If true, refines to avoid returning t=0 when possible.
+/// @param[in] no_zero_toi If true, refines to avoid returning t=0 when
+/// possible.
 /// @return Populated CCDResult on collision; std::nullopt otherwise.
 std::optional<CCDResult> vertex_face_ccd(
     const Eigen::Vector3f &v_t0, const Eigen::Vector3f &f0_t0,

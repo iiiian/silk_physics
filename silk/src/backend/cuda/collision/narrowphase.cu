@@ -1,3 +1,5 @@
+#include "backend/cuda/collision/narrowphase.cuh"
+
 #include <cuda/atomic>
 #include <cuda/buffer>
 #include <cuda/std/span>
@@ -6,7 +8,6 @@
 #include "backend/cuda/collision/ccd.cuh"
 #include "backend/cuda/collision/collision.cuh"
 #include "backend/cuda/collision/mesh_collider.cuh"
-#include "backend/cuda/collision/narrowphase.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 
 namespace silk::cuda::collision {

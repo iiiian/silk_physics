@@ -124,8 +124,8 @@ void sap_sort_proxies(const std::vector<C>& colliders, int* proxies,
 /// return pair [b, a] instead of [a, b].
 template <typename C, bool flip = false, typename FilterT>
 void sap_sorted_collision(C& ca, std::span<C> colliders_b, const int* proxies_b,
-                          int proxy_num_b, int axis,
-                          const FilterT& filter, CollisionCache<C>& cache) {
+                          int proxy_num_b, int axis, const FilterT& filter,
+                          CollisionCache<C>& cache) {
   assert((proxy_num_b != 0));
 
   for (int i = 0; i < proxy_num_b; ++i) {
@@ -216,8 +216,7 @@ void sap_sorted_group_group_collision(std::vector<C>& colliders_a,
                                       CollisionCache<C>& cache) {
   sap_sorted_group_group_collision(std::span<C>(colliders_a), proxies_a,
                                    proxy_num_a, std::span<C>(colliders_b),
-                                   proxies_b, proxy_num_b, axis, filter,
-                                   cache);
+                                   proxies_b, proxy_num_b, axis, filter, cache);
 }
 
 /// Node of the broad-phase KD-tree.
@@ -1043,8 +1042,8 @@ class KDTree {
 
       auto task_func = [colliders, proxy_start, proxy_num, axis, &filter,
                         &cache]() {
-        sap_sorted_group_self_collision(colliders, proxy_start, proxy_num,
-                                        axis, filter, cache.local());
+        sap_sorted_group_self_collision(colliders, proxy_start, proxy_num, axis,
+                                        filter, cache.local());
       };
       task_group.run(task_func);
     } else {
@@ -1064,8 +1063,8 @@ class KDTree {
 
       auto task_func = [colliders, proxy_start, proxy_num, axis, &filter,
                         ext = std::move(ext_copy), ext_num, &cache]() {
-        sap_sorted_group_self_collision(colliders, proxy_start, proxy_num,
-                                        axis, filter, cache.local());
+        sap_sorted_group_self_collision(colliders, proxy_start, proxy_num, axis,
+                                        filter, cache.local());
         sap_sorted_group_group_collision(colliders, proxy_start, proxy_num,
                                          colliders, ext.data(), ext_num, axis,
                                          filter, cache.local());

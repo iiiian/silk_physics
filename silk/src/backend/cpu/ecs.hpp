@@ -16,9 +16,9 @@ class ObjectCollider;
 struct ObjectState;
 struct ObstaclePosition;
 
-using Registry = ::silk::ecs::Registry<ClothConfig, CollisionConfig, TriMesh,
-                                       Pin, ClothAssemblyL2Cache,
-                                       ClothSolverContext, ObjectState,
-                                       ObstaclePosition, ObjectCollider>;
+using Registry =
+    ::silk::ecs::Registry<ClothConfig, CollisionConfig, TriMesh, Pin,
+                          ClothAssemblyL2Cache, ClothSolverContext, ObjectState,
+                          ObstaclePosition, ObjectCollider>;
 
 }  // namespace silk::cpu

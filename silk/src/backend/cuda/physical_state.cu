@@ -1,3 +1,5 @@
+#include "backend/cuda/physical_state.cuh"
+
 #include <cuda_runtime_api.h>
 
 #include <cassert>
@@ -6,7 +8,6 @@
 
 #include "backend/cuda/collision/bbox.cuh"
 #include "backend/cuda/collision/broadphase.cuh"
-#include "backend/cuda/physical_state.cuh"
 // #include "backend/cuda/copy_vector_like.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "common/mesh.hpp"

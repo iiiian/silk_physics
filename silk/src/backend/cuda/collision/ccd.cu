@@ -1,9 +1,10 @@
+#include "backend/cuda/collision/ccd.cuh"
+
 #include <cassert>
 #include <cuda/std/algorithm>
 #include <cuda/std/cmath>
 #include <cuda/std/numeric>
 
-#include "backend/cuda/collision/ccd.cuh"
 #include "backend/cuda/collision/dcd.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/simple_linalg.cuh"

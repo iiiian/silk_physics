@@ -94,9 +94,8 @@ bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt,
 
   auto collider = registry.get<ObjectCollider>(e);
   if (!collider) {
-    auto new_collider =
-        ObjectCollider(e, *collision_config, *mesh, *pin, context->mass,
-                       state_offset);
+    auto new_collider = ObjectCollider(e, *collision_config, *mesh, *pin,
+                                       context->mass, state_offset);
     collider = registry.set(e, std::move(new_collider));
   } else {
     collider->state_offset = state_offset;

@@ -1,8 +1,7 @@
 #pragma once
 
-#include <cstdint>
-
 #include <Eigen/Core>
+#include <cstdint>
 
 namespace silk::cpu {
 

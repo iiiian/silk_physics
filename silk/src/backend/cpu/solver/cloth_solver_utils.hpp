@@ -1,8 +1,7 @@
 #pragma once
 
-#include <cstdint>
-
 #include <Eigen/Core>
+#include <cstdint>
 
 #include "backend/cpu/ecs.hpp"
 #include "backend/cpu/solver/barrier_constrain.hpp"

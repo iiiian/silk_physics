@@ -1,11 +1,11 @@
+#include "backend/cuda/inner_product.cuh"
+
 #include <cassert>
 #include <cub/cub.cuh>
 #include <cuda/algorithm>
 #include <cuda/atomic>
 #include <cuda/buffer>
 #include <cuda/std/span>
-
-#include "backend/cuda/inner_product.cuh"
 
 namespace silk::cuda {
 
