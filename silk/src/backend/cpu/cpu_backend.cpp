@@ -18,27 +18,6 @@
 
 namespace silk::cpu {
 
-namespace {
-
-Pin make_pin(std::span<const int> pin_index, const TriMesh& mesh) {
-  Pin p;
-  p.is_static = true;
-  p.is_static_twice = true;
-  p.is_all_pinned = false;
-  if (!pin_index.empty()) {
-    p.index =
-        Eigen::Map<const Eigen::VectorXi>(pin_index.data(), pin_index.size());
-    p.curr_position.resize(3 * p.index.size());
-    for (int i = 0; i < p.index.size(); ++i) {
-      p.curr_position(Eigen::seqN(3 * i, 3)) = mesh.V.row(p.index(i));
-    }
-    p.prev_position = p.curr_position;
-  }
-  return p;
-}
-
-}  // namespace
-
 struct CpuBackend::Impl {
   Registry registry_;
   SolverPipeline solver_pipeline_;
@@ -80,7 +59,15 @@ Result CpuBackend::add_cloth(ClothConfig cloth_config,
     return Result::error(ErrorCode::InvalidMesh);
   }
 
-  Pin p = make_pin(pin_index, *tri_mesh);
+  if (pin_index.size() > tri_mesh->V.rows()) {
+    return Result::error(ErrorCode::InvalidPin);
+  }
+  for (int i : pin_index) {
+    if (i < 0 || i >= tri_mesh->V.rows()) {
+      return Result::error(ErrorCode::InvalidPin);
+    }
+  }
+  Pin p{pin_index, tri_mesh->V};
 
   uint32_t e = impl_->registry_.make_entity();
   if (e == 0) {
@@ -116,7 +103,7 @@ Result CpuBackend::get_cloth_position(uint32_t handle,
   auto obj_state = impl_->registry_.get<ObjectState>(handle);
   if (obj_state) {
     if ((int)position.size() < obj_state->state_num) {
-      return Result::error(ErrorCode::IncorrectPositionNum);
+      return Result::error(ErrorCode::InvalidPosition);
     }
     memcpy(position.data(), obj_state->curr_state.data(),
            obj_state->state_num * sizeof(float));
@@ -126,7 +113,7 @@ Result CpuBackend::get_cloth_position(uint32_t handle,
   if (mesh) {
     int state_num = 3 * mesh->V.rows();
     if ((int)position.size() != state_num) {
-      return Result::error(ErrorCode::IncorrectPositionNum);
+      return Result::error(ErrorCode::InvalidPosition);
     }
     memcpy(position.data(), mesh->V.data(), state_num * sizeof(float));
     return Result::ok();
@@ -174,9 +161,13 @@ Result CpuBackend::set_cloth_pin_index(uint32_t handle,
   }
   auto tri_mesh = impl_->registry_.get<TriMesh>(handle);
   assert(tri_mesh);
-  auto pin = impl_->registry_.get<Pin>(handle);
-  assert(pin);
-  *pin = make_pin(pin_index, *tri_mesh);
+  for (int i : pin_index) {
+    if (i < 0 || i >= tri_mesh->V.rows()) {
+      return Result::error(ErrorCode::InvalidPin);
+    }
+  }
+
+  impl_->registry_.set(handle, Pin{pin_index, tri_mesh->V});
   impl_->registry_.remove<ClothSolverContext>(handle);
   impl_->registry_.remove<ObjectCollider>(handle);
   return Result::ok();
@@ -193,8 +184,8 @@ Result CpuBackend::set_cloth_pin_position(uint32_t handle,
   }
   auto pin = impl_->registry_.get<Pin>(handle);
   assert(pin);
-  if (3 * pin->index.size() != (int)position.size()) {
-    return Result::error(ErrorCode::IncorrectPinNum);
+  if (3 * pin->index.size() != position.size()) {
+    return Result::error(ErrorCode::InvalidPin);
   }
   pin->prev_position = pin->curr_position;
   if (position.empty()) {
@@ -269,7 +260,7 @@ Result CpuBackend::set_obstacle_position(uint32_t handle,
     return Result::error(ErrorCode::InvalidHandle);
   }
   if (pos->curr_position.size() != (int)position.size()) {
-    return Result::error(ErrorCode::IncorrectPositionNum);
+    return Result::error(ErrorCode::InvalidPosition);
   }
   pos->is_static = false;
   pos->is_static_twice = false;

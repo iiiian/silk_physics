@@ -20,10 +20,10 @@ static std::string error_to_string(ErrorCode error) {
       return "InvalidHandle";
     case ErrorCode::InvalidMesh:
       return "InvalidMesh";
-    case ErrorCode::IncorrectPinNum:
-      return "IncorrectPinNum";
-    case ErrorCode::IncorrectPositionNum:
-      return "IncorrectPositionNum";
+    case ErrorCode::InvalidPin:
+      return "InvalidPin";
+    case ErrorCode::InvalidPosition:
+      return "InvalidPosition";
     case ErrorCode::CholeskyDecompositionFail:
       return "CholeskyDecompositionFail";
     case ErrorCode::NeedInitSolverFirst:
