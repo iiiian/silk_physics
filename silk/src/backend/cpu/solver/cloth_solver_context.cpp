@@ -44,14 +44,13 @@ std::optional<ClothSolverContext> ClothSolverContext::make_cloth_solver_context(
   }
   Eigen::SparseMatrix<float> H{state_num, state_num};
   H.setFromTriplets(H_triplets.begin(), H_triplets.end());
-  auto H_view = cholmod_raii::make_cholmod_sparse_view(H, Symmetry::Upper);
-  cholmod_raii::CholmodFactor L =
-      cholmod_analyze(&H_view, cholmod_raii::common);
+  auto H_view = make_cholmod_sparse_view(H, Symmetry::Upper);
+  CholmodFactor L = cholmod_analyze(&H_view, common);
   if (L.is_empty()) {
     SPDLOG_DEBUG("cholmod analyze fail");
     return std::nullopt;
   }
-  if (!cholmod_factorize(&H_view, L, cholmod_raii::common)) {
+  if (!cholmod_factorize(&H_view, L, common)) {
     SPDLOG_DEBUG("cholmod factorize fail");
     return std::nullopt;
   }

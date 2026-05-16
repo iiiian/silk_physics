@@ -17,7 +17,7 @@
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/simple_linalg.cuh"
 
-namespace silk::cuda::collision {
+namespace silk::cuda {
 
 template <typename X, typename Y>
 using CollisionCache = cu::device_buffer<ctd::pair<const X*, const Y*>>;
@@ -518,7 +518,8 @@ OIBVHTree<C>::OIBVHTree(const Bbox& root_bbox, cu::device_buffer<C> colliders,
 
   // Make unsorted morton codes.
   auto unsorted_mortons = alloc<uint64_t>(rt, collider_num);
-  update_collider_morton_codes<C>(root_bbox, colliders, unsorted_mortons, rt);
+  detail::update_collider_morton_codes<C>(root_bbox, colliders,
+                                          unsorted_mortons, rt);
 
   // Radix sort id based on morton code.
   auto sorted_mortons = alloc<uint64_t>(rt, collider_num);
@@ -594,8 +595,8 @@ void OIBVHTree<C>::update(const Bbox& root_bbox, CudaRuntime rt) {
     return;
   }
 
-  update_collider_morton_codes<C>(root_bbox, *colliders_, *unsorted_mortons_,
-                                  rt);
+  detail::update_collider_morton_codes<C>(root_bbox, *colliders_,
+                                          *unsorted_mortons_, rt);
   size_t radix_temp_size = radix_temp_->size();
   cub::DeviceRadixSort::SortPairs(
       radix_temp_->data(), radix_temp_size, unsorted_mortons_->data(),
@@ -681,4 +682,4 @@ void OIBVHTree<X>::test_ext_collision(ctd::span<const Y> colliders,
   }
 }
 
-}  // namespace silk::cuda::collision
+}  // namespace silk::cuda

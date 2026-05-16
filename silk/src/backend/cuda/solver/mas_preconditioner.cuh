@@ -5,7 +5,7 @@
 #include "backend/cuda/bsr_matrix.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 
-namespace silk::cuda::solver {
+namespace silk::cuda {
 
 // Our bank size is 32, so 4 coarse levels should cover 1M x 1M BSR matrix.
 constexpr int MAS_MAX_COARSE_LEVEL = 4;
@@ -91,4 +91,4 @@ class MASPreconditioner {
   CoarseVectors coarse_vectors_;
 };
 
-}  // namespace silk::cuda::solver
+}  // namespace silk::cuda

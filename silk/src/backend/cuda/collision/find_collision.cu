@@ -8,7 +8,7 @@
 #include "backend/cuda/collision/object_collider.cuh"
 #include "backend/cuda/ecs.hpp"
 
-namespace silk::cuda::collision {
+namespace silk::cuda {
 
 __both__ bool object_collision_filter(const ObjectCollider& a,
                                       const ObjectCollider& b) {
@@ -64,17 +64,16 @@ int find_collision(ObjRegistry& registry, float dt,
   // 3. Narrowphase using continuous collision detection on GPU.
 
   // State 1. Object level broadphase on CPU.
-  namespace cpu = ::silk::cpu;
-  cpu::CollisionCache<ObjectCollider> object_ccache;
+  ::silk::cpu::CollisionCache<ObjectCollider> object_ccache;
   std::vector<int> object_proxies(object_colliders.size());
   for (int i = 0; i < object_colliders.size(); ++i) {
     object_proxies[i] = i;
   }
-  int axis = cpu::sap_optimal_axis<ObjectCollider>(
+  int axis = ::silk::cpu::sap_optimal_axis<ObjectCollider>(
       object_colliders, object_proxies.data(), object_proxies.size());
-  cpu::sap_sort_proxies<ObjectCollider>(object_colliders, object_proxies.data(),
-                                        object_proxies.size(), axis);
-  cpu::sap_sorted_group_self_collision<ObjectCollider>(
+  ::silk::cpu::sap_sort_proxies<ObjectCollider>(
+      object_colliders, object_proxies.data(), object_proxies.size(), axis);
+  ::silk::cpu::sap_sorted_group_self_collision<ObjectCollider>(
       object_colliders, object_proxies.data(), object_proxies.size(), axis,
       object_collision_filter, object_ccache);
 
@@ -145,4 +144,4 @@ int find_collision(ObjRegistry& registry, float dt,
   return collision_fill;
 }
 
-}  // namespace silk::cuda::collision
+}  // namespace silk::cuda

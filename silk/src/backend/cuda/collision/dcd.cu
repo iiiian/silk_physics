@@ -6,7 +6,7 @@
 
 #include "backend/cuda/simple_linalg.cuh"
 
-namespace silk::cuda::collision {
+namespace silk::cuda {
 
 __both__ ctd::optional<ctd::pair<float, float>> exact_pt_uv(const Vec3f& x0,
                                                             const Vec3f& x1,
@@ -84,4 +84,4 @@ __both__ ctd::optional<ctd::pair<float, float>> exact_ee_uv(const Vec3f& x0,
   }
 }
 
-}  // namespace silk::cuda::collision
+}  // namespace silk::cuda

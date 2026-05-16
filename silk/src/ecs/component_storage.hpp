@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-namespace silk::ecs {
+namespace silk {
 
 template <typename T>
 class ComponentStorage {
@@ -88,4 +88,4 @@ class ComponentStorage {
   std::span<const T> data() const { return data_; }
 };
 
-}  // namespace silk::ecs
+}  // namespace silk

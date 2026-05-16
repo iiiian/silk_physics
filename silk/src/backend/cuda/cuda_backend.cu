@@ -17,8 +17,8 @@
 #include "backend/cuda/ecs.hpp"
 #include "backend/cuda/main_loop.cuh"
 #include "backend/cuda/mesh_partition.cuh"
-#include "backend/cuda/pin.hpp"
 #include "backend/cuda/physical_state.cuh"
+#include "backend/cuda/pin.hpp"
 #include "backend/cuda/solver/cloth_admm_helper.cuh"
 #include "common/cloth_assembly_l2_cache.hpp"
 #include "common/config_plus.hpp"
@@ -81,9 +81,9 @@ Result CudaBackend::solver_step() {
 Result CudaBackend::solver_reset() {
   impl_->registry_.remove_all_components<ClothAssemblyL2Cache>();
   impl_->registry_.remove_all_components<PhysicalState>();
-  impl_->registry_.remove_all_components<collision::ObjectCollider>();
-  impl_->registry_.remove_all_components<assembly::ClothAssemblyL1Cache>();
-  impl_->registry_.remove_all_components<solver::ClothADMMHelper>();
+  impl_->registry_.remove_all_components<ObjectCollider>();
+  impl_->registry_.remove_all_components<ClothAssemblyL1Cache>();
+  impl_->registry_.remove_all_components<ClothADMMHelper>();
 
   return Result::ok();
 }
@@ -182,10 +182,10 @@ Result CudaBackend::set_cloth_config(uint32_t handle, ClothConfig config) {
   }
 
   *cloth_config = config;
-  impl_->registry_.remove<collision::ObjectCollider>(handle);
+  impl_->registry_.remove<ObjectCollider>(handle);
   impl_->registry_.remove<ClothAssemblyL2Cache>(handle);
-  impl_->registry_.remove<assembly::ClothAssemblyL1Cache>(handle);
-  impl_->registry_.remove<solver::ClothADMMHelper>(handle);
+  impl_->registry_.remove<ClothAssemblyL1Cache>(handle);
+  impl_->registry_.remove<ClothADMMHelper>(handle);
   return Result::ok();
 }
 
@@ -227,8 +227,8 @@ Result CudaBackend::set_cloth_pin_index(uint32_t handle,
   PinPosition pin_position{pin, tri_mesh->V};
   impl_->registry_.set(handle, std::move(pin));
   impl_->registry_.set(handle, std::move(pin_position));
-  impl_->registry_.remove<assembly::ClothAssemblyL1Cache>(handle);
-  impl_->registry_.remove<collision::ObjectCollider>(handle);
+  impl_->registry_.remove<ClothAssemblyL1Cache>(handle);
+  impl_->registry_.remove<ObjectCollider>(handle);
   return Result::ok();
 }
 

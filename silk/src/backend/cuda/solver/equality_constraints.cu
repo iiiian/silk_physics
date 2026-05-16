@@ -6,7 +6,7 @@
 
 #include "backend/cuda/cuda_utils.cuh"
 
-namespace silk::cuda::solver {
+namespace silk::cuda {
 
 namespace {
 
@@ -109,4 +109,4 @@ void EqualityConstraints::enforce(ctd::span<float> state, CudaRuntime rt) {
                                                         state);
 }
 
-}  // namespace silk::cuda::solver
+}  // namespace silk::cuda

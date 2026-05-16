@@ -5,7 +5,7 @@
 
 #include "backend/cuda/cuda_utils.cuh"
 
-namespace silk::cuda::solver {
+namespace silk::cuda {
 
 class EqualityConstraints {
  private:
@@ -49,4 +49,4 @@ class EqualityConstraints {
   void enforce(ctd::span<float> state, CudaRuntime rt);
 };
 
-}  // namespace silk::cuda::solver
+}  // namespace silk::cuda

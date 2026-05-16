@@ -3,8 +3,8 @@
 #include <Eigen/Core>
 #include <optional>
 
-#include "backend/cpu/solver/cholmod_utils.hpp"
 #include "backend/cpu/pin.hpp"
+#include "backend/cpu/solver/cholmod_utils.hpp"
 #include "common/cloth_assembly_l2_cache.hpp"
 #include "silk/silk.hpp"
 
@@ -30,10 +30,10 @@ class ClothSolverContext {
   Eigen::SparseMatrix<float> H;
 
   // Cholesky factorization of H produced via CHOLMOD.
-  cholmod_raii::CholmodFactor L;
+  CholmodFactor L;
 
   // Updated factorization to account for barrier constraints.
-  cholmod_raii::CholmodFactor LB;
+  CholmodFactor LB;
 
   // Weighted rest-curvature vector (state_num x 1).
   Eigen::VectorXf C0;

@@ -15,7 +15,7 @@
 
 #include "common/symmetry.hpp"
 
-namespace silk::cpu::cholmod_raii {
+namespace silk::cpu {
 
 /// RAII wrapper for cholmod_common context object.
 ///
@@ -210,4 +210,4 @@ cholmod_dense make_cholmod_dense_view(Eigen::DenseBase<Derived>& M) {
 /// @return Eigen::Map view of the CHOLMOD vector data
 Eigen::Map<Eigen::VectorXf> make_eigen_dense_vector_view(cholmod_dense* v);
 
-}  // namespace silk::cpu::cholmod_raii
+}  // namespace silk::cpu

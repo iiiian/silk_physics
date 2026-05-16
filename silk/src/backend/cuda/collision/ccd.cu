@@ -9,7 +9,7 @@
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/simple_linalg.cuh"
 
-namespace silk::cuda::collision {
+namespace silk::cuda {
 
 class CubicPoly {
  public:
@@ -320,4 +320,4 @@ __device__ ctd::optional<Collision> ee_ccd(
   }
 }
 
-}  // namespace silk::cuda::collision
+}  // namespace silk::cuda

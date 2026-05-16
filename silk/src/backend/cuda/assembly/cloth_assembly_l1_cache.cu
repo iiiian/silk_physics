@@ -9,7 +9,7 @@
 #include "common/logger.hpp"
 #include "silk/silk.hpp"
 
-namespace silk::cuda::assembly {
+namespace silk::cuda {
 
 ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
                                            const MeshPartition& partition,
@@ -76,4 +76,4 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
       vec_like_to_device<int>(partition.h_partition_offsets, rt);
 }
 
-}  // namespace silk::cuda::assembly
+}  // namespace silk::cuda

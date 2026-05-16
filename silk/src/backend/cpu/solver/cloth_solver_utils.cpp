@@ -178,19 +178,19 @@ bool compute_cloth_outer_loop(
 
   // Update Cholesky factorization using CHOLMOD up/down.
   C = C.cwiseSqrt();
-  cholmod_sparse C_view = cholmod_raii::make_cholmod_sparse_view(C);
+  cholmod_sparse C_view = make_cholmod_sparse_view(C);
 
   // Permute C according to L.Perm as suggested by CHOLMOD for up/down updates.
   int32_t* rset = static_cast<int32_t*>(s.L.raw()->Perm);
   int64_t rset_num = static_cast<int64_t>(s.L.raw()->n);
-  cholmod_raii::CholmodSparse C_perm = cholmod_submatrix(
-      &C_view, rset, rset_num, nullptr, -1, 1, 1, cholmod_raii::common);
+  CholmodSparse C_perm =
+      cholmod_submatrix(&C_view, rset, rset_num, nullptr, -1, 1, 1, common);
   if (C_perm.is_empty()) {
     return false;
   }
 
   s.LB = s.L;
-  if (!cholmod_updown(1, C_perm, s.LB, cholmod_raii::common)) {
+  if (!cholmod_updown(1, C_perm, s.LB, common)) {
     return false;
   }
 
@@ -279,16 +279,16 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
   }
 
   // Global solve with (optionally barrier‑updated) Cholesky factorization.
-  cholmod_dense rhs_view = cholmod_raii::make_cholmod_dense_view(rhs);
+  cholmod_dense rhs_view = make_cholmod_dense_view(rhs);
   auto& L = (s.has_barrier_constrain) ? s.LB : s.L;
 
-  cholmod_raii::CholmodDense cholmod_solution =
-      cholmod_solve(CHOLMOD_A, L, &rhs_view, cholmod_raii::common);
+  CholmodDense cholmod_solution =
+      cholmod_solve(CHOLMOD_A, L, &rhs_view, common);
   if (cholmod_solution.is_empty()) {
     return false;
   }
 
-  solution = cholmod_raii::make_eigen_dense_vector_view(cholmod_solution);
+  solution = make_eigen_dense_vector_view(cholmod_solution);
 
   return true;
 }

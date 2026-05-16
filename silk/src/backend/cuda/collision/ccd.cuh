@@ -6,7 +6,7 @@
 #include "backend/cuda/collision/collision.cuh"
 #include "backend/cuda/collision/mesh_collider.cuh"
 
-namespace silk::cuda::collision {
+namespace silk::cuda {
 
 __device__ ctd::optional<Collision> pt_ccd(
     const PointCollider* point_collider,
@@ -15,4 +15,4 @@ __device__ ctd::optional<Collision> pt_ccd(
 __device__ ctd::optional<Collision> ee_ccd(const EdgeCollider* edge_collider_a,
                                            const EdgeCollider* edge_collider_b);
 
-}  // namespace silk::cuda::collision
+}  // namespace silk::cuda

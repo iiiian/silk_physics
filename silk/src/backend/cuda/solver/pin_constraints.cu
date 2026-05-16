@@ -7,11 +7,11 @@
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/ecs.hpp"
 #include "backend/cuda/mesh_partition.cuh"
-#include "backend/cuda/pin.hpp"
 #include "backend/cuda/physical_state.cuh"
+#include "backend/cuda/pin.hpp"
 #include "backend/cuda/solver/equality_constraints.cuh"
 
-namespace silk::cuda::solver {
+namespace silk::cuda {
 
 namespace {
 
@@ -99,4 +99,4 @@ EqualityConstraints gather_pin_constraints(ObjRegistry& registry, int state_num,
                              rt};
 }
 
-}  // namespace silk::cuda::solver
+}  // namespace silk::cuda

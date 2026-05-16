@@ -6,9 +6,7 @@
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/solver/equality_constraints.cuh"
 
-namespace silk::cuda::solver {
-
-using Collision = ::silk::cuda::collision::Collision;
+namespace silk::cuda {
 
 namespace {
 
@@ -90,4 +88,4 @@ EqualityConstraints gather_barrier_constraints(
                              rt};
 }
 
-}  // namespace silk::cuda::solver
+}  // namespace silk::cuda

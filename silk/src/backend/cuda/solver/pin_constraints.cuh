@@ -7,9 +7,9 @@
 #include "backend/cuda/ecs.hpp"
 #include "backend/cuda/solver/equality_constraints.cuh"
 
-namespace silk::cuda::solver {
+namespace silk::cuda {
 
 EqualityConstraints gather_pin_constraints(ObjRegistry& registry, int state_num,
                                            CudaRuntime rt);
 
-}  // namespace silk::cuda::solver
+}  // namespace silk::cuda

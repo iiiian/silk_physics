@@ -21,7 +21,7 @@
 #include "common/mesh.hpp"
 #include "silk/silk.hpp"
 
-namespace silk::cuda::assembly {
+namespace silk::cuda {
 
 namespace {
 
@@ -125,7 +125,6 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
   }
   assert(l1_cache != nullptr);
 
-  using ClothADMMHelper = solver::ClothADMMHelper;
   auto admm_helper = registry.get<ClothADMMHelper>(e);
   if (!admm_helper) {
     admm_helper = registry.set(
@@ -135,8 +134,7 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
   }
 
   // Prepare ObjCollider.
-  using ObjCollider = ::silk::cuda::collision::ObjectCollider;
-  auto collider = registry.get<ObjCollider>(e);
+  auto collider = registry.get<ObjectCollider>(e);
   if (!collider) {
     if (!perm_mesh) {
       perm_mesh = std::make_unique<TriMesh>(
@@ -150,8 +148,8 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
     Eigen::VectorXf collider_mass = cloth_config->density * l2_cache->mass;
 
     auto new_collider =
-        ObjCollider::from_physical(*collision_config, *perm_mesh, *perm_pin,
-                                   collider_mass, state_offset, rt);
+        ObjectCollider::from_physical(*collision_config, *perm_mesh, *perm_pin,
+                                      collider_mass, state_offset, rt);
     collider = registry.set(e, std::move(new_collider));
   } else {
     collider->update_state_offset(state_offset, rt);
@@ -301,4 +299,4 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
 //   return true;
 // }
 
-}  // namespace silk::cuda::assembly
+}  // namespace silk::cuda

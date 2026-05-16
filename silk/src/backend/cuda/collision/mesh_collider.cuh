@@ -5,7 +5,7 @@
 #include "backend/cuda/collision/bbox.cuh"
 #include "backend/cuda/simple_linalg.cuh"
 
-namespace silk::cuda::collision {
+namespace silk::cuda {
 
 struct PointCollider {
   Bbox bbox;
@@ -76,4 +76,4 @@ struct TriangleCollider {
 using PTCCache = ctd::pair<const TriangleCollider*, const PointCollider*>;
 using EECCache = ctd::pair<const EdgeCollider*, const EdgeCollider*>;
 
-}  // namespace silk::cuda::collision
+}  // namespace silk::cuda

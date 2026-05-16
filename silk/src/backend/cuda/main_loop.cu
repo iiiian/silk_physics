@@ -37,14 +37,14 @@ std::optional<MainLoop::Error> init(ObjRegistry& registry,
   for (uint32_t e : registry.get_all_entities()) {
     auto cloth_config = registry.get<ClothConfig>(e);
     if (cloth_config) {
-      assembly::assemble_cloth(registry, e, dt, state_num, rt);
+      assemble_cloth(registry, e, dt, state_num, rt);
       auto state = registry.get<PhysicalState>(e);
       assert(state);
       state_num += state->state_num;
       continue;
     }
 
-    assembly::assemble_obstacle(registry, e, rt);
+    assemble_obstacle(registry, e, rt);
   }
 
   if (state_num == 0) {
@@ -109,12 +109,13 @@ __global__ void predict(int vert_num, float dt, Vec3f acc,
 
 void update_aux_and_lagrange_mul(ObjRegistry& registry, float max_lagrange_mul,
                                  ctd::span<const float> state, CudaRuntime rt) {
-  auto clothes = registry.get_entity_with_components<
-      PhysicalState, assembly::ClothAssemblyL1Cache, solver::ClothADMMHelper>();
+  auto clothes =
+      registry.get_entity_with_components<PhysicalState, ClothAssemblyL1Cache,
+                                          ClothADMMHelper>();
   for (uint32_t e : clothes) {
     auto phy_state = registry.get<PhysicalState>(e);
-    auto l1_cache = registry.get<assembly::ClothAssemblyL1Cache>(e);
-    auto admm_helper = registry.get<solver::ClothADMMHelper>(e);
+    auto l1_cache = registry.get<ClothAssemblyL1Cache>(e);
+    auto admm_helper = registry.get<ClothADMMHelper>(e);
     assert(phy_state && l1_cache && admm_helper);
 
     auto x = state.subspan(phy_state->state_offset, phy_state->state_num);
@@ -127,12 +128,13 @@ void update_main(ObjRegistry& registry, float rel_tol,
                  ctd::span<const float> lhs_diag, ctd::span<const float> rhs,
                  ctd::span<const float> inertia_mod, ctd::span<float> state,
                  CudaRuntime rt) {
-  auto clothes = registry.get_entity_with_components<
-      PhysicalState, assembly::ClothAssemblyL1Cache, solver::ClothADMMHelper>();
+  auto clothes =
+      registry.get_entity_with_components<PhysicalState, ClothAssemblyL1Cache,
+                                          ClothADMMHelper>();
   for (uint32_t e : clothes) {
     auto phy_state = registry.get<PhysicalState>(e);
-    auto l1_cache = registry.get<assembly::ClothAssemblyL1Cache>(e);
-    auto admm_helper = registry.get<solver::ClothADMMHelper>(e);
+    auto l1_cache = registry.get<ClothAssemblyL1Cache>(e);
+    auto admm_helper = registry.get<ClothADMMHelper>(e);
     assert(phy_state && l1_cache && admm_helper);
 
     auto x = state.subspan(phy_state->state_offset, phy_state->state_num);
@@ -212,8 +214,7 @@ __global__ void diff_norm2(ctd::span<const float> a, ctd::span<const float> b,
   }
 }
 
-__global__ void min_toi(ctd::span<const collision::Collision> collisions,
-                        float* out) {
+__global__ void min_toi(ctd::span<const Collision> collisions, float* out) {
   using BlockReduce = cub::BlockReduce<float, 128>;
   BlockReduce::TempStorage tmp;
 
@@ -274,11 +275,9 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
   auto inertia_mod = alloc<float>(rt, state_num);
   auto scalar_norm2 = alloc<float>(rt, 1);
   auto scalar_min_toi = alloc<float>(rt, 1);
-  auto collision_storage =
-      alloc<collision::Collision>(rt, init_narrowphase_cache_size);
-  auto pin_constraints =
-      solver::gather_pin_constraints(registry, state_num, rt);
-  std::optional<solver::EqualityConstraints> barrier_constraints;
+  auto collision_storage = alloc<Collision>(rt, init_narrowphase_cache_size);
+  auto pin_constraints = gather_pin_constraints(registry, state_num, rt);
+  std::optional<EqualityConstraints> barrier_constraints;
 
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
     // Prediction based on linear velocity.
@@ -353,10 +352,9 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
 
     // Full collision update.
     for (uint32_t e :
-         registry.get_entity_with_components<PhysicalState,
-                                             collision::ObjectCollider>()) {
+         registry.get_entity_with_components<PhysicalState, ObjectCollider>()) {
       auto phy_state = registry.get<PhysicalState>(e);
-      auto collider = registry.get<collision::ObjectCollider>(e);
+      auto collider = registry.get<ObjectCollider>(e);
       assert(phy_state && collider);
 
       ctd::span<const float> curr(next_state.data() + phy_state->state_offset,
@@ -365,8 +363,8 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
                                   phy_state->state_num);
       collider->update_position(curr, prev, rt);
     }
-    auto collisions = collision::find_collision(
-        registry, dt, init_broadphase_cache_size, collision_storage, rt);
+    auto collisions = find_collision(registry, dt, init_broadphase_cache_size,
+                                     collision_storage, rt);
 
     // CCD line search.
     float h_min_toi = 1.0f;
@@ -408,8 +406,7 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     };
     cub::DeviceFor::Bulk(collisions.size(), update_all_toi, rt.stream.get());
 
-    barrier_constraints =
-        solver::gather_barrier_constraints(state_num, collisions, rt);
+    barrier_constraints = gather_barrier_constraints(state_num, collisions, rt);
   }
 
   // Write solution back to registry

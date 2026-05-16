@@ -6,11 +6,10 @@
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/solver/equality_constraints.cuh"
 
-namespace silk::cuda::solver {
+namespace silk::cuda {
 
 EqualityConstraints gather_barrier_constraints(
-    int state_num,
-    ctd::span<const ::silk::cuda::collision::Collision> collisions,
+    int state_num, ctd::span<const ::silk::cuda::Collision> collisions,
     CudaRuntime rt);
 
-}  // namespace silk::cuda::solver
+}  // namespace silk::cuda

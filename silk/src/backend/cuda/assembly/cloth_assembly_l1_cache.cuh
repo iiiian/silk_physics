@@ -6,7 +6,7 @@
 #include "common/cloth_assembly_l2_cache.hpp"
 #include "silk/silk.hpp"
 
-namespace silk::cuda::assembly {
+namespace silk::cuda {
 
 /// Dynamic, time step or config dependent quantities used by the cloth solver.
 ///
@@ -38,4 +38,4 @@ class ClothAssemblyL1Cache {
                        CudaRuntime rt);
 };
 
-}  // namespace silk::cuda::assembly
+}  // namespace silk::cuda

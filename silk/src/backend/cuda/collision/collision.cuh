@@ -2,7 +2,7 @@
 
 #include "backend/cuda/simple_linalg.cuh"
 
-namespace silk::cuda::collision {
+namespace silk::cuda {
 
 enum class CollisionType { PointTriangle, EdgeEdge };
 
@@ -48,4 +48,4 @@ struct Collision {
   Vec3f v3_t1;
 };
 
-}  // namespace silk::cuda::collision
+}  // namespace silk::cuda

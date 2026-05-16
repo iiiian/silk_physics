@@ -13,7 +13,7 @@
 
 #include "common/compiler_builtin.hpp"
 
-namespace silk::cuda::solver {
+namespace silk::cuda {
 
 namespace {
 
@@ -971,4 +971,4 @@ void MASPreconditioner::apply(ctd::span<const float> r, ctd::span<float> z,
       coarse_space_.level_num);
 }
 
-}  // namespace silk::cuda::solver
+}  // namespace silk::cuda

@@ -8,7 +8,7 @@
 #include "backend/cuda/pin.hpp"
 #include "common/mesh.hpp"
 
-namespace silk::cuda::assembly {
+namespace silk::cuda {
 
 void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
                        CudaRuntime rt) {
@@ -22,7 +22,6 @@ void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
   assert(config && mesh && pin_position);
 
   // Ensure collider exists and is up-to-date
-  using ObjectCollider = collision::ObjectCollider;
   auto collider = registry.get<ObjectCollider>(e);
   if (!collider) {
     auto new_collider = ObjectCollider::from_obstacle(*config, *mesh, rt);
@@ -52,4 +51,4 @@ void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
   }
 }
 
-}  // namespace silk::cuda::assembly
+}  // namespace silk::cuda

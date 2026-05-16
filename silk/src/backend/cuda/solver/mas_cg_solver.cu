@@ -13,7 +13,7 @@
 #include "backend/cuda/solver/mas_preconditioner.cuh"
 #include "common/logger.hpp"
 
-namespace silk::cuda::solver {
+namespace silk::cuda {
 
 namespace {
 
@@ -257,4 +257,4 @@ MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
   return status;
 }
 
-}  // namespace silk::cuda::solver
+}  // namespace silk::cuda

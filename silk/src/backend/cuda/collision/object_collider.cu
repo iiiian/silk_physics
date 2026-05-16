@@ -13,7 +13,7 @@
 #include "common/mesh.hpp"
 #include "silk/silk.hpp"
 
-namespace silk::cuda::collision {
+namespace silk::cuda {
 
 std::vector<PointCollider> make_point_colliders(
     const TriMesh& mesh, float bbox_padding, int state_offset,
@@ -498,4 +498,4 @@ void ObjectCollider::update_all(const CollisionConfigPlus& config,
   edge_collider_tree.update(bbox, rt);
 }
 
-}  // namespace silk::cuda::collision
+}  // namespace silk::cuda

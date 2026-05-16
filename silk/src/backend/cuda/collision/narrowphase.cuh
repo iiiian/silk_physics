@@ -8,7 +8,7 @@
 #include "backend/cuda/collision/mesh_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 
-namespace silk::cuda::collision {
+namespace silk::cuda {
 
 /// @brief Batch point triangle narrowphase.
 /// @param pt_ccache Candidate pairs.
@@ -28,4 +28,4 @@ void ee_narrowphase(ctd::span<EECCache> ee_ccache,
                     cu::device_buffer<Collision>& out, int& fill,
                     CudaRuntime rt);
 
-}  // namespace silk::cuda::collision
+}  // namespace silk::cuda

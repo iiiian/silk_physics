@@ -12,7 +12,7 @@
 
 #include "ecs/component_storage.hpp"
 
-namespace silk::ecs {
+namespace silk {
 
 /// @brief Type-level list of component types.
 template <typename... T>
@@ -226,4 +226,4 @@ class Registry {
   std::tuple<ComponentStorage<C>...> components_;
 };
 
-}  // namespace silk::ecs
+}  // namespace silk

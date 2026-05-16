@@ -11,7 +11,7 @@
 #include "common/config_plus.hpp"
 #include "common/mesh.hpp"
 
-namespace silk::cuda::collision {
+namespace silk::cuda {
 
 class ObjectCollider {
  public:
@@ -39,8 +39,7 @@ class ObjectCollider {
   /// @param[in] mass Object vertex mass vector.
   /// @param[in] state_offset Object offset in global state.
   static ObjectCollider from_physical(const CollisionConfigPlus& config,
-                                      const TriMesh& mesh,
-                                      const PinIndex& pin,
+                                      const TriMesh& mesh, const PinIndex& pin,
                                       const Eigen::VectorXf& mass,
                                       int state_offset, CudaRuntime rt);
 
@@ -79,4 +78,4 @@ class ObjectCollider {
   Buf<TriangleCollider> reduced_collider_;
 };
 
-}  // namespace silk::cuda::collision
+}  // namespace silk::cuda

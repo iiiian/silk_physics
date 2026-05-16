@@ -7,7 +7,7 @@
 #include "backend/cuda/cusparse_wrapper.hpp"
 #include "backend/cuda/solver/mas_preconditioner.cuh"
 
-namespace silk::cuda::solver {
+namespace silk::cuda {
 
 class MASCGSolver {
  public:
@@ -66,4 +66,4 @@ class MASCGSolver {
   void spmv(ctd::span<const float> x, ctd::span<float> y, CudaRuntime rt);
 };
 
-}  // namespace silk::cuda::solver
+}  // namespace silk::cuda
