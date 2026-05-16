@@ -1,5 +1,7 @@
 #pragma once
 
+#include <span>
+
 #include "silk/silk.hpp"
 
 namespace silk {
@@ -18,18 +20,19 @@ class IBackend {
   // Cloth API
   virtual Result add_cloth(ClothConfig cloth_config,
                            CollisionConfig collision_config,
-                           MeshConfig mesh_config, ConstSpan<int> pin_index,
+                           MeshConfig mesh_config,
+                           std::span<const int> pin_index,
                            uint32_t& handle) = 0;
   virtual Result remove_cloth(uint32_t handle) = 0;
   virtual Result get_cloth_position(uint32_t handle,
-                                    Span<float> position) const = 0;
+                                    std::span<float> position) const = 0;
   virtual Result set_cloth_config(uint32_t handle, ClothConfig config) = 0;
   virtual Result set_cloth_collision_config(uint32_t handle,
                                             CollisionConfig config) = 0;
   virtual Result set_cloth_pin_index(uint32_t handle,
-                                     ConstSpan<int> pin_index) = 0;
+                                     std::span<const int> pin_index) = 0;
   virtual Result set_cloth_pin_position(uint32_t handle,
-                                        ConstSpan<float> position) = 0;
+                                        std::span<const float> position) = 0;
 
   // Obstacle API
   virtual Result add_obstacle(CollisionConfig collision_config,
@@ -38,7 +41,7 @@ class IBackend {
   virtual Result set_obstacle_collision_config(uint32_t handle,
                                                CollisionConfig config) = 0;
   virtual Result set_obstacle_position(uint32_t handle,
-                                       ConstSpan<float> position) = 0;
+                                       std::span<const float> position) = 0;
 };
 
 }  // namespace silk

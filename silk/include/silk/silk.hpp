@@ -8,45 +8,19 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <vector>
 
 #include "silk/result.hpp"
 
 namespace silk {
 
-/// @brief Non-owning view over contiguous array data.
-/// @tparam T Element type
-template <typename T>
-class Span {
- public:
-  T* data = nullptr;  ///< Pointer to first element (may be null if size is 0)
-  int size = 0;       ///< Number of elements
-
- public:
-  Span() = default;
-  Span(T* ptr, int size) : data(ptr), size(size) {}
-  Span(std::vector<T>& vec) : data(vec.data()), size(vec.size()) {}
-};
-
-/// @brief Non-owning read-only view over contiguous array data.
-/// @tparam T Element type
-template <typename T>
-class ConstSpan {
- public:
-  const T* data =
-      nullptr;   ///< Pointer to first element (may be null if size is 0)
-  int size = 0;  ///< Number of elements
-
- public:
-  ConstSpan() = default;
-  ConstSpan(const T* ptr, int size) : data(ptr), size(size) {}
-  ConstSpan(const std::vector<T>& vec) : data(vec.data()), size(vec.size()) {}
-};
-
 /// @brief Triangle mesh definition for cloth and obstacles.
 struct MeshConfig {
-  ConstSpan<float> verts;  ///< Vertex positions as [x0,y0,z0, x1,y1,z1, ...]
-  ConstSpan<int> faces;    ///< Triangle indices as [i0,j0,k0, i1,j1,k1, ...]
+  std::span<const float>
+      verts;  ///< Vertex positions as [x0,y0,z0, x1,y1,z1, ...]
+  std::span<const int>
+      faces;  ///< Triangle indices as [i0,j0,k0, i1,j1,k1, ...]
 };
 
 /// @brief Collision behavior configuration for entities.
@@ -154,7 +128,8 @@ class World {
   [[nodiscard]] Result add_cloth(ClothConfig cloth_config,
                                  CollisionConfig collision_config,
                                  MeshConfig mesh_config,
-                                 ConstSpan<int> pin_index, uint32_t& handle);
+                                 std::span<const int> pin_index,
+                                 uint32_t& handle);
 
   /// @brief Remove cloth object from simulation.
   /// @param handle Cloth object handle
@@ -170,7 +145,7 @@ class World {
   /// @param position Output buffer for vertex positions (must be pre-allocated)
   /// @return Success, or InvalidHandle/IncorrectPositionNum on error
   [[nodiscard]] Result get_cloth_position(uint32_t handle,
-                                          Span<float> position) const;
+                                          std::span<float> position) const;
 
   /// @brief Update physical properties of existing cloth.
   ///
@@ -196,7 +171,7 @@ class World {
   /// @param pin_index Vertex indices to pin (may be empty to unpin all)
   /// @return Success, or InvalidHandle if cloth not found
   [[nodiscard]] Result set_cloth_pin_index(uint32_t handle,
-                                           ConstSpan<int> pin_index);
+                                           std::span<const int> pin_index);
 
   /// @brief Move pinned vertices to new target positions.
   ///
@@ -207,7 +182,7 @@ class World {
   /// ...]
   /// @return Success, or InvalidHandle/IncorrectPinNum on error
   [[nodiscard]] Result set_cloth_pin_position(uint32_t handle,
-                                              ConstSpan<float> position);
+                                              std::span<const float> position);
 
   // ---------------------------------------
   // Obstacle API
@@ -246,7 +221,7 @@ class World {
   /// @param position New vertex positions [x0,y0,z0, x1,y1,z1, ...]
   /// @return Success, or InvalidHandle/IncorrectPositionNum on error
   [[nodiscard]] Result set_obstacle_position(uint32_t handle,
-                                             ConstSpan<float> position);
+                                             std::span<const float> position);
 };
 
 }  // namespace silk

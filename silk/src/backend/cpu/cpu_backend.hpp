@@ -1,5 +1,7 @@
 #pragma once
 
+#include <span>
+
 #include "common/backend.hpp"
 #include "silk/silk.hpp"
 
@@ -27,18 +29,18 @@ class CpuBackend : public IBackend {
 
   // Cloth API
   Result add_cloth(ClothConfig cloth_config, CollisionConfig collision_config,
-                   MeshConfig mesh_config, ConstSpan<int> pin_index,
+                   MeshConfig mesh_config, std::span<const int> pin_index,
                    uint32_t& handle) override;
   Result remove_cloth(uint32_t handle) override;
   Result get_cloth_position(uint32_t handle,
-                            Span<float> position) const override;
+                            std::span<float> position) const override;
   Result set_cloth_config(uint32_t handle, ClothConfig config) override;
   Result set_cloth_collision_config(uint32_t handle,
                                     CollisionConfig config) override;
   Result set_cloth_pin_index(uint32_t handle,
-                             ConstSpan<int> pin_index) override;
+                             std::span<const int> pin_index) override;
   Result set_cloth_pin_position(uint32_t handle,
-                                ConstSpan<float> position) override;
+                                std::span<const float> position) override;
 
   // Obstacle API
   Result add_obstacle(CollisionConfig collision_config, MeshConfig mesh_config,
@@ -47,7 +49,7 @@ class CpuBackend : public IBackend {
   Result set_obstacle_collision_config(uint32_t handle,
                                        CollisionConfig config) override;
   Result set_obstacle_position(uint32_t handle,
-                               ConstSpan<float> position) override;
+                               std::span<const float> position) override;
 };
 
 }  // namespace silk::cpu

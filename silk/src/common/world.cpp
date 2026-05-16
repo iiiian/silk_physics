@@ -1,3 +1,5 @@
+#include <span>
+
 #include "backend/cpu/cpu_backend.hpp"
 #include "common/backend.hpp"
 #include "common/check_cuda_support.hpp"
@@ -69,7 +71,7 @@ Result World::solver_reset() {
 
 Result World::add_cloth(ClothConfig cloth_config,
                         CollisionConfig collision_config,
-                        MeshConfig mesh_config, ConstSpan<int> pin_index,
+                        MeshConfig mesh_config, std::span<const int> pin_index,
                         uint32_t& handle) {
   if (!impl_->backend) {
     return Result::error(ErrorCode::NotInitialized);
@@ -85,7 +87,8 @@ Result World::remove_cloth(uint32_t handle) {
   return impl_->backend->remove_cloth(handle);
 }
 
-Result World::get_cloth_position(uint32_t handle, Span<float> position) const {
+Result World::get_cloth_position(uint32_t handle,
+                                 std::span<float> position) const {
   if (!impl_->backend) {
     return Result::error(ErrorCode::NotInitialized);
   }
@@ -107,7 +110,8 @@ Result World::set_cloth_collision_config(uint32_t handle,
   return impl_->backend->set_cloth_collision_config(handle, config);
 }
 
-Result World::set_cloth_pin_index(uint32_t handle, ConstSpan<int> pin_index) {
+Result World::set_cloth_pin_index(uint32_t handle,
+                                  std::span<const int> pin_index) {
   if (!impl_->backend) {
     return Result::error(ErrorCode::NotInitialized);
   }
@@ -115,7 +119,7 @@ Result World::set_cloth_pin_index(uint32_t handle, ConstSpan<int> pin_index) {
 }
 
 Result World::set_cloth_pin_position(uint32_t handle,
-                                     ConstSpan<float> position) {
+                                     std::span<const float> position) {
   if (!impl_->backend) {
     return Result::error(ErrorCode::NotInitialized);
   }
@@ -146,7 +150,7 @@ Result World::set_obstacle_collision_config(uint32_t handle,
 }
 
 Result World::set_obstacle_position(uint32_t handle,
-                                    ConstSpan<float> position) {
+                                    std::span<const float> position) {
   if (!impl_->backend) {
     return Result::error(ErrorCode::NotInitialized);
   }

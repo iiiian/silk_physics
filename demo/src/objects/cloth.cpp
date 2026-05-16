@@ -8,6 +8,7 @@
 #include <array>
 #include <glm/glm.hpp>
 #include <queue>
+#include <span>
 
 #include "../eigen_alias.hpp"
 #include "../gui_utils.hpp"
@@ -192,7 +193,7 @@ bool Cloth::init_sim() {
   mesh_->resetTransform();
 
   // Setup cloth in silk
-  silk::ConstSpan<float> vert_span =
+  std::span<const float> vert_span =
       make_const_span_from_position(mesh_->vertexPositions);
 
   if (silk_handle_ != 0 && transform_changed_) {
@@ -213,8 +214,7 @@ bool Cloth::init_sim() {
 
   silk::MeshConfig mesh_config;
   mesh_config.verts = vert_span;
-  mesh_config.faces.data = F_.data();
-  mesh_config.faces.size = F_.size();
+  mesh_config.faces = std::span<const int>(F_.data(), F_.size());
 
   silk::Result r = world_->add_cloth(cloth_config_, collision_config_,
                                      mesh_config, pin_index_, silk_handle_);
@@ -281,7 +281,7 @@ bool Cloth::sim_step_pre() {
 bool Cloth::sim_step_post(float current_time) {
   // Update position in polyscope
   mesh_->vertexPositions.ensureHostBufferAllocated();
-  silk::Span<float> position = make_span_from_position(mesh_->vertexPositions);
+  std::span<float> position = make_span_from_position(mesh_->vertexPositions);
   silk::Result r = world_->get_cloth_position(silk_handle_, position);
   if (!r) {
     spdlog::error("Fail to update cloth {} position. Error: {}", name_,
@@ -291,7 +291,7 @@ bool Cloth::sim_step_post(float current_time) {
   mesh_->vertexPositions.markHostBufferUpdated();
 
   // Also save a copy in simulation cache
-  Eigen::Map<Vert> vert{position.data, position.size / 3, 3};
+  Eigen::Map<Vert> vert{position.data(), (int)position.size() / 3, 3};
   cache_.emplace_back(current_time, vert);
 
   return true;

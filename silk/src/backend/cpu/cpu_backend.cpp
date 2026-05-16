@@ -3,6 +3,7 @@
 #include <Eigen/Core>
 #include <cassert>
 #include <cstring>
+#include <span>
 #include <utility>
 
 #include "backend/cpu/collision/object_collider.hpp"
@@ -19,13 +20,14 @@ namespace silk::cpu {
 
 namespace {
 
-Pin make_pin(ConstSpan<int> pin_index, const TriMesh& mesh) {
+Pin make_pin(std::span<const int> pin_index, const TriMesh& mesh) {
   Pin p;
   p.is_static = true;
   p.is_static_twice = true;
   p.is_all_pinned = false;
-  if (pin_index.data != nullptr && pin_index.size != 0) {
-    p.index = Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.size);
+  if (!pin_index.empty()) {
+    p.index =
+        Eigen::Map<const Eigen::VectorXi>(pin_index.data(), pin_index.size());
     p.curr_position.resize(3 * p.index.size());
     for (int i = 0; i < p.index.size(); ++i) {
       p.curr_position(Eigen::seqN(3 * i, 3)) = mesh.V.row(p.index(i));
@@ -70,8 +72,8 @@ Result CpuBackend::solver_reset() {
 
 Result CpuBackend::add_cloth(ClothConfig cloth_config,
                              CollisionConfig collision_config,
-                             MeshConfig mesh_config, ConstSpan<int> pin_index,
-                             uint32_t& handle) {
+                             MeshConfig mesh_config,
+                             std::span<const int> pin_index, uint32_t& handle) {
   auto tri_mesh = make_cloth_mesh(mesh_config);
   if (!tri_mesh) {
     handle = 0;
@@ -107,26 +109,26 @@ Result CpuBackend::remove_cloth(uint32_t handle) {
 }
 
 Result CpuBackend::get_cloth_position(uint32_t handle,
-                                      Span<float> position) const {
+                                      std::span<float> position) const {
   if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
   auto obj_state = impl_->registry_.get<ObjectState>(handle);
   if (obj_state) {
-    if (position.size < obj_state->state_num) {
+    if ((int)position.size() < obj_state->state_num) {
       return Result::error(ErrorCode::IncorrectPositionNum);
     }
-    memcpy(position.data, obj_state->curr_state.data(),
+    memcpy(position.data(), obj_state->curr_state.data(),
            obj_state->state_num * sizeof(float));
     return Result::ok();
   }
   auto mesh = impl_->registry_.get<TriMesh>(handle);
   if (mesh) {
     int state_num = 3 * mesh->V.rows();
-    if (position.size != state_num) {
+    if ((int)position.size() != state_num) {
       return Result::error(ErrorCode::IncorrectPositionNum);
     }
-    memcpy(position.data, mesh->V.data(), state_num * sizeof(float));
+    memcpy(position.data(), mesh->V.data(), state_num * sizeof(float));
     return Result::ok();
   }
   return Result::error(ErrorCode::InvalidHandle);
@@ -162,7 +164,7 @@ Result CpuBackend::set_cloth_collision_config(uint32_t handle,
 }
 
 Result CpuBackend::set_cloth_pin_index(uint32_t handle,
-                                       ConstSpan<int> pin_index) {
+                                       std::span<const int> pin_index) {
   if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -181,7 +183,7 @@ Result CpuBackend::set_cloth_pin_index(uint32_t handle,
 }
 
 Result CpuBackend::set_cloth_pin_position(uint32_t handle,
-                                          ConstSpan<float> position) {
+                                          std::span<const float> position) {
   if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -191,15 +193,15 @@ Result CpuBackend::set_cloth_pin_position(uint32_t handle,
   }
   auto pin = impl_->registry_.get<Pin>(handle);
   assert(pin);
-  if (3 * pin->index.size() != position.size) {
+  if (3 * pin->index.size() != (int)position.size()) {
     return Result::error(ErrorCode::IncorrectPinNum);
   }
   pin->prev_position = pin->curr_position;
-  if (position.size == 0) {
+  if (position.empty()) {
     pin->curr_position.resize(0);
   } else {
     pin->curr_position =
-        Eigen::Map<const Eigen::VectorXf>(position.data, position.size);
+        Eigen::Map<const Eigen::VectorXf>(position.data(), position.size());
   }
   pin->is_static = false;
   pin->is_static_twice = false;
@@ -258,7 +260,7 @@ Result CpuBackend::set_obstacle_collision_config(uint32_t handle,
 }
 
 Result CpuBackend::set_obstacle_position(uint32_t handle,
-                                         ConstSpan<float> position) {
+                                         std::span<const float> position) {
   if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -266,14 +268,14 @@ Result CpuBackend::set_obstacle_position(uint32_t handle,
   if (!pos) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  if (pos->curr_position.size() != position.size) {
+  if (pos->curr_position.size() != (int)position.size()) {
     return Result::error(ErrorCode::IncorrectPositionNum);
   }
   pos->is_static = false;
   pos->is_static_twice = false;
   std::swap(pos->curr_position, pos->prev_position);
   pos->curr_position =
-      Eigen::Map<const Eigen::VectorXf>(position.data, position.size);
+      Eigen::Map<const Eigen::VectorXf>(position.data(), position.size());
   return Result::ok();
 }
 

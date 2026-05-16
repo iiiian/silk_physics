@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <optional>
 #include <silk/silk.hpp>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -134,13 +135,11 @@ class HeadlessCloth : public IObject {
 
   bool init_sim() override {
     silk::MeshConfig mesh_config;
-    mesh_config.verts.data = verts_.data();
-    mesh_config.verts.size = verts_.size();
-    mesh_config.faces.data = faces_.data();
-    mesh_config.faces.size = faces_.size();
+    mesh_config.verts = std::span<const float>(verts_.data(), verts_.size());
+    mesh_config.faces = std::span<const int>(faces_.data(), faces_.size());
 
     // Empty pin
-    silk::ConstSpan<int> pin_index;
+    std::span<const int> pin_index;
 
     silk::Result r = world_->add_cloth(cloth_config_, collision_config_,
                                        mesh_config, pin_index, handle_);
@@ -161,9 +160,7 @@ class HeadlessCloth : public IObject {
     Vert buffer;
     buffer.resize(verts_.rows(), 3);
 
-    silk::Span<float> position_span;
-    position_span.data = buffer.data();
-    position_span.size = buffer.size();
+    std::span<float> position_span(buffer.data(), buffer.size());
 
     silk::Result r = world_->get_cloth_position(handle_, position_span);
     if (!r) {
@@ -296,10 +293,8 @@ class HeadlessObstacle : public IObject {
 
   bool init_sim() override {
     silk::MeshConfig mesh_config;
-    mesh_config.verts.data = verts_.data();
-    mesh_config.verts.size = verts_.size();
-    mesh_config.faces.data = faces_.data();
-    mesh_config.faces.size = faces_.size();
+    mesh_config.verts = std::span<const float>(verts_.data(), verts_.size());
+    mesh_config.faces = std::span<const int>(faces_.data(), faces_.size());
 
     silk::Result r =
         world_->add_obstacle(collision_config_, mesh_config, handle_);
