@@ -53,6 +53,11 @@ class CudaBackend::Impl {
     auto ref = mr->as_ref();  // resource_ref can't bind to rvalue.
     return CudaRuntime{.stream = *stream, .mr = ref};
   }
+
+  bool is_obstacle(uint32_t entity) {
+    return !registry_.has_component<ClothConfig>(entity) &&
+           registry_.has_entity(entity);
+  }
 };
 
 CudaBackend::CudaBackend() : impl_(std::make_unique<Impl>()) {}
@@ -79,10 +84,10 @@ Result CudaBackend::solver_step() {
 }
 
 Result CudaBackend::solver_reset() {
+  impl_->registry_.remove_all_components<ClothAssemblyL1Cache>();
   impl_->registry_.remove_all_components<ClothAssemblyL2Cache>();
   impl_->registry_.remove_all_components<PhysicalState>();
   impl_->registry_.remove_all_components<ObjectCollider>();
-  impl_->registry_.remove_all_components<ClothAssemblyL1Cache>();
   impl_->registry_.remove_all_components<ClothADMMHelper>();
 
   return Result::ok();
@@ -110,27 +115,21 @@ Result CudaBackend::add_cloth(ClothConfig cloth_config,
       return Result::error(ErrorCode::InvalidPin);
     }
   }
-  PinIndex pin{pin_index};
-  PinPosition pin_position{pin, tri_mesh->V};
+  PinIndex pin_index{pin_index};
 
   uint32_t e = impl_->registry_.make_entity();
   impl_->registry_.set(e, std::move(cloth_config));
   impl_->registry_.set(e, std::move(collision_config));
   impl_->registry_.set(e, std::move(*tri_mesh));
   impl_->registry_.set(e, std::move(init_state));
-  impl_->registry_.set(e, std::move(pin));
-  impl_->registry_.set(e, std::move(pin_position));
+  impl_->registry_.set(e, std::move(pin_index));
 
   handle = e;
   return Result::ok();
 }
 
 Result CudaBackend::remove_cloth(uint32_t handle) {
-  if (!impl_->registry_.has_entity(handle)) {
-    return Result::error(ErrorCode::InvalidHandle);
-  }
-  auto cloth_config = impl_->registry_.get<ClothConfig>(handle);
-  if (!cloth_config) {
+  if (!impl_->registry_.has_component<ClothConfig>(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
   impl_->registry_.nuke_entity(handle);
@@ -139,7 +138,7 @@ Result CudaBackend::remove_cloth(uint32_t handle) {
 
 Result CudaBackend::get_cloth_position(uint32_t handle,
                                        std::span<float> position) const {
-  if (!impl_->registry_.has_entity(handle)) {
+  if (!impl_->registry_.has_component<ClothConfig>(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
 
@@ -172,85 +171,62 @@ Result CudaBackend::get_cloth_position(uint32_t handle,
 }
 
 Result CudaBackend::set_cloth_config(uint32_t handle, ClothConfig config) {
-  if (!impl_->registry_.has_entity(handle)) {
+  if (!impl_->registry_.has_component<ClothConfig>(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-
-  auto cloth_config = impl_->registry_.get<ClothConfig>(handle);
-  if (!cloth_config) {
-    return Result::error(ErrorCode::InvalidHandle);
-  }
-
-  *cloth_config = config;
-  impl_->registry_.remove<ObjectCollider>(handle);
-  impl_->registry_.remove<ClothAssemblyL2Cache>(handle);
-  impl_->registry_.remove<ClothAssemblyL1Cache>(handle);
-  impl_->registry_.remove<ClothADMMHelper>(handle);
+  impl_->registry_.remove_deps_then_set(handle, config);
   return Result::ok();
 }
 
 Result CudaBackend::set_cloth_collision_config(uint32_t handle,
                                                CollisionConfig config) {
-  if (!impl_->registry_.has_entity(handle)) {
+  if (!impl_->registry_.has_component<ClothConfig>(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = impl_->registry_.get<ClothConfig>(handle);
-  if (!cloth_config) {
-    return Result::error(ErrorCode::InvalidHandle);
-  }
-
-  auto collision_config = impl_->registry_.get<CollisionConfig>(handle);
-  assert(collision_config);
-  *collision_config = config;
+  impl_->registry_.remove_deps_then_set(handle, config);
   return Result::ok();
 }
 
 Result CudaBackend::set_cloth_pin_index(uint32_t handle,
                                         std::span<const int> pin_index) {
-  if (!impl_->registry_.has_entity(handle)) {
+  if (!impl_->registry_.has_component<ClothConfig>(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = impl_->registry_.get<ClothConfig>(handle);
-  if (!cloth_config) {
-    return Result::error(ErrorCode::InvalidHandle);
-  }
+
   auto tri_mesh = impl_->registry_.get<TriMesh>(handle);
   assert(tri_mesh);
-
   for (int i : pin_index) {
     if (i < 0 || i >= tri_mesh->V.rows()) {
       return Result::error(ErrorCode::InvalidPin);
     }
   }
 
-  PinIndex pin{pin_index};
-  PinPosition pin_position{pin, tri_mesh->V};
-  impl_->registry_.set(handle, std::move(pin));
-  impl_->registry_.set(handle, std::move(pin_position));
-  impl_->registry_.remove<ClothAssemblyL1Cache>(handle);
-  impl_->registry_.remove<ObjectCollider>(handle);
+  impl_->registry_.remove_deps_then_set(handle, PinIndex{pin_index});
   return Result::ok();
 }
 
 Result CudaBackend::set_cloth_pin_position(uint32_t handle,
                                            std::span<const float> position) {
-  if (!impl_->registry_.has_entity(handle)) {
+  if (!impl_->registry_.has_component<ClothConfig>(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = impl_->registry_.get<ClothConfig>(handle);
-  if (!cloth_config) {
-    return Result::error(ErrorCode::InvalidHandle);
-  }
+
   auto pin_index = impl_->registry_.get<PinIndex>(handle);
-  auto pin_position = impl_->registry_.get<PinPosition>(handle);
-  assert(pin_index && pin_position);
+  assert(pin_index);
   if (3 * pin_index->index.size() != position.size()) {
     return Result::error(ErrorCode::InvalidPin);
   }
-  pin_position->prev_position = pin_position->curr_position;
-  pin_position->curr_position.assign(position.begin(), position.end());
-  pin_position->is_static = false;
-  pin_position->is_static_twice = false;
+
+  auto pin_pos = impl_->registry_.get<PinPosition>(handle);
+  if (pin_pos) {
+    pin_pos->prev_position = pin_pos->curr_position;
+    pin_pos->curr_position.assign(position.begin(), position.end());
+    pin_pos->is_static = false;
+    pin_pos->is_static_twice = false;
+  } else {
+    impl_->registry_.remove_deps_then_set(handle,
+                                          PinPosition{pin_index, position});
+  }
   return Result::ok();
 }
 
@@ -261,64 +237,51 @@ Result CudaBackend::add_obstacle(CollisionConfig collision_config,
     handle = 0;
     return Result::error(ErrorCode::InvalidMesh);
   }
-  PinPosition p{tri_mesh->V};
-  p.is_static = false;
-  p.is_static_twice = false;
-  auto [h, e] = impl_->registry_.add_entity();
-  if (h.is_empty()) {
-    handle = 0;
-    return Result::error(ErrorCode::TooManyBody);
-  }
-  assert(e);
-  impl_->registry_.set<CollisionConfig>(*e, std::move(collision_config));
-  impl_->registry_.set<TriMesh>(*e, std::move(*tri_mesh));
-  impl_->registry_.set<PinPosition>(*e, std::move(p));
-  handle = h.value;
+
+  InitialState init_state{tri_mesh->V};
+
+  PinIndex pin_index;
+  pin_index.is_all_pinned = true;
+
+  uint32_t e = impl_->registry_.make_entity();
+  impl_->registry_.set(e, std::move(collision_config));
+  impl_->registry_.set(e, std::move(*tri_mesh));
+  impl_->registry_.set(e, std::move(init_state));
+  impl_->registry_.set(e, std::move(pin_index));
+
+  handle = e;
   return Result::ok();
 }
 
 Result CudaBackend::remove_obstacle(uint32_t handle) {
-  auto entity = impl_->registry_.get_entity(Handle(handle));
-  if (!entity) {
+  if (!impl_->is_obstacle(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto obstacle_position = impl_->registry_.get<PinPosition>(*entity);
-  if (!obstacle_position) {
-    return Result::error(ErrorCode::InvalidHandle);
-  }
-  impl_->registry_.remove_entity(Handle(handle));
+  impl_->registry_.nuke_entity(handle);
   return Result::ok();
 }
 
 Result CudaBackend::set_obstacle_collision_config(uint32_t handle,
                                                   CollisionConfig config) {
-  Entity* e = impl_->registry_.get_entity(Handle(handle));
-  if (!e) {
+  if (!impl_->is_obstacle(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto obstacle_position = impl_->registry_.get<PinPosition>(*e);
-  if (!obstacle_position) {
-    return Result::error(ErrorCode::InvalidHandle);
-  }
-  auto collision_config = impl_->registry_.get<CollisionConfig>(*e);
-  assert(collision_config);
-  *collision_config = config;
+  impl_->registry_.remove_deps_then_set(handle, config);
   return Result::ok();
 }
 
 Result CudaBackend::set_obstacle_position(uint32_t handle,
-                                          ConstSpan<float> position) {
-  Entity* e = impl_->registry_.get_entity(Handle(handle));
-  if (!e) {
+                                          std::span<const float> position) {
+  if (!impl_->is_obstacle(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto pos = impl_->registry_.get<PinPosition>(*e);
-  if (!pos) {
-    return Result::error(ErrorCode::InvalidHandle);
-  }
+
+  auto pos = impl_->registry_.get<PinPosition>(handle);
+  assert(pos);
   if (pos->curr_position.size() != position.size()) {
     return Result::error(ErrorCode::InvalidPosition);
   }
+
   pos->is_static = false;
   pos->is_static_twice = false;
   std::swap(pos->curr_position, pos->prev_position);

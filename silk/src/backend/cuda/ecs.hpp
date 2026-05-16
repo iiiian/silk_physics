@@ -11,6 +11,7 @@ class InitialState;
 }  // namespace silk
 
 namespace silk::cuda {
+
 class ClothADMMHelper;
 class ClothAssemblyL1Cache;
 class ObjectCollider;
@@ -45,7 +46,8 @@ namespace silk {
 
 template <>
 struct ComponentDependents<cuda::ObjRegistry, ClothConfig> {
-  using Type = ComponentList<ClothAssemblyL2Cache, cuda::ObjectCollider>;
+  using Type = ComponentList<ClothAssemblyL2Cache, cuda::ClothADMMHelper,
+                             cuda::ClothAssemblyL1Cache, cuda::ObjectCollider>;
 };
 
 template <>
@@ -54,31 +56,8 @@ struct ComponentDependents<cuda::ObjRegistry, CollisionConfigPlus> {
 };
 
 template <>
-struct ComponentDependents<cuda::ObjRegistry, TriMesh> {
-  using Type = ComponentList<cuda::MeshPartition, InitialState, cuda::PinIndex,
-                             ClothAssemblyL2Cache, cuda::PhysicalState,
-                             cuda::ObjectCollider>;
-};
-
-template <>
-struct ComponentDependents<cuda::ObjRegistry, InitialState> {
-  using Type = ComponentList<cuda::PhysicalState, cuda::ObjectCollider>;
-};
-
-template <>
-struct ComponentDependents<cuda::ObjRegistry, cuda::MeshPartition> {
-  using Type = ComponentList<ClothAssemblyL2Cache, cuda::PhysicalState,
-                             cuda::ObjectCollider>;
-};
-
-template <>
-struct ComponentDependents<cuda::ObjRegistry, cuda::PinIndex> {
-  using Type = ComponentList<cuda::PinPosition, cuda::ObjectCollider>;
-};
-
-template <>
 struct ComponentDependents<cuda::ObjRegistry, ClothAssemblyL2Cache> {
-  using Type = ComponentList<cuda::ClothAssemblyL1Cache, cuda::ObjectCollider>;
+  using Type = ComponentList<cuda::ClothADMMHelper, cuda::ClothAssemblyL1Cache>;
 };
 
 template <>
@@ -87,8 +66,15 @@ struct ComponentDependents<cuda::ObjRegistry, cuda::ClothAssemblyL1Cache> {
 };
 
 template <>
-struct ComponentDependents<cuda::ObjRegistry, cuda::PhysicalState> {
-  using Type = ComponentList<cuda::ObjectCollider>;
+struct ComponentDependents<cuda::ObjRegistry, cuda::PinIndex> {
+  using Type = ComponentList<cuda::PinPosition, cuda::ObjectCollider>;
+};
+
+template <>
+struct ComponentDependents<cuda::ObjRegistry, cuda::MeshPartition> {
+  using Type = ComponentList<ClothAssemblyL2Cache, cuda::ClothADMMHelper,
+                             cuda::ClothAssemblyL1Cache, cuda::ObjectCollider,
+                             cuda::PhysicalState>;
 };
 
 }  // namespace silk

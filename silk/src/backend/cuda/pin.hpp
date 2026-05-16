@@ -24,6 +24,7 @@ struct PinPosition {
   PinPosition() = default;
   explicit PinPosition(const RMatrixX3f& V);
   PinPosition(const PinIndex& index, const RMatrixX3f& V);
+  PinPosition(const PinIndex& index, std::span<const float> V);
 };
 
 }  // namespace silk::cuda

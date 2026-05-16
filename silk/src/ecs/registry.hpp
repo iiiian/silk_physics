@@ -160,8 +160,8 @@ class Registry {
     return c.data();
   }
 
-  /// @brief Remove component T from entity and invalidate handle.
-  /// No-op if entity does not have such component.
+  /// @brief Remove component T and its dependents from entity and invalidate
+  /// handle. No-op if entity does not have such component.
   template <typename T>
   void remove(uint32_t entity) {
     static_assert((std::is_same_v<T, C> || ...),
@@ -172,7 +172,7 @@ class Registry {
     remove_direct<T>(entity);
   }
 
-  /// @brief Remove all components of type T.
+  /// @brief Remove all components of type T and their dependents.
   template <typename T>
   void remove_all_components() {
     static_assert((std::is_same_v<T, C> || ...),
@@ -190,6 +190,21 @@ class Registry {
   /// @return Pointer to newly modified component. nullptr if entity is invalid.
   template <typename T>
   T *set(uint32_t entity, T component) {
+    static_assert((std::is_same_v<T, C> || ...),
+                  "T is not a component type, double check T appears as "
+                  "template argument in registry declaration.");
+    if (!has_entity(entity)) {
+      return nullptr;
+    }
+
+    auto &c = std::get<ComponentStorage<T>>(components_);
+    return c.set(entity, std::move(component));
+  }
+
+  /// @brief Remove dependents then set/replace component T of entity.
+  /// @return Pointer to newly modified component. nullptr if entity is invalid.
+  template <typename T>
+  T *remove_deps_then_set(uint32_t entity, T component) {
     static_assert((std::is_same_v<T, C> || ...),
                   "T is not a component type, double check T appears as "
                   "template argument in registry declaration.");
