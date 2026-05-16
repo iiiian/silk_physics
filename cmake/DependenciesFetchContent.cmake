@@ -76,8 +76,11 @@ FetchContent_Declare(
     Imath
     GIT_REPOSITORY https://github.com/AcademySoftwareFoundation/Imath.git
     GIT_TAG c0396a055a01bc537d32f435aee11a9b7ed6f0b5 # version 3.1.12
+    OVERRIDE_FIND_PACKAGE
 )
 
+set(USE_BINARIES OFF CACHE BOOL "Build Alembic command line tools" FORCE)
+set(USE_TESTS OFF CACHE BOOL "Build Alembic tests" FORCE)
 FetchContent_Declare(
     Alembic
     GIT_REPOSITORY https://github.com/alembic/alembic.git
