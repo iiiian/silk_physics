@@ -9,8 +9,8 @@
 #include "config.hpp"
 #include "eigen_alias.hpp"
 
-/// @brief A utility class to handle 3D affine transformations using both GLM and
-/// Eigen.
+/// @brief A utility class to handle 3D affine transformations using both GLM
+/// and Eigen.
 class AffineTransformer {
  public:
   using EigenAffine =

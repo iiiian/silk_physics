@@ -47,8 +47,7 @@ void Demo::apply_config(const SimConfig& config) {
 bool Demo::init(silk::Backend backend) {
   silk::Result r = ctx_.silk_world.init(backend);
   if (!r) {
-    spdlog::error("Failed to initialize Silk world. Error: {}",
-                  r.to_string());
+    spdlog::error("Failed to initialize Silk world. Error: {}", r.to_string());
     return false;
   }
   spdlog::info("Silk world initialized with {} backend",

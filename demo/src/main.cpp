@@ -3,8 +3,8 @@
 #include <spdlog/spdlog.h>
 
 #include <argparse/argparse.hpp>
-#include <optional>
 #include <cctype>
+#include <optional>
 #include <string>
 
 #include "config.hpp"
