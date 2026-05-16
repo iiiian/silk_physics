@@ -8,32 +8,50 @@
 #include <cuda/devices>
 #include <cuda/memory_pool>
 #include <cuda/stream>
+#include <stdexcept>
 
-// #include "backend/cuda/collision/object_collider.cuh"
+#include "backend/cuda/assembly/cloth_assembly_l1_cache.cuh"
+#include "backend/cuda/collision/object_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
-// #include "backend/cuda/ecs.hpp"
-// #include "backend/cuda/object_state.cuh"
-// #include "backend/cuda/obstacle_position.hpp"
-// #include "backend/cuda/solver/cloth_solver_context.cuh"
-// #include "backend/cuda/solver/pipeline.hpp"
-// #include "common/cloth_assembly_l2_cache.hpp"
 #include "backend/cuda/ecs.hpp"
 #include "backend/cuda/main_loop.cuh"
+#include "backend/cuda/mesh_partition.cuh"
+#include "backend/cuda/physical_state.cuh"
+#include "backend/cuda/solver/cloth_admm_helper.cuh"
+#include "common/cloth_assembly_l2_cache.hpp"
+#include "common/config_plus.hpp"
+#include "common/initial_state.hpp"
 #include "common/mesh.hpp"
 #include "common/pin.hpp"
+#include "silk/silk.hpp"
 
 namespace silk::cuda {
 
-namespace {
-CudaRuntime init_cuda_runtime() {}
-}
-
-struct CudaBackend::Impl {
+class CudaBackend::Impl {
+ public:
+  // Cuda resources MUST BE the first in member declaration.
+  // Else they will be destroyed before ref.
   std::optional<cu::device_ref> device;
   std::optional<cu::stream> stream;
-  std::optional<cu::device_memory_pool> mr;
+  mutable std::optional<cu::device_memory_pool> mr;
+
   ObjRegistry registry_;
   MainLoop main_loop_;
+
+  Impl() {
+    if (cu::devices.size() == 0) {
+      throw std::runtime_error("No Nvidia GPU!!");
+    }
+
+    device.emplace(cu::devices[0]);
+    stream.emplace(*device);
+    mr.emplace(*device);
+  }
+
+  CudaRuntime get_runtime() const {
+    auto ref = mr->as_ref();  // resource_ref can't bind to rvalue.
+    return CudaRuntime{.stream = *stream, .mr = ref};
+  }
 };
 
 CudaBackend::CudaBackend() : impl_(std::make_unique<Impl>()) {}
@@ -50,20 +68,22 @@ Result CudaBackend::set_global_config(GlobalConfig config) {
   return Result::ok();
 }
 
-void CudaBackend::clear() {
-  impl_->main_loop_ = {};
-  impl_->registry_ = {};
-}
-
 Result CudaBackend::solver_step() {
-  auto err = impl_->main_loop_.step(impl_->registry_, );
-  return Result::error(ErrorCode::Unknown);
-}
-return Result::ok();
+  auto err = impl_->main_loop_.step(impl_->registry_, impl_->get_runtime());
+  if (err) {
+    // TODO: better err message.
+    return Result::error(ErrorCode::Unknown);
+  }
+  return Result::ok();
 }
 
 Result CudaBackend::solver_reset() {
-  impl_->main_loop_.reset(impl_->registry_);
+  impl_->registry_.remove_all_components<ClothAssemblyL2Cache>();
+  impl_->registry_.remove_all_components<PhysicalState>();
+  impl_->registry_.remove_all_components<collision::ObjectCollider>();
+  impl_->registry_.remove_all_components<assembly::ClothAssemblyL1Cache>();
+  impl_->registry_.remove_all_components<solver::ClothADMMHelper>();
+
   return Result::ok();
 }
 
@@ -102,15 +122,14 @@ Result CudaBackend::add_cloth(ClothConfig cloth_config,
 }
 
 Result CudaBackend::remove_cloth(uint32_t handle) {
-  auto entity = impl_->registry_.get_entity(Handle(handle));
-  if (!entity) {
+  if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = impl_->registry_.get<ClothConfig>(*entity);
+  auto cloth_config = impl_->registry_.get<ClothConfig>(handle);
   if (!cloth_config) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  impl_->registry_.remove_entity(Handle(handle));
+  impl_->registry_.nuke_entity(handle);
   return Result::ok();
 }
 

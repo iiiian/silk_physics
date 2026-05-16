@@ -14,7 +14,6 @@ class InitialState;
 namespace silk::cuda {
 class ClothADMMHelper;
 class PhysicalState;
-class ObstaclePosition;
 class MeshPartition;
 }  // namespace silk::cuda
 
@@ -41,7 +40,6 @@ using ObjRegistry = ::silk::ecs::Registry<ClothConfig,
                                           InitialState,
                                           ClothAssemblyL2Cache,
                                           PhysicalState,
-                                          ObstaclePosition,
                                           collision::ObjectCollider,
                                           assembly::ClothAssemblyL1Cache,
                                           solver::ClothADMMHelper
