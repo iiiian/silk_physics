@@ -47,3 +47,9 @@ using ObjRegistry = ::silk::ecs::Registry<ClothConfig,
 // clang-format on
 
 }  // namespace silk::cuda
+
+namespace silk {
+
+// dependency here
+
+}  // namespace silk

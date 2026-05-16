@@ -14,6 +14,37 @@
 
 namespace silk::ecs {
 
+/// @brief Type-level list of component types.
+template <typename... T>
+struct ComponentList {};
+
+/// @brief Optional customization point for dependency-driven component removal.
+///
+/// Specialize this trait for a registry/component pair to describe components
+/// dependency.
+///
+/// This is invalidation only. The registry does not auto-create missing
+/// components. Dependency graphs are expected to be acyclic.
+///
+/// Example:
+///
+/// Suppose DerivedComponentA and DerivedComponentB depends on SourceComponent.
+///
+/// @code
+/// template <>
+/// struct ComponentDependents<MyRegistry, SourceComponent> {
+///   using Type = ComponentList<DerivedComponentA, DerivedComponentB>;
+/// };
+/// @endcode
+///
+/// @tparam RegistryType Registry type the rule applies to.
+/// @tparam ComponentType Source component type being removed or replaced.
+template <typename RegistryType, typename ComponentType>
+struct ComponentDependents {
+  /// @brief No dependents by default. Backends opt in by specializing.
+  using Type = ComponentList<>;
+};
+
 template <typename... C>
 class Registry {
  public:
@@ -54,7 +85,7 @@ class Registry {
   }
 
   void nuke_entity(uint32_t entity) {
-    (remove<C>(entity), ...);
+    (remove_direct<C>(entity), ...);
     entities_.erase(entity);
   }
 
@@ -137,8 +168,8 @@ class Registry {
                   "T is not a component type, double check T appears as "
                   "template argument in registry declaration.");
 
-    auto &c = std::get<ComponentStorage<T>>(components_);
-    c.remove(entity);
+    remove_dependents<T>(entity);
+    remove_direct<T>(entity);
   }
 
   /// @brief Remove all components of type T.
@@ -148,6 +179,9 @@ class Registry {
                   "T is not a component type, double check T appears as "
                   "template argument in registry declaration.");
 
+    for (uint32_t entity : entities_) {
+      remove_dependents<T>(entity);
+    }
     auto &c = std::get<ComponentStorage<T>>(components_);
     c.clear();
   }
@@ -163,11 +197,31 @@ class Registry {
       return nullptr;
     }
 
+    if (has_component<T>(entity)) {
+      remove_dependents<T>(entity);
+    }
     auto &c = std::get<ComponentStorage<T>>(components_);
     return c.set(entity, std::move(component));
   }
 
  private:
+  template <typename T>
+  void remove_direct(uint32_t entity) {
+    auto &c = std::get<ComponentStorage<T>>(components_);
+    c.remove(entity);
+  }
+
+  template <typename T>
+  void remove_dependents(uint32_t entity) {
+    using Dependents = typename ComponentDependents<Registry, T>::Type;
+    remove_component_list(entity, Dependents{});
+  }
+
+  template <typename... T>
+  void remove_component_list(uint32_t entity, ComponentList<T...>) {
+    (remove<T>(entity), ...);
+  }
+
   std::unordered_set<uint32_t> entities_;
   std::tuple<ComponentStorage<C>...> components_;
 };
