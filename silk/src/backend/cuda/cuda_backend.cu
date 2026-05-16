@@ -17,13 +17,13 @@
 #include "backend/cuda/ecs.hpp"
 #include "backend/cuda/main_loop.cuh"
 #include "backend/cuda/mesh_partition.cuh"
+#include "backend/cuda/pin.hpp"
 #include "backend/cuda/physical_state.cuh"
 #include "backend/cuda/solver/cloth_admm_helper.cuh"
 #include "common/cloth_assembly_l2_cache.hpp"
 #include "common/config_plus.hpp"
 #include "common/initial_state.hpp"
 #include "common/mesh.hpp"
-#include "common/pin.hpp"
 #include "silk/silk.hpp"
 
 namespace silk::cuda {
@@ -110,7 +110,8 @@ Result CudaBackend::add_cloth(ClothConfig cloth_config,
       return Result::error(ErrorCode::InvalidPin);
     }
   }
-  Pin pin{pin_index, tri_mesh->V};
+  PinIndex pin{pin_index};
+  PinPosition pin_position{pin, tri_mesh->V};
 
   uint32_t e = impl_->registry_.make_entity();
   impl_->registry_.set(e, std::move(cloth_config));
@@ -118,6 +119,7 @@ Result CudaBackend::add_cloth(ClothConfig cloth_config,
   impl_->registry_.set(e, std::move(*tri_mesh));
   impl_->registry_.set(e, std::move(init_state));
   impl_->registry_.set(e, std::move(pin));
+  impl_->registry_.set(e, std::move(pin_position));
 
   handle = e;
   return Result::ok();
@@ -204,52 +206,51 @@ Result CudaBackend::set_cloth_collision_config(uint32_t handle,
 }
 
 Result CudaBackend::set_cloth_pin_index(uint32_t handle,
-                                        ctd::span<const int> pin_index) {
-  Entity* e = impl_->registry_.get_entity(Handle(handle));
-  if (!e) {
+                                        std::span<const int> pin_index) {
+  if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = impl_->registry_.get<ClothConfig>(*e);
+  auto cloth_config = impl_->registry_.get<ClothConfig>(handle);
   if (!cloth_config) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto tri_mesh = impl_->registry_.get<TriMesh>(*e);
+  auto tri_mesh = impl_->registry_.get<TriMesh>(handle);
   assert(tri_mesh);
-  auto pin = impl_->registry_.get<Pin>(*e);
-  assert(pin);
-  if (pin_index.data != nullptr && pin_index.size != 0) {
-    pin->index =
-        Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.size);
-    pin->position.resize(3 * pin->index.size());
-    for (int i = 0; i < pin->index.size(); ++i) {
-      pin->position(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(pin->index(i));
+
+  for (int i : pin_index) {
+    if (i < 0 || i >= tri_mesh->V.rows()) {
+      return Result::error(ErrorCode::InvalidPin);
     }
-  } else {
-    pin->index = {};
-    pin->position = {};
   }
-  impl_->registry_.remove<ClothAssemblyL1Cache>(*e);
-  impl_->registry_.remove<ObjectCollider>(*e);
+
+  PinIndex pin{pin_index};
+  PinPosition pin_position{pin, tri_mesh->V};
+  impl_->registry_.set(handle, std::move(pin));
+  impl_->registry_.set(handle, std::move(pin_position));
+  impl_->registry_.remove<assembly::ClothAssemblyL1Cache>(handle);
+  impl_->registry_.remove<collision::ObjectCollider>(handle);
   return Result::ok();
 }
 
 Result CudaBackend::set_cloth_pin_position(uint32_t handle,
-                                           ConstSpan<float> position) {
-  Entity* e = impl_->registry_.get_entity(Handle(handle));
-  if (!e) {
+                                           std::span<const float> position) {
+  if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = impl_->registry_.get<ClothConfig>(*e);
+  auto cloth_config = impl_->registry_.get<ClothConfig>(handle);
   if (!cloth_config) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto pin = impl_->registry_.get<Pin>(*e);
-  assert(pin);
-  if (3 * pin->index.size() != position.size) {
+  auto pin_index = impl_->registry_.get<PinIndex>(handle);
+  auto pin_position = impl_->registry_.get<PinPosition>(handle);
+  assert(pin_index && pin_position);
+  if (3 * pin_index->index.size() != position.size()) {
     return Result::error(ErrorCode::InvalidPin);
   }
-  pin->position =
-      Eigen::Map<const Eigen::VectorXf>(position.data, position.size);
+  pin_position->prev_position = pin_position->curr_position;
+  pin_position->curr_position.assign(position.begin(), position.end());
+  pin_position->is_static = false;
+  pin_position->is_static_twice = false;
   return Result::ok();
 }
 
@@ -260,11 +261,9 @@ Result CudaBackend::add_obstacle(CollisionConfig collision_config,
     handle = 0;
     return Result::error(ErrorCode::InvalidMesh);
   }
-  ObstaclePosition p;
+  PinPosition p{tri_mesh->V};
   p.is_static = false;
   p.is_static_twice = false;
-  p.curr_position = tri_mesh->V.reshaped<Eigen::RowMajor>();
-  p.prev_position = p.curr_position;
   auto [h, e] = impl_->registry_.add_entity();
   if (h.is_empty()) {
     handle = 0;
@@ -273,7 +272,7 @@ Result CudaBackend::add_obstacle(CollisionConfig collision_config,
   assert(e);
   impl_->registry_.set<CollisionConfig>(*e, std::move(collision_config));
   impl_->registry_.set<TriMesh>(*e, std::move(*tri_mesh));
-  impl_->registry_.set<ObstaclePosition>(*e, std::move(p));
+  impl_->registry_.set<PinPosition>(*e, std::move(p));
   handle = h.value;
   return Result::ok();
 }
@@ -283,7 +282,7 @@ Result CudaBackend::remove_obstacle(uint32_t handle) {
   if (!entity) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto obstacle_position = impl_->registry_.get<ObstaclePosition>(*entity);
+  auto obstacle_position = impl_->registry_.get<PinPosition>(*entity);
   if (!obstacle_position) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -297,7 +296,7 @@ Result CudaBackend::set_obstacle_collision_config(uint32_t handle,
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto obstacle_position = impl_->registry_.get<ObstaclePosition>(*e);
+  auto obstacle_position = impl_->registry_.get<PinPosition>(*e);
   if (!obstacle_position) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -313,18 +312,17 @@ Result CudaBackend::set_obstacle_position(uint32_t handle,
   if (!e) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto pos = impl_->registry_.get<ObstaclePosition>(*e);
+  auto pos = impl_->registry_.get<PinPosition>(*e);
   if (!pos) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  if (pos->curr_position.size() != position.size) {
+  if (pos->curr_position.size() != position.size()) {
     return Result::error(ErrorCode::InvalidPosition);
   }
   pos->is_static = false;
   pos->is_static_twice = false;
   std::swap(pos->curr_position, pos->prev_position);
-  pos->curr_position =
-      Eigen::Map<const Eigen::VectorXf>(position.data, position.size);
+  pos->curr_position.assign(position.begin(), position.end());
   return Result::ok();
 }
 

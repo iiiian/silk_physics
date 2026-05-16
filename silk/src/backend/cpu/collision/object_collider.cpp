@@ -9,8 +9,8 @@
 #include <unordered_set>
 
 #include "backend/cpu/obstacle_position.hpp"
+#include "backend/cpu/pin.hpp"
 #include "common/mesh.hpp"
-#include "common/pin.hpp"
 #include "silk/silk.hpp"
 
 namespace silk::cpu {

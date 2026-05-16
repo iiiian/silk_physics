@@ -10,6 +10,7 @@ set(SILK_SOURCES
     src/backend/cpu/collision/object_collider.cpp
     src/backend/cpu/collision/pipeline.cpp
     src/backend/cpu/cpu_backend.cpp
+    src/backend/cpu/pin.cpp
     src/backend/cpu/solver/cholmod_utils.cpp
     src/backend/cpu/solver/cloth_solver_context.cpp
     src/backend/cpu/solver/cloth_solver_utils.cpp
@@ -36,6 +37,7 @@ set(SILK_CUDA_SOURCES
     src/backend/cuda/graph_partition.cpp
     src/backend/cuda/main_loop.cu
     src/backend/cuda/mesh_partition.cu
+    src/backend/cuda/pin.cpp
     src/backend/cuda/physical_state.cu
     src/backend/cuda/solver/barrier_constraints.cu
     src/backend/cuda/solver/cloth_admm_helper.cu

@@ -6,13 +6,14 @@ namespace silk {
 class ClothConfig;
 class CollisionConfigPlus;
 class TriMesh;
-class Pin;
 class ClothAssemblyL2Cache;
 class InitialState;
 }  // namespace silk
 
 namespace silk::cuda {
 class ClothADMMHelper;
+struct PinIndex;
+struct PinPosition;
 class PhysicalState;
 class MeshPartition;
 }  // namespace silk::cuda
@@ -36,7 +37,8 @@ using ObjRegistry = ::silk::ecs::Registry<ClothConfig,
                                           CollisionConfigPlus,
                                           TriMesh,
                                           MeshPartition,
-                                          Pin,
+                                          PinIndex,
+                                          PinPosition,
                                           InitialState,
                                           ClothAssemblyL2Cache,
                                           PhysicalState,

@@ -9,8 +9,8 @@
 
 #include "backend/cuda/collision/mesh_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
+#include "backend/cuda/pin.hpp"
 #include "common/mesh.hpp"
-#include "common/pin.hpp"
 #include "silk/silk.hpp"
 
 namespace silk::cuda::collision {
@@ -115,7 +115,7 @@ std::vector<TriangleCollider> make_triangle_colliders(
 
 ObjectCollider ObjectCollider::from_physical(const CollisionConfigPlus& config,
                                              const TriMesh& mesh,
-                                             const Pin& pin,
+                                             const PinIndex& pin,
                                              const Eigen::VectorXf& mass,
                                              int state_offset, CudaRuntime rt) {
   auto& c = config;

@@ -7,9 +7,9 @@
 #include "backend/cuda/collision/broadphase.cuh"
 #include "backend/cuda/collision/mesh_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
+#include "backend/cuda/pin.hpp"
 #include "common/config_plus.hpp"
 #include "common/mesh.hpp"
-#include "common/pin.hpp"
 
 namespace silk::cuda::collision {
 
@@ -39,7 +39,8 @@ class ObjectCollider {
   /// @param[in] mass Object vertex mass vector.
   /// @param[in] state_offset Object offset in global state.
   static ObjectCollider from_physical(const CollisionConfigPlus& config,
-                                      const TriMesh& mesh, const Pin& pin,
+                                      const TriMesh& mesh,
+                                      const PinIndex& pin,
                                       const Eigen::VectorXf& mass,
                                       int state_offset, CudaRuntime rt);
 

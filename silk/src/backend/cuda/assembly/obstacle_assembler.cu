@@ -5,9 +5,8 @@
 #include "backend/cuda/collision/object_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/ecs.hpp"
-#include "backend/cuda/eigen_cuda_interop.cuh"
+#include "backend/cuda/pin.hpp"
 #include "common/mesh.hpp"
-#include "common/pin.hpp"
 
 namespace silk::cuda::assembly {
 
@@ -17,10 +16,10 @@ void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
 
   auto config = registry.get<CollisionConfigPlus>(e);
   auto mesh = registry.get<TriMesh>(e);
-  auto pin = registry.get<Pin>(e);
+  auto pin_position = registry.get<PinPosition>(e);
 
   // Obstacle entity sanity check.
-  assert(config && mesh && pin);
+  assert(config && mesh && pin_position);
 
   // Ensure collider exists and is up-to-date
   using ObjectCollider = collision::ObjectCollider;
@@ -36,20 +35,20 @@ void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
     config->is_updated = false;
   }
 
-  if (pin->is_static_twice) {
+  if (pin_position->is_static_twice) {
     // No-op.
-  } else if (pin->is_static) {
+  } else if (pin_position->is_static) {
     // Static once. Update position.
-    auto d_pos = host_eigen_to_device(pin->curr_position, rt);
+    auto d_pos = vec_like_to_device(pin_position->curr_position, rt);
     collider->update_position(d_pos, d_pos, rt);
-    pin->is_static_twice = true;
+    pin_position->is_static_twice = true;
   } else {
     // Dynamic. Update position.
-    auto d_prev = host_eigen_to_device(pin->prev_position, rt);
-    auto d_curr = host_eigen_to_device(pin->curr_position, rt);
+    auto d_prev = vec_like_to_device(pin_position->prev_position, rt);
+    auto d_curr = vec_like_to_device(pin_position->curr_position, rt);
     collider->update_position(d_curr, d_prev, rt);
-    std::swap(pin->curr_position, pin->prev_position);
-    pin->is_static = true;
+    std::swap(pin_position->curr_position, pin_position->prev_position);
+    pin_position->is_static = true;
   }
 }
 

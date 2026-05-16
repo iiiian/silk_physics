@@ -11,3 +11,7 @@ On linux, valid presets are linux_debug, linux_profile, and linux_release
 - no casting between index type. This repo assumes index type is int and is always large enough.
   Ex. static_cast<some size_t type> should be avoided. rely on implicit cast.
 
+## CCCL lib
+
+- cuda::std::span is a device compatible span. Common vector like type like std::vector, cuda::buffer can be casted to cuda::std::span implicitly.
+

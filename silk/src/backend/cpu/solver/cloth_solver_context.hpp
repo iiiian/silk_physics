@@ -4,8 +4,8 @@
 #include <optional>
 
 #include "backend/cpu/solver/cholmod_utils.hpp"
+#include "backend/cpu/pin.hpp"
 #include "common/cloth_assembly_l2_cache.hpp"
-#include "common/pin.hpp"
 #include "silk/silk.hpp"
 
 namespace silk::cpu {

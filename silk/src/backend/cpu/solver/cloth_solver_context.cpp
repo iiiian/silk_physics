@@ -3,11 +3,11 @@
 #include <Eigen/Core>
 #include <optional>
 
+#include "backend/cpu/pin.hpp"
 #include "backend/cpu/solver/cholmod_utils.hpp"
 #include "common/cloth_assembly_l2_cache.hpp"
 #include "common/eigen_utils.hpp"
 #include "common/logger.hpp"
-#include "common/pin.hpp"
 #include "silk/silk.hpp"
 
 namespace silk::cpu {

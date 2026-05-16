@@ -5,7 +5,7 @@
 
 #include "common/eigen_alias.hpp"
 
-namespace silk {
+namespace silk::cpu {
 
 class Pin {
  public:
@@ -20,4 +20,4 @@ class Pin {
   Pin(std::span<const int> index, const RMatrixX3f& V);
 };
 
-}  // namespace silk
+}  // namespace silk::cpu

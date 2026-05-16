@@ -1,4 +1,4 @@
-#include "common/pin.hpp"
+#include "backend/cpu/pin.hpp"
 
 #include <Eigen/Core>
 #include <cassert>
@@ -6,7 +6,7 @@
 
 #include "common/eigen_alias.hpp"
 
-namespace silk {
+namespace silk::cpu {
 
 Pin::Pin(std::span<const int> index, const RMatrixX3f& V) {
   assert(index.size() < V.rows());
@@ -22,4 +22,4 @@ Pin::Pin(std::span<const int> index, const RMatrixX3f& V) {
   prev_position = curr_position;
 }
 
-}  // namespace silk
+}  // namespace silk::cpu

@@ -6,13 +6,13 @@ namespace silk {
 class ClothAssemblyL2Cache;
 struct ClothConfig;
 struct CollisionConfig;
-struct Pin;
 struct TriMesh;
 }  // namespace silk
 
 namespace silk::cpu {
 class ClothSolverContext;
 class ObjectCollider;
+class Pin;
 struct ObjectState;
 struct ObstaclePosition;
 
