@@ -80,7 +80,8 @@ __both__ ctd::optional<ctd::pair<float, float>> exact_ee_uv(const Vec3f& x0,
   v = (b * u + f) / e;
   if (v < 0.0f) {
     v = 0.0f;
-    u = ctd::clamp(-c / 1, 0.0f, 1.0f);
+    // TODO: double check
+    u = ctd::clamp(-c / a, 0.0f, 1.0f);
   } else if (v > 1.0f) {
     v = 1.0f;
     u = ctd::clamp((b - c) / a, 0.0f, 1.0f);

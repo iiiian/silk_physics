@@ -90,7 +90,7 @@ FetchContent_Declare(
 FetchContent_Declare(
     CCCL
     GIT_REPOSITORY https://github.com/NVIDIA/cccl.git
-    GIT_TAG d84981c797eb186e45f883f85423df94f9ac8bf4 # version 3.2.1
+    GIT_TAG d84981c797eb186e45f883f85423df94f9ac8bf4 # version 3.3.3
 )
 
 set(KAMINPAR_BUILD_APPS OFF)

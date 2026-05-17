@@ -126,7 +126,7 @@ template <typename T>
 void resize_buffer(size_t size, cu::device_buffer<T>& buf, CudaRuntime rt) {
   auto new_buf = alloc<T>(rt, size);
   cu::copy_bytes(rt.stream, buf, ctd::span{new_buf.data(), buf.size()});
-  buf = new_buf;
+  buf = std::move(new_buf);
 }
 
 template <typename T>
@@ -149,6 +149,8 @@ template <typename T>
 std::vector<T> vec_like_to_host(ctd::span<const T> vec, CudaRuntime rt) {
   std::vector<T> buffer(vec.size());
   cu::copy_bytes(rt.stream, vec, buffer);
+  rt.stream.sync();
+  return buffer;
 }
 
 template <typename T>

@@ -197,8 +197,8 @@ __device__ ctd::optional<Collision> pt_ccd(
     inv_mass(3) = t->inv_mass(2);
 
     float denom = 0.0f;
-    for (int i = 0; i < 4; ++i) {
-      denom += para(i) * para(i) * inv_mass(i);
+    for (int j = 0; j < 4; ++j) {
+      denom += para(j) * para(j) * inv_mass(j);
     }
 
     Vec4f weight = ax(-1.0f / denom, vmul(para, inv_mass));
@@ -291,7 +291,7 @@ __device__ ctd::optional<Collision> ee_ccd(
     Vec3f v_diff = velocity_diff(v_rel, n, ms, restitution, friction);
 
     // Compute impulse weights.
-    Vec4f para = {1.0f, 1.0f - u - v, u, v};
+    Vec4f para = {1.0f - u, u, 1.0f - v, v};
     Vec4f inv_mass;
     inv_mass(0) = ea->inv_mass(0);
     inv_mass(1) = ea->inv_mass(1);
@@ -299,8 +299,8 @@ __device__ ctd::optional<Collision> ee_ccd(
     inv_mass(3) = eb->inv_mass(1);
 
     float denom = 0.0f;
-    for (int i = 0; i < 4; ++i) {
-      denom += para(i) * para(i) * inv_mass(i);
+    for (int j = 0; j < 4; ++j) {
+      denom += para(j) * para(j) * inv_mass(j);
     }
 
     Vec4f weight = ax(-1.0f / denom, vmul(para, inv_mass));

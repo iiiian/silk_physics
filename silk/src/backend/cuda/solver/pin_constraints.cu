@@ -79,7 +79,11 @@ EqualityConstraints gather_pin_constraints(ObjRegistry& registry, int state_num,
 
     if (pin_index->is_all_pinned) {
       cu::fill_bytes(rt.stream, indicator, true);
-      part->permute(target_position, target, rt);
+      if (part) {
+        part->permute(target_position, target, rt);
+      } else {
+        cu::copy_bytes(rt.stream, target_position, target);
+      }
     } else {
       auto indexes = vec_like_to_device(pin_index->index, rt);
       int grid_num = div_round_up(pin_index->index.size(), 128);

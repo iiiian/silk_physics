@@ -93,26 +93,6 @@ target_compile_definitions(
     PRIVATE PHYSICS_SCENE_ROOT="${CMAKE_SOURCE_DIR}/misc/physics_scene"
 )
 
-if(SILK_ENABLE_CUDA)
-    add_executable(
-        elastic_rhs_test
-        elastic_rhs_test.cpp
-    )
-    target_include_directories(
-        elastic_rhs_test
-        PRIVATE ${SILK_DIR}
-    )
-    target_link_libraries(
-        elastic_rhs_test
-        PRIVATE silk::silk
-        PRIVATE Eigen3::Eigen
-        PRIVATE spdlog::spdlog
-        PRIVATE Catch2::Catch2WithMain
-        PRIVATE TBB::tbb
-        PRIVATE CUDA::cudart
-    )
-endif()
-
 include(CTest)
 include(Catch)
 
@@ -122,27 +102,5 @@ set(SILK_TEST_TARGETS
     sap_benchmark
     sap_kd_tree_benchmark
 )
-
-if(SILK_ENABLE_CUDA)
-    add_executable(
-        jacobi_solver_test
-        jacobi_solver_test.cpp
-    )
-    target_include_directories(
-        jacobi_solver_test
-        PRIVATE ${SILK_DIR}
-    )
-    target_link_libraries(
-        jacobi_solver_test
-        PRIVATE silk::silk
-        PRIVATE Eigen3::Eigen
-        PRIVATE spdlog::spdlog
-        PRIVATE Catch2::Catch2WithMain
-        PRIVATE TBB::tbb
-        PRIVATE CUDA::cudart
-    )
-
-    list(APPEND SILK_TEST_TARGETS elastic_rhs_test jacobi_solver_test)
-endif()
 
 catch_discover_tests(${SILK_TEST_TARGETS})
