@@ -23,8 +23,8 @@ PhysicalState::PhysicalState(int state_offset,
 
   this->state_offset = state_offset;
   this->state_num = curr_state.size();
-  this->curr_state = vec_like_to_device(curr_state, rt);
-  this->state_velocity = vec_like_to_device(state_velocity, rt);
+  this->curr_state = vec_like_to_device<float>(curr_state, rt);
+  this->state_velocity = vec_like_to_device<float>(state_velocity, rt);
   rt.stream.sync();
 }
 

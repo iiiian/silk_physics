@@ -69,7 +69,8 @@ EqualityConstraints gather_pin_constraints(ObjRegistry& registry, int state_num,
     }
 
     // TODO: avoid host <-> device copy.
-    auto target_position = vec_like_to_device(pin_position->curr_position, rt);
+    auto target_position =
+        vec_like_to_device<float>(pin_position->curr_position, rt);
 
     ctd::span<const int> perm = {};
     auto part = registry.get<MeshPartition>(e);
@@ -85,7 +86,7 @@ EqualityConstraints gather_pin_constraints(ObjRegistry& registry, int state_num,
         cu::copy_bytes(rt.stream, target_position, target);
       }
     } else {
-      auto indexes = vec_like_to_device(pin_index->index, rt);
+      auto indexes = vec_like_to_device<int>(pin_index->index, rt);
       int grid_num = div_round_up(pin_index->index.size(), 128);
       scatter_vertices<bool><<<grid_num, 128, 0, rt.stream.get()>>>(
           indexes, perm, true, indicator);

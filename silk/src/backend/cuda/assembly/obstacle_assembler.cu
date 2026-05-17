@@ -54,12 +54,12 @@ void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
     // No-op.
   } else if (pin_pos->is_static) {
     // Static once. Update position.
-    auto d_pos = vec_like_to_device(pin_pos->curr_position, rt);
+    auto d_pos = vec_like_to_device<float>(pin_pos->curr_position, rt);
     collider->update_position(d_pos, d_pos, rt);
   } else {
     // Dynamic. Update position.
-    auto d_prev = vec_like_to_device(pin_pos->prev_position, rt);
-    auto d_curr = vec_like_to_device(pin_pos->curr_position, rt);
+    auto d_prev = vec_like_to_device<float>(pin_pos->prev_position, rt);
+    auto d_curr = vec_like_to_device<float>(pin_pos->curr_position, rt);
     collider->update_position(d_curr, d_prev, rt);
   }
 }

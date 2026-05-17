@@ -129,6 +129,12 @@ endif()
 
 if (SILK_ENABLE_CUDA)
     FetchContent_MakeAvailable(CCCL KaMinPar)
+    # So we could link KaMinPar as shared lib.
+    if (TARGET KaMinParCommon)
+        set_target_properties(KaMinParCommon PROPERTIES
+            POSITION_INDEPENDENT_CODE ON
+        )
+    endif()
 endif()
 
 if(SILK_BUILD_DEMO)
