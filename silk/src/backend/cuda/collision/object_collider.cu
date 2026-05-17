@@ -2,8 +2,10 @@
 
 #include <cuda_runtime.h>
 
+#include <cassert>
 #include <cub/cub.cuh>
 #include <cuda/buffer>
+#include <functional>
 #include <unordered_set>
 #include <vector>
 
@@ -16,8 +18,8 @@
 namespace silk::cuda {
 
 std::vector<PointCollider> make_point_colliders(
-    const TriMesh& mesh, const RMatrixX3f& init_pos, float bbox_padding,
-    int state_offset, float restitution, float friction,
+    const TriMesh& mesh, Eigen::Ref<const RMatrixX3f> init_pos,
+    float bbox_padding, int state_offset, float restitution, float friction,
     float minimal_separation, std::function<float(int)> get_inv_mass) {
   int point_num = mesh.V.rows();
   std::vector<PointCollider> point_colliders;
@@ -43,8 +45,8 @@ std::vector<PointCollider> make_point_colliders(
 }
 
 std::vector<EdgeCollider> make_edge_colliders(
-    const TriMesh& mesh, const RMatrixX3f& init_pos, float bbox_padding,
-    int state_offset, float restitution, float friction,
+    const TriMesh& mesh, Eigen::Ref<const RMatrixX3f> init_pos,
+    float bbox_padding, int state_offset, float restitution, float friction,
     float minimal_separation, std::function<float(int)> get_inv_mass) {
   int edge_num = mesh.E.rows();
   std::vector<EdgeCollider> edge_colliders;
@@ -73,8 +75,8 @@ std::vector<EdgeCollider> make_edge_colliders(
 }
 
 std::vector<TriangleCollider> make_triangle_colliders(
-    const TriMesh& mesh, const RMatrixX3f& init_pos, float bbox_padding,
-    int state_offset, float restitution, float friction,
+    const TriMesh& mesh, Eigen::Ref<const RMatrixX3f> init_pos,
+    float bbox_padding, int state_offset, float restitution, float friction,
     float minimal_separation, std::function<float(int)> get_inv_mass) {
   int face_num = mesh.F.rows();
   std::vector<TriangleCollider> triangle_colliders;
@@ -113,13 +115,14 @@ std::vector<TriangleCollider> make_triangle_colliders(
 ObjectCollider ObjectCollider::from_physical(const CollisionConfigPlus& config,
                                              const TriMesh& mesh,
                                              const PinIndex& pin,
-                                             const Eigen::VectorXf& init_pos,
+                                             ctd::span<const float> init_pos,
                                              const Eigen::VectorXf& mass,
                                              int state_offset, CudaRuntime rt) {
   auto& c = config;
   ObjectCollider oc;
 
-  auto pos = Eigen::Map<const RMatrixX3f>(init_pos.data(), mesh.V.rows(), 3);
+  assert(init_pos.size() == 3 * mesh.V.rows());
+  Eigen::Map<const RMatrixX3f> pos(init_pos.data(), mesh.V.rows(), 3);
 
   // Pad object AABB by 5% of mesh scale to avoid zero-width degenerate cases.
   oc.bbox = {.min = Vec3f::vec_like(pos.colwise().minCoeff()),
@@ -171,12 +174,13 @@ ObjectCollider ObjectCollider::from_physical(const CollisionConfigPlus& config,
 
 ObjectCollider ObjectCollider::from_obstacle(const CollisionConfigPlus& config,
                                              const TriMesh& mesh,
-                                             const Eigen::VectorXf& init_pos,
+                                             ctd::span<const float> init_pos,
                                              CudaRuntime rt) {
   auto& c = config;
   ObjectCollider oc;
 
-  auto pos = Eigen::Map<const RMatrixX3f>(init_pos.data(), mesh.V.rows(), 3);
+  assert(init_pos.size() == 3 * mesh.V.rows());
+  Eigen::Map<const RMatrixX3f> pos(init_pos.data(), mesh.V.rows(), 3);
 
   // Pad object AABB by 5% of mesh scale to avoid zero-width degenerate cases.
   oc.bbox = {.min = Vec3f::vec_like(pos.colwise().minCoeff()),

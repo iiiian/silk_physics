@@ -1,6 +1,9 @@
 #include "backend/cuda/assembly/obstacle_assembler.cuh"
 
+#include <cassert>
 #include <cuda/buffer>
+#include <span>
+#include <utility>
 
 #include "backend/cuda/collision/object_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
@@ -27,13 +30,17 @@ void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
   if (!pin_pos) {
     std::span<const float> pos_span(init_state->position.data(),
                                     init_state->position.size());
-    registry.set(e, PinPosition{*pin_index, pos_span});
+    pin_pos = registry.set(e, PinPosition{*pin_index, pos_span});
   }
+  assert(pin_pos != nullptr);
 
   // Ensure collider exists and is up-to-date
   auto collider = registry.get<ObjectCollider>(e);
   if (!collider) {
-    auto new_collider = ObjectCollider::from_obstacle(*config, *mesh, rt);
+    ctd::span<const float> init_pos(init_state->position.data(),
+                                    init_state->position.size());
+    auto new_collider =
+        ObjectCollider::from_obstacle(*config, *mesh, init_pos, rt);
     collider = registry.set<ObjectCollider>(e, std::move(new_collider));
   }
   assert(collider != nullptr);
@@ -43,20 +50,17 @@ void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
     config->is_updated = false;
   }
 
-  if (pin_position->is_static_twice) {
+  if (pin_pos->is_static_twice) {
     // No-op.
-  } else if (pin_position->is_static) {
+  } else if (pin_pos->is_static) {
     // Static once. Update position.
-    auto d_pos = vec_like_to_device(pin_position->curr_position, rt);
+    auto d_pos = vec_like_to_device(pin_pos->curr_position, rt);
     collider->update_position(d_pos, d_pos, rt);
-    pin_position->is_static_twice = true;
   } else {
     // Dynamic. Update position.
-    auto d_prev = vec_like_to_device(pin_position->prev_position, rt);
-    auto d_curr = vec_like_to_device(pin_position->curr_position, rt);
+    auto d_prev = vec_like_to_device(pin_pos->prev_position, rt);
+    auto d_curr = vec_like_to_device(pin_pos->curr_position, rt);
     collider->update_position(d_curr, d_prev, rt);
-    std::swap(pin_position->curr_position, pin_position->prev_position);
-    pin_position->is_static = true;
   }
 }
 

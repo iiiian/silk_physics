@@ -84,11 +84,12 @@ Result CudaBackend::solver_step() {
 }
 
 Result CudaBackend::solver_reset() {
+  impl_->registry_.remove_all_components<ClothADMMHelper>();
   impl_->registry_.remove_all_components<ClothAssemblyL1Cache>();
   impl_->registry_.remove_all_components<ClothAssemblyL2Cache>();
   impl_->registry_.remove_all_components<PhysicalState>();
   impl_->registry_.remove_all_components<ObjectCollider>();
-  impl_->registry_.remove_all_components<ClothADMMHelper>();
+  impl_->registry_.remove_all_components<PinPosition>();
 
   return Result::ok();
 }

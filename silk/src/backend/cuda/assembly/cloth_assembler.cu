@@ -6,6 +6,7 @@
 #include <cuda/algorithm>
 #include <cuda/std/span>
 #include <memory>
+#include <vector>
 
 #include "backend/cuda/assembly/cloth_assembly_l1_cache.cuh"
 #include "backend/cuda/collision/object_collider.cuh"
@@ -149,12 +150,18 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
       perm_pin = std::make_unique<PinIndex>(
           build_permuted_pin_index(*pin_index, part->h_perm));
     }
+
     // Per-vertex mass in permuted indexing for collision.
     Eigen::VectorXf collider_mass = cloth_config->density * l2_cache->mass;
 
-    auto new_collider =
-        ObjectCollider::from_physical(*collision_config, *perm_mesh, *perm_pin,
-                                      collider_mass, state_offset, rt);
+    std::vector<float> perm_init_pos(init_state->position.size());
+    ctd::span<const float> init_pos_span{init_state->position.data(),
+                                         init_state->position.size()};
+    part->permute(init_pos_span, perm_init_pos, rt);
+
+    auto new_collider = ObjectCollider::from_physical(
+        *collision_config, *perm_mesh, *perm_pin, perm_init_pos, collider_mass,
+        state_offset, rt);
     collider = registry.set(e, std::move(new_collider));
   } else {
     collider->update_state_offset(state_offset, rt);

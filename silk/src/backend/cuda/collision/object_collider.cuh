@@ -36,11 +36,13 @@ class ObjectCollider {
   /// @param[in] config Collision config.
   /// @param[in] mesh Object mesh.
   /// @param[in] pin Object's pinned vertex indices.
+  /// @param[in] init_pos Initial positions as [x0, y0, z0, ...] in mesh
+  /// vertex order.
   /// @param[in] mass Object vertex mass vector.
   /// @param[in] state_offset Object offset in global state.
   static ObjectCollider from_physical(const CollisionConfigPlus& config,
                                       const TriMesh& mesh, const PinIndex& pin,
-                                      const Eigen::VectorXf& init_pos,
+                                      ctd::span<const float> init_pos,
                                       const Eigen::VectorXf& mass,
                                       int state_offset, CudaRuntime rt);
 
@@ -48,9 +50,11 @@ class ObjectCollider {
   ///
   /// @param[in] config Collision config.
   /// @param[in] mesh Object mesh.
+  /// @param[in] init_pos Initial positions as [x0, y0, z0, ...] in mesh
+  /// vertex order.
   static ObjectCollider from_obstacle(const CollisionConfigPlus& config,
                                       const TriMesh& mesh,
-                                      const Eigen::VectorXf& init_pos,
+                                      ctd::span<const float> init_pos,
                                       CudaRuntime rt);
 
   /// @brief Update collider collision config.
