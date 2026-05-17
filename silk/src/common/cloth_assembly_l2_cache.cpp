@@ -68,8 +68,7 @@ Eigen::Matrix<float, 6, 9> triangle_jacobian_operator(
   return Eigen::KroneckerProduct(B, Eigen::Matrix3f::Identity());
 }
 
-ClothAssemblyL2Cache::ClothAssemblyL2Cache(const ClothConfig& config,
-                                           const TriMesh& mesh) {
+ClothAssemblyL2Cache::ClothAssemblyL2Cache(const TriMesh& mesh) {
   const TriMesh& m = mesh;
 
   int vert_num = m.V.rows();

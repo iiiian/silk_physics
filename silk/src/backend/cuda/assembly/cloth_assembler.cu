@@ -122,7 +122,7 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
       perm_mesh = std::make_unique<TriMesh>(
           build_permuted_mesh(*mesh, part->h_perm, part->h_inv_perm));
     }
-    l2_cache = registry.set(e, ClothAssemblyL2Cache{*cloth_config, *perm_mesh});
+    l2_cache = registry.set(e, ClothAssemblyL2Cache{*perm_mesh});
   }
   assert(l2_cache != nullptr);
 

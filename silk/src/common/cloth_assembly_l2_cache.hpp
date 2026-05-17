@@ -47,7 +47,7 @@ class ClothAssemblyL2Cache {
 
  public:
   ClothAssemblyL2Cache() = default;
-  ClothAssemblyL2Cache(const ClothConfig& config, const TriMesh& mesh);
+  ClothAssemblyL2Cache(const TriMesh& mesh);
 
   // Since Eigen::SparseMatrix lacks noexcept move ctor, explicitly
   // delete copy ctor to avoid error in containers like std::vector.

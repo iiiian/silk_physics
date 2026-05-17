@@ -75,7 +75,7 @@ bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt,
 
   auto topology = registry.get<ClothAssemblyL2Cache>(e);
   if (!topology) {
-    topology = registry.set(e, ClothAssemblyL2Cache(*cloth_config, *mesh));
+    topology = registry.set(e, ClothAssemblyL2Cache(*mesh));
   }
   assert(topology != nullptr);
 
