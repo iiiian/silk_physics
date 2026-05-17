@@ -92,23 +92,20 @@ ctd::span<Collision> find_collision(ObjRegistry& registry, float dt,
   // Stage 2-3. Gpu broadphase + narrowphase.
 
   for (auto& [oa, ob] : object_ccache) {
-    oa->triangle_collider_tree
-        .test_ext_collision<PointCollider, decltype(pt_inter_collision_filter)>(
-            ob->point_colliders.value(), pt_inter_collision_filter, pt_ccache,
-            pt_ccache_fill, rt);
+    oa->triangle_collider_tree.test_ext_collision<PointCollider>(
+        ob->point_colliders.value(), pt_inter_collision_filter, pt_ccache,
+        pt_ccache_fill, rt);
     if (pt_ccache_fill == pt_ccache.size()) {
       pt_narrowphase(pt_ccache, collisions, collision_fill, rt);
       pt_ccache_fill = 0;
     }
 
-    ob->triangle_collider_tree
-        .test_ext_collision<PointCollider, decltype(pt_inter_collision_filter)>(
-            oa->point_colliders.value(), pt_inter_collision_filter, pt_ccache,
-            pt_ccache_fill, rt);
-    oa->edge_collider_tree
-        .test_ext_collision<EdgeCollider, decltype(ee_inter_collision_filter)>(
-            ob->edge_collider_tree.get_colliders(), ee_inter_collision_filter,
-            ee_ccache, ee_ccache_fill, rt);
+    ob->triangle_collider_tree.test_ext_collision<PointCollider>(
+        oa->point_colliders.value(), pt_inter_collision_filter, pt_ccache,
+        pt_ccache_fill, rt);
+    oa->edge_collider_tree.test_ext_collision<EdgeCollider>(
+        ob->edge_collider_tree.get_colliders(), ee_inter_collision_filter,
+        ee_ccache, ee_ccache_fill, rt);
 
     if (pt_ccache_fill == pt_ccache.size()) {
       pt_narrowphase(pt_ccache, collisions, collision_fill, rt);
@@ -128,10 +125,9 @@ ctd::span<Collision> find_collision(ObjRegistry& registry, float dt,
       continue;
     }
 
-    o.triangle_collider_tree
-        .test_ext_collision<PointCollider, decltype(pt_self_collision_filter)>(
-            o.point_colliders.value(), pt_self_collision_filter, pt_ccache,
-            pt_ccache_fill, rt);
+    o.triangle_collider_tree.test_ext_collision<PointCollider>(
+        o.point_colliders.value(), pt_self_collision_filter, pt_ccache,
+        pt_ccache_fill, rt);
     o.edge_collider_tree.test_self_collision(ee_self_collision_filter,
                                              ee_ccache, ee_ccache_fill, rt);
 

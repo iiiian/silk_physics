@@ -558,7 +558,7 @@ __both__ constexpr bool all_leq(const X& x, const Y& y) {
   return all(x, y, [] __both__(float a, float b) { return a <= b; });
 }
 
-__both__ Vec3f cross(Vec3f x, Vec3f y) {
+__both__ inline Vec3f cross(Vec3f x, Vec3f y) {
   Vec3f res;
   res(0) = x(1) * y(2) - x(2) * y(1);
   res(1) = x(2) * y(0) - x(0) * y(2);

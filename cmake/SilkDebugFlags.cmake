@@ -13,12 +13,11 @@ function(silk_debug_warnings target)
     set(_silk_debug_flags_msvc
         /W4
         /permissive-
-        /wd4100 # unused parameter
         /wd4244 # signed/unsigned conversions
     )
 
     set(_silk_debug_flags_nvcc
-      -diag-suppress 2361 #sign unsiged narrowing
+      -diag-suppress 2361 # signed unsiged narrowing
     )
 
     target_compile_options(
@@ -30,4 +29,5 @@ function(silk_debug_warnings target)
 
     unset(_silk_debug_flags_gnu_clang)
     unset(_silk_debug_flags_msvc)
+    unset(_silk_debug_flags_nvcc)
 endfunction()

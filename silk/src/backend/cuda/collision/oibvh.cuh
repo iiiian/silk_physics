@@ -104,7 +104,7 @@ class OIBVHTree {
 
 namespace detail {
 
-__global__ void fill_sequence_ids(ctd::span<int> ids) {
+__global__ inline void fill_sequence_ids(ctd::span<int> ids) {
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i >= ids.size()) {
     return;
