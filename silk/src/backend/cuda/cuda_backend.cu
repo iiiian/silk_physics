@@ -259,9 +259,17 @@ Result CudaBackend::add_obstacle(CollisionConfig collision_config,
 
   PinIndex pin_index;
   pin_index.is_all_pinned = true;
+  CollisionConfigPlus collision_config_plus{
+      .is_updated = true,
+      .is_collision_on = collision_config.is_collision_on,
+      .is_self_collision_on = collision_config.is_self_collision_on,
+      .group = collision_config.group,
+      .restitution = collision_config.restitution,
+      .friction = collision_config.friction,
+  };
 
   uint32_t e = impl_->registry_.make_entity();
-  impl_->registry_.set(e, std::move(collision_config));
+  impl_->registry_.set(e, std::move(collision_config_plus));
   impl_->registry_.set(e, std::move(*tri_mesh));
   impl_->registry_.set(e, std::move(init_state));
   impl_->registry_.set(e, std::move(pin_index));
@@ -283,7 +291,15 @@ Result CudaBackend::set_obstacle_collision_config(uint32_t handle,
   if (!impl_->is_obstacle(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  impl_->registry_.remove_deps_then_set(handle, config);
+  CollisionConfigPlus config_plus{
+      .is_updated = true,
+      .is_collision_on = config.is_collision_on,
+      .is_self_collision_on = config.is_self_collision_on,
+      .group = config.group,
+      .restitution = config.restitution,
+      .friction = config.friction,
+  };
+  impl_->registry_.remove_deps_then_set(handle, std::move(config_plus));
   return Result::ok();
 }
 

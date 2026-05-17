@@ -90,15 +90,15 @@ class OIBVHTree {
   /// @param out Output buffer. collision will be appended.
   /// @param fill The actual size of out cache. 0 -> empty, out.size() -> full.
   template <typename Filter>
-  void test_self_collision(const Filter& filter, CollisionCache<X, X>& out,
-                           int& fill, CudaRuntime rt);
+  void test_self_collision(Filter filter, CollisionCache<X, X>& out, int& fill,
+                           CudaRuntime rt);
 
   /// @brief Test tree-tree collision.
   /// @param filter Collision filter callback. True if ignore.
   /// @param out Output buffer. collision will be appended.
   /// @param fill The actual size of out cache. 0 -> empty, out.size() -> full.
   template <typename Y, typename Filter>
-  void test_ext_collision(ctd::span<const Y> colliders, const Filter& filter,
+  void test_ext_collision(ctd::span<const Y> colliders, Filter filter,
                           CollisionCache<X, Y>& out, int& fill, CudaRuntime rt);
 };
 
@@ -410,9 +410,9 @@ class SimpleStack {
 };
 
 /// @brief Traverse collider through the tree.
-template <typename X, typename Y, typename OnFilter, bool dedup_self>
-__device__ void traverse(const X& collider, int dedup_id,
-                         OIBVHTreeView<Y> oibvh_tree, const OnFilter& on_filter,
+template <typename X, typename Y, typename Filter, bool dedup_self>
+__device__ void traverse(const Y& collider, int dedup_id,
+                         OIBVHTreeView<X> oibvh_tree, Filter filter,
                          DynSpan<CollisionPair<X, Y>> out) {
   const Bbox& bbox = collider.bbox;
   assert(!bbox.is_empty());
@@ -459,11 +459,11 @@ __device__ void traverse(const X& collider, int dedup_id,
             continue;
           }
         }
-        const Y& leaf_collider = t.colliders[t.collider_ids[i]];
+        const X& leaf_collider = t.colliders[t.collider_ids[i]];
         if (!Bbox::is_colliding(bbox, leaf_collider.bbox)) {
           continue;
         }
-        if (!on_filter(collider, leaf_collider)) {
+        if (!filter(leaf_collider, collider)) {
           continue;
         }
 
@@ -471,7 +471,7 @@ __device__ void traverse(const X& collider, int dedup_id,
         cu::atomic_ref<int> fill{*out.fill};
         int out_idx = fill.fetch_add(1);
         if (out_idx < out.data.size()) {
-          out.data[out_idx] = ctd::make_pair(&collider, &leaf_collider);
+          out.data[out_idx] = ctd::make_pair(&leaf_collider, &collider);
         }
       }
     }
@@ -507,7 +507,7 @@ __global__ void ext_batch_traversal(ctd::span<const Y> colliders,
     return;
   }
 
-  traverse<Y, X, Filter, false>(colliders[tid], 0, tree, filter, out);
+  traverse<X, Y, Filter, false>(colliders[tid], 0, tree, filter, out);
 }
 
 }  // namespace detail
@@ -629,9 +629,8 @@ void OIBVHTree<C>::update(const Bbox& root_bbox, CudaRuntime rt) {
 
 template <typename X>
 template <typename Filter>
-void OIBVHTree<X>::test_self_collision(const Filter& filter,
-                                       CollisionCache<X, X>& out, int& fill,
-                                       CudaRuntime rt) {
+void OIBVHTree<X>::test_self_collision(Filter filter, CollisionCache<X, X>& out,
+                                       int& fill, CudaRuntime rt) {
   if (colliders_->empty()) {
     return;
   }
@@ -657,9 +656,8 @@ void OIBVHTree<X>::test_self_collision(const Filter& filter,
 template <typename X>
 template <typename Y, typename Filter>
 void OIBVHTree<X>::test_ext_collision(ctd::span<const Y> colliders,
-                                      const Filter& filter,
-                                      CollisionCache<X, Y>& out, int& fill,
-                                      CudaRuntime rt) {
+                                      Filter filter, CollisionCache<X, Y>& out,
+                                      int& fill, CudaRuntime rt) {
   if (colliders_->empty() || colliders.empty()) {
     return;
   }

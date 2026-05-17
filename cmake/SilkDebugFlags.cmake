@@ -6,7 +6,6 @@ function(silk_debug_warnings target)
         -Wextra
         -Wpedantic
         -fdiagnostics-color
-        -Wno-unused-parameter
         -Wno-sign-compare # libigl emits signed/unsigned comparisons
         -Wno-ctor-dtor-privacy 
     )
@@ -16,6 +15,10 @@ function(silk_debug_warnings target)
         /permissive-
         /wd4100 # unused parameter
         /wd4244 # signed/unsigned conversions
+    )
+
+    set(_silk_debug_flags_nvcc
+      -diag-suppress 2361 #sign unsiged narrowing
     )
 
     target_compile_options(

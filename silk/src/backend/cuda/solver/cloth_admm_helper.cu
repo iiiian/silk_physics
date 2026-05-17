@@ -205,7 +205,7 @@ __global__ void assemble_elastic_rhs(
   int x_offset = 6 * tid;
 #pragma unroll
   for (int i = 0; i < 6; ++i) {
-    x(i) = aux_var[u_offset + i];
+    x(i) = aux_var[x_offset + i];
   }
 
   auto S_tr = jop.view().transpose();

@@ -57,10 +57,6 @@ class MatView {
     }
   }
 
-  __both__ constexpr operator MatView<ConstScalar, m, n>() const {
-    return const_view();
-  }
-
   __both__ constexpr T& operator()(int i, int j) const {
     assert(i >= 0 && i < m && "Invalid row index");
     assert(j >= 0 && j < n && "Invalid col index");
@@ -212,14 +208,8 @@ class Mat {
     return MatView<T, m, n>::row_major(data.data());
   }
 
-  __both__ constexpr operator MatView<T, m, n>() { return view(); }
-
   __both__ constexpr MatView<const T, m, n> const_view() const {
     return MatView<const T, m, n>::row_major(data.data());
-  }
-
-  __both__ constexpr operator MatView<const T, m, n>() const {
-    return const_view();
   }
 
   __both__ constexpr T& operator()(int i, int j) { return view()(i, j); }
@@ -248,18 +238,18 @@ using Mat42f = Mat<float, 4, 2>;
 using Mat43f = Mat<float, 4, 3>;
 using Mat44f = Mat<float, 4, 4>;
 
-using Vec2fV = MatView<const float, 2, 1>;
-using Vec3fV = MatView<const float, 3, 1>;
-using Vec4fV = MatView<const float, 4, 1>;
-using Mat22fV = MatView<const float, 2, 2>;
-using Mat23fV = MatView<const float, 2, 3>;
-using Mat32fV = MatView<const float, 3, 2>;
-using Mat33fV = MatView<const float, 3, 3>;
-using Mat24fV = MatView<const float, 2, 4>;
-using Mat34fV = MatView<const float, 3, 4>;
-using Mat42fV = MatView<const float, 4, 2>;
-using Mat43fV = MatView<const float, 4, 3>;
-using Mat44fV = MatView<const float, 4, 4>;
+// using Vec2fV = MatView<const float, 2, 1>;
+// using Vec3fV = MatView<const float, 3, 1>;
+// using Vec4fV = MatView<const float, 4, 1>;
+// using Mat22fV = MatView<const float, 2, 2>;
+// using Mat23fV = MatView<const float, 2, 3>;
+// using Mat32fV = MatView<const float, 3, 2>;
+// using Mat33fV = MatView<const float, 3, 3>;
+// using Mat24fV = MatView<const float, 2, 4>;
+// using Mat34fV = MatView<const float, 3, 4>;
+// using Mat42fV = MatView<const float, 4, 2>;
+// using Mat43fV = MatView<const float, 4, 3>;
+// using Mat44fV = MatView<const float, 4, 4>;
 
 using Vec2i = Mat<int, 2, 1>;
 using Vec3i = Mat<int, 3, 1>;
@@ -274,18 +264,18 @@ using Mat42i = Mat<int, 4, 2>;
 using Mat43i = Mat<int, 4, 3>;
 using Mat44i = Mat<int, 4, 4>;
 
-using Vec2iV = MatView<const int, 2, 1>;
-using Vec3iV = MatView<const int, 3, 1>;
-using Vec4iV = MatView<const int, 4, 1>;
-using Mat22iV = MatView<const int, 2, 2>;
-using Mat23iV = MatView<const int, 2, 3>;
-using Mat32iV = MatView<const int, 3, 2>;
-using Mat33iV = MatView<const int, 3, 3>;
-using Mat24iV = MatView<const int, 2, 4>;
-using Mat34iV = MatView<const int, 3, 4>;
-using Mat42iV = MatView<const int, 4, 2>;
-using Mat43iV = MatView<const int, 4, 3>;
-using Mat44iV = MatView<const int, 4, 4>;
+// using Vec2iV = MatView<const int, 2, 1>;
+// using Vec3iV = MatView<const int, 3, 1>;
+// using Vec4iV = MatView<const int, 4, 1>;
+// using Mat22iV = MatView<const int, 2, 2>;
+// using Mat23iV = MatView<const int, 2, 3>;
+// using Mat32iV = MatView<const int, 3, 2>;
+// using Mat33iV = MatView<const int, 3, 3>;
+// using Mat24iV = MatView<const int, 2, 4>;
+// using Mat34iV = MatView<const int, 3, 4>;
+// using Mat42iV = MatView<const int, 4, 2>;
+// using Mat43iV = MatView<const int, 4, 3>;
+// using Mat44iV = MatView<const int, 4, 4>;
 
 using Vec2u = Mat<uint32_t, 2, 1>;
 using Vec3u = Mat<uint32_t, 3, 1>;
@@ -300,18 +290,18 @@ using Mat42u = Mat<uint32_t, 4, 2>;
 using Mat43u = Mat<uint32_t, 4, 3>;
 using Mat44u = Mat<uint32_t, 4, 4>;
 
-using Vec2uV = MatView<const uint32_t, 2, 1>;
-using Vec3uV = MatView<const uint32_t, 3, 1>;
-using Vec4uV = MatView<const uint32_t, 4, 1>;
-using Mat22uV = MatView<const uint32_t, 2, 2>;
-using Mat23uV = MatView<const uint32_t, 2, 3>;
-using Mat32uV = MatView<const uint32_t, 3, 2>;
-using Mat33uV = MatView<const uint32_t, 3, 3>;
-using Mat24uV = MatView<const uint32_t, 2, 4>;
-using Mat34uV = MatView<const uint32_t, 3, 4>;
-using Mat42uV = MatView<const uint32_t, 4, 2>;
-using Mat43uV = MatView<const uint32_t, 4, 3>;
-using Mat44uV = MatView<const uint32_t, 4, 4>;
+// using Vec2uV = MatView<const uint32_t, 2, 1>;
+// using Vec3uV = MatView<const uint32_t, 3, 1>;
+// using Vec4uV = MatView<const uint32_t, 4, 1>;
+// using Mat22uV = MatView<const uint32_t, 2, 2>;
+// using Mat23uV = MatView<const uint32_t, 2, 3>;
+// using Mat32uV = MatView<const uint32_t, 3, 2>;
+// using Mat33uV = MatView<const uint32_t, 3, 3>;
+// using Mat24uV = MatView<const uint32_t, 2, 4>;
+// using Mat34uV = MatView<const uint32_t, 3, 4>;
+// using Mat42uV = MatView<const uint32_t, 4, 2>;
+// using Mat43uV = MatView<const uint32_t, 4, 3>;
+// using Mat44uV = MatView<const uint32_t, 4, 4>;
 
 template <typename Dst, typename Src>
 __both__ constexpr void assign(Dst& dst, const Src& src) {
@@ -568,7 +558,7 @@ __both__ constexpr bool all_leq(const X& x, const Y& y) {
   return all(x, y, [] __both__(float a, float b) { return a <= b; });
 }
 
-__both__ Vec3f cross(Vec3fV x, Vec3fV y) {
+__both__ Vec3f cross(Vec3f x, Vec3f y) {
   Vec3f res;
   res(0) = x(1) * y(2) - x(2) * y(1);
   res(1) = x(2) * y(0) - x(0) * y(2);

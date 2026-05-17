@@ -25,10 +25,18 @@ option(SILK_FETCH_DEPENDENCIES "Download dependencies using CMake FetchContent" 
 # ---------------------------------------------------------------
 
 if(SILK_ENABLE_CUDA)
+    # If CMAKE_CUDA_ARCHITECTURES was not specified, set it to native.
+    if(DEFINED CMAKE_CUDA_ARCHITECTURES)
+      message(STATUS "CMAKE_CUDA_ARCHITECTURES was specified, skipping auto-detection")
+    else()
+      message(STATUS "CMAKE_CUDA_ARCHITECTURES was not specified, set it to native")
+      set(CMAKE_CUDA_ARCHITECTURES "native")
+    endif()
+    message(STATUS "Targeting CUDA_ARCHITECTURES \"${CMAKE_CUDA_ARCHITECTURES}\"")
+
     enable_language(CUDA)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-    set(CMAKE_CUDA_ARCHITECTURES all-major)
 endif()
 
 if(SILK_FETCH_DEPENDENCIES)

@@ -276,8 +276,9 @@ void ObjectCollider::update_position(ctd::span<const float> curr_state,
                                      CudaRuntime rt) {
   // Update triangle colliders and root bbox.
   auto triangle_colliders = triangle_collider_tree.get_colliders();
-  auto update_triangle_collider = [triangle_colliders, prev_state, curr_state,
-                                   padding = bbox_padding] __device__(int i) {
+  auto update_triangle_collider =
+      [triangle_colliders, prev_state, curr_state,
+       padding = bbox_padding] __device__(int i) -> TriangleCollider {
     TriangleCollider& c = triangle_colliders[i];
     int i0 = c.index(0);
     int i1 = c.index(1);
@@ -299,8 +300,9 @@ void ObjectCollider::update_position(ctd::span<const float> curr_state,
     c.bbox = Bbox::pad(bbox, padding);
     return c;
   };
-  auto merge_bbox = [] __device__(const TriangleCollider& a,
-                                  const TriangleCollider& b) {
+  auto merge_bbox = [] __device__(
+                        const TriangleCollider& a,
+                        const TriangleCollider& b) -> TriangleCollider {
     TriangleCollider c;
     c.bbox = Bbox::merge(a.bbox, b.bbox);
     return c;
@@ -413,10 +415,10 @@ void ObjectCollider::update_all(const CollisionConfigPlus& config,
 
   // Update triangle colliders and root bbox.
   auto triangle_colliders = triangle_collider_tree.get_colliders();
-  auto update_triangle_collider = [triangle_colliders, prev_state, curr_state,
-                                   state_offset, padding = bbox_padding,
-                                   restitution = c.restitution,
-                                   friction = c.friction] __device__(int i) {
+  auto update_triangle_collider =
+      [triangle_colliders, prev_state, curr_state, state_offset,
+       padding = bbox_padding, restitution = c.restitution,
+       friction = c.friction] __device__(int i) -> TriangleCollider {
     TriangleCollider& c = triangle_colliders[i];
     c.state_offset = state_offset;
     c.restitution = restitution;
@@ -441,8 +443,9 @@ void ObjectCollider::update_all(const CollisionConfigPlus& config,
     c.bbox = Bbox::pad(bbox, padding);
     return c;
   };
-  auto merge_bbox = [] __device__(const TriangleCollider& a,
-                                  const TriangleCollider& b) {
+  auto merge_bbox = [] __device__(
+                        const TriangleCollider& a,
+                        const TriangleCollider& b) -> TriangleCollider {
     TriangleCollider c;
     c.bbox = Bbox::merge(a.bbox, b.bbox);
     return c;
