@@ -20,7 +20,10 @@
 namespace silk::cuda {
 
 template <typename X, typename Y>
-using CollisionCache = cu::device_buffer<ctd::pair<const X*, const Y*>>;
+using CollisionPair = ctd::pair<const X*, const Y*>;
+
+template <typename X, typename Y>
+using CollisionCache = cu::device_buffer<CollisionPair<X, Y>>;
 
 struct BVHNode {
   Bbox bbox;
@@ -410,7 +413,7 @@ class SimpleStack {
 template <typename X, typename Y, typename OnFilter, bool dedup_self>
 __device__ void traverse(const X& collider, int dedup_id,
                          OIBVHTreeView<Y> oibvh_tree, const OnFilter& on_filter,
-                         DynSpan<CollisionCache<X, Y>> out) {
+                         DynSpan<CollisionPair<X, Y>> out) {
   const Bbox& bbox = collider.bbox;
   assert(!bbox.is_empty());
 
@@ -485,7 +488,7 @@ __device__ void traverse(const X& collider, int dedup_id,
 
 template <typename X, typename Filter>
 __global__ void self_batch_traversal(OIBVHTreeView<X> tree, Filter filter,
-                                     DynSpan<CollisionCache<X, X>> out) {
+                                     DynSpan<CollisionPair<X, X>> out) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= tree.collider_ids.size()) {
     return;
@@ -498,7 +501,7 @@ __global__ void self_batch_traversal(OIBVHTreeView<X> tree, Filter filter,
 template <typename X, typename Y, typename Filter>
 __global__ void ext_batch_traversal(ctd::span<const Y> colliders,
                                     OIBVHTreeView<X> tree, Filter filter,
-                                    DynSpan<CollisionCache<X, Y>> out) {
+                                    DynSpan<CollisionPair<X, Y>> out) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= colliders.size()) {
     return;
@@ -634,7 +637,7 @@ void OIBVHTree<X>::test_self_collision(const Filter& filter,
   }
 
   auto d_fill = alloc<int>(rt, 1, fill);
-  DynSpan<CollisionCache<X, X>> dyn_out{.fill = d_fill.data(), .data = out};
+  DynSpan<CollisionPair<X, X>> dyn_out{.fill = d_fill.data(), .data = out};
   auto tree = view();
   int grid_num = div_round_up(collider_ids_->size(), 128);
   detail::self_batch_traversal<X, Filter>
@@ -662,7 +665,7 @@ void OIBVHTree<X>::test_ext_collision(ctd::span<const Y> colliders,
   }
 
   auto d_fill = alloc<int>(rt, 1, fill);
-  DynSpan<CollisionCache<X, Y>> dyn_out{.fill = d_fill.data(), .data = out};
+  DynSpan<CollisionPair<X, Y>> dyn_out{.fill = d_fill.data(), .data = out};
   auto tree = view();
   int grid_num = div_round_up(colliders.size(), 128);
   detail::ext_batch_traversal<X, Y, Filter>

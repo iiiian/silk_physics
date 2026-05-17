@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cub/cub.cuh>
 #include <cuda/buffer>
+#include <cuda/iterator>
 #include <functional>
 #include <unordered_set>
 #include <vector>
@@ -275,8 +276,8 @@ void ObjectCollider::update_position(ctd::span<const float> curr_state,
                                      CudaRuntime rt) {
   // Update triangle colliders and root bbox.
   auto triangle_colliders = triangle_collider_tree.get_colliders();
-  auto update_triangles_colliders = [triangle_colliders, prev_state, curr_state,
-                                     padding = bbox_padding] __device__(int i) {
+  auto update_triangle_collider = [triangle_colliders, prev_state, curr_state,
+                                   padding = bbox_padding] __device__(int i) {
     TriangleCollider& c = triangle_colliders[i];
     int i0 = c.index(0);
     int i1 = c.index(1);
@@ -296,6 +297,7 @@ void ObjectCollider::update_position(ctd::span<const float> curr_state,
     Vec3f t1_max = vmax(vmax(c.v0_t1, c.v1_t1), c.v2_t1);
     bbox.max = vmax(t0_max, t1_max);
     c.bbox = Bbox::pad(bbox, padding);
+    return c;
   };
   auto merge_bbox = [] __device__(const TriangleCollider& a,
                                   const TriangleCollider& b) {
@@ -307,20 +309,21 @@ void ObjectCollider::update_position(ctd::span<const float> curr_state,
   TriangleCollider init_reduce_collider;
   init_reduce_collider.bbox.min = Vec3f::max();
   init_reduce_collider.bbox.max = Vec3f::min();
+  auto ids = ::cuda::counting_iterator<int>(0);
 
   size_t temp_size;
   cub::DeviceReduce::TransformReduce(
-      nullptr, temp_size, triangle_colliders.data(), reduced_collider_->data(),
-      triangle_colliders.size(), merge_bbox, update_triangles_colliders,
+      nullptr, temp_size, ids, reduced_collider_->data(),
+      triangle_colliders.size(), merge_bbox, update_triangle_collider,
       init_reduce_collider, rt.stream.get());
 
   if (!device_reduce_temp_ || device_reduce_temp_->size() < temp_size) {
     device_reduce_temp_ = alloc<char>(rt, temp_size);
   }
   cub::DeviceReduce::TransformReduce(
-      device_reduce_temp_->data(), temp_size, triangle_colliders.data(),
-      reduced_collider_->data(), triangle_colliders.size(), merge_bbox,
-      update_triangles_colliders, init_reduce_collider, rt.stream.get());
+      device_reduce_temp_->data(), temp_size, ids, reduced_collider_->data(),
+      triangle_colliders.size(), merge_bbox, update_triangle_collider,
+      init_reduce_collider, rt.stream.get());
 
   bbox = scalar_load(&(reduced_collider_->data()->bbox), rt);
 
@@ -410,10 +413,10 @@ void ObjectCollider::update_all(const CollisionConfigPlus& config,
 
   // Update triangle colliders and root bbox.
   auto triangle_colliders = triangle_collider_tree.get_colliders();
-  auto update_triangles_colliders = [triangle_colliders, prev_state, curr_state,
-                                     state_offset, padding = bbox_padding,
-                                     restitution = c.restitution,
-                                     friction = c.friction] __device__(int i) {
+  auto update_triangle_collider = [triangle_colliders, prev_state, curr_state,
+                                   state_offset, padding = bbox_padding,
+                                   restitution = c.restitution,
+                                   friction = c.friction] __device__(int i) {
     TriangleCollider& c = triangle_colliders[i];
     c.state_offset = state_offset;
     c.restitution = restitution;
@@ -436,6 +439,7 @@ void ObjectCollider::update_all(const CollisionConfigPlus& config,
     Vec3f t1_max = vmax(vmax(c.v0_t1, c.v1_t1), c.v2_t1);
     bbox.max = vmax(t0_max, t1_max);
     c.bbox = Bbox::pad(bbox, padding);
+    return c;
   };
   auto merge_bbox = [] __device__(const TriangleCollider& a,
                                   const TriangleCollider& b) {
@@ -447,20 +451,21 @@ void ObjectCollider::update_all(const CollisionConfigPlus& config,
   TriangleCollider init_reduce_collider;
   init_reduce_collider.bbox.min = Vec3f::max();
   init_reduce_collider.bbox.max = Vec3f::min();
+  auto ids = ::cuda::counting_iterator<int>(0);
 
   size_t temp_size;
   cub::DeviceReduce::TransformReduce(
-      nullptr, temp_size, triangle_colliders.data(), reduced_collider_->data(),
-      triangle_colliders.size(), merge_bbox, update_triangles_colliders,
+      nullptr, temp_size, ids, reduced_collider_->data(),
+      triangle_colliders.size(), merge_bbox, update_triangle_collider,
       init_reduce_collider, rt.stream.get());
 
   if (!device_reduce_temp_ || device_reduce_temp_->size() < temp_size) {
     device_reduce_temp_ = alloc<char>(rt, temp_size);
   }
   cub::DeviceReduce::TransformReduce(
-      device_reduce_temp_->data(), temp_size, triangle_colliders.data(),
-      reduced_collider_->data(), triangle_colliders.size(), merge_bbox,
-      update_triangles_colliders, init_reduce_collider, rt.stream.get());
+      device_reduce_temp_->data(), temp_size, ids, reduced_collider_->data(),
+      triangle_colliders.size(), merge_bbox, update_triangle_collider,
+      init_reduce_collider, rt.stream.get());
 
   bbox = scalar_load(&(reduced_collider_->data()->bbox), rt);
 

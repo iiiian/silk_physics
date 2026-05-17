@@ -8,5 +8,7 @@ CompileFlags:
     - "-Xcompiler=*"
     - "-arch=*"
     - "-forward-unknown-to-host-compiler"
+    - "--expt-relaxed-constexpr"
+    - "--extended-lambda"
 Documentation:
   CommentFormat: Doxygen

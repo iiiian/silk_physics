@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "backend/cuda/collision/bbox.cuh"
-#include "backend/cuda/collision/broadphase.cuh"
+#include "backend/cuda/collision/oibvh.cuh"
 // #include "backend/cuda/copy_vector_like.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "common/mesh.hpp"
