@@ -233,7 +233,9 @@ class Registry {
   }
 
   template <typename... T>
-  void remove_component_list(uint32_t entity, ComponentList<T...>) {
+  void remove_component_list(
+      // Prevent warning for entity with no deps.
+      [[maybe_unused]] uint32_t entity, ComponentList<T...>) {
     (remove<T>(entity), ...);
   }
 

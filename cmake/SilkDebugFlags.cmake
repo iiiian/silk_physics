@@ -25,6 +25,7 @@ function(silk_debug_warnings target)
         PRIVATE
             $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>>:${_silk_debug_flags_gnu_clang}>
             $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:CXX,MSVC>>:${_silk_debug_flags_msvc}>
+            $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:CUDA,NVIDIA>>:${_silk_debug_flags_nvcc}>
     )
 
     unset(_silk_debug_flags_gnu_clang)

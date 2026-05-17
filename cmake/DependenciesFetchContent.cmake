@@ -19,12 +19,14 @@ include(FetchContent)
 
 FetchContent_Declare(
     Eigen3
+    SYSTEM
     GIT_REPOSITORY https://github.com/eigen-mirror/eigen.git
     GIT_TAG 3147391d946bb4b6c68edd901f2add6ac1f31f8c # release 3.4.0
 )
 
 FetchContent_Declare(
     Libigl
+    SYSTEM
     GIT_REPOSITORY https://github.com/libigl/libigl.git
     GIT_TAG 40e7900ccbd767f1f360e0eb10f0f1a6432e0993 # release 2.6.0
 )
@@ -33,12 +35,14 @@ set(SUITESPARSE_ENABLE_PROJECTS "suitesparse_config;amd;camd;colamd;ccolamd;chol
 set(CHOLMOD_USE_CUDA OFF)
 FetchContent_Declare(
     SuiteSparse
+    SYSTEM
     GIT_REPOSITORY https://github.com/DrTimothyAldenDavis/SuiteSparse.git
     GIT_TAG b35a1f9318f4bd42085f4b5ea56f29c89d342d4d # release 7.11.0
 )
 
 FetchContent_Declare(
     Catch2
+    SYSTEM
     GIT_REPOSITORY https://github.com/catchorg/Catch2.git
     GIT_TAG 644821ce28cb25d7992a4d0375b1d83214392592 # release 3.9.1
 )
@@ -46,6 +50,7 @@ FetchContent_Declare(
 set(SPDLOG_INSTALL ON)
 FetchContent_Declare(
     spdlog
+    SYSTEM
     GIT_REPOSITORY https://github.com/gabime/spdlog.git
     GIT_TAG 6fa36017cfd5731d617e1a934f0e5ea9c4445b13 # release 1.15.3
 )
@@ -54,18 +59,21 @@ set(TBB_TEST OFF)
 set(TBB_STRICT OFF) # prevent tbb from throwing error due to gcc 15
 FetchContent_Declare(
     tbb
+    SYSTEM
     GIT_REPOSITORY https://github.com/uxlfoundation/oneTBB.git
     GIT_TAG 6f468b0385b2104a9f485e49bb55508d0024e32d
 )
 
 FetchContent_Declare(
     nlohmann_json
+    SYSTEM
     GIT_REPOSITORY https://github.com/nlohmann/json.git
     GIT_TAG 55f93686c01528224f448c19128836e7df245f72 # version 3.12.0
 )
 
 FetchContent_Declare(
     argparse
+    SYSTEM
     GIT_REPOSITORY https://github.com/p-ranav/argparse.git
     GIT_TAG 3eda91b2e1ce7d569f84ba295507c4cd8fd96910 # version 3.2
 )
@@ -74,6 +82,7 @@ FetchContent_Declare(
 # Newest version does not work with Alembic, be careful when update.
 FetchContent_Declare(
     Imath
+    SYSTEM
     GIT_REPOSITORY https://github.com/AcademySoftwareFoundation/Imath.git
     GIT_TAG c0396a055a01bc537d32f435aee11a9b7ed6f0b5 # version 3.1.12
     OVERRIDE_FIND_PACKAGE
@@ -83,12 +92,14 @@ set(USE_BINARIES OFF CACHE BOOL "Build Alembic command line tools" FORCE)
 set(USE_TESTS OFF CACHE BOOL "Build Alembic tests" FORCE)
 FetchContent_Declare(
     Alembic
+    SYSTEM
     GIT_REPOSITORY https://github.com/alembic/alembic.git
     GIT_TAG 43a1489a0f5e15420e4be7225df86e819884b6fa # version 1.8.8
 )
 
 FetchContent_Declare(
     CCCL
+    SYSTEM
     GIT_REPOSITORY https://github.com/NVIDIA/cccl.git
     GIT_TAG d84981c797eb186e45f883f85423df94f9ac8bf4 # version 3.3.3
 )
@@ -104,6 +115,7 @@ set(KAMINPAR_DOWNLOAD_TBB ON)
 set(TBB_FOUND TRUE)
 FetchContent_Declare(
     KaMinPar
+    SYSTEM
     GIT_REPOSITORY https://github.com/KaHIP/KaMinPar.git
     GIT_TAG 00fa1ef4150b558a1260918fe8dc49dae048ea62 # version 3.7.3
 )
