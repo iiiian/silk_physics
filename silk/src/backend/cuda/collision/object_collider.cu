@@ -278,12 +278,15 @@ void ObjectCollider::update_position(ctd::span<const float> curr_state,
   auto update_triangles_colliders = [triangle_colliders, prev_state, curr_state,
                                      padding = bbox_padding] __device__(int i) {
     TriangleCollider& c = triangle_colliders[i];
-    c.v0_t0 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
-    c.v1_t0 = Vec3f::vec_like(prev_state.subspan(3 * i + 3, 3));
-    c.v2_t0 = Vec3f::vec_like(prev_state.subspan(3 * i + 6, 3));
-    c.v0_t1 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
-    c.v1_t1 = Vec3f::vec_like(prev_state.subspan(3 * i + 3, 3));
-    c.v2_t1 = Vec3f::vec_like(prev_state.subspan(3 * i + 6, 3));
+    int i0 = c.index(0);
+    int i1 = c.index(1);
+    int i2 = c.index(2);
+    c.v0_t0 = Vec3f::vec_like(prev_state.subspan(3 * i0, 3));
+    c.v1_t0 = Vec3f::vec_like(prev_state.subspan(3 * i1, 3));
+    c.v2_t0 = Vec3f::vec_like(prev_state.subspan(3 * i2, 3));
+    c.v0_t1 = Vec3f::vec_like(curr_state.subspan(3 * i0, 3));
+    c.v1_t1 = Vec3f::vec_like(curr_state.subspan(3 * i1, 3));
+    c.v2_t1 = Vec3f::vec_like(curr_state.subspan(3 * i2, 3));
 
     Bbox bbox;
     Vec3f t0_min = vmin(vmin(c.v0_t0, c.v1_t0), c.v2_t0);
@@ -326,10 +329,12 @@ void ObjectCollider::update_position(ctd::span<const float> curr_state,
   auto update_edge_colliders = [edge_colliders, prev_state, curr_state,
                                 padding = bbox_padding] __device__(int i) {
     EdgeCollider& c = edge_colliders[i];
-    c.v0_t0 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
-    c.v1_t0 = Vec3f::vec_like(prev_state.subspan(3 * i + 3, 3));
-    c.v0_t1 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
-    c.v1_t1 = Vec3f::vec_like(prev_state.subspan(3 * i + 3, 3));
+    int i0 = c.index(0);
+    int i1 = c.index(1);
+    c.v0_t0 = Vec3f::vec_like(prev_state.subspan(3 * i0, 3));
+    c.v1_t0 = Vec3f::vec_like(prev_state.subspan(3 * i1, 3));
+    c.v0_t1 = Vec3f::vec_like(curr_state.subspan(3 * i0, 3));
+    c.v1_t1 = Vec3f::vec_like(curr_state.subspan(3 * i1, 3));
 
     Bbox bbox;
     bbox.min = vmin(vmin(c.v0_t0, c.v1_t0), vmin(c.v0_t1, c.v1_t1));
@@ -345,7 +350,7 @@ void ObjectCollider::update_position(ctd::span<const float> curr_state,
                                  padding = bbox_padding] __device__(int i) {
     PointCollider& c = point_colliders_span[i];
     c.v0_t0 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
-    c.v0_t1 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
+    c.v0_t1 = Vec3f::vec_like(curr_state.subspan(3 * i, 3));
 
     Bbox bbox;
     bbox.min = vmin(c.v0_t0, c.v0_t1);
@@ -413,12 +418,15 @@ void ObjectCollider::update_all(const CollisionConfigPlus& config,
     c.state_offset = state_offset;
     c.restitution = restitution;
     c.friction = friction;
-    c.v0_t0 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
-    c.v1_t0 = Vec3f::vec_like(prev_state.subspan(3 * i + 3, 3));
-    c.v2_t0 = Vec3f::vec_like(prev_state.subspan(3 * i + 6, 3));
-    c.v0_t1 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
-    c.v1_t1 = Vec3f::vec_like(prev_state.subspan(3 * i + 3, 3));
-    c.v2_t1 = Vec3f::vec_like(prev_state.subspan(3 * i + 6, 3));
+    int i0 = c.index(0);
+    int i1 = c.index(1);
+    int i2 = c.index(2);
+    c.v0_t0 = Vec3f::vec_like(prev_state.subspan(3 * i0, 3));
+    c.v1_t0 = Vec3f::vec_like(prev_state.subspan(3 * i1, 3));
+    c.v2_t0 = Vec3f::vec_like(prev_state.subspan(3 * i2, 3));
+    c.v0_t1 = Vec3f::vec_like(curr_state.subspan(3 * i0, 3));
+    c.v1_t1 = Vec3f::vec_like(curr_state.subspan(3 * i1, 3));
+    c.v2_t1 = Vec3f::vec_like(curr_state.subspan(3 * i2, 3));
 
     Bbox bbox;
     Vec3f t0_min = vmin(vmin(c.v0_t0, c.v1_t0), c.v2_t0);
@@ -466,10 +474,12 @@ void ObjectCollider::update_all(const CollisionConfigPlus& config,
     c.state_offset = state_offset;
     c.restitution = restitution;
     c.friction = friction;
-    c.v0_t0 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
-    c.v1_t0 = Vec3f::vec_like(prev_state.subspan(3 * i + 3, 3));
-    c.v0_t1 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
-    c.v1_t1 = Vec3f::vec_like(prev_state.subspan(3 * i + 3, 3));
+    int i0 = c.index(0);
+    int i1 = c.index(1);
+    c.v0_t0 = Vec3f::vec_like(prev_state.subspan(3 * i0, 3));
+    c.v1_t0 = Vec3f::vec_like(prev_state.subspan(3 * i1, 3));
+    c.v0_t1 = Vec3f::vec_like(curr_state.subspan(3 * i0, 3));
+    c.v1_t1 = Vec3f::vec_like(curr_state.subspan(3 * i1, 3));
 
     Bbox bbox;
     bbox.min = vmin(vmin(c.v0_t0, c.v1_t0), vmin(c.v0_t1, c.v1_t1));
@@ -490,7 +500,7 @@ void ObjectCollider::update_all(const CollisionConfigPlus& config,
     c.restitution = restitution;
     c.friction = friction;
     c.v0_t0 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
-    c.v0_t1 = Vec3f::vec_like(prev_state.subspan(3 * i, 3));
+    c.v0_t1 = Vec3f::vec_like(curr_state.subspan(3 * i, 3));
 
     Bbox bbox;
     bbox.min = vmin(c.v0_t0, c.v0_t1);

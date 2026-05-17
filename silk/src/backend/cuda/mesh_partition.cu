@@ -17,8 +17,13 @@ namespace {
 
 bool is_device_mem(const void* ptr) {
   cudaPointerAttributes attr;
-  CHECK_CUDA(cudaPointerGetAttributes(&attr, ptr));
-  return (attr.type == cudaMemoryTypeHost);
+  cudaError_t err = cudaPointerGetAttributes(&attr, ptr);
+  if (err == cudaErrorInvalidValue) {
+    cudaGetLastError();
+    return false;
+  }
+  CHECK_CUDA(err);
+  return attr.type == cudaMemoryTypeDevice;
 }
 
 void h_perm_then_assign(ctd::span<const float> in, ctd::span<const int> perm,
@@ -35,7 +40,7 @@ __global__ void d_perm_then_assign(ctd::span<const float> in,
                                    ctd::span<const int> perm,
                                    ctd::span<float> out) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
-  if (tid > perm.size()) {
+  if (tid >= perm.size()) {
     return;
   }
 

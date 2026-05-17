@@ -60,6 +60,7 @@ target_link_libraries(
 
 if(SILK_ENABLE_CUDA)
     target_sources(silk PRIVATE ${SILK_CUDA_SOURCES})
+    target_compile_options(silk PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>)
     target_link_libraries(silk PRIVATE CUDA::cudart CUDA::cusparse CCCL::CCCL KaMinPar::KaMinPar)
 endif()
 

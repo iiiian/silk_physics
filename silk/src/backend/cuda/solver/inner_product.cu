@@ -1,4 +1,4 @@
-#include "backend/cuda/inner_product.cuh"
+#include "backend/cuda/solver/inner_product.cuh"
 
 #include <cassert>
 #include <cub/cub.cuh>

@@ -54,6 +54,15 @@ void axpby(float h_alpha, const float *d_alpha, float h_beta,
   cub::DeviceFor::Bulk(x.size(), op, rt.stream.get());
 }
 
+__global__ void add_diag_kernel(ctd::span<const float> diag,
+                                ctd::span<const float> x, ctd::span<float> y) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= diag.size()) {
+    return;
+  }
+  y[idx] += diag[idx] * x[idx];
+}
+
 }  // namespace
 
 void MASCGSolver::setup_cusparse(BSRView A, CudaRuntime rt) {
@@ -104,10 +113,8 @@ void MASCGSolver::spmv(ctd::span<const float> x, ctd::span<float> y,
                  spmv_workspace_->data());
   // clang-format on
 
-  auto add_diag = [diag = diag_, x, y] __device__(int idx) {
-    y[idx] += diag[idx] * x[idx];
-  };
-  cub::DeviceFor::Bulk(diag_.size(), add_diag, rt.stream.get());
+  int grid_num = div_round_up(diag_.size(), 128);
+  add_diag_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(diag_, x, y);
 }
 
 void MASCGSolver::factorize(DynamicBSRView A, ctd::span<const int> part_offset,

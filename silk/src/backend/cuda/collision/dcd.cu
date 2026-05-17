@@ -33,6 +33,9 @@ __both__ ctd::optional<ctd::pair<float, float>> exact_pt_uv(const Vec3f& x0,
   // Barycentric (u, v) of point projection w.r.t. (x2, x3).
   float b1 = (x31dx31 * x21dx01 - x21dx31 * x31dx01) / det;  // U.
   float b2 = (x21dx21 * x31dx01 - x21dx31 * x21dx01) / det;  // V.
+  if (b1 < 0.0f || b2 < 0.0f || b1 + b2 > 1.0f) {
+    return ctd::nullopt;
+  }
 
   return ctd::make_pair(b1, b2);
 }
@@ -82,6 +85,7 @@ __both__ ctd::optional<ctd::pair<float, float>> exact_ee_uv(const Vec3f& x0,
     v = 1.0f;
     u = ctd::clamp((b - c) / a, 0.0f, 1.0f);
   }
+  return ctd::make_pair(u, v);
 }
 
 }  // namespace silk::cuda

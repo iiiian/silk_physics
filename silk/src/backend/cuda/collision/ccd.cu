@@ -14,6 +14,7 @@ namespace silk::cuda {
 class CubicPoly {
  public:
   static constexpr int BISECT_ITER = 6;
+  static constexpr float EMPTY = -1.0f;
 
   float a;
   float b;
@@ -59,7 +60,7 @@ class CubicPoly {
     float t2 = ctd::max(e0, x_min);
     float t3 = ctd::min(e1, x_max);
     float t4 = ctd::max(e1, x_min);
-    Vec3f root;
+    Vec3f root = {EMPTY, EMPTY, EMPTY};
 
     // Region A.
     if (t1 > x_min) {
@@ -150,6 +151,10 @@ __device__ ctd::optional<Collision> pt_ccd(
   Vec3f d2 = vsub(t->v1_t1, t->v1_t0);
   Vec3f d3 = vsub(t->v2_t1, t->v2_t0);
   for (int i = 0; i < 3; ++i) {
+    if (root(i) == CubicPoly::EMPTY) {
+      continue;
+    }
+
     // Discrete collision detection.
     Vec3f y0 = axpby(1.0f, p->v0_t0, root(i), d0);
     Vec3f y1 = axpby(1.0f, t->v0_t0, root(i), d1);
@@ -213,6 +218,10 @@ __device__ ctd::optional<Collision> pt_ccd(
     c.minimal_separation = ms;
     c.inv_mass = inv_mass;
 
+    c.x0_t0 = y0;
+    c.x1_t0 = y1;
+    c.x2_t0 = y2;
+    c.x3_t0 = y3;
     c.v0_t0 = d0;
     c.v1_t0 = d1;
     c.v2_t0 = d2;
@@ -224,6 +233,7 @@ __device__ ctd::optional<Collision> pt_ccd(
 
     return c;
   }
+  return ctd::nullopt;
 }
 
 __device__ ctd::optional<Collision> ee_ccd(
@@ -243,6 +253,10 @@ __device__ ctd::optional<Collision> ee_ccd(
   Vec3f d2 = vsub(eb->v0_t1, eb->v0_t0);
   Vec3f d3 = vsub(eb->v1_t1, eb->v1_t0);
   for (int i = 0; i < 3; ++i) {
+    if (root(i) == CubicPoly::EMPTY) {
+      continue;
+    }
+
     // Discrete collision detection.
     Vec3f y0 = axpby(1.0f, ea->v0_t0, root(i), d0);
     Vec3f y1 = axpby(1.0f, ea->v1_t0, root(i), d1);
@@ -300,13 +314,17 @@ __device__ ctd::optional<Collision> ee_ccd(
     c.state_offset_b = eb->state_offset;
 
     c.index(0) = ea->index(0);
-    c.index(1) = eb->index(1);
+    c.index(1) = ea->index(1);
     c.index(2) = eb->index(0);
     c.index(3) = eb->index(1);
     c.toi = root(i);
     c.minimal_separation = ms;
     c.inv_mass = inv_mass;
 
+    c.x0_t0 = y0;
+    c.x1_t0 = y1;
+    c.x2_t0 = y2;
+    c.x3_t0 = y3;
     c.v0_t0 = d0;
     c.v1_t0 = d1;
     c.v2_t0 = d2;
@@ -318,6 +336,7 @@ __device__ ctd::optional<Collision> ee_ccd(
 
     return c;
   }
+  return ctd::nullopt;
 }
 
 }  // namespace silk::cuda

@@ -267,7 +267,7 @@ void assemble_bending_rhs(float penalty, BSRView weighted_laplacian_ops,
     cusparse_workspace = alloc<char>(rt, workspace_size);
   }
   cusparseSpMV(cusparse_handle.raw, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha,
-               cusparse_lap.raw, cusparse_u.raw, &beta, cusparse_tmp.raw,
+               cusparse_lap.raw, cusparse_x.raw, &beta, cusparse_tmp.raw,
                CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT,
                cusparse_workspace.data());
 

@@ -138,6 +138,14 @@ cu::device_buffer<T> vec_like_to_device(ctd::span<const T> vec,
 }
 
 template <typename T>
+cu::device_buffer<T> vec_like_to_device(std::span<const T> vec,
+                                        CudaRuntime rt) {
+  auto buffer = alloc<T>(rt, vec.size());
+  cu::copy_bytes(rt.stream, vec, buffer);
+  return buffer;
+}
+
+template <typename T>
 std::vector<T> vec_like_to_host(ctd::span<const T> vec, CudaRuntime rt) {
   std::vector<T> buffer(vec.size());
   cu::copy_bytes(rt.stream, vec, buffer);

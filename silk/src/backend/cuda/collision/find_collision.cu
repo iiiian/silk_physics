@@ -2,6 +2,7 @@
 
 #include <cassert>
 
+#include "backend/cpu/collision/broadphase.hpp"
 #include "backend/cuda/collision/broadphase.cuh"
 #include "backend/cuda/collision/collision.cuh"
 #include "backend/cuda/collision/narrowphase.cuh"
@@ -53,9 +54,10 @@ __both__ bool ee_self_collision_filter(const EdgeCollider& a,
   return !is_both_pinned && !is_neighbor;
 };
 
-int find_collision(ObjRegistry& registry, float dt,
-                   int init_broadphase_cache_size,
-                   cu::device_buffer<Collision>& collisions, CudaRuntime rt) {
+ctd::span<Collision> find_collision(ObjRegistry& registry, float dt,
+                                    int init_broadphase_cache_size,
+                                    cu::device_buffer<Collision>& collisions,
+                                    CudaRuntime rt) {
   auto object_colliders = registry.get_all_components<ObjectCollider>();
 
   // Three-stage collision detection for inter-object collisions:
@@ -94,6 +96,15 @@ int find_collision(ObjRegistry& registry, float dt,
         .test_ext_collision<PointCollider, decltype(pt_inter_collision_filter)>(
             ob->point_colliders.value(), pt_inter_collision_filter, pt_ccache,
             pt_ccache_fill, rt);
+    if (pt_ccache_fill == pt_ccache.size()) {
+      pt_narrowphase(pt_ccache, collisions, collision_fill, rt);
+      pt_ccache_fill = 0;
+    }
+
+    ob->triangle_collider_tree
+        .test_ext_collision<PointCollider, decltype(pt_inter_collision_filter)>(
+            oa->point_colliders.value(), pt_inter_collision_filter, pt_ccache,
+            pt_ccache_fill, rt);
     oa->edge_collider_tree
         .test_ext_collision<EdgeCollider, decltype(ee_inter_collision_filter)>(
             ob->edge_collider_tree.get_colliders(), ee_inter_collision_filter,
@@ -118,8 +129,8 @@ int find_collision(ObjRegistry& registry, float dt,
     }
 
     o.triangle_collider_tree
-        .test_ext_collision<PointCollider, decltype(pt_inter_collision_filter)>(
-            o.point_colliders.value(), pt_inter_collision_filter, pt_ccache,
+        .test_ext_collision<PointCollider, decltype(pt_self_collision_filter)>(
+            o.point_colliders.value(), pt_self_collision_filter, pt_ccache,
             pt_ccache_fill, rt);
     o.edge_collider_tree.test_self_collision(ee_self_collision_filter,
                                              ee_ccache, ee_ccache_fill, rt);
@@ -141,7 +152,7 @@ int find_collision(ObjRegistry& registry, float dt,
     ee_narrowphase(ee_ccache, collisions, collision_fill, rt);
   }
 
-  return collision_fill;
+  return ctd::span<Collision>(collisions.data(), collision_fill);
 }
 
 }  // namespace silk::cuda

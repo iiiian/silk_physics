@@ -30,9 +30,9 @@ TriMesh build_permuted_mesh(const TriMesh& mesh, ctd::span<int> perm,
                             ctd::span<int> inv_perm) {
   TriMesh perm_mesh = mesh;
   int vert_num = mesh.V.rows();
-  for (int i = 0; i < vert_num; ++i) {
-    int old_idx = perm[i];
-    perm_mesh.V.row(i) = mesh.V.row(old_idx);
+  for (int new_idx = 0; new_idx < vert_num; ++new_idx) {
+    int old_idx = inv_perm[new_idx];
+    perm_mesh.V.row(new_idx) = mesh.V.row(old_idx);
   }
   for (int i = 0; i < mesh.E.rows(); ++i) {
     perm_mesh.E(i, 0) = inv_perm[mesh.E(i, 0)];
@@ -76,7 +76,7 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
   // Prepare pin position.
   auto pin_pos = registry.get<PinPosition>(e);
   if (!pin_pos) {
-    registry.set(e, PinPosition{*pin_index, init_state->position});
+    pin_pos = registry.set(e, PinPosition{*pin_index, init_state->position});
   }
   assert(pin_pos != nullptr);
 

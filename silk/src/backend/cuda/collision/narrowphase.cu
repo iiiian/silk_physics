@@ -17,7 +17,7 @@ namespace {
 __global__ void batch_pt_ccd(ctd::span<PTCCache> pt_ccache,
                              DynSpan<Collision> out) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
-  if (tid > pt_ccache.size()) {
+  if (tid >= pt_ccache.size()) {
     return;
   }
 
@@ -38,7 +38,7 @@ __global__ void batch_pt_ccd(ctd::span<PTCCache> pt_ccache,
 __global__ void batch_ee_ccd(ctd::span<EECCache> ee_ccache,
                              DynSpan<Collision> out) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
-  if (tid > ee_ccache.size()) {
+  if (tid >= ee_ccache.size()) {
     return;
   }
 

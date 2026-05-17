@@ -157,15 +157,15 @@ __global__ void min_max_kernel(ctd::span<const float> values, float* min_out,
   }
 
   float block_min = BlockReduce(tmp).Reduce(min, cu::minimum<float>{});
-  if (tid == 0) {
+  if (threadIdx.x == 0) {
     cu::atomic_ref<float> amin{*min_out};
     amin.fetch_min(block_min);
   }
   __syncthreads();
 
-  float block_max = BlockReduce(tmp).Reduce(min, cu::maximum<float>{});
-  if (tid == 0) {
-    cu::atomic_ref<float> amax{*min_out};
+  float block_max = BlockReduce(tmp).Reduce(max, cu::maximum<float>{});
+  if (threadIdx.x == 0) {
+    cu::atomic_ref<float> amax{*max_out};
     amax.fetch_max(block_max);
   }
 }
@@ -198,15 +198,15 @@ __global__ void compute_inertia_mod(float dt, ctd::span<const float> state,
 __global__ void diff_norm2(ctd::span<const float> a, ctd::span<const float> b,
                            float* norm2_out) {
   using BlockReduce = cub::BlockReduce<float, 128>;
-  BlockReduce::TempStorage tmp;
+  __shared__ BlockReduce::TempStorage tmp;
 
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  if (tid >= a.size()) {
-    return;
+  float norm2 = 0.0f;
+  if (tid < a.size()) {
+    float diff = a[tid] - b[tid];
+    norm2 = diff * diff;
   }
 
-  float norm2 = a[tid] - b[tid];
-  norm2 = norm2 * norm2;
   float reduced = BlockReduce(tmp).Sum(norm2);
   if (threadIdx.x == 0) {
     cu::atomic_ref<float> a_out{*norm2_out};
@@ -216,14 +216,14 @@ __global__ void diff_norm2(ctd::span<const float> a, ctd::span<const float> b,
 
 __global__ void min_toi(ctd::span<const Collision> collisions, float* out) {
   using BlockReduce = cub::BlockReduce<float, 128>;
-  BlockReduce::TempStorage tmp;
+  __shared__ BlockReduce::TempStorage tmp;
 
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  if (tid >= collisions.size()) {
-    return;
+  float toi = 1.0f;
+  if (tid < collisions.size()) {
+    toi = collisions[tid].toi;
   }
 
-  float toi = collisions[tid].toi;
   float reduced = BlockReduce(tmp).Reduce(toi, cu::minimum<>{});
   if (threadIdx.x == 0) {
     cu::atomic_ref<float> a_out{*out};
@@ -369,16 +369,16 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     // CCD line search.
     float h_min_toi = 1.0f;
     if (!collisions.empty()) {
-      SPDLOG_DEBUG("find {} collisions", collision_num);
+      SPDLOG_DEBUG("find {} collisions", collisions.size());
 
-      scalar_write(scalar_min_toi.data(), 0.0f, rt);
+      scalar_write(scalar_min_toi.data(), 1.0f, rt);
       int grid_num = div_round_up(collisions.size(), 128);
       min_toi<<<grid_num, 128, 0, rt.stream.get()>>>(collisions,
                                                      scalar_min_toi.data());
 
       // Back off to 80% of TOI as a safety margin to remain strictly
       // pre-contact and avoid zero toi.
-      float h_min_toi = 0.8 * scalar_load(scalar_min_toi.data(), rt);
+      h_min_toi = 0.8f * scalar_load(scalar_min_toi.data(), rt);
       SPDLOG_DEBUG("earliest toi {}", h_min_toi);
     }
 

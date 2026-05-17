@@ -3,12 +3,12 @@
 #include <cuda_runtime_api.h>
 
 #include <Eigen/Core>
+#include <algorithm>
 #include <cassert>
 #include <cuda/algorithm>
 #include <cuda/devices>
 #include <cuda/memory_pool>
 #include <cuda/stream>
-#include <std/algorithm>
 #include <stdexcept>
 
 #include "backend/cuda/assembly/cloth_assembly_l1_cache.cuh"
@@ -167,7 +167,7 @@ Result CudaBackend::get_cloth_position(uint32_t handle,
   if (init_pos->position.size() != position.size()) {
     return Result::error(ErrorCode::InvalidPosition);
   }
-  std::ranges::copy(init_pos.position, position);
+  std::ranges::copy(init_pos->position, position.begin());
   return Result::ok();
 }
 
@@ -226,7 +226,7 @@ Result CudaBackend::set_cloth_pin_position(uint32_t handle,
     pin_pos->is_static_twice = false;
   } else {
     impl_->registry_.remove_deps_then_set(handle,
-                                          PinPosition{pin_index, position});
+                                          PinPosition{*pin_index, position});
   }
   return Result::ok();
 }

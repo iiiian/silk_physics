@@ -43,18 +43,25 @@ __global__ void compute_all_barriers(ctd::span<const Collision> collisions,
 
   auto& c = collisions[tid];
 
-  // Vertex 0.
-  compute_barrier(c.state_offset_a, c.index(0), c.toi, c.inv_mass(0), c.x0_t0,
-                  c.v0_t0, c.v0_t1, indicator, target);
-  // Vertex 1.
-  compute_barrier(c.state_offset_a, c.index(1), c.toi, c.inv_mass(1), c.x1_t0,
-                  c.v1_t0, c.v1_t1, indicator, target);
-  // Vertex 2.
-  compute_barrier(c.state_offset_b, c.index(2), c.toi, c.inv_mass(2), c.x2_t0,
-                  c.v2_t0, c.v2_t1, indicator, target);
-  // Vertex 3.
-  compute_barrier(c.state_offset_b, c.index(3), c.toi, c.inv_mass(3), c.x3_t0,
-                  c.v3_t0, c.v3_t1, indicator, target);
+  if (c.type == CollisionType::PointTriangle) {
+    compute_barrier(c.state_offset_a, c.index(0), c.toi, c.inv_mass(0), c.x0_t0,
+                    c.v0_t0, c.v0_t1, indicator, target);
+    compute_barrier(c.state_offset_b, c.index(1), c.toi, c.inv_mass(1), c.x1_t0,
+                    c.v1_t0, c.v1_t1, indicator, target);
+    compute_barrier(c.state_offset_b, c.index(2), c.toi, c.inv_mass(2), c.x2_t0,
+                    c.v2_t0, c.v2_t1, indicator, target);
+    compute_barrier(c.state_offset_b, c.index(3), c.toi, c.inv_mass(3), c.x3_t0,
+                    c.v3_t0, c.v3_t1, indicator, target);
+  } else {
+    compute_barrier(c.state_offset_a, c.index(0), c.toi, c.inv_mass(0), c.x0_t0,
+                    c.v0_t0, c.v0_t1, indicator, target);
+    compute_barrier(c.state_offset_a, c.index(1), c.toi, c.inv_mass(1), c.x1_t0,
+                    c.v1_t0, c.v1_t1, indicator, target);
+    compute_barrier(c.state_offset_b, c.index(2), c.toi, c.inv_mass(2), c.x2_t0,
+                    c.v2_t0, c.v2_t1, indicator, target);
+    compute_barrier(c.state_offset_b, c.index(3), c.toi, c.inv_mass(3), c.x3_t0,
+                    c.v3_t0, c.v3_t1, indicator, target);
+  }
 }
 }  // namespace
 

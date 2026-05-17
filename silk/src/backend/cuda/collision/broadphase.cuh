@@ -101,6 +101,14 @@ class OIBVHTree {
 
 namespace detail {
 
+__global__ void fill_sequence_ids(ctd::span<int> ids) {
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= ids.size()) {
+    return;
+  }
+  ids[i] = i;
+}
+
 /// @brief Split and interleave 21 bit uint32.
 ///
 /// https://www.forceflow.be/2013/10/07/morton-encodingdecoding-through-bit-interleaving-implementations/
@@ -511,10 +519,8 @@ OIBVHTree<C>::OIBVHTree(const Bbox& root_bbox, cu::device_buffer<C> colliders,
 
   // Make unsorted collider ids.
   auto unsorted_collider_ids = alloc<int>(rt, collider_num);
-  auto fill_ids = [id = unsorted_collider_ids.data()] __device__(int i) {
-    id[i] = i;
-  };
-  cub::DeviceFor::Bulk(collider_num, fill_ids, rt.stream.get());
+  detail::fill_sequence_ids<<<div_round_up(collider_num, 128), 128, 0,
+                              rt.stream.get()>>>(unsorted_collider_ids);
 
   // Make unsorted morton codes.
   auto unsorted_mortons = alloc<uint64_t>(rt, collider_num);
@@ -572,20 +578,17 @@ OIBVHTree<C>::OIBVHTree(const Bbox& root_bbox, cu::device_buffer<C> colliders,
         depth, max_depth, vleaf_num, nodes);
   }
 
-  OIBVHTree<C> t;
-  t.unsorted_collider_ids_ = std::move(unsorted_collider_ids);
-  t.unsorted_mortons_ = std::move(unsorted_mortons);
-  t.sorted_mortons_ = std::move(sorted_mortons);
-  t.radix_temp_ = std::move(radix_temp);
-  t.max_depth_ = max_depth;
-  t.skipped_rleaf_num_ = skipped_rleaf_num;
-  t.skipped_depth_ = skipped_depth;
-  t.vleaf_num_ = vleaf_num;
-  t.colliders_ = std::move(colliders);
-  t.collider_ids_ = std::move(collider_ids);
-  t.nodes_ = std::move(nodes);
-
-  return t;
+  this->unsorted_collider_ids_ = std::move(unsorted_collider_ids);
+  this->unsorted_mortons_ = std::move(unsorted_mortons);
+  this->sorted_mortons_ = std::move(sorted_mortons);
+  this->radix_temp_ = std::move(radix_temp);
+  this->max_depth_ = max_depth;
+  this->skipped_rleaf_num_ = skipped_rleaf_num;
+  this->skipped_depth_ = skipped_depth;
+  this->vleaf_num_ = vleaf_num;
+  this->colliders_ = std::move(colliders);
+  this->collider_ids_ = std::move(collider_ids);
+  this->nodes_ = std::move(nodes);
 }
 
 template <typename C>
@@ -626,7 +629,6 @@ template <typename Filter>
 void OIBVHTree<X>::test_self_collision(const Filter& filter,
                                        CollisionCache<X, X>& out, int& fill,
                                        CudaRuntime rt) {
-  out.counter = 0;
   if (colliders_->empty()) {
     return;
   }
@@ -638,7 +640,6 @@ void OIBVHTree<X>::test_self_collision(const Filter& filter,
   detail::self_batch_traversal<X, Filter>
       <<<grid_num, 128, 0, rt.stream.get()>>>(tree, filter, dyn_out);
   // If buffer overlfow, resize then traverse again.
-  //
   int old_fill = fill;
   fill = scalar_load(d_fill.data(), rt);
   if (fill > out.size()) {
@@ -656,8 +657,6 @@ void OIBVHTree<X>::test_ext_collision(ctd::span<const Y> colliders,
                                       const Filter& filter,
                                       CollisionCache<X, Y>& out, int& fill,
                                       CudaRuntime rt) {
-  out.counter = 0;
-
   if (colliders_->empty() || colliders.empty()) {
     return;
   }
