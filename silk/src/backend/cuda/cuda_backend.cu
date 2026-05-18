@@ -50,8 +50,7 @@ class CudaBackend::Impl {
   }
 
   CudaRuntime get_runtime() const {
-    auto ref = mr->as_ref();  // resource_ref can't bind to rvalue.
-    return CudaRuntime{.stream = *stream, .mr = ref};
+    return CudaRuntime{.stream = *stream, .mr = mr->as_ref()};
   }
 
   bool is_obstacle(uint32_t entity) {

@@ -283,11 +283,12 @@ ClothADMMHelper::ClothADMMHelper(int vert_num, int face_num, CudaRuntime rt) {
   y_ = alloc<float>(rt, jacobian_dof);
   uy_ = alloc<float>(rt, jacobian_dof, 0);
   jacobians_ = alloc<float>(rt, jacobian_dof);
-  // Curvature is per vertex.
-  int curvature_dof = vert_num;
+  // Curvature is per vertex coordinate.
+  int curvature_dof = 3 * vert_num;
   z_ = alloc<float>(rt, curvature_dof);
   uz_ = alloc<float>(rt, curvature_dof, 0);
   laplacians_ = alloc<float>(rt, curvature_dof);
+  cusparse_workspace_ = alloc<char>(rt, 0);
 }
 
 void ClothADMMHelper::reset_aux_lagrange_mul(CudaRuntime rt) {

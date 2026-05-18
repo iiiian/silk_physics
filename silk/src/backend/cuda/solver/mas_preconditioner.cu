@@ -890,7 +890,11 @@ void MASPreconditioner::factorize(DynamicBSRView A,
                                   CudaRuntime rt) {
   assert(part_offsets.size() >= 2);
   assert(A.mat.block_dim >= 1 && A.mat.block_dim <= 3);
-  assert(part_offsets.back() == A.mat.dim);
+#ifndef NDEBUG
+  int last_part_offset =
+      scalar_load(part_offsets.data() + part_offsets.size() - 1, rt);
+  assert(last_part_offset == A.mat.dim);
+#endif
   assert(A.diag.size() == A.mat.dim * A.mat.block_dim);
 
   initialized_ = false;

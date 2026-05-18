@@ -7,6 +7,7 @@
 #include <cuda/algorithm>
 #include <cuda/atomic>
 #include <cuda/buffer>
+#include <cuda/memory_pool>
 #include <cuda/memory_resource>
 #include <cuda/std/source_location>
 #include <cuda/std/span>
@@ -68,7 +69,7 @@ inline void check_cusparse(cusparseStatus_t result, char const* const func,
 
 struct CudaRuntime {
   cu::stream_ref stream;
-  cu::mr::resource_ref<cu::mr::device_accessible> mr;
+  cu::device_memory_pool_ref mr;
 };
 
 class CudaOOM : public std::runtime_error {

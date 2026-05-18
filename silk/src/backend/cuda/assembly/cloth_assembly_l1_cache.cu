@@ -33,6 +33,15 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
   h_AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
   h_AA *= PENALTY;
 
+  // Assemble vectorized Laplacian operator.
+  Eigen::SparseMatrix<float> h_weighted_laplacian =
+      l2.mass.asDiagonal() * l2.laplacian_ops;
+  std::vector<Eigen::Triplet<float>> lap_triplets;
+  append_triplets_from_vectorized_sparse(h_weighted_laplacian, 0, 0, 1.0f,
+                                         lap_triplets);
+  Eigen::SparseMatrix<float> h_laplacian_ops{state_num, state_num};
+  h_laplacian_ops.setFromTriplets(lap_triplets.begin(), lap_triplets.end());
+
   // Assemble jacobian ops.
   std::vector<float> h_jacobian_ops(l2.jacobian_ops.size() * 54);
   for (int i = 0; i < l2.jacobian_ops.size(); ++i) {
@@ -58,8 +67,7 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
   this->elastic_stiffness = c.elastic_stiffness;
   this->bending_stiffness = c.bending_stiffness;
   this->faces = host_eigen_to_device(l2_cache.F, rt);
-  this->weighted_laplacian_ops =
-      BSRMatrix{l2.mass.asDiagonal() * l2.laplacian_ops, 3, {}, rt};
+  this->weighted_laplacian_ops = BSRMatrix{h_laplacian_ops, 3, {}, rt};
   this->C0 = host_eigen_to_device(
       (c.bending_stiffness * l2.C0).reshaped<Eigen::RowMajor>(), rt);
   this->weighted_jacobian_ops = vec_like_to_device<float>(h_jacobian_ops, rt);
