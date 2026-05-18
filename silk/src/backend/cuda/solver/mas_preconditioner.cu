@@ -9,6 +9,7 @@
 #include <cuda/std/array>
 #include <cuda/std/bit>
 #include <cuda/std/utility>
+#include <cuda/warp>
 #include <stdexcept>
 
 #include "common/compiler_builtin.hpp"
@@ -596,29 +597,53 @@ __global__ void fill_coarse_matrices(DynamicBSRView mat_in,
   }
 }
 
+template <int BLOCK_DIM>
 __global__ void gather_multi_level_r(
     ctd::span<const float> r, ctd::span<float> multi_level_r,
-    ctd::span<const int> real_to_padded, ctd::span<const int> coarse_space_map,
-    ctd::array<int, MAS_LEVEL_NUM> level_offsets, int block_dim,
-    int coarse_level_num) {
-  int real_id = blockDim.x * blockIdx.x + threadIdx.x;
-  if (real_id >= real_to_padded.size()) {
+    ctd::span<const int> padded_to_real, ctd::span<const int> coarse_space_map,
+    ctd::array<int, MAS_LEVEL_NUM> level_offsets, int coarse_level_num) {
+  using WarpReduce = cub::WarpReduce<float, BANK_SIZE>;
+  constexpr int WARPS_PER_BLOCK = 128 / BANK_SIZE;
+
+  __shared__ typename WarpReduce::TempStorage
+      reduce_storage[WARPS_PER_BLOCK][MAS_MAX_COARSE_LEVEL][BLOCK_DIM];
+
+  int tid = blockDim.x * blockIdx.x + threadIdx.x;
+  if (tid >= padded_to_real.size()) {
     return;
   }
 
-  int padded_id = real_to_padded[real_id];
-  int src_root = real_id * block_dim;
-  int fine_root = padded_id * block_dim;
-  // Gather padded space.
-  for (int i = 0; i < block_dim; ++i) {
-    multi_level_r[fine_root + i] = r[src_root + i];
+  int lid = threadIdx.x % BANK_SIZE;
+  int wid = threadIdx.x / BANK_SIZE;
+  int rid = padded_to_real[tid];
+
+  if (rid < 0) {
+    return;
   }
-  // Gather coarse space.
+
+  float r_value[BLOCK_DIM];
+#pragma unroll
+  for (int i = 0; i < BLOCK_DIM; ++i) {
+    r_value[i] = r[rid * BLOCK_DIM + i];
+  }
+
+#pragma unroll
+  for (int i = 0; i < BLOCK_DIM; ++i) {
+    multi_level_r[tid * BLOCK_DIM + i] = r_value[i];
+  }
+
   for (int lv = 0; lv < coarse_level_num; ++lv) {
-    int cco_id = coarse_space_map[real_id * MAS_MAX_COARSE_LEVEL + lv];
-    int dst_root = (level_offsets[lv + 1] + cco_id) * block_dim;
-    for (int i = 0; i < block_dim; ++i) {
-      atomicAdd(multi_level_r.data() + dst_root + i, r[src_root + i]);
+    int cco_id = coarse_space_map[rid * MAS_MAX_COARSE_LEVEL + lv];
+    int prev_cco_id = cu::device::warp_shuffle_up<BANK_SIZE>(cco_id, 1).data;
+    bool head = lid == 0 || cco_id != prev_cco_id;
+    int dst_root = (level_offsets[lv + 1] + cco_id) * BLOCK_DIM;
+#pragma unroll
+    for (int i = 0; i < BLOCK_DIM; ++i) {
+      float segment_sum = WarpReduce(reduce_storage[wid][lv][i])
+                              .HeadSegmentedSum(r_value[i], head);
+      if (head) {
+        atomicAdd(multi_level_r.data() + dst_root + i, segment_sum);
+      }
     }
   }
 }
@@ -960,16 +985,29 @@ void MASPreconditioner::apply(ctd::span<const float> r, ctd::span<float> z,
   cu::fill_bytes(rt.stream, *(coarse_vectors_.multi_level_r), 0);
   cu::fill_bytes(rt.stream, *(coarse_vectors_.multi_level_z), 0);
 
-  int grid_num = div_round_up(padded_topology_.node_num, 128);
-  gather_multi_level_r<<<grid_num, 128, 0, rt.stream.get()>>>(
-      r, *(coarse_vectors_.multi_level_r), *(padded_topology_.real_to_padded),
-      *(coarse_space_.map), coarse_vectors_.level_offsets, block_dim_,
-      coarse_space_.level_num);
+  int gather_r_grid_num = div_round_up(padded_topology_.padded_node_num, 128);
+  if (block_dim_ == 1) {
+    gather_multi_level_r<1><<<gather_r_grid_num, 128, 0, rt.stream.get()>>>(
+        r, *(coarse_vectors_.multi_level_r), *(padded_topology_.padded_to_real),
+        *(coarse_space_.map), coarse_vectors_.level_offsets,
+        coarse_space_.level_num);
+  } else if (block_dim_ == 2) {
+    gather_multi_level_r<2><<<gather_r_grid_num, 128, 0, rt.stream.get()>>>(
+        r, *(coarse_vectors_.multi_level_r), *(padded_topology_.padded_to_real),
+        *(coarse_space_.map), coarse_vectors_.level_offsets,
+        coarse_space_.level_num);
+  } else {
+    gather_multi_level_r<3><<<gather_r_grid_num, 128, 0, rt.stream.get()>>>(
+        r, *(coarse_vectors_.multi_level_r), *(padded_topology_.padded_to_real),
+        *(coarse_space_.map), coarse_vectors_.level_offsets,
+        coarse_space_.level_num);
+  }
 
   apply_inverse(coarse_matrices_, *(coarse_vectors_.multi_level_r),
                 *(coarse_vectors_.multi_level_z), block_dim_, rt);
 
-  gather_multi_level_z<<<grid_num, 128, 0, rt.stream.get()>>>(
+  int gather_z_grid_num = div_round_up(padded_topology_.node_num, 128);
+  gather_multi_level_z<<<gather_z_grid_num, 128, 0, rt.stream.get()>>>(
       *(coarse_vectors_.multi_level_z), z, *(padded_topology_.real_to_padded),
       *(coarse_space_.map), coarse_vectors_.level_offsets, block_dim_,
       coarse_space_.level_num);
