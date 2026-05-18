@@ -20,6 +20,7 @@
 #include "backend/cuda/solver/barrier_constraints.cuh"
 #include "backend/cuda/solver/cloth_admm_helper.cuh"
 #include "backend/cuda/solver/equality_constraints.cuh"
+#include "backend/cuda/solver/inner_product.cuh"
 #include "backend/cuda/solver/pin_constraints.cuh"
 #include "common/logger.hpp"
 #include "silk/silk.hpp"
@@ -108,7 +109,10 @@ __global__ void predict(int vert_num, float dt, Vec3f acc,
 }
 
 void update_aux_and_lagrange_mul(ObjRegistry& registry, float max_lagrange_mul,
-                                 ctd::span<const float> state, CudaRuntime rt) {
+                                 ctd::span<const float> state,
+                                 ctd::span<float> primal_norm2,
+                                 ctd::span<float> dual_residual,
+                                 CudaRuntime rt) {
   auto clothes =
       registry.get_entity_with_components<PhysicalState, ClothAssemblyL1Cache,
                                           ClothADMMHelper>();
@@ -118,9 +122,12 @@ void update_aux_and_lagrange_mul(ObjRegistry& registry, float max_lagrange_mul,
     auto admm_helper = registry.get<ClothADMMHelper>(e);
     assert(phy_state && l1_cache && admm_helper);
 
-    auto x = state.subspan(phy_state->state_offset, phy_state->state_num);
-    admm_helper->update_aux_var_and_lagrange_mul(max_lagrange_mul, *l1_cache, x,
-                                                 rt);
+    auto sub_state =
+        state.subspan(phy_state->state_offset, phy_state->state_num);
+    auto sub_dual =
+        dual_residual.subspan(phy_state->state_offset, phy_state->state_num);
+    admm_helper->update_aux_var_and_lagrange_mul(
+        max_lagrange_mul, *l1_cache, sub_state, primal_norm2, sub_dual, rt);
   }
 }
 
@@ -195,25 +202,6 @@ __global__ void compute_inertia_mod(float dt, ctd::span<const float> state,
   out[tid] = -state[tid] / (dt * dt) - velocity[tid] / dt - a;
 }
 
-__global__ void diff_norm2(ctd::span<const float> a, ctd::span<const float> b,
-                           float* norm2_out) {
-  using BlockReduce = cub::BlockReduce<float, 128>;
-  __shared__ BlockReduce::TempStorage tmp;
-
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  float norm2 = 0.0f;
-  if (tid < a.size()) {
-    float diff = a[tid] - b[tid];
-    norm2 = diff * diff;
-  }
-
-  float reduced = BlockReduce(tmp).Sum(norm2);
-  if (threadIdx.x == 0) {
-    cu::atomic_ref<float> a_out{*norm2_out};
-    a_out.fetch_add(reduced);
-  }
-}
-
 __global__ void min_toi(ctd::span<const Collision> collisions, float* out) {
   using BlockReduce = cub::BlockReduce<float, 128>;
   __shared__ BlockReduce::TempStorage tmp;
@@ -284,8 +272,10 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
   auto lhs_diag = alloc<float>(rt, state_num, 0);
   auto rhs = alloc<float>(rt, state_num, 0);
   auto inertia_mod = alloc<float>(rt, state_num);
-  auto scalar_norm2 = alloc<float>(rt, 1);
   auto scalar_min_toi = alloc<float>(rt, 1);
+  auto scalar_primal_norm2 = alloc<float>(rt, 1);
+  auto dual_residual = alloc<float>(rt, state_num);
+  auto scalar_dual_norm2 = alloc<float>(rt, state_num);
   auto collision_storage = alloc<Collision>(rt, init_narrowphase_cache_size);
   auto pin_constraints = gather_pin_constraints(registry, state_num, rt);
   std::optional<EqualityConstraints> barrier_constraints;
@@ -309,10 +299,11 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     }
 
     // Inner loop.
-    float init_norm = 0;
+    float h_init_primal_norm = 0.0f;
+    float h_init_dual_norm = 0.0f;
     cu::copy_bytes(rt.stream, inner_state, inner_tmp);
     for (int inner_it = 0; inner_it < max_inner_iteration; ++inner_it) {
-      SPDLOG_DEBUG("Inner iter {}", inner_it);
+      SPDLOG_INFO("Inner iter {}", inner_it);
 
       // Sovle main.
       // Skip iter 0 as aux variables are not initialized yet.
@@ -329,7 +320,10 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
       }
 
       // Update all aux variables and lagrange multipliers.
-      update_aux_and_lagrange_mul(registry, max_lagrange_mul, inner_tmp, rt);
+      cu::fill_bytes(rt.stream, scalar_primal_norm2, 0);
+      cu::fill_bytes(rt.stream, dual_residual, 0);
+      update_aux_and_lagrange_mul(registry, max_lagrange_mul, inner_tmp,
+                                  scalar_primal_norm2, dual_residual, rt);
       pin_constraints.update_lagrange_mul(inner_tmp, rt);
       if (barrier_constraints) {
         barrier_constraints->update_lagrange_mul(inner_tmp, rt);
@@ -347,16 +341,30 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
         return Error::Diverge;
       }
 
-      grid_num = div_round_up(state_num, 128);
-      scalar_write<float>(scalar_norm2.data(), 0, rt);
-      diff_norm2<<<grid_num, 128, 0, rt.stream.get()>>>(inner_tmp, inner_state,
-                                                        scalar_norm2.data());
-      float norm = std::sqrt(scalar_load(scalar_norm2.data(), rt));
+      float h_primal_norm =
+          std::sqrt(scalar_load(scalar_primal_norm2.data(), rt));
+      inner_product(dual_residual, dual_residual, scalar_dual_norm2, rt);
+      float h_dual_norm = std::sqrt(scalar_load(scalar_dual_norm2.data(), rt));
+
       if (inner_it == 1) {
-        init_norm = norm;
+        h_init_primal_norm = h_primal_norm;
+        h_init_dual_norm = h_dual_norm;
       }
-      if (norm < non_linear_rel_tol * init_norm || norm < non_linear_abs_tol) {
-        SPDLOG_DEBUG("||dx|| < {}, NL loop terminate", norm);
+      bool primal_converged =
+          h_primal_norm < non_linear_rel_tol * h_init_primal_norm ||
+          h_primal_norm < non_linear_abs_tol;
+      bool dual_converged =
+          h_dual_norm < non_linear_rel_tol * h_init_dual_norm ||
+          h_dual_norm < non_linear_abs_tol;
+      SPDLOG_INFO("Primal norm {}. Rel criteria {}. Abs criteria {}.",
+                  h_primal_norm, non_linear_rel_tol * h_init_primal_norm,
+                  non_linear_abs_tol);
+      SPDLOG_INFO("Dual norm {}. Rel criteria {}. Abs criteria {}.",
+                  h_dual_norm, non_linear_rel_tol * h_init_dual_norm,
+                  non_linear_abs_tol);
+      if (primal_converged && dual_converged) {
+        SPDLOG_INFO("ADMM residual [{}, {}], NL loop terminate", h_primal_norm,
+                    h_dual_norm);
         cu::copy_bytes(rt.stream, inner_tmp, inner_state);
         break;
       }
