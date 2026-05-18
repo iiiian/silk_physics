@@ -41,7 +41,8 @@ __global__ void update_lagrange_mul_kernel(ctd::span<const bool> indicator,
 
   if (indicator[tid]) {
     float tmp = lagrange_mul[tid] + penalty * (state[tid] - target[tid]);
-    lagrange_mul[tid] = min(max_lagrange_mul, tmp);
+    lagrange_mul[tid] =
+        ctd::clamp(tmp, -max_lagrange_mul, max_lagrange_mul);
   }
 }
 
@@ -56,7 +57,7 @@ __global__ void eval_kernel(ctd::span<const bool> indicator,
 
   if (indicator[tid]) {
     lhs_diag[tid] += penalty;
-    rhs[tid] += penalty * target[tid] + lagrange_mul[tid];
+    rhs[tid] += penalty * target[tid] - lagrange_mul[tid];
   }
 }
 

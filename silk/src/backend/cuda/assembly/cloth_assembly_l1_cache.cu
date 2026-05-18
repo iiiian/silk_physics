@@ -43,10 +43,14 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
   h_laplacian_ops.setFromTriplets(lap_triplets.begin(), lap_triplets.end());
 
   // Assemble jacobian ops.
+  // Convert from Eigen default col major to row major.
   std::vector<float> h_jacobian_ops(l2.jacobian_ops.size() * 54);
   for (int i = 0; i < l2.jacobian_ops.size(); ++i) {
-    memcpy(h_jacobian_ops.data() + 54 * i, l2.jacobian_ops[i].data(),
-           54 * sizeof(float));
+    for (int row = 0; row < 6; ++row) {
+      for (int col = 0; col < 9; ++col) {
+        h_jacobian_ops[54 * i + 9 * row + col] = l2.jacobian_ops[i](row, col);
+      }
+    }
   }
 
   // Assemble area_sqrt.
