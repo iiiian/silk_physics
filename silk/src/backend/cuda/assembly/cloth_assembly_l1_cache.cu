@@ -37,7 +37,7 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
   std::vector<float> h_jacobian_ops(l2.jacobian_ops.size() * 54);
   for (int i = 0; i < l2.jacobian_ops.size(); ++i) {
     Eigen::Matrix<float, 6, 9> weighted_jac = l2.area(i) * l2.jacobian_ops[i];
-    memcpy(h_jacobian_ops.data() + 54 * i, l2.jacobian_ops[i].data(),
+    memcpy(h_jacobian_ops.data() + 54 * i, weighted_jac.data(),
            54 * sizeof(float));
   }
 

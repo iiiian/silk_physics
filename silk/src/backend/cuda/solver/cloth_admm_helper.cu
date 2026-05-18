@@ -158,17 +158,16 @@ void solve_and_update_bending_aux(
   cub::DeviceFor::Bulk(lagrange_mul.size(), update_mul, rt.stream.get());
 }
 
-__global__ void assemble_inertia(int vert_num, float dt,
-                                 ctd::span<const float> mass,
+__global__ void assemble_inertia(float dt, ctd::span<const float> mass,
                                  ctd::span<const float> x,
                                  ctd::span<const float> inertia_mod,
                                  ctd::span<float> lhs_diag) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  if (tid >= vert_num) {
+  if (tid >= lhs_diag.size()) {
     return;
   }
 
-  lhs_diag[tid] += mass[tid] * (1.0 / (dt * dt) * x[tid] + inertia_mod[tid]);
+  lhs_diag[tid] += mass[tid] * (1.0f / (dt * dt) * x[tid] + inertia_mod[tid]);
 }
 
 // clang-format off
@@ -218,7 +217,7 @@ __global__ void assemble_elastic_rhs(
     int rhs_offset = 3 * faces[tid * 3 + i];
 #pragma unroll
     for (int j = 0; j < 3; ++j) {
-      rhs[rhs_offset + j] += tmp(3 * i + j);
+      atomicAdd(rhs.data() + rhs_offset + j, tmp(3 * i + j));
     }
   }
 }
@@ -325,8 +324,7 @@ void ClothADMMHelper::solve_main_var(float rel_tol,
 
   int grid_num = div_round_up(l1_cache.state_num, 128);
   assemble_inertia<<<grid_num, 128, 0, rt.stream.get()>>>(
-      l1_cache.vert_num, l1_cache.dt, *l1_cache.mass, state, inertia_mod,
-      lhs_diag);
+      l1_cache.dt, *l1_cache.mass, state, inertia_mod, lhs_diag);
 
   grid_num = div_round_up(l1_cache.face_num, 128);
   assemble_elastic_rhs<<<grid_num, 128, 0, rt.stream.get()>>>(

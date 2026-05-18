@@ -24,7 +24,9 @@ class CubicPoly {
   __both__ float eval(float x) const { return ((a * x + b) * x + c) * x + d; }
 
   __both__ float bisect_monotone(float left, float right) const {
-    assert(right > left);
+    if (right <= left) {
+      return EMPTY;
+    }
 
     float eval_left = eval(left);
     float eval_right = eval(right);
@@ -51,30 +53,42 @@ class CubicPoly {
   }
 
   __both__ Vec3f find_root(float x_min, float x_max) const {
-    float t0 = b * b - 3 * a * c;
-    // Extrema
-    float e0 = (-b - t0) / (3 * a);
-    float e1 = (-b + t0) / (3 * a);
-
-    float t1 = ctd::min(e0, x_max);
-    float t2 = ctd::max(e0, x_min);
-    float t3 = ctd::min(e1, x_max);
-    float t4 = ctd::max(e1, x_min);
+    float eps = 1e-8f;
     Vec3f root = {EMPTY, EMPTY, EMPTY};
 
-    // Region A.
-    if (t1 > x_min) {
-      root(0) = bisect_monotone(x_min, t1);
-    }
-    // Region B.
-    if (t3 > t2) {
-      root(1) = bisect_monotone(t2, t3);
-    }
-    // Region C.
-    if (x_max > t4) {
-      root(2) = bisect_monotone(t4, x_max);
+    // Degenerate to quadratic or linear.
+    if (ctd::abs(a) < eps) {
+      if (ctd::abs(b) < eps) {
+        root(0) = bisect_monotone(x_min, x_max);
+        return root;
+      }
+
+      // Quadratic monotone intervals are split at the vertex.
+      float e = ctd::clamp(-c / (2.0f * b), x_min, x_max);
+      root(0) = bisect_monotone(x_min, e);
+      root(1) = bisect_monotone(e, x_max);
+      return root;
     }
 
+    // Cubic monotone intervals are split at derivative roots.
+    float disc = b * b - 3.0f * a * c;
+    if (disc <= 0.0f) {
+      root(0) = bisect_monotone(x_min, x_max);
+      return root;
+    }
+
+    float s = ctd::sqrt(disc);
+    float e0 = (-b - s) / (3.0f * a);
+    float e1 = (-b + s) / (3.0f * a);
+    if (e0 > e1) {
+      ctd::swap(e0, e1);
+    }
+
+    e0 = ctd::clamp(e0, x_min, x_max);
+    e1 = ctd::clamp(e1, x_min, x_max);
+    root(0) = bisect_monotone(x_min, e0);
+    root(1) = bisect_monotone(e0, e1);
+    root(2) = bisect_monotone(e1, x_max);
     return root;
   }
 };
@@ -143,8 +157,8 @@ __device__ ctd::optional<Collision> pt_ccd(
   float restitution = 0.5 * (p->restitution + t->restitution);
   float friction = 0.5 * (p->friction + t->friction);
 
-  Vec3f root = solve_coplaner_poly(p->v0_t0, p->v0_t1, t->v0_t0, t->v0_t1,
-                                   t->v1_t0, t->v1_t1, t->v2_t0, t->v2_t1);
+  Vec3f root = solve_coplaner_poly(p->v0_t0, t->v0_t0, t->v1_t0, t->v2_t0,
+                                   p->v0_t1, t->v0_t1, t->v1_t1, t->v2_t1);
 
   Vec3f d0 = vsub(p->v0_t1, p->v0_t0);
   Vec3f d1 = vsub(t->v0_t1, t->v0_t0);
@@ -245,8 +259,8 @@ __device__ ctd::optional<Collision> ee_ccd(
   float restitution = 0.5 * (ea->restitution + eb->restitution);
   float friction = 0.5 * (ea->friction + eb->friction);
 
-  Vec3f root = solve_coplaner_poly(ea->v0_t0, ea->v0_t1, ea->v1_t0, ea->v1_t1,
-                                   eb->v0_t0, eb->v0_t1, eb->v1_t0, eb->v1_t1);
+  Vec3f root = solve_coplaner_poly(ea->v0_t0, ea->v1_t0, eb->v0_t0, eb->v1_t0,
+                                   ea->v0_t1, ea->v1_t1, eb->v0_t1, eb->v1_t1);
 
   Vec3f d0 = vsub(ea->v0_t1, ea->v0_t0);
   Vec3f d1 = vsub(ea->v1_t1, ea->v1_t0);

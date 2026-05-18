@@ -36,13 +36,13 @@ TriMesh build_permuted_mesh(const TriMesh& mesh, ctd::span<int> perm,
     perm_mesh.V.row(new_idx) = mesh.V.row(old_idx);
   }
   for (int i = 0; i < mesh.E.rows(); ++i) {
-    perm_mesh.E(i, 0) = inv_perm[mesh.E(i, 0)];
-    perm_mesh.E(i, 1) = inv_perm[mesh.E(i, 1)];
+    perm_mesh.E(i, 0) = perm[mesh.E(i, 0)];
+    perm_mesh.E(i, 1) = perm[mesh.E(i, 1)];
   }
   for (int i = 0; i < mesh.F.rows(); ++i) {
-    perm_mesh.F(i, 0) = inv_perm[mesh.F(i, 0)];
-    perm_mesh.F(i, 1) = inv_perm[mesh.F(i, 1)];
-    perm_mesh.F(i, 2) = inv_perm[mesh.F(i, 2)];
+    perm_mesh.F(i, 0) = perm[mesh.F(i, 0)];
+    perm_mesh.F(i, 1) = perm[mesh.F(i, 1)];
+    perm_mesh.F(i, 2) = perm[mesh.F(i, 2)];
   }
   return perm_mesh;
 }

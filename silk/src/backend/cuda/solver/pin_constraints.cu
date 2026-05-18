@@ -97,8 +97,8 @@ EqualityConstraints gather_pin_constraints(ObjRegistry& registry, int state_num,
 
   return EqualityConstraints{state_num,
                              1e4,
-                             1e8,
                              0.0,
+                             1e8,
                              std::move(global_indicator),
                              std::move(global_target),
                              rt};
