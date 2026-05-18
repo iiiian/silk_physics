@@ -77,9 +77,9 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
   // Prepare pin position.
   auto pin_pos = registry.get<PinPosition>(e);
   if (!pin_pos) {
-    std::span<const float> position{init_state->position.data(),
-                                    init_state->position.size()};
-    pin_pos = registry.set(e, PinPosition{*pin_index, position});
+    std::span<const float> position(init_state->position.data(),
+                                    init_state->position.size());
+    pin_pos = registry.set(e, PinPosition::from_vertices(*pin_index, position));
   }
   assert(pin_pos != nullptr);
 

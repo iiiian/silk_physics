@@ -15,8 +15,8 @@ namespace silk::cuda {
 class ClothADMMHelper;
 class ClothAssemblyL1Cache;
 class ObjectCollider;
-struct PinIndex;
-struct PinPosition;
+class PinIndex;
+class PinPosition;
 class PhysicalState;
 class MeshPartition;
 

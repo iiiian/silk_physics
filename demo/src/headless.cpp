@@ -40,13 +40,13 @@ silk::CollisionConfig to_collision_config(const config::Collision& collision) {
 
 class HeadlessCloth : public IObject {
  private:
-  silk::World* world_;
+  silk::World* world_ = nullptr;
   std::string name_;
   Vert verts_;
   Face faces_;
   silk::ClothConfig cloth_config_;
   silk::CollisionConfig collision_config_;
-  uint32_t handle_;
+  uint32_t handle_ = 0;
   PositionCache cache_;
 
  public:

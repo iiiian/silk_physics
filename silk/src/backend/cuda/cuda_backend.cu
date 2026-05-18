@@ -242,7 +242,7 @@ Result CudaBackend::set_cloth_pin_position(uint32_t handle,
     pin_pos->is_static_twice = false;
   } else {
     impl_->registry_.remove_deps_then_set(handle,
-                                          PinPosition{*pin_index, position});
+                                          PinPosition::from_position(position));
   }
   return Result::ok();
 }

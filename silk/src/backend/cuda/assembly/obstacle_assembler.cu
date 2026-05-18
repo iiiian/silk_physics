@@ -30,7 +30,7 @@ void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
   if (!pin_pos) {
     std::span<const float> pos_span(init_state->position.data(),
                                     init_state->position.size());
-    pin_pos = registry.set(e, PinPosition{*pin_index, pos_span});
+    pin_pos = registry.set(e, PinPosition::from_position(pos_span));
   }
   assert(pin_pos != nullptr);
 
