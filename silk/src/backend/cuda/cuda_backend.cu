@@ -164,6 +164,7 @@ Result CudaBackend::get_cloth_position(uint32_t handle,
     auto tmp = alloc<float>(rt, position.size());
     part->inv_permute(*state->curr_state, tmp, rt);
     cu::copy_bytes(rt.stream, tmp, position);
+    rt.stream.sync();
 
     return Result::ok();
   }

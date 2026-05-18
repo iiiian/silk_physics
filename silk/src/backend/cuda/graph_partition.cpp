@@ -4,11 +4,8 @@
 
 #include <cassert>
 #include <cstdint>
-#include <cuda/std/span>
 #include <thread>
 #include <vector>
-
-#include "backend/cuda/cuda_utils.cuh"
 
 namespace silk::cuda {
 
@@ -58,7 +55,7 @@ void graph_partition(ctd::span<int> row_ptr, ctd::span<int> cols,
 
   // Forcing tight K for k-way algorithm leads to low quality parition.
   // It seems like max_part_size - 2 is a good balance.
-  part_num = div_round_up(node_num, max_part_size - 2);
+  part_num = (node_num + max_part_size - 3) / (max_part_size - 2);
   assert(part_num >= 1);
   std::vector<kaminpar_block_weight_t> max_block_weights(
       part_num, static_cast<kaminpar_block_weight_t>(max_part_size));

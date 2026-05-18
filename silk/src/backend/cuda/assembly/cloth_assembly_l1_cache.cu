@@ -75,6 +75,8 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
   this->weighted_AA = BSRMatrix{h_AA, 3, {}, rt};
   this->part_offsets =
       vec_like_to_device<int>(partition.h_partition_offsets, rt);
+
+  rt.stream.sync();
 }
 
 }  // namespace silk::cuda

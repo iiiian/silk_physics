@@ -170,6 +170,8 @@ ObjectCollider ObjectCollider::from_physical(const CollisionConfigPlus& config,
   TriangleCollider reduced_triangle;
   reduced_triangle.bbox = oc.bbox;
   oc.reduced_collider_ = alloc<TriangleCollider>(rt, 1, reduced_triangle);
+
+  rt.stream.sync();
   return oc;
 }
 
@@ -222,6 +224,8 @@ ObjectCollider ObjectCollider::from_obstacle(const CollisionConfigPlus& config,
   TriangleCollider reduced_triangle;
   reduced_triangle.bbox = oc.bbox;
   oc.reduced_collider_ = alloc<TriangleCollider>(rt, 1, reduced_triangle);
+
+  rt.stream.sync();
   return oc;
 }
 

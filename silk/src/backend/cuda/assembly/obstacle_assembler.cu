@@ -62,6 +62,8 @@ void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
     auto d_curr = vec_like_to_device<float>(pin_pos->curr_position, rt);
     collider->update_position(d_curr, d_prev, rt);
   }
+
+  rt.stream.sync();
 }
 
 }  // namespace silk::cuda

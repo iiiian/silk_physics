@@ -93,6 +93,8 @@ EqualityConstraints gather_pin_constraints(ObjRegistry& registry, int state_num,
       scatter_vertices<float><<<grid_num, 128, 0, rt.stream.get()>>>(
           indexes, perm, target_position, target);
     }
+
+    rt.stream.sync();
   }
 
   return EqualityConstraints{state_num,

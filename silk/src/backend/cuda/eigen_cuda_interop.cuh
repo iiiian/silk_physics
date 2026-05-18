@@ -21,6 +21,8 @@ cu::device_buffer<typename Derived::Scalar> host_eigen_to_device(
   cu::copy_bytes(rt.stream,
                  ctd::span<const typename Derived::Scalar>{tmp.data(), num},
                  buffer);
+
+  rt.stream.sync();
   return buffer;
 }
 

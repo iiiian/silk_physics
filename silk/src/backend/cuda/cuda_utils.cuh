@@ -127,9 +127,11 @@ template <typename T>
 void resize_buffer(size_t size, cu::device_buffer<T>& buf, CudaRuntime rt) {
   auto new_buf = alloc<T>(rt, size);
   cu::copy_bytes(rt.stream, buf, ctd::span{new_buf.data(), buf.size()});
+  rt.stream.sync();
   buf = std::move(new_buf);
 }
 
+/// @brief Async host/device span upload.
 template <typename T>
 cu::device_buffer<T> vec_like_to_device(ctd::span<const T> vec,
                                         CudaRuntime rt) {
@@ -155,10 +157,10 @@ T scalar_load(const T* device_ptr, CudaRuntime rt) {
   return result;
 }
 
+/// @brief Async scalar write.
 template <typename T>
 void scalar_write(T* dst, T val, CudaRuntime rt) {
-  cudaMemcpyAsync(dst, &val, sizeof(T), cudaMemcpyHostToDevice,
-                  rt.stream.get());
+  cu::fill_bytes(rt.stream, ctd::span<T>{dst, 1}, val);
 }
 
 }  // namespace silk::cuda
