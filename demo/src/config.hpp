@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -48,6 +49,18 @@ struct ClothParams {
 };
 
 //********************************/
+//*        Pin Selection         */
+//********************************/
+struct PinBBox {
+  std::array<float, 3> min{0.0, 0.0, 0.0};
+  std::array<float, 3> max{0.0, 0.0, 0.0};
+};
+
+struct PinSelection {
+  std::optional<PinBBox> bbox;
+};
+
+//********************************/
 //*          Object Base         */
 //********************************/
 
@@ -64,6 +77,7 @@ struct ObjectBase {
 //******** Cloth Object **********/
 struct ClothObject : public ObjectBase {
   ClothParams cloth;
+  std::optional<PinSelection> pin_selection;
   ClothObject() { type = ObjectType::Cloth; }
 };
 

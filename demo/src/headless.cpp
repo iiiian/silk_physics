@@ -17,6 +17,7 @@
 #include "alembic_writer.hpp"
 #include "gui_utils.hpp"
 #include "object.hpp"
+#include "pin_selection.hpp"
 #include "transform.hpp"
 
 silk::ClothConfig to_cloth_config(const config::ClothParams& params) {
@@ -46,6 +47,7 @@ class HeadlessCloth : public IObject {
   Face faces_;
   silk::ClothConfig cloth_config_;
   silk::CollisionConfig collision_config_;
+  std::vector<int> pin_index_;
   uint32_t handle_ = 0;
   PositionCache cache_;
 
@@ -77,6 +79,17 @@ class HeadlessCloth : public IObject {
     cloth.faces_ = std::move(mesh->faces);
     cloth.cloth_config_ = to_cloth_config(config.cloth);
     cloth.collision_config_ = to_collision_config(config.collision);
+    if (config.pin_selection && config.pin_selection->bbox) {
+      cloth.pin_index_ = pin_selection::select_bbox_vertices(
+          cloth.verts_, *config.pin_selection->bbox);
+      if (cloth.pin_index_.empty()) {
+        spdlog::warn(
+            "Pin selection for cloth '{}' matched no vertices.", cloth.name_);
+      } else {
+        spdlog::info("Pin selection for cloth '{}' matched {} vertices.",
+                     cloth.name_, cloth.pin_index_.size());
+      }
+    }
     cloth.handle_ = 0;
     cloth.cache_ = {};
     cloth.cache_.emplace_back(0.0f, cloth.verts_);
@@ -138,11 +151,8 @@ class HeadlessCloth : public IObject {
     mesh_config.verts = std::span<const float>(verts_.data(), verts_.size());
     mesh_config.faces = std::span<const int>(faces_.data(), faces_.size());
 
-    // Empty pin
-    std::span<const int> pin_index;
-
     silk::Result r = world_->add_cloth(cloth_config_, collision_config_,
-                                       mesh_config, pin_index, handle_);
+                                       mesh_config, pin_index_, handle_);
     if (!r) {
       spdlog::error(
           "Failed to add cloth '{}' to headless simulation. Error: {}", name_,
@@ -192,6 +202,7 @@ class HeadlessCloth : public IObject {
     std::swap(faces_, other.faces_);
     std::swap(cloth_config_, other.cloth_config_);
     std::swap(collision_config_, other.collision_config_);
+    std::swap(pin_index_, other.pin_index_);
     std::swap(handle_, other.handle_);
     std::swap(cache_, other.cache_);
   }

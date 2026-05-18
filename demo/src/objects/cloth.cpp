@@ -12,6 +12,7 @@
 
 #include "../eigen_alias.hpp"
 #include "../gui_utils.hpp"
+#include "../pin_selection.hpp"
 #include "../polyscope_silk_interop.hpp"
 #include "../position_cache.hpp"
 #include "../transform.hpp"
@@ -91,6 +92,22 @@ std::optional<Cloth> Cloth::make_cloth(silk::World* world,
   cloth->collision_config_.group = obj.collision.group;
   cloth->collision_config_.friction = obj.collision.friction;
   cloth->collision_config_.restitution = obj.collision.restitution;
+  if (obj.pin_selection && obj.pin_selection->bbox) {
+    std::vector<int> selected =
+        pin_selection::select_bbox_vertices(cloth->V_, *obj.pin_selection->bbox);
+    if (selected.empty()) {
+      spdlog::warn("Pin selection for cloth '{}' matched no vertices.",
+                   obj.name);
+    } else {
+      spdlog::info("Pin selection for cloth '{}' matched {} vertices.",
+                   obj.name, selected.size());
+    }
+    for (int idx : selected) {
+      cloth->pin_group_.insert(idx);
+    }
+    cloth->update_pin_index();
+    cloth->update_pin_highlight();
+  }
 
   return cloth;
 }
@@ -349,31 +366,32 @@ void Cloth::handle_pick(const polyscope::PickResult& pick,
     }
   }
 
-  // Update vertex color quantity to visualize current selection as yellow.
-  // Use the mesh base surface color for unselected vertices to preserve
-  // appearance.
-  const glm::vec3 base_color = mesh_->getSurfaceColor();
-  const glm::vec3 selected_color = {1.0f, 1.0f, 0.0f};  // yellow
-
-  // Build a full color array; this is O(nV) but simple and robust.
-  int vert_num = V_.rows();
-  std::vector<glm::vec3> colors(vert_num, base_color);
-  for (int idx : pin_group_) {
-    colors[idx] = selected_color;
-  }
-
-  // Replace existing quantity (if any), or remove when empty selection.
-  mesh_->removeQuantity("pin_highlight");
-  if (!pin_group_.empty()) {
-    auto* q = mesh_->addVertexColorQuantity("pin_highlight", colors);
-    q->setEnabled(true);
-  }
+  update_pin_highlight();
 }
 
 void Cloth::update_pin_index() {
   pin_index_.clear();
   for (int idx : pin_group_) {
     pin_index_.push_back(idx);
+  }
+}
+
+void Cloth::update_pin_highlight() {
+  // Use the mesh base surface color for unselected vertices to preserve
+  // appearance.
+  glm::vec3 base_color = mesh_->getSurfaceColor();
+  glm::vec3 selected_color = {1.0f, 1.0f, 0.0f};  // yellow
+
+  int vert_num = V_.rows();
+  std::vector<glm::vec3> colors(vert_num, base_color);
+  for (int idx : pin_group_) {
+    colors[idx] = selected_color;
+  }
+
+  mesh_->removeQuantity("pin_highlight");
+  if (!pin_group_.empty()) {
+    auto* q = mesh_->addVertexColorQuantity("pin_highlight", colors);
+    q->setEnabled(true);
   }
 }
 

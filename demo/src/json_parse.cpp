@@ -536,6 +536,79 @@ bool parse_cloth_params_obj(jx::Cur& cur, config::ClothParams& p) {
 }
 
 //********************************/
+//*       Pin Selection Parse    */
+//********************************/
+bool parse_pin_bbox_obj(jx::Cur& cur, config::PinBBox& bbox) {
+  using namespace jx;
+  bool has_min = false;
+  bool has_max = false;
+  bool ok = parse_object(cur, [&](const std::string& k) -> bool {
+    if (k == "min") {
+      std::array<float, 3> v;
+      if (!parse_number_array3(cur, v)) {
+        ui_error(
+            "Fail to parse pin selection config. Incorrect json field "
+            "'pin_selection.bbox.min'");
+        return false;
+      }
+      bbox.min = v;
+      has_min = true;
+      return true;
+    }
+    if (k == "max") {
+      std::array<float, 3> v;
+      if (!parse_number_array3(cur, v)) {
+        ui_error(
+            "Fail to parse pin selection config. Incorrect json field "
+            "'pin_selection.bbox.max'");
+        return false;
+      }
+      bbox.max = v;
+      has_max = true;
+      return true;
+    }
+    return jx::skip_value(cur);
+  });
+  if (!ok) {
+    return false;
+  }
+  if (!has_min || !has_max) {
+    ui_error(
+        "Fail to parse pin selection config. 'pin_selection.bbox' requires "
+        "'min' and 'max' fields.");
+    return false;
+  }
+  return true;
+}
+
+bool parse_pin_selection_obj(jx::Cur& cur, config::PinSelection& selection) {
+  using namespace jx;
+  bool has_bbox = false;
+  bool ok = parse_object(cur, [&](const std::string& k) -> bool {
+    if (k == "bbox") {
+      config::PinBBox bbox;
+      if (!parse_pin_bbox_obj(cur, bbox)) {
+        return false;
+      }
+      selection.bbox = bbox;
+      has_bbox = true;
+      return true;
+    }
+    return jx::skip_value(cur);
+  });
+  if (!ok) {
+    return false;
+  }
+  if (!has_bbox) {
+    ui_error(
+        "Fail to parse pin selection config. 'pin_selection' requires a "
+        "'bbox' field.");
+    return false;
+  }
+  return true;
+}
+
+//********************************/
 //*          Object Parse        */
 //********************************/
 bool parse_object_item(jx::Cur& cur, SimConfig& cfg) {
@@ -544,6 +617,7 @@ bool parse_object_item(jx::Cur& cur, SimConfig& cfg) {
   config::Collision col{};
   config::Transform tr{};
   config::ClothParams clothp{};
+  std::optional<config::PinSelection> pin_selection;
 
   if (!parse_object(cur, [&](const std::string& k) -> bool {
         if (k == "type") {
@@ -564,6 +638,14 @@ bool parse_object_item(jx::Cur& cur, SimConfig& cfg) {
         if (k == "cloth") {
           return parse_cloth_params_obj(cur, clothp);
         }
+        if (k == "pin_selection") {
+          config::PinSelection selection;
+          if (!parse_pin_selection_obj(cur, selection)) {
+            return false;
+          }
+          pin_selection = selection;
+          return true;
+        }
         return jx::skip_value(cur);
       }))
     return false;
@@ -576,6 +658,7 @@ bool parse_object_item(jx::Cur& cur, SimConfig& cfg) {
     co.collision = col;
     co.transform = tr;
     co.cloth = clothp;
+    co.pin_selection = pin_selection;
     cfg.cloths.emplace_back(std::move(co));
   } else if (type_str == "obstacle") {
     config::ObstacleObject oo;
@@ -648,6 +731,14 @@ void console_test(const SimConfig& c) {
         "density={:.6f} damping={:.6f}",
         o.cloth.elastic_stiffness, o.cloth.bending_stiffness, o.cloth.density,
         o.cloth.damping);
+    if (o.pin_selection && o.pin_selection->bbox) {
+      const auto& bbox = *o.pin_selection->bbox;
+      ui_info(
+          "      [pin_selection] bbox min=[{:.6f},{:.6f},{:.6f}] "
+          "max=[{:.6f},{:.6f},{:.6f}]",
+          bbox.min[0], bbox.min[1], bbox.min[2], bbox.max[0], bbox.max[1],
+          bbox.max[2]);
+    }
   }
 
   // Obstacles

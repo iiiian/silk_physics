@@ -15,7 +15,10 @@ The config file will be a json file containing below sections:
     - ClothConfig
     - CollisionConfig
     - 3D model file path (.off, .obj, .ply, .stl)
-    - pin position (optional)
+    - pin selection (optional)
+      - `pin_selection.bbox.min`: xyz lower corner for vertex selection
+      - `pin_selection.bbox.max`: xyz upper corner for vertex selection
+      - bbox coordinates are evaluated after the object transform
     - transformation (optional)
       - position offset (xyz)
       - rotation (xyz)

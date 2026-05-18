@@ -3,6 +3,7 @@
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
 #include <optional>
+#include <unordered_set>
 #include <vector>
 
 #include "../config.hpp"
@@ -89,5 +90,6 @@ class Cloth : public IObject {
   Cloth() = default;
 
   void update_pin_index();
+  void update_pin_highlight();
   std::vector<float> gather_pin_position() const;
 };
