@@ -9,6 +9,7 @@ namespace silk {
 InitialState::InitialState(const RMatrixX3f& V) {
   position = V.reshaped<Eigen::RowMajor>();
   velocity.resizeLike(position);
+  velocity.fill(0);
 }
 
 }  // namespace silk

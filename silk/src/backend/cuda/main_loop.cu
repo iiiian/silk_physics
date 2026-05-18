@@ -84,8 +84,8 @@ std::optional<MainLoop::Error> init(ObjRegistry& registry,
 }
 
 __global__ void predict(int vert_num, float dt, Vec3f acc,
-                        ctd::span<const float> curr_state,
-                        ctd::span<const float> state_velocity,
+                        ctd::span<const float> state,
+                        ctd::span<const float> velocity,
                         ctd::span<float> next_state) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= vert_num) {
@@ -93,8 +93,8 @@ __global__ void predict(int vert_num, float dt, Vec3f acc,
   }
 
   // TODO: adaptive prediction.
-  auto x = Vec3f::vec_like(curr_state.data() + 3 * tid);
-  auto v = Vec3f::vec_like(state_velocity.data() + 3 * tid);
+  auto x = Vec3f::vec_like(state.data() + 3 * tid);
+  auto v = Vec3f::vec_like(velocity.data() + 3 * tid);
 
   // x_next = x + dt*velocity + dt*dt*acceleration.
   Vec3f next;
@@ -259,16 +259,27 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
                                               CudaRuntime rt) {
   SPDLOG_DEBUG("solver step");
 
-  auto curr_state = alloc<float>(rt, 0);
-  auto state_velocity = alloc<float>(rt, 0);
+  auto prev_state = alloc<float>(rt, 0);
+  auto prev_velocity = alloc<float>(rt, 0);
 
-  auto err = init(registry, curr_state, state_velocity, dt, rt);
+  auto err = init(registry, prev_state, prev_velocity, dt, rt);
   if (err) {
     return err;
   }
 
-  int state_num = curr_state.size();
-  auto next_state = alloc<float>(rt, state_num);
+  // prev_state/velocity: state at previous time step.
+  // outer_state/velocity: current state in outer loop.
+  // inner_state: current state in inner loop.
+  // inner_tmp: intermediate state in inner loop.
+
+  int state_num = prev_state.size();
+  auto outer_state = alloc<float>(rt, state_num);
+  cu::copy_bytes(rt.stream, prev_state, outer_state);
+  auto outer_velocity = alloc<float>(rt, state_num);
+  cu::copy_bytes(rt.stream, prev_velocity, outer_velocity);
+  auto inner_state = alloc<float>(rt, state_num);
+  auto inner_tmp = alloc<float>(rt, state_num);
+
   float remaining_step = 1.0f;
   auto lhs_diag = alloc<float>(rt, state_num, 0);
   auto rhs = alloc<float>(rt, state_num, 0);
@@ -284,21 +295,22 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     int vert_num = state_num / 3;
     int grid_num = div_round_up(state_num / 3, 128);
     predict<<<grid_num, 128, 0, rt.stream.get()>>>(
-        vert_num, dt, const_acceleration, curr_state, state_velocity,
-        next_state);
+        vert_num, dt, const_acceleration, outer_state, outer_velocity,
+        inner_state);
 
     // Compute inertia mod.
     grid_num = div_round_up(state_num, 128);
     compute_inertia_mod<<<grid_num, 128, 0, rt.stream.get()>>>(
-        dt, curr_state, state_velocity, const_acceleration, inertia_mod);
+        dt, prev_state, prev_velocity, const_acceleration, inertia_mod);
 
     pin_constraints.reset_lagrange_mul(rt);
     if (barrier_constraints) {
       barrier_constraints->reset_lagrange_mul(rt);
     }
 
-    // Inner loop: solve until the state update is small relative to scene size.
+    // Inner loop.
     float init_norm = 0;
+    cu::copy_bytes(rt.stream, inner_state, inner_tmp);
     for (int inner_it = 0; inner_it < max_inner_iteration; ++inner_it) {
       SPDLOG_DEBUG("Inner iter {}", inner_it);
 
@@ -312,17 +324,16 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
         }
         // TODO: dynamic rel_tol
         update_main(registry, linear_rel_tol, lhs_diag, rhs, inertia_mod,
-                    next_state, rt);
+                    inner_tmp, rt);
       }
 
-      update_aux_and_lagrange_mul(registry, max_lagrange_mul, next_state, rt);
-      pin_constraints.update_lagrange_mul(next_state, rt);
+      update_aux_and_lagrange_mul(registry, max_lagrange_mul, inner_tmp, rt);
+      pin_constraints.update_lagrange_mul(inner_tmp, rt);
       if (barrier_constraints) {
-        barrier_constraints->update_lagrange_mul(next_state, rt);
+        barrier_constraints->update_lagrange_mul(inner_tmp, rt);
       }
 
-      auto [min, max] = min_max(next_state, rt);
-      // float dist = compute_L2_distance(state_num, tmp, d_next_state, tmp);
+      auto [min, max] = min_max(inner_tmp, rt);
       if (!(std::isfinite(min) && std::isfinite(max))) {
         SPDLOG_ERROR("solver explodes");
         return Error::Diverge;
@@ -331,7 +342,7 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
       // Convergence check.
       grid_num = div_round_up(state_num, 128);
       scalar_write<float>(scalar_norm2.data(), 0, rt);
-      diff_norm2<<<grid_num, 128, 0, rt.stream.get()>>>(next_state, curr_state,
+      diff_norm2<<<grid_num, 128, 0, rt.stream.get()>>>(inner_tmp, inner_state,
                                                         scalar_norm2.data());
       float norm = std::sqrt(scalar_load(scalar_norm2.data(), rt));
       if (inner_it == 0) {
@@ -339,16 +350,19 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
       }
       if (norm < non_linear_rel_tol * init_norm || norm < non_linear_abs_tol) {
         SPDLOG_DEBUG("||dx|| < {}, NL loop terminate", norm);
+        cu::copy_bytes(rt.stream, inner_tmp, inner_state);
         break;
       }
+
+      cu::copy_bytes(rt.stream, inner_tmp, inner_state);
     }
 
     // Project to barrier targets to prevent accumulation of small violations,
     // which could otherwise cause zero-TOI contacts in later steps.
     // TODO: maybe not required anymore?
-    pin_constraints.enforce(next_state, rt);
+    pin_constraints.enforce(inner_state, rt);
     if (barrier_constraints) {
-      barrier_constraints->enforce(next_state, rt);
+      barrier_constraints->enforce(inner_state, rt);
     }
 
     // Full collision update.
@@ -358,9 +372,9 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
       auto collider = registry.get<ObjectCollider>(e);
       assert(phy_state && collider);
 
-      ctd::span<const float> curr(next_state.data() + phy_state->state_offset,
+      ctd::span<const float> curr(inner_state.data() + phy_state->state_offset,
                                   phy_state->state_num);
-      ctd::span<const float> prev(curr_state.data() + phy_state->state_offset,
+      ctd::span<const float> prev(outer_state.data() + phy_state->state_offset,
                                   phy_state->state_num);
       collider->update_position(curr, prev, rt);
     }
@@ -385,22 +399,22 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
 
     grid_num = div_round_up(state_num, 128);
     update_velocity<<<grid_num, 128, 0, rt.stream.get()>>>(
-        dt, curr_state, next_state, state_velocity);
+        dt, outer_state, inner_state, outer_velocity);
 
     if (h_min_toi >= remaining_step) {
       SPDLOG_DEBUG(
           "earliest toi  {} >= remaining step {}. terminate outer loop.",
           h_min_toi, remaining_step);
       grid_num = div_round_up(state_num, 128);
-      mix<<<grid_num, 128, 0, rt.stream.get()>>>(remaining_step, next_state,
-                                                 curr_state, curr_state);
+      mix<<<grid_num, 128, 0, rt.stream.get()>>>(remaining_step, inner_state,
+                                                 outer_state, outer_state);
       break;
     }
 
     SPDLOG_DEBUG("CCD rollback to toi {}", h_min_toi);
     grid_num = div_round_up(state_num, 128);
-    mix<<<grid_num, 128, 0, rt.stream.get()>>>(h_min_toi, next_state,
-                                               curr_state, curr_state);
+    mix<<<grid_num, 128, 0, rt.stream.get()>>>(h_min_toi, inner_state,
+                                               outer_state, outer_state);
     remaining_step -= h_min_toi;
     auto update_all_toi = [collisions, delta = h_min_toi] __device__(int i) {
       collisions[i].toi -= delta;
@@ -414,8 +428,8 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
   for (auto& phy_state : registry.get_all_components<PhysicalState>()) {
     int offset = phy_state.state_offset;
     int num = phy_state.state_num;
-    ctd::span<float> local_state(curr_state.data() + offset, num);
-    ctd::span<float> local_vel(state_velocity.data() + offset, num);
+    ctd::span<float> local_state(outer_state.data() + offset, num);
+    ctd::span<float> local_vel(outer_velocity.data() + offset, num);
     cu::copy_bytes(rt.stream, local_state, *phy_state.curr_state);
     cu::copy_bytes(rt.stream, local_vel, *phy_state.state_velocity);
   }

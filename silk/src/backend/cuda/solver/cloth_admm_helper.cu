@@ -161,13 +161,15 @@ void solve_and_update_bending_aux(
 __global__ void assemble_inertia(float dt, ctd::span<const float> mass,
                                  ctd::span<const float> x,
                                  ctd::span<const float> inertia_mod,
-                                 ctd::span<float> lhs_diag) {
+                                 ctd::span<float> lhs_diag,
+                                 ctd::span<float> rhs) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= lhs_diag.size()) {
     return;
   }
 
-  lhs_diag[tid] += mass[tid] * (1.0f / (dt * dt) * x[tid] + inertia_mod[tid]);
+  lhs_diag[tid] += mass[tid] / (dt * dt);
+  rhs[tid] -= mass[tid] * inertia_mod[tid];
 }
 
 // clang-format off
@@ -209,7 +211,7 @@ __global__ void assemble_elastic_rhs(
 
   auto S_tr = jop.view().transpose();
   auto tmp = Mat<float, 9, 1>::zeros();
-  vadd(tmp, mat_mul(S_tr, u));
+  vadd(tmp, ax(-1.0, mat_mul(S_tr, u)));
   vadd(tmp, ax(penalty, mat_mul(S_tr, x)));
 
   // Write to global mem.
@@ -239,8 +241,8 @@ void assemble_bending_rhs(float penalty, BSRView weighted_laplacian_ops,
   }
   CuSparseVec cusparse_tmp{tmp};
 
-  // Compute Su.
-  float alpha = 1.0;
+  // Compute -Su.
+  float alpha = -1.0;
   float beta = 0.0;
   size_t workspace_size;
   cusparseSpMV_bufferSize(cusparse_handle.raw, CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -255,7 +257,7 @@ void assemble_bending_rhs(float penalty, BSRView weighted_laplacian_ops,
                CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT,
                cusparse_workspace.data());
 
-  // Compute Sx.
+  // Compute penalty * Sx.
   alpha = penalty;
   beta = 1.0;
   cusparseSpMV_bufferSize(cusparse_handle.raw, CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -325,7 +327,7 @@ void ClothADMMHelper::solve_main_var(float rel_tol,
 
   int grid_num = div_round_up(l1_cache.state_num, 128);
   assemble_inertia<<<grid_num, 128, 0, rt.stream.get()>>>(
-      l1_cache.dt, *l1_cache.mass, state, inertia_mod, lhs_diag);
+      l1_cache.dt, *l1_cache.mass, state, inertia_mod, lhs_diag, rhs);
 
   grid_num = div_round_up(l1_cache.face_num, 128);
   assemble_elastic_rhs<<<grid_num, 128, 0, rt.stream.get()>>>(
