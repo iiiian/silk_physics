@@ -158,8 +158,8 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
     Eigen::VectorXf collider_mass = cloth_config->density * l2_cache->mass;
 
     std::vector<float> perm_init_pos(init_state->position.size());
-    ctd::span<const float> init_pos_span{init_state->position.data(),
-                                         init_state->position.size()};
+    ctd::span<const float> init_pos_span(init_state->position.data(),
+                                         init_state->position.size());
     part->permute(init_pos_span, perm_init_pos, rt);
 
     auto new_collider = ObjectCollider::from_physical(

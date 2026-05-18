@@ -315,6 +315,7 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
       SPDLOG_DEBUG("Inner iter {}", inner_it);
 
       // Sovle main.
+      // Skip iter 0 as aux variables are not initialized yet.
       if (inner_it != 0) {
         cu::fill_bytes(rt.stream, lhs_diag, 0);
         cu::fill_bytes(rt.stream, rhs, 0);
@@ -327,11 +328,18 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
                     inner_tmp, rt);
       }
 
+      // Update all aux variables and lagrange multipliers.
       update_aux_and_lagrange_mul(registry, max_lagrange_mul, inner_tmp, rt);
       pin_constraints.update_lagrange_mul(inner_tmp, rt);
       if (barrier_constraints) {
         barrier_constraints->update_lagrange_mul(inner_tmp, rt);
       }
+
+      if (inner_it == 0) {
+        continue;
+      }
+
+      // Convergence check.
 
       auto [min, max] = min_max(inner_tmp, rt);
       if (!(std::isfinite(min) && std::isfinite(max))) {
@@ -339,13 +347,12 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
         return Error::Diverge;
       }
 
-      // Convergence check.
       grid_num = div_round_up(state_num, 128);
       scalar_write<float>(scalar_norm2.data(), 0, rt);
       diff_norm2<<<grid_num, 128, 0, rt.stream.get()>>>(inner_tmp, inner_state,
                                                         scalar_norm2.data());
       float norm = std::sqrt(scalar_load(scalar_norm2.data(), rt));
-      if (inner_it == 0) {
+      if (inner_it == 1) {
         init_norm = norm;
       }
       if (norm < non_linear_rel_tol * init_norm || norm < non_linear_abs_tol) {

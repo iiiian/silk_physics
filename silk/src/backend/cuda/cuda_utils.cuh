@@ -126,7 +126,7 @@ struct DynSpan {
 template <typename T>
 void resize_buffer(size_t size, cu::device_buffer<T>& buf, CudaRuntime rt) {
   auto new_buf = alloc<T>(rt, size);
-  cu::copy_bytes(rt.stream, buf, ctd::span{new_buf.data(), buf.size()});
+  cu::copy_bytes(rt.stream, buf, ctd::span(new_buf.data(), buf.size()));
   rt.stream.sync();
   buf = std::move(new_buf);
 }

@@ -14,11 +14,9 @@ class ClothADMMHelper {
   // y := in-plane elastic aux state.
   Buf<float> y_;
   Buf<float> uy_;
-  Buf<float> jacobians_;
   // z := bending aux state.
   Buf<float> z_;
   Buf<float> uz_;
-  Buf<float> laplacians_;
   // cusparse related.
   CuSparseHandle cusparse_handle_;
   Buf<char> cusparse_workspace_;

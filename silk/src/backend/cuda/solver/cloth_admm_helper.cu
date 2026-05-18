@@ -24,7 +24,6 @@ __global__ void solve_and_update_elastic_aux(
     ctd::span<const float> position,
     ctd::span<const float> jacobian_ops,
     ctd::span<const float> area_sqrt,
-    ctd::span<float> weighted_jacobians,
     ctd::span<float> lagrange_mul,
     ctd::span<float> aux_var)
 // clang-format on
@@ -61,11 +60,6 @@ __global__ void solve_and_update_elastic_aux(
 
   // Compute Sx.
   auto Sx = mat_mul(jop, x);
-  int jacobian_offset = tid * 6;
-#pragma unroll
-  for (int i = 0; i < 6; ++i) {
-    weighted_jacobians[jacobian_offset + i] = w * Sx(i);
-  }
 
   // Compute aux variable.
   auto y = axpby(1.0, Sx, 1.0 / penalty, u);
@@ -115,7 +109,7 @@ void solve_and_update_bending_aux(
     ctd::span<const float> rest_curvature,
     const CuSparseHandle& cusparse_handle,
     cu::device_buffer<char>& cusparse_workspace,
-    ctd::span<float> laplacians,
+    cu::device_buffer<float>& tmp,
     ctd::span<float> lagrange_mul,
     ctd::span<float> aux_var,
     CudaRuntime rt)
@@ -124,7 +118,11 @@ void solve_and_update_bending_aux(
   cusparseSetStream(cusparse_handle.raw, rt.stream.get());
   CuSparseBSR cusparse_lap{weighted_laplacian_ops};
   CuSparseConstVec cusparse_x{position};
-  CuSparseVec cusparse_Sx{laplacians};
+
+  if (tmp.size() < position.size()) {
+    tmp = alloc<float>(rt, position.size());
+  }
+  CuSparseVec cusparse_Sx{tmp};
 
   // Compute Sx.
   float alpha = 1.0;
@@ -144,18 +142,18 @@ void solve_and_update_bending_aux(
 
   // Compute aux variables.
   float r = bending_stiffness / (bending_stiffness + penalty);
-  auto compute_aux_var = [proj = rest_curvature, lagrange_mul, penalty, r,
-                          laplacians, aux_var] __device__(int i) {
-    float Sx = laplacians[i];
-    float y = Sx + lagrange_mul[i] / penalty;
+  ctd::span<const float> Sx{tmp};
+  auto compute_aux_var = [proj = rest_curvature, Sx, lagrange_mul, penalty, r,
+                          aux_var] __device__(int i) {
+    float y = Sx[i] + lagrange_mul[i] / penalty;
     aux_var[i] = (1.0 - r) * y + r * proj[i];
   };
   cub::DeviceFor::Bulk(aux_var.size(), compute_aux_var, rt.stream.get());
 
   // Update lagrange multiplers.
-  auto update_mul = [lagrange_mul, laplacians, aux_var, penalty,
+  auto update_mul = [lagrange_mul, Sx, aux_var, penalty,
                      max_lagrange_mul] __device__(int i) {
-    float delta = penalty * (laplacians[i] - aux_var[i]);
+    float delta = penalty * (Sx[i] - aux_var[i]);
     lagrange_mul[i] = min(lagrange_mul[i] + delta, max_lagrange_mul);
   };
   cub::DeviceFor::Bulk(lagrange_mul.size(), update_mul, rt.stream.get());
@@ -242,7 +240,7 @@ void assemble_bending_rhs(float penalty, BSRView weighted_laplacian_ops,
   CuSparseConstVec cusparse_x{aux_var};
   CuSparseConstVec cusparse_u{lagrange_mul};
 
-  if (tmp.size() != rhs.size()) {
+  if (tmp.size() < rhs.size()) {
     tmp = alloc<float>(rt, rhs.size());
   }
   CuSparseVec cusparse_tmp{tmp};
@@ -290,13 +288,12 @@ ClothADMMHelper::ClothADMMHelper(int vert_num, int face_num, CudaRuntime rt) {
   int jacobian_dof = 6 * face_num;
   y_ = alloc<float>(rt, jacobian_dof);
   uy_ = alloc<float>(rt, jacobian_dof, 0);
-  jacobians_ = alloc<float>(rt, jacobian_dof);
   // Curvature is per vertex coordinate.
   int curvature_dof = 3 * vert_num;
   z_ = alloc<float>(rt, curvature_dof);
   uz_ = alloc<float>(rt, curvature_dof, 0);
-  laplacians_ = alloc<float>(rt, curvature_dof);
   cusparse_workspace_ = alloc<char>(rt, 0);
+  float_tmp_ = alloc<float>(rt, 0);
 }
 
 void ClothADMMHelper::reset_aux_lagrange_mul(CudaRuntime rt) {
@@ -311,12 +308,12 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
   solve_and_update_elastic_aux<<<grid_num, 128, 0, rt.stream.get()>>>(
       l1_cache.face_num, max_lagrange_mul, l1_cache.elastic_stiffness,
       l1_cache.penalty, *l1_cache.faces, state, *l1_cache.jacobian_ops,
-      *l1_cache.area_sqrt, *jacobians_, *uy_, *y_);
+      *l1_cache.area_sqrt, *uy_, *y_);
 
   solve_and_update_bending_aux(
       l1_cache.vert_num, max_lagrange_mul, l1_cache.bending_stiffness,
       l1_cache.penalty, state, l1_cache.weighted_laplacian_ops.view(),
-      *l1_cache.C0, cusparse_handle_, *cusparse_workspace_, *laplacians_, *uz_,
+      *l1_cache.C0, cusparse_handle_, *cusparse_workspace_, *float_tmp_, *uz_,
       *z_, rt);
 }
 
