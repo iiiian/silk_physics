@@ -105,10 +105,6 @@ class MatView {
     return MatView<T, n, m>{mdspan.data_handle(), mdspan.stride(1),
                             mdspan.stride(0)};
   }
-
-  __both__ constexpr MatView<T, n * m, 1> vectorize() const {
-    return MatView<T, n * m, 1>{mdspan.data_handle(), n * m, 1};
-  }
 };
 
 /// @brief Row major dense matrix.

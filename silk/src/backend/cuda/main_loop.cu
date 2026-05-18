@@ -192,7 +192,7 @@ __global__ void compute_inertia_mod(float dt, ctd::span<const float> state,
   }
 
   float a = acc(tid % 3);
-  out[tid] = -state[tid] / (dt * dt) - velocity[tid] / dt + a;
+  out[tid] = -state[tid] / (dt * dt) - velocity[tid] / dt - a;
 }
 
 __global__ void diff_norm2(ctd::span<const float> a, ctd::span<const float> b,

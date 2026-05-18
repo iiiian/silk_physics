@@ -62,7 +62,7 @@ __global__ void solve_and_update_elastic_aux(
   auto Sx = mat_mul(jop, x);
 
   // Compute aux variable.
-  auto y = axpby(1.0, Sx, 1.0 / penalty, u);
+  auto y = axpby(1.0, Sx, 1.0f / (penalty * w), u);
   // SVD decomposition D = U S V^T via svd32 (backed by the 3x3 ref SVD).
   Mat32f U;
   Mat22f S = Mat22f::zeros();
@@ -80,8 +80,15 @@ __global__ void solve_and_update_elastic_aux(
   S(1, 1) = ctd::clamp(S(1, 1), 0.9f, 1.1f);
   // proj = U S' V^T where S' is clamped.
   Mat32f proj = mat_mul(U, mat_mul(S, V.view().transpose()));
+  Mat<float, 6, 1> proj_vec;
+  proj_vec(0) = proj(0, 0);
+  proj_vec(1) = proj(1, 0);
+  proj_vec(2) = proj(2, 0);
+  proj_vec(3) = proj(0, 1);
+  proj_vec(4) = proj(1, 1);
+  proj_vec(5) = proj(2, 1);
   float r = elastic_stiffness / (elastic_stiffness + penalty);
-  Mat<float, 6, 1> aux = axpby(1 - r, y, r, proj.view().vectorize());
+  Mat<float, 6, 1> aux = axpby(1 - r, y, r, proj_vec);
   // Write to global mem.
   int aux_var_offset = tid * 6;
 #pragma unroll
@@ -94,7 +101,8 @@ __global__ void solve_and_update_elastic_aux(
   int mul_offset = tid * 6;
 #pragma unroll
   for (int i = 0; i < 6; ++i) {
-    lagrange_mul[mul_offset + i] = min(u(i) + delta(i), max_lagrange_mul);
+    lagrange_mul[mul_offset + i] =
+        ctd::clamp(u(i) + delta(i), -max_lagrange_mul, max_lagrange_mul);
   }
 }
 
@@ -215,8 +223,8 @@ __global__ void assemble_elastic_rhs(
 
   auto S_tr = jop.view().transpose();
   auto tmp = Mat<float, 9, 1>::zeros();
-  vadd(tmp, ax(-w, mat_mul(S_tr, u)));
-  vadd(tmp, ax(w * penalty, mat_mul(S_tr, z)));
+  tmp = vadd(tmp, ax(-w, mat_mul(S_tr, u)));
+  tmp = vadd(tmp, ax(w * w * penalty, mat_mul(S_tr, z)));
 
   // Write to global mem.
   for (int i = 0; i < 3; ++i) {

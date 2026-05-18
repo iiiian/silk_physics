@@ -25,7 +25,7 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
   // Assemble H matrix.
   std::vector<Eigen::Triplet<float>> AA_triplets;
   // Elastic term.
-  append_triplets_from_sparse(l2.JWJ, 0, 0, c.elastic_stiffness, AA_triplets);
+  append_triplets_from_sparse(l2.JWJ, 0, 0, 1.0f, AA_triplets);
   // Bending term.
   append_triplets_from_vectorized_sparse(l2.CWC, 0, 0, c.bending_stiffness,
                                          AA_triplets);
