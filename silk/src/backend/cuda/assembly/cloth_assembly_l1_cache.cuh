@@ -25,7 +25,8 @@ class ClothAssemblyL1Cache {
   Buf<int> faces;
   BSRMatrix weighted_laplacian_ops;
   Buf<float> C0;
-  Buf<float> weighted_jacobian_ops;
+  Buf<float> jacobian_ops;
+  Buf<float> area_sqrt;
   Buf<float> mass;
   BSRMatrix weighted_AA;
   Buf<int> part_offsets;

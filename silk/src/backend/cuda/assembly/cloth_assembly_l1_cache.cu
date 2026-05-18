@@ -45,10 +45,12 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
   // Assemble jacobian ops.
   std::vector<float> h_jacobian_ops(l2.jacobian_ops.size() * 54);
   for (int i = 0; i < l2.jacobian_ops.size(); ++i) {
-    Eigen::Matrix<float, 6, 9> weighted_jac = l2.area(i) * l2.jacobian_ops[i];
-    memcpy(h_jacobian_ops.data() + 54 * i, weighted_jac.data(),
+    memcpy(h_jacobian_ops.data() + 54 * i, l2.jacobian_ops[i].data(),
            54 * sizeof(float));
   }
+
+  // Assemble area_sqrt.
+  Eigen::VectorXf h_area_sqrt = l2_cache.area.array().sqrt();
 
   // Assemble mass.
   std::vector<float> h_mass(state_num);
@@ -70,7 +72,8 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
   this->weighted_laplacian_ops = BSRMatrix{h_laplacian_ops, 3, {}, rt};
   this->C0 = host_eigen_to_device(
       (c.bending_stiffness * l2.C0).reshaped<Eigen::RowMajor>(), rt);
-  this->weighted_jacobian_ops = vec_like_to_device<float>(h_jacobian_ops, rt);
+  this->jacobian_ops = vec_like_to_device<float>(h_jacobian_ops, rt);
+  this->area_sqrt = host_eigen_to_device(h_area_sqrt, rt);
   this->mass = vec_like_to_device<float>(h_mass, rt);
   this->weighted_AA = BSRMatrix{h_AA, 3, {}, rt};
   this->part_offsets =

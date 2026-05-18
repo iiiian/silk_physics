@@ -22,8 +22,9 @@ __global__ void solve_and_update_elastic_aux(
     float penalty,
     ctd::span<const int> faces,
     ctd::span<const float> position,
-    ctd::span<const float> weighted_jacobian_ops,
-    ctd::span<float> jacobians,
+    ctd::span<const float> jacobian_ops,
+    ctd::span<const float> area_sqrt,
+    ctd::span<float> weighted_jacobians,
     ctd::span<float> lagrange_mul,
     ctd::span<float> aux_var)
 // clang-format on
@@ -53,15 +54,17 @@ __global__ void solve_and_update_elastic_aux(
   Mat<float, 6, 9> jop;
   int jop_offset = 54 * tid;
   for (int i = 0; i < 54; ++i) {
-    jop.data[i] = weighted_jacobian_ops[jop_offset + i];
+    jop.data[i] = jacobian_ops[jop_offset + i];
   }
+  // Gather weight.
+  float w = area_sqrt[tid];
 
   // Compute Sx.
   auto Sx = mat_mul(jop, x);
   int jacobian_offset = tid * 6;
 #pragma unroll
   for (int i = 0; i < 6; ++i) {
-    jacobians[jacobian_offset + i] = Sx(i);
+    weighted_jacobians[jacobian_offset + i] = w * Sx(i);
   }
 
   // Compute aux variable.
@@ -93,7 +96,7 @@ __global__ void solve_and_update_elastic_aux(
   }
 
   // Update lagrange multipliers.
-  auto delta = axpby(penalty, Sx, -penalty, aux);
+  auto delta = axpby(w * penalty, Sx, -w * penalty, aux);
   int mul_offset = tid * 6;
 #pragma unroll
   for (int i = 0; i < 6; ++i) {
@@ -177,7 +180,8 @@ __global__ void assemble_elastic_rhs(
     int face_num,
     float penalty,
     ctd::span<const int> faces,
-    ctd::span<const float> weighted_jacobian_ops,
+    ctd::span<const float> jacobian_ops,
+    ctd::span<const float> area_sqrt,
     ctd::span<const float> lagrange_mul,
     ctd::span<const float> aux_var,
     ctd::span<float> rhs)
@@ -192,7 +196,7 @@ __global__ void assemble_elastic_rhs(
   Mat<float, 6, 9> jop;
   int jop_offset = 54 * tid;
   for (int i = 0; i < 54; ++i) {
-    jop.data[i] = weighted_jacobian_ops[jop_offset + i];
+    jop.data[i] = jacobian_ops[jop_offset + i];
   }
   // Gather lagrange multipler u.
   Mat<float, 6, 1> u;
@@ -201,18 +205,20 @@ __global__ void assemble_elastic_rhs(
   for (int i = 0; i < 6; ++i) {
     u(i) = lagrange_mul[u_offset + i];
   }
-  // Gather aux variable x.
-  Mat<float, 6, 1> x;
+  // Gather aux variable z.
+  Mat<float, 6, 1> z;
   int x_offset = 6 * tid;
 #pragma unroll
   for (int i = 0; i < 6; ++i) {
-    x(i) = aux_var[x_offset + i];
+    z(i) = aux_var[x_offset + i];
   }
+  // Gather weight.
+  float w = area_sqrt[tid];
 
   auto S_tr = jop.view().transpose();
   auto tmp = Mat<float, 9, 1>::zeros();
-  vadd(tmp, ax(-1.0, mat_mul(S_tr, u)));
-  vadd(tmp, ax(penalty, mat_mul(S_tr, x)));
+  vadd(tmp, ax(-w, mat_mul(S_tr, u)));
+  vadd(tmp, ax(w * penalty, mat_mul(S_tr, z)));
 
   // Write to global mem.
   for (int i = 0; i < 3; ++i) {
@@ -304,8 +310,8 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
   int grid_num = div_round_up(l1_cache.face_num, 128);
   solve_and_update_elastic_aux<<<grid_num, 128, 0, rt.stream.get()>>>(
       l1_cache.face_num, max_lagrange_mul, l1_cache.elastic_stiffness,
-      l1_cache.penalty, *l1_cache.faces, state, *l1_cache.weighted_jacobian_ops,
-      *jacobians_, *uy_, *y_);
+      l1_cache.penalty, *l1_cache.faces, state, *l1_cache.jacobian_ops,
+      *l1_cache.area_sqrt, *jacobians_, *uy_, *y_);
 
   solve_and_update_bending_aux(
       l1_cache.vert_num, max_lagrange_mul, l1_cache.bending_stiffness,
@@ -332,7 +338,7 @@ void ClothADMMHelper::solve_main_var(float rel_tol,
   grid_num = div_round_up(l1_cache.face_num, 128);
   assemble_elastic_rhs<<<grid_num, 128, 0, rt.stream.get()>>>(
       l1_cache.face_num, l1_cache.penalty, *l1_cache.faces,
-      *l1_cache.weighted_jacobian_ops, *uy_, *y_, rhs);
+      *l1_cache.jacobian_ops, *l1_cache.area_sqrt, *uy_, *y_, rhs);
 
   if (!float_tmp_) {
     float_tmp_ = alloc<float>(rt, rhs.size());
