@@ -80,7 +80,7 @@ void EqualityConstraints::merge(const EqualityConstraints& other,
   assert(state_num == other.state_num);
 
   int grid_num = div_round_up(state_num, 128);
-  merge_kernel<<<grid_num, 120, 0, rt.stream.get()>>>(
+  merge_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
       state_num, indicator, target, lagrange_mul, other.indicator, other.target,
       other.lagrange_mul);
 }

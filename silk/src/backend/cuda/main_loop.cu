@@ -281,9 +281,10 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
 
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
     // Prediction based on linear velocity.
+    int vert_num = state_num / 3;
     int grid_num = div_round_up(state_num / 3, 128);
     predict<<<grid_num, 128, 0, rt.stream.get()>>>(
-        state_num, dt, const_acceleration, curr_state, state_velocity,
+        vert_num, dt, const_acceleration, curr_state, state_velocity,
         next_state);
 
     // Compute inertia mod.
