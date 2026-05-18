@@ -19,7 +19,7 @@ namespace {
 
 using clock = std::chrono::steady_clock;
 
-float elapsed(const std::chrono::time_point<clock> &begin) {
+[[maybe_unused]] float elapsed(const std::chrono::time_point<clock> &begin) {
   return std::chrono::duration<float>(clock::now() - begin).count();
 }
 
@@ -181,9 +181,22 @@ MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
 
   // Compute rr = r^T r.
   float rr0 = 0.0;
+  float rr_stop = abs_tol * abs_tol;
   if (!use_preconditioned_residual_norm) {
     inner_product(*r_, *r_, *scalar_rr_, rt);
     rr0 = scalar_load(scalar_rr_->data(), rt);
+    inner_product(b, b, *scalar_pAp_, rt);
+    float bb = scalar_load(scalar_pAp_->data(), rt);
+    float rel_stop = rel_tol * rel_tol * bb;
+    if (rel_stop > rr_stop) {
+      rr_stop = rel_stop;
+    }
+    if (rr0 <= rr_stop) {
+      iterations_ = 0;
+      residual_norm_ = ctd::sqrt(rr0);
+      return (rr0 <= abs_tol * abs_tol) ? Status::ReachAbsTol
+                                        : Status::ReachRelTol;
+    }
   }
 
   Status status = Status::ReachAbsTol;
@@ -232,7 +245,7 @@ MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
         inner_product(*r_, *r_, *scalar_rr_, rt);
         float rr = scalar_load(scalar_rr_->data(), rt);
         residual_norm_ = ctd::sqrt(rr);
-        if (rr <= rel_tol * rel_tol * rr0 || rr <= abs_tol * abs_tol) {
+        if (rr <= rr_stop) {
           status = (rr <= abs_tol * abs_tol) ? Status::ReachAbsTol
                                              : Status::ReachRelTol;
           break;

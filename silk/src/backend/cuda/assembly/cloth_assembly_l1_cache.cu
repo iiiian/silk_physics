@@ -1,6 +1,7 @@
 #include "backend/cuda/assembly/cloth_assembly_l1_cache.cuh"
 
 #include <Eigen/Core>
+#include <cmath>
 
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/eigen_cuda_interop.cuh"
@@ -20,18 +21,18 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
   int state_num = 3 * l2.mass.size();
 
   // TODO: Experiements with penalty.
-  constexpr float PENALTY = 1.0;
+  float penalty = std::sqrt(c.elastic_stiffness);
 
   // Assemble H matrix.
   std::vector<Eigen::Triplet<float>> AA_triplets;
   // Elastic term.
   append_triplets_from_sparse(l2.JWJ, 0, 0, 1.0f, AA_triplets);
   // Bending term.
-  append_triplets_from_vectorized_sparse(l2.CWC, 0, 0, c.bending_stiffness,
-                                         AA_triplets);
+  // append_triplets_from_vectorized_sparse(l2.CWC, 0, 0, c.bending_stiffness,
+  //                                        AA_triplets);
   Eigen::SparseMatrix<float> h_AA{state_num, state_num};
   h_AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
-  h_AA *= PENALTY;
+  h_AA *= penalty;
 
   // Assemble vectorized Laplacian operator.
   Eigen::SparseMatrix<float> h_weighted_laplacian =
@@ -66,7 +67,7 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
   }
 
   this->dt = dt;
-  this->penalty = PENALTY;
+  this->penalty = penalty;
   this->state_num = state_num;
   this->vert_num = l2_cache.mass.size();
   this->face_num = l2_cache.area.size();

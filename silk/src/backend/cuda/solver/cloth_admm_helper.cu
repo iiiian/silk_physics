@@ -107,7 +107,7 @@ __global__ void solve_and_update_elastic_aux(
 }
 
 // clang-format off
-void solve_and_update_bending_aux(
+[[maybe_unused]] void solve_and_update_bending_aux(
     int vert_num,
     float max_lagrange_mul,
     float bending_stiffness,
@@ -236,13 +236,12 @@ __global__ void assemble_elastic_rhs(
   }
 }
 
-void assemble_bending_rhs(float penalty, BSRView weighted_laplacian_ops,
-                          ctd::span<const float> lagrange_mul,
-                          ctd::span<const float> aux_var,
-                          const CuSparseHandle& cusparse_handle,
-                          cu::device_buffer<char>& cusparse_workspace,
-                          cu::device_buffer<float>& tmp, ctd::span<float> rhs,
-                          CudaRuntime rt) {
+[[maybe_unused]] void assemble_bending_rhs(
+    float penalty, BSRView weighted_laplacian_ops,
+    ctd::span<const float> lagrange_mul, ctd::span<const float> aux_var,
+    const CuSparseHandle& cusparse_handle,
+    cu::device_buffer<char>& cusparse_workspace, cu::device_buffer<float>& tmp,
+    ctd::span<float> rhs, CudaRuntime rt) {
   cusparseSetStream(cusparse_handle.raw, rt.stream.get());
   CuSparseBSR cusparse_lap{weighted_laplacian_ops};
   CuSparseConstVec cusparse_x{aux_var};
@@ -318,11 +317,11 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
       l1_cache.penalty, *l1_cache.faces, state, *l1_cache.jacobian_ops,
       *l1_cache.area_sqrt, *uy_, *y_);
 
-  solve_and_update_bending_aux(
-      l1_cache.vert_num, max_lagrange_mul, l1_cache.bending_stiffness,
-      l1_cache.penalty, state, l1_cache.weighted_laplacian_ops.view(),
-      *l1_cache.C0, cusparse_handle_, *cusparse_workspace_, *float_tmp_, *uz_,
-      *z_, rt);
+  // solve_and_update_bending_aux(
+  //     l1_cache.vert_num, max_lagrange_mul, l1_cache.bending_stiffness,
+  //     l1_cache.penalty, state, l1_cache.weighted_laplacian_ops.view(),
+  //     *l1_cache.C0, cusparse_handle_, *cusparse_workspace_, *float_tmp_,
+  //     *uz_, *z_, rt);
 }
 
 void ClothADMMHelper::solve_main_var(float rel_tol,
@@ -348,9 +347,10 @@ void ClothADMMHelper::solve_main_var(float rel_tol,
   if (!float_tmp_) {
     float_tmp_ = alloc<float>(rt, rhs.size());
   }
-  assemble_bending_rhs(l1_cache.penalty, l1_cache.weighted_laplacian_ops.view(),
-                       *uz_, *z_, cusparse_handle_, *cusparse_workspace_,
-                       *float_tmp_, rhs, rt);
+  // assemble_bending_rhs(l1_cache.penalty,
+  //                      l1_cache.weighted_laplacian_ops.view(), *uz_, *z_,
+  //                      cusparse_handle_, *cusparse_workspace_, *float_tmp_,
+  //                      rhs, rt);
 
   DynamicBSRView dyn_A{lhs_diag, l1_cache.weighted_AA.view()};
   linear_solver_.factorize(dyn_A, *l1_cache.part_offsets, rt);
