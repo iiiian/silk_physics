@@ -38,8 +38,17 @@ target_include_directories(
 # Define SILK_WITH_CUDA macro if cuda is enabled.
 target_compile_definitions(
     silk
-    PUBLIC
+    PRIVATE
         $<$<BOOL:${SILK_ENABLE_CUDA}>:SILK_WITH_CUDA=1>
+        # Eigen's aligned malloc/free helpers are header-only and can be
+        # instantiated in both host C++ and CUDA translation units.  If Eigen
+        # auto-detects different EIGEN_MALLOC_ALREADY_ALIGNED values in those
+        # TUs, an Eigen object allocated in one TU can be destroyed in another
+        # with the wrong free path, e.g. handmade_aligned_malloc paired with
+        # plain free(), causing "double free or corruption" during teardown.
+        # Force the conservative handmade aligned allocator for CUDA builds so
+        # allocation and deallocation use the same path everywhere.
+        $<$<BOOL:${SILK_ENABLE_CUDA}>:EIGEN_MALLOC_ALREADY_ALIGNED=0>
 )
 
 target_link_libraries(
