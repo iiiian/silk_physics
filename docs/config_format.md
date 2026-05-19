@@ -7,6 +7,14 @@ The config file will be a json file containing below sections:
   - max outer iteration
   - max inner iteration
   - dt
+  - linear solver tolerances
+    - `linear_solver_abs_tol`
+    - `linear_solver_rel_tol_min`
+    - `linear_solver_rel_tol_max`
+    - `linear_solver_adaptive_factor`
+  - ADMM tolerances
+    - `admm_abs_tol`
+    - `admm_rel_tol`
   - max time
 - object specific setting (A json list, containing settings for each object)
   - cloth

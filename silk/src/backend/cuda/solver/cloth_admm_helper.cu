@@ -28,11 +28,15 @@ __global__ void solve_and_update_elastic_aux(
     ctd::span<float> lagrange_mul,
     ctd::span<float> aux_var,
     ctd::span<float> primal_norm2,
+    ctd::span<float> primal_scale_x2,
+    ctd::span<float> primal_scale_aux2,
     ctd::span<float> dual_residual)
 // clang-format on
 {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   float local_primal_norm2 = 0.0f;
+  float local_primal_scale_x2 = 0.0f;
+  float local_primal_scale_aux2 = 0.0f;
 
   if (tid < face_num) {
     // Gather position x.
@@ -103,6 +107,8 @@ __global__ void solve_and_update_elastic_aux(
     // r = W(Sx - z)
     auto primal = ax(w, vsub(Sx, aux));
     local_primal_norm2 = squared_norm(primal);
+    local_primal_scale_x2 = squared_norm(ax(w, Sx));
+    local_primal_scale_aux2 = squared_norm(ax(w, aux));
 
     // Per state dof dual residual.
     // r = rho * S^T W^T W (z - z_old)
@@ -138,6 +144,16 @@ __global__ void solve_and_update_elastic_aux(
   float reduced = BlockReduce(reduce_tmp).Sum(local_primal_norm2);
   if (threadIdx.x == 0) {
     atomicAdd(primal_norm2.data(), reduced);
+  }
+  __syncthreads();
+  reduced = BlockReduce(reduce_tmp).Sum(local_primal_scale_x2);
+  if (threadIdx.x == 0) {
+    atomicAdd(primal_scale_x2.data(), reduced);
+  }
+  __syncthreads();
+  reduced = BlockReduce(reduce_tmp).Sum(local_primal_scale_aux2);
+  if (threadIdx.x == 0) {
+    atomicAdd(primal_scale_aux2.data(), reduced);
   }
 }
 
@@ -214,6 +230,13 @@ __global__ void assemble_inertia(float dt, ctd::span<const float> mass,
 
   lhs_diag[tid] += mass[tid] / (dt * dt);
   rhs[tid] -= mass[tid] * inertia_mod[tid];
+}
+
+__global__ void add_scalar_kernel(ctd::span<const float> value,
+                                  ctd::span<float> out) {
+  if (threadIdx.x == 0 && blockIdx.x == 0) {
+    atomicAdd(out.data(), value[0]);
+  }
 }
 
 // clang-format off
@@ -349,6 +372,7 @@ void ClothADMMHelper::reset_aux_lagrange_mul(CudaRuntime rt) {
 void ClothADMMHelper::update_aux_var_and_lagrange_mul(
     float max_lagrange_mul, const ClothAssemblyL1Cache& l1_cache,
     ctd::span<const float> state, ctd::span<float> primal_residual_norm2,
+    ctd::span<float> primal_scale_x2, ctd::span<float> primal_scale_aux2,
     ctd::span<float> dual_residual, CudaRuntime rt) {
   int grid_num = div_round_up(l1_cache.face_num, 128);
   // clang-format off
@@ -364,6 +388,8 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
         *uy_,
         *y_,
         primal_residual_norm2,
+        primal_scale_x2,
+        primal_scale_aux2,
         dual_residual);
   // clang-format on
 
@@ -374,12 +400,14 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
   //     *uz_, *z_, rt);
 }
 
-void ClothADMMHelper::solve_main_var(float rel_tol,
+void ClothADMMHelper::solve_main_var(float rel_tol, float abs_tol,
                                      const ClothAssemblyL1Cache& l1_cache,
                                      ctd::span<const float> extern_lhs,
                                      ctd::span<const float> extern_rhs,
                                      ctd::span<const float> inertia_mod,
-                                     ctd::span<float> state, CudaRuntime rt) {
+                                     ctd::span<float> state,
+                                     ctd::span<float> rhs_norm2,
+                                     CudaRuntime rt) {
   auto lhs_diag = alloc<float>(rt, l1_cache.state_num);
   cu::copy_bytes(rt.stream, extern_lhs, lhs_diag);
   auto rhs = alloc<float>(rt, l1_cache.state_num);
@@ -402,8 +430,14 @@ void ClothADMMHelper::solve_main_var(float rel_tol,
   //                      cusparse_handle_, *cusparse_workspace_, *float_tmp_,
   //                      rhs, rt);
 
+  auto scalar_local_rhs_norm2 = alloc<float>(rt, 1);
+  inner_product(rhs, rhs, scalar_local_rhs_norm2, rt);
+  add_scalar_kernel<<<1, 1, 0, rt.stream.get()>>>(scalar_local_rhs_norm2,
+                                                  rhs_norm2);
+
   DynamicBSRView dyn_A{lhs_diag, l1_cache.weighted_AA.view()};
   linear_solver_.factorize(dyn_A, *l1_cache.part_offsets, rt);
+  linear_solver_.abs_tol = abs_tol;
   linear_solver_.rel_tol = rel_tol;
   auto status = linear_solver_.solve(rhs, state, rt);
   // TODO: handle failure.

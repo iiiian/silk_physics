@@ -35,14 +35,18 @@ class ClothADMMHelper {
                                        const ClothAssemblyL1Cache& l1_cache,
                                        ctd::span<const float> state,
                                        ctd::span<float> primal_residual_norm2,
+                                       ctd::span<float> primal_scale_x2,
+                                       ctd::span<float> primal_scale_aux2,
                                        ctd::span<float> dual_residual,
                                        CudaRuntime rt);
 
-  void solve_main_var(float rel_tol, const ClothAssemblyL1Cache& l1_cache,
+  void solve_main_var(float rel_tol, float abs_tol,
+                      const ClothAssemblyL1Cache& l1_cache,
                       ctd::span<const float> extern_lhs,
                       ctd::span<const float> extern_rhs,
                       ctd::span<const float> inertia_mod,
-                      ctd::span<float> state, CudaRuntime rt);
+                      ctd::span<float> state,
+                      ctd::span<float> rhs_norm2, CudaRuntime rt);
 };
 
 }  // namespace silk::cuda

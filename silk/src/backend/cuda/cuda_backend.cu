@@ -70,6 +70,13 @@ Result CudaBackend::set_global_config(GlobalConfig config) {
   impl_->main_loop_.dt = c.dt;
   impl_->main_loop_.max_outer_iteration = c.max_outer_iteration;
   impl_->main_loop_.max_inner_iteration = c.max_inner_iteration;
+  impl_->main_loop_.linear_abs_tol = c.linear_solver_abs_tol;
+  impl_->main_loop_.linear_rel_tol_min = c.linear_solver_rel_tol_min;
+  impl_->main_loop_.linear_rel_tol_max = c.linear_solver_rel_tol_max;
+  impl_->main_loop_.linear_adaptive_factor =
+      c.linear_solver_adaptive_factor;
+  impl_->main_loop_.non_linear_abs_tol = c.admm_abs_tol;
+  impl_->main_loop_.non_linear_rel_tol = c.admm_rel_tol;
   return Result::ok();
 }
 

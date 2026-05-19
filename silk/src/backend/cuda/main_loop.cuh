@@ -24,7 +24,10 @@ class MainLoop {
   // float penalty_scaling_factor = 2;
   // float penalty_scaling_threshold = 0.25;
   // linear solver param
-  float linear_rel_tol = 1e-3;
+  float linear_abs_tol = 1e-7;
+  float linear_rel_tol_min = 1e-6;
+  float linear_rel_tol_max = 1e-3;
+  float linear_adaptive_factor = 1e-2;
   // non-linear solver param
   float non_linear_rel_tol = 1e-3;
   float non_linear_abs_tol = 1e-5;

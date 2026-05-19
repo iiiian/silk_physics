@@ -1,6 +1,7 @@
 #include "backend/cuda/main_loop.cuh"
 
 #include <Eigen/Core>
+#include <algorithm>
 #include <cmath>
 #include <cub/cub.cuh>
 #include <cuda/algorithm>
@@ -111,6 +112,8 @@ __global__ void predict(int vert_num, float dt, Vec3f acc,
 void update_aux_and_lagrange_mul(ObjRegistry& registry, float max_lagrange_mul,
                                  ctd::span<const float> state,
                                  ctd::span<float> primal_norm2,
+                                 ctd::span<float> primal_scale_x2,
+                                 ctd::span<float> primal_scale_aux2,
                                  ctd::span<float> dual_residual,
                                  CudaRuntime rt) {
   auto clothes =
@@ -127,13 +130,15 @@ void update_aux_and_lagrange_mul(ObjRegistry& registry, float max_lagrange_mul,
     auto sub_dual =
         dual_residual.subspan(phy_state->state_offset, phy_state->state_num);
     admm_helper->update_aux_var_and_lagrange_mul(
-        max_lagrange_mul, *l1_cache, sub_state, primal_norm2, sub_dual, rt);
+        max_lagrange_mul, *l1_cache, sub_state, primal_norm2, primal_scale_x2,
+        primal_scale_aux2, sub_dual, rt);
   }
 }
 
-void update_main(ObjRegistry& registry, float rel_tol,
+void update_main(ObjRegistry& registry, float rel_tol, float abs_tol,
                  ctd::span<const float> lhs_diag, ctd::span<const float> rhs,
                  ctd::span<const float> inertia_mod, ctd::span<float> state,
+                 ctd::span<float> rhs_norm2,
                  CudaRuntime rt) {
   auto clothes =
       registry.get_entity_with_components<PhysicalState, ClothAssemblyL1Cache,
@@ -145,9 +150,26 @@ void update_main(ObjRegistry& registry, float rel_tol,
     assert(phy_state && l1_cache && admm_helper);
 
     auto x = state.subspan(phy_state->state_offset, phy_state->state_num);
-    admm_helper->solve_main_var(rel_tol, *l1_cache, lhs_diag, rhs, inertia_mod,
-                                x, rt);
+    admm_helper->solve_main_var(rel_tol, abs_tol, *l1_cache, lhs_diag, rhs,
+                                inertia_mod, x, rhs_norm2, rt);
   }
+}
+
+float clamp_tol(float value, float min_value, float max_value) {
+  return std::max(min_value, std::min(value, max_value));
+}
+
+int primal_residual_dof(ObjRegistry& registry) {
+  int dof = 0;
+  auto clothes =
+      registry.get_entity_with_components<PhysicalState, ClothAssemblyL1Cache,
+                                          ClothADMMHelper>();
+  for (uint32_t e : clothes) {
+    auto l1_cache = registry.get<ClothAssemblyL1Cache>(e);
+    assert(l1_cache);
+    dof += 6 * l1_cache->face_num;
+  }
+  return dof;
 }
 
 __global__ void min_max_kernel(ctd::span<const float> values, float* min_out,
@@ -274,11 +296,15 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
   auto inertia_mod = alloc<float>(rt, state_num);
   auto scalar_min_toi = alloc<float>(rt, 1);
   auto scalar_primal_norm2 = alloc<float>(rt, 1);
+  auto scalar_primal_scale_x2 = alloc<float>(rt, 1);
+  auto scalar_primal_scale_aux2 = alloc<float>(rt, 1);
   auto dual_residual = alloc<float>(rt, state_num);
   auto scalar_dual_norm2 = alloc<float>(rt, 1);
+  auto scalar_rhs_norm2 = alloc<float>(rt, 1);
   auto collision_storage = alloc<Collision>(rt, init_narrowphase_cache_size);
   auto pin_constraints = gather_pin_constraints(registry, state_num, rt);
   std::optional<EqualityConstraints> barrier_constraints;
+  int primal_dof = primal_residual_dof(registry);
 
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
     // Prediction based on linear velocity.
@@ -301,6 +327,7 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     // Inner loop.
     float h_init_primal_norm = 0.0f;
     float h_init_dual_norm = 0.0f;
+    float h_adaptive_ratio = 1.0f;
     cu::copy_bytes(rt.stream, inner_state, inner_tmp);
     for (int inner_it = 0; inner_it < max_inner_iteration; ++inner_it) {
       SPDLOG_INFO("Inner iter {}", inner_it);
@@ -310,20 +337,31 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
       if (inner_it != 0) {
         cu::fill_bytes(rt.stream, lhs_diag, 0);
         cu::fill_bytes(rt.stream, rhs, 0);
+        cu::fill_bytes(rt.stream, scalar_rhs_norm2, 0);
         pin_constraints.eval(lhs_diag, rhs, rt);
         if (barrier_constraints) {
           barrier_constraints->eval(lhs_diag, rhs, rt);
         }
-        // TODO: dynamic rel_tol
-        update_main(registry, linear_rel_tol, lhs_diag, rhs, inertia_mod,
-                    inner_tmp, rt);
+        float h_linear_rel_tol = linear_rel_tol_max;
+        if (inner_it > 1) {
+          h_linear_rel_tol =
+              clamp_tol(linear_adaptive_factor * h_adaptive_ratio,
+                        linear_rel_tol_min, linear_rel_tol_max);
+        }
+        SPDLOG_INFO("Linear solver tolerance rel={} abs={}",
+                    h_linear_rel_tol, linear_abs_tol);
+        update_main(registry, h_linear_rel_tol, linear_abs_tol, lhs_diag, rhs,
+                    inertia_mod, inner_tmp, scalar_rhs_norm2, rt);
       }
 
       // Update all aux variables and lagrange multipliers.
       cu::fill_bytes(rt.stream, scalar_primal_norm2, 0);
+      cu::fill_bytes(rt.stream, scalar_primal_scale_x2, 0);
+      cu::fill_bytes(rt.stream, scalar_primal_scale_aux2, 0);
       cu::fill_bytes(rt.stream, dual_residual, 0);
       update_aux_and_lagrange_mul(registry, max_lagrange_mul, inner_tmp,
-                                  scalar_primal_norm2, dual_residual, rt);
+                                  scalar_primal_norm2, scalar_primal_scale_x2,
+                                  scalar_primal_scale_aux2, dual_residual, rt);
       pin_constraints.update_lagrange_mul(inner_tmp, rt);
       if (barrier_constraints) {
         barrier_constraints->update_lagrange_mul(inner_tmp, rt);
@@ -343,27 +381,39 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
 
       float h_primal_norm =
           std::sqrt(scalar_load(scalar_primal_norm2.data(), rt));
+      float h_primal_scale_x =
+          std::sqrt(scalar_load(scalar_primal_scale_x2.data(), rt));
+      float h_primal_scale_aux =
+          std::sqrt(scalar_load(scalar_primal_scale_aux2.data(), rt));
       inner_product(dual_residual, dual_residual, scalar_dual_norm2, rt);
       float h_dual_norm = std::sqrt(scalar_load(scalar_dual_norm2.data(), rt));
+      float h_rhs_norm = std::sqrt(scalar_load(scalar_rhs_norm2.data(), rt));
 
       if (inner_it == 1) {
         h_init_primal_norm = h_primal_norm;
         h_init_dual_norm = h_dual_norm;
       }
-      bool primal_converged =
-          h_primal_norm < non_linear_rel_tol * h_init_primal_norm ||
-          h_primal_norm < non_linear_abs_tol;
-      bool dual_converged =
-          h_dual_norm < non_linear_rel_tol * h_init_dual_norm ||
-          h_dual_norm < non_linear_abs_tol;
-      SPDLOG_INFO("Primal norm {}. Rel criteria {}. Abs criteria {}.",
-                  h_primal_norm, non_linear_rel_tol * h_init_primal_norm,
-                  non_linear_abs_tol);
-      SPDLOG_INFO("Dual norm {}. Rel criteria {}. Abs criteria {}.",
-                  h_dual_norm, non_linear_rel_tol * h_init_dual_norm,
-                  non_linear_abs_tol);
-      if (primal_converged) {
-        // if (primal_converged && dual_converged) {
+      float h_primal_dof = primal_dof;
+      float h_state_dof = state_num;
+      float h_primal_eps =
+          std::sqrt(h_primal_dof) * non_linear_abs_tol +
+          non_linear_rel_tol * std::max(h_primal_scale_x, h_primal_scale_aux);
+      float h_dual_scale =
+          std::max(std::min(h_rhs_norm, std::max(h_init_dual_norm, 1.0f)),
+                   1.0f);
+      float h_dual_eps = std::sqrt(h_state_dof) * non_linear_abs_tol +
+                         non_linear_rel_tol * h_dual_scale;
+      bool primal_converged = h_primal_norm <= h_primal_eps;
+      bool dual_converged = h_dual_norm <= h_dual_eps;
+      float h_primal_denom = std::max(h_init_primal_norm, non_linear_abs_tol);
+      float h_dual_denom = std::max(h_init_dual_norm, non_linear_abs_tol);
+      h_adaptive_ratio = std::max(h_primal_norm / h_primal_denom,
+                                  h_dual_norm / h_dual_denom);
+      SPDLOG_INFO("Primal norm {}. Hybrid criteria {}. Abs tol {}.",
+                  h_primal_norm, h_primal_eps, non_linear_abs_tol);
+      SPDLOG_INFO("Dual norm {}. Hybrid criteria {}. Abs tol {}.",
+                  h_dual_norm, h_dual_eps, non_linear_abs_tol);
+      if (primal_converged && dual_converged) {
         SPDLOG_INFO("ADMM residual [{}, {}], NL loop terminate", h_primal_norm,
                     h_dual_norm);
         cu::copy_bytes(rt.stream, inner_tmp, inner_state);

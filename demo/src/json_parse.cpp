@@ -371,6 +371,72 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
       g.total_steps = static_cast<int>(v);
       return true;
     }
+    if (k == "linear_solver_abs_tol") {
+      float v;
+      if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse global config. Incorrect json field "
+            "'linear_solver_abs_tol'");
+        return false;
+      }
+      g.linear_solver_abs_tol = v;
+      return true;
+    }
+    if (k == "linear_solver_rel_tol_min") {
+      float v;
+      if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse global config. Incorrect json field "
+            "'linear_solver_rel_tol_min'");
+        return false;
+      }
+      g.linear_solver_rel_tol_min = v;
+      return true;
+    }
+    if (k == "linear_solver_rel_tol_max") {
+      float v;
+      if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse global config. Incorrect json field "
+            "'linear_solver_rel_tol_max'");
+        return false;
+      }
+      g.linear_solver_rel_tol_max = v;
+      return true;
+    }
+    if (k == "linear_solver_adaptive_factor") {
+      float v;
+      if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse global config. Incorrect json field "
+            "'linear_solver_adaptive_factor'");
+        return false;
+      }
+      g.linear_solver_adaptive_factor = v;
+      return true;
+    }
+    if (k == "admm_abs_tol") {
+      float v;
+      if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse global config. Incorrect json field "
+            "'admm_abs_tol'");
+        return false;
+      }
+      g.admm_abs_tol = v;
+      return true;
+    }
+    if (k == "admm_rel_tol") {
+      float v;
+      if (!parse_number(cur, v)) {
+        ui_error(
+            "Fail to parse global config. Incorrect json field "
+            "'admm_rel_tol'");
+        return false;
+      }
+      g.admm_rel_tol = v;
+      return true;
+    }
     // skip unknown
     return jx::skip_value(cur);
   });
@@ -705,6 +771,14 @@ void console_test(const SimConfig& c) {
   ui_info("  acceleration = [{:.6f}, {:.6f}, {:.6f}]", c.global.acceleration[0],
           c.global.acceleration[1], c.global.acceleration[2]);
   ui_info("  total_steps = {}", c.global.total_steps);
+  ui_info(
+      "  linear_solver_abs_tol = {:.6e}, rel_tol_min = {:.6e}, "
+      "rel_tol_max = {:.6e}, adaptive_factor = {:.6e}",
+      c.global.linear_solver_abs_tol, c.global.linear_solver_rel_tol_min,
+      c.global.linear_solver_rel_tol_max,
+      c.global.linear_solver_adaptive_factor);
+  ui_info("  admm_abs_tol = {:.6e}, admm_rel_tol = {:.6e}",
+          c.global.admm_abs_tol, c.global.admm_rel_tol);
 
   // Cloths
   ui_info("[Cloths] count = {}", c.cloths.size());

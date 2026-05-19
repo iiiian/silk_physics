@@ -356,6 +356,13 @@ silk::GlobalConfig make_global_config(const config::Global& global_cfg) {
   cfg.acceleration_x = static_cast<float>(global_cfg.acceleration[0]);
   cfg.acceleration_y = static_cast<float>(global_cfg.acceleration[1]);
   cfg.acceleration_z = static_cast<float>(global_cfg.acceleration[2]);
+  cfg.linear_solver_abs_tol = global_cfg.linear_solver_abs_tol;
+  cfg.linear_solver_rel_tol_min = global_cfg.linear_solver_rel_tol_min;
+  cfg.linear_solver_rel_tol_max = global_cfg.linear_solver_rel_tol_max;
+  cfg.linear_solver_adaptive_factor =
+      global_cfg.linear_solver_adaptive_factor;
+  cfg.admm_abs_tol = global_cfg.admm_abs_tol;
+  cfg.admm_rel_tol = global_cfg.admm_rel_tol;
 
   return cfg;
 }
