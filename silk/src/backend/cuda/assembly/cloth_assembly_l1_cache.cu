@@ -21,7 +21,7 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
   int state_num = 3 * l2.mass.size();
 
   // TODO: Experiements with penalty.
-  float penalty = std::sqrt(c.elastic_stiffness);
+  float penalty = c.elastic_stiffness;
 
   // Assemble H matrix.
   std::vector<Eigen::Triplet<float>> AA_triplets;

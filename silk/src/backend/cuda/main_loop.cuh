@@ -27,7 +27,7 @@ class MainLoop {
   float linear_rel_tol = 1e-3;
   // non-linear solver param
   float non_linear_rel_tol = 1e-3;
-  float non_linear_abs_tol = 1e-20;
+  float non_linear_abs_tol = 1e-5;
   // collision cache settings
   int init_broadphase_cache_size = 10000;
   int init_narrowphase_cache_size = 1000;

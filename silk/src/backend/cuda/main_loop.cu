@@ -275,7 +275,7 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
   auto scalar_min_toi = alloc<float>(rt, 1);
   auto scalar_primal_norm2 = alloc<float>(rt, 1);
   auto dual_residual = alloc<float>(rt, state_num);
-  auto scalar_dual_norm2 = alloc<float>(rt, state_num);
+  auto scalar_dual_norm2 = alloc<float>(rt, 1);
   auto collision_storage = alloc<Collision>(rt, init_narrowphase_cache_size);
   auto pin_constraints = gather_pin_constraints(registry, state_num, rt);
   std::optional<EqualityConstraints> barrier_constraints;
@@ -362,7 +362,8 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
       SPDLOG_INFO("Dual norm {}. Rel criteria {}. Abs criteria {}.",
                   h_dual_norm, non_linear_rel_tol * h_init_dual_norm,
                   non_linear_abs_tol);
-      if (primal_converged && dual_converged) {
+      if (primal_converged) {
+        // if (primal_converged && dual_converged) {
         SPDLOG_INFO("ADMM residual [{}, {}], NL loop terminate", h_primal_norm,
                     h_dual_norm);
         cu::copy_bytes(rt.stream, inner_tmp, inner_state);
