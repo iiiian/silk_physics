@@ -93,6 +93,25 @@ target_compile_definitions(
     PRIVATE PHYSICS_SCENE_ROOT="${CMAKE_SOURCE_DIR}/misc/physics_scene"
 )
 
+if(SILK_ENABLE_CUDA)
+    add_executable(
+        sym_inverse_benchmark
+        sym_inverse_benchmark.cu
+    )
+    target_include_directories(
+        sym_inverse_benchmark
+        PRIVATE ${SILK_DIR}
+    )
+    target_compile_options(
+        sym_inverse_benchmark
+        PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda --expt-relaxed-constexpr>
+    )
+    target_link_libraries(
+        sym_inverse_benchmark
+        PRIVATE CUDA::cudart CCCL::CCCL Eigen3::Eigen
+    )
+endif()
+
 include(CTest)
 include(Catch)
 

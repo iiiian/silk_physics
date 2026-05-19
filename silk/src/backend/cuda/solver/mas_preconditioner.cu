@@ -783,26 +783,28 @@ __global__ void batched_invert_upper(float *d_matrices, bool *success) {
     }
     __syncthreads();
 
-    if (tx < N) {
-      if (tx == pivot) {
-        s_col[tx] = 0.0f;
-      } else {
-        int row = ctd::min(tx, pivot);
-        int col = ctd::max(tx, pivot);
-        s_col[tx] = s_A[index_upper_mat(N, row, col)];
-      }
+    if (tx == pivot) {
+      s_col[tx] = 0.0f;
+    } else {
+      int row = ctd::min(tx, pivot);
+      int col = ctd::max(tx, pivot);
+      s_col[tx] = s_A[index_upper_mat(N, row, col)];
     }
     __syncthreads();
 
-    if (tx < N && tx != pivot) {
-      float a_ik = s_col[tx];
-      for (int col = tx; col < N; ++col) {
-        if (col == pivot) {
+    // All threads sweep the same column index in lockstep so that
+    // s_A[index_upper_mat(N, tx, col)] maps each (tx, col) pair to a
+    // different shared-memory bank (the row-stride in packed format is
+    // coprime to 32).  This eliminates the bank conflicts that occur when
+    // each thread starts at col=tx.  Division is hoisted out of the loop.
+    if (tx != pivot) {
+      float scale = s_col[tx] / s_pivot;
+      for (int col = 0; col < N; ++col) {
+        if (col < tx || col == pivot) {
           continue;
         }
 
-        float updated =
-            s_A[index_upper_mat(N, tx, col)] - a_ik * s_col[col] / s_pivot;
+        float updated = s_A[index_upper_mat(N, tx, col)] - scale * s_col[col];
         if (!ctd::isfinite(updated)) {
           *success = false;
         }
@@ -818,7 +820,7 @@ __global__ void batched_invert_upper(float *d_matrices, bool *success) {
       } else {
         s_A[index_upper_mat(N, pivot, pivot)] = updated;
       }
-    } else if (tx < N) {
+    } else {
       float updated = s_col[tx] / s_pivot;
       if (!ctd::isfinite(updated)) {
         *success = false;
