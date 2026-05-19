@@ -402,9 +402,9 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
 
 void ClothADMMHelper::solve_main_var(
     float rel_tol, float abs_tol, const ClothAssemblyL1Cache& l1_cache,
-    ctd::span<const float> extern_lhs, ctd::span<const float> extern_rhs,
-    ctd::span<const float> inertia_mod, ctd::span<float> state,
-    ctd::span<float> rhs_norm2, CudaRuntime rt) {
+    bool is_lhs_changed, ctd::span<const float> extern_lhs,
+    ctd::span<const float> extern_rhs, ctd::span<const float> inertia_mod,
+    ctd::span<float> state, ctd::span<float> rhs_norm2, CudaRuntime rt) {
   auto lhs_diag = alloc<float>(rt, l1_cache.state_num);
   cu::copy_bytes(rt.stream, extern_lhs, lhs_diag);
   auto rhs = alloc<float>(rt, l1_cache.state_num);
@@ -433,7 +433,9 @@ void ClothADMMHelper::solve_main_var(
                                                   rhs_norm2);
 
   DynamicBSRView dyn_A{lhs_diag, l1_cache.weighted_AA.view()};
-  linear_solver_.factorize(dyn_A, *l1_cache.part_offsets, rt);
+  if (is_lhs_changed) {
+    linear_solver_.factorize(dyn_A, *l1_cache.part_offsets, rt);
+  }
   linear_solver_.abs_tol = abs_tol;
   linear_solver_.rel_tol = rel_tol;
   auto status = linear_solver_.solve(rhs, state, rt);

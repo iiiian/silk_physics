@@ -53,6 +53,8 @@ class CudaBackend::Impl {
     return CudaRuntime{.stream = *stream, .mr = mr->as_ref()};
   }
 
+  void sync() const { stream->sync(); }
+
   bool is_obstacle(uint32_t entity) {
     return !registry_.has_component<ClothConfig>(entity) &&
            registry_.has_entity(entity);
@@ -81,6 +83,8 @@ Result CudaBackend::set_global_config(GlobalConfig config) {
 
 Result CudaBackend::solver_step() {
   auto err = impl_->main_loop_.step(impl_->registry_, impl_->get_runtime());
+  impl_->sync();
+
   if (err) {
     // TODO: better err message.
     return Result::error(ErrorCode::Unknown);
@@ -96,10 +100,10 @@ Result CudaBackend::solver_reset() {
   impl_->registry_.remove_all_components<ObjectCollider>();
   impl_->registry_.remove_all_components<PinPosition>();
 
+  impl_->sync();
   return Result::ok();
 }
 
-// TODO
 Result CudaBackend::add_cloth(ClothConfig cloth_config,
                               CollisionConfig collision_config,
                               MeshConfig mesh_config,
@@ -139,6 +143,7 @@ Result CudaBackend::add_cloth(ClothConfig cloth_config,
   impl_->registry_.set(e, std::move(pin));
 
   handle = e;
+  impl_->sync();
   return Result::ok();
 }
 
@@ -147,6 +152,7 @@ Result CudaBackend::remove_cloth(uint32_t handle) {
     return Result::error(ErrorCode::InvalidHandle);
   }
   impl_->registry_.nuke_entity(handle);
+  impl_->sync();
   return Result::ok();
 }
 
@@ -170,8 +176,8 @@ Result CudaBackend::get_cloth_position(uint32_t handle,
     auto tmp = alloc<float>(rt, position.size());
     part->inv_permute(*state->curr_state, tmp, rt);
     cu::copy_bytes(rt.stream, tmp, position);
-    rt.stream.sync();
 
+    impl_->sync();
     return Result::ok();
   }
 
@@ -190,6 +196,7 @@ Result CudaBackend::set_cloth_config(uint32_t handle, ClothConfig config) {
     return Result::error(ErrorCode::InvalidHandle);
   }
   impl_->registry_.remove_deps_then_set(handle, config);
+  impl_->sync();
   return Result::ok();
 }
 
@@ -207,6 +214,7 @@ Result CudaBackend::set_cloth_collision_config(uint32_t handle,
       .friction = config.friction,
   };
   impl_->registry_.remove_deps_then_set(handle, std::move(config_plus));
+  impl_->sync();
   return Result::ok();
 }
 
@@ -225,6 +233,7 @@ Result CudaBackend::set_cloth_pin_index(uint32_t handle,
   }
 
   impl_->registry_.remove_deps_then_set(handle, PinIndex{pin_index});
+  impl_->sync();
   return Result::ok();
 }
 
@@ -250,6 +259,7 @@ Result CudaBackend::set_cloth_pin_position(uint32_t handle,
     impl_->registry_.remove_deps_then_set(handle,
                                           PinPosition::from_position(position));
   }
+  impl_->sync();
   return Result::ok();
 }
 
@@ -281,6 +291,7 @@ Result CudaBackend::add_obstacle(CollisionConfig collision_config,
   impl_->registry_.set(e, std::move(pin_index));
 
   handle = e;
+  impl_->sync();
   return Result::ok();
 }
 
@@ -306,6 +317,7 @@ Result CudaBackend::set_obstacle_collision_config(uint32_t handle,
       .friction = config.friction,
   };
   impl_->registry_.remove_deps_then_set(handle, std::move(config_plus));
+  impl_->sync();
   return Result::ok();
 }
 
@@ -325,6 +337,7 @@ Result CudaBackend::set_obstacle_position(uint32_t handle,
   pos->is_static_twice = false;
   std::swap(pos->curr_position, pos->prev_position);
   pos->curr_position.assign(position.begin(), position.end());
+  impl_->sync();
   return Result::ok();
 }
 

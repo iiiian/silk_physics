@@ -135,10 +135,11 @@ void update_aux_and_lagrange_mul(ObjRegistry& registry, float max_lagrange_mul,
   }
 }
 
-void update_main(ObjRegistry& registry, float rel_tol, float abs_tol,
-                 ctd::span<const float> lhs_diag, ctd::span<const float> rhs,
-                 ctd::span<const float> inertia_mod, ctd::span<float> state,
-                 ctd::span<float> rhs_norm2, CudaRuntime rt) {
+void update_main(ObjRegistry& registry, int inner_iter, float rel_tol,
+                 float abs_tol, ctd::span<const float> lhs_diag,
+                 ctd::span<const float> rhs, ctd::span<const float> inertia_mod,
+                 ctd::span<float> state, ctd::span<float> rhs_norm2,
+                 CudaRuntime rt) {
   auto clothes =
       registry.get_entity_with_components<PhysicalState, ClothAssemblyL1Cache,
                                           ClothADMMHelper>();
@@ -149,8 +150,9 @@ void update_main(ObjRegistry& registry, float rel_tol, float abs_tol,
     assert(phy_state && l1_cache && admm_helper);
 
     auto x = state.subspan(phy_state->state_offset, phy_state->state_num);
-    admm_helper->solve_main_var(rel_tol, abs_tol, *l1_cache, lhs_diag, rhs,
-                                inertia_mod, x, rhs_norm2, rt);
+    bool is_lhs_changed = (inner_iter == 1);
+    admm_helper->solve_main_var(rel_tol, abs_tol, *l1_cache, is_lhs_changed,
+                                lhs_diag, rhs, inertia_mod, x, rhs_norm2, rt);
   }
 }
 
@@ -268,6 +270,7 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
   auto prev_velocity = alloc<float>(rt, 0);
 
   auto err = init(registry, prev_state, prev_velocity, dt, rt);
+  rt.stream.sync();
   if (err) {
     return err;
   }
@@ -345,8 +348,9 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
         }
         SPDLOG_INFO("Linear solver tolerance rel={} abs={}", h_linear_rel_tol,
                     linear_abs_tol);
-        update_main(registry, h_linear_rel_tol, linear_abs_tol, lhs_diag, rhs,
-                    inertia_mod, inner_tmp, scalar_rhs_norm2, rt);
+        update_main(registry, inner_it, h_linear_rel_tol, linear_abs_tol,
+                    lhs_diag, rhs, inertia_mod, inner_tmp, scalar_rhs_norm2,
+                    rt);
       }
 
       // Update all aux variables and lagrange multipliers.
@@ -424,6 +428,8 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     if (barrier_constraints) {
       barrier_constraints->enforce(inner_state, rt);
     }
+
+    rt.stream.sync();
 
     // Full collision update.
     for (uint32_t e :
@@ -504,6 +510,7 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     }
   }
 
+  rt.stream.sync();
   return std::nullopt;
 }
 
