@@ -77,16 +77,16 @@ void MASCGSolver::setup_cusparse(BSRView A, CudaRuntime rt) {
 
   cusparseSetStream(cusparse_handle_.raw, rt.stream.get());
   // clang-format off
-    cusparseSpMV_bufferSize(cusparse_handle_.raw,
-                            CUSPARSE_OPERATION_NON_TRANSPOSE,
-                            &alpha,
-                            cusparse_A_.raw,
-                            x.raw,
-                            &beta,
-                            y.raw,
-                            CUDA_R_32F,
-                            CUSPARSE_SPMV_ALG_DEFAULT,
-                            &workspace_size);
+  cusparseSpMV_bufferSize(cusparse_handle_.raw,
+                          CUSPARSE_OPERATION_NON_TRANSPOSE,
+                          &alpha,
+                          cusparse_A_.raw,
+                          x.raw,
+                          &beta,
+                          y.raw,
+                          CUDA_R_32F,
+                          CUSPARSE_SPMV_ALG_DEFAULT,
+                          &workspace_size);
   // clang-format on
 
   spmv_workspace_ = alloc<char>(rt, workspace_size);
@@ -158,10 +158,14 @@ void MASCGSolver::factorize(DynamicBSRView A, ctd::span<const int> part_offset,
 }
 
 /// https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
-MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
+MASCGSolver::Status MASCGSolver::solve(DynamicBSRView A,
+                                       ctd::span<const float> b,
                                        ctd::span<float> x, CudaRuntime rt) {
   assert(b.size() == fine_dim_);
   assert(x.size() == fine_dim_);
+
+  diag_ = A.diag;
+  setup_cusparse(A.mat, rt);
 
   // Compute initial residual r = b-Ax.
   spmv(x, *r_, rt);

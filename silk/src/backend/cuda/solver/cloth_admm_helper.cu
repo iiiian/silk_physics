@@ -438,7 +438,7 @@ void ClothADMMHelper::solve_main_var(
   }
   linear_solver_.abs_tol = abs_tol;
   linear_solver_.rel_tol = rel_tol;
-  auto status = linear_solver_.solve(rhs, state, rt);
+  auto status = linear_solver_.solve(dyn_A, rhs, state, rt);
   // TODO: handle failure.
 }
 

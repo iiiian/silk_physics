@@ -58,7 +58,8 @@ class MASCGSolver {
 
   /// @brief Solve linear system Ax=b.
   /// https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
-  Status solve(ctd::span<const float> b, ctd::span<float> x, CudaRuntime rt);
+  Status solve(DynamicBSRView A, ctd::span<const float> b, ctd::span<float> x,
+               CudaRuntime rt);
 
  private:
   void setup_cusparse(BSRView A, CudaRuntime rt);
