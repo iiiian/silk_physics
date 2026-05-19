@@ -181,22 +181,9 @@ MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
 
   // Compute rr = r^T r.
   float rr0 = 0.0;
-  float rr_stop = abs_tol * abs_tol;
   if (!use_preconditioned_residual_norm) {
     inner_product(*r_, *r_, *scalar_rr_, rt);
     rr0 = scalar_load(scalar_rr_->data(), rt);
-    inner_product(b, b, *scalar_pAp_, rt);
-    float bb = scalar_load(scalar_pAp_->data(), rt);
-    float rel_stop = rel_tol * rel_tol * bb;
-    if (rel_stop > rr_stop) {
-      rr_stop = rel_stop;
-    }
-    if (rr0 <= rr_stop) {
-      iterations_ = 0;
-      residual_norm_ = ctd::sqrt(rr0);
-      return (rr0 <= abs_tol * abs_tol) ? Status::ReachAbsTol
-                                        : Status::ReachRelTol;
-    }
   }
 
   Status status = Status::ReachAbsTol;
@@ -231,7 +218,7 @@ MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
 
     iterations_ = k;
 
-    // Check convergence every 10 iterations.
+    // Check convergence every true_residual_period iterations.
     if (k % 10 == 0) {
       if (use_preconditioned_residual_norm) {
         float rz_new = scalar_load(scalar_rz_->data(), rt);
@@ -245,7 +232,7 @@ MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
         inner_product(*r_, *r_, *scalar_rr_, rt);
         float rr = scalar_load(scalar_rr_->data(), rt);
         residual_norm_ = ctd::sqrt(rr);
-        if (rr <= rr_stop) {
+        if (rr <= rel_tol * rel_tol * rr0 || rr <= abs_tol * abs_tol) {
           status = (rr <= abs_tol * abs_tol) ? Status::ReachAbsTol
                                              : Status::ReachRelTol;
           break;
@@ -256,8 +243,8 @@ MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
     // debug logging
     if (k % 100 == 0) {
       rt.stream.sync();
-      SPDLOG_TRACE("[pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]",
-                   elapsed(iter_window_begin), iterations_, residual_norm_);
+      SPDLOG_INFO("[pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]",
+                  elapsed(iter_window_begin), iterations_, residual_norm_);
       iter_window_begin = clock::now();
     }
 
