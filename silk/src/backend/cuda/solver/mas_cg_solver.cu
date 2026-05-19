@@ -185,6 +185,8 @@ MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
     inner_product(*r_, *r_, *scalar_rr_, rt);
     rr0 = scalar_load(scalar_rr_->data(), rt);
   }
+  residual_norm_ =
+      use_preconditioned_residual_norm ? ctd::sqrt(rz0) : ctd::sqrt(rr0);
 
   Status status = Status::ReachAbsTol;
   auto iter_window_begin = clock::now();
@@ -195,19 +197,11 @@ MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
     inner_product(*p_, *Ap_, *scalar_pAp_, rt);
     // Compute alpha = (r M^-1 r) / (p^T A p).
     scalar_division(*scalar_rz_, *scalar_pAp_, *scalar_alpha_, rt);
-    // Compute x = x + alpha A p.
+    // Compute x = x + alpha p.
     axpby(1.0, scalar_alpha_->data(), 1.0, nullptr, *p_, x, rt);
 
-    // Compute residual b-Ax directly.
-    if (k % true_residual_period == 0) {
-      spmv(x, *r_, rt);
-      axpby(1.0, nullptr, -1.0, nullptr, b, *r_, rt);
-    }
     // Compute residual update using r' = r - alpha A p.
-    // This saves one spmv but accumulates floating point error overtime.
-    else {
-      axpby(-1.0, scalar_alpha_->data(), 1.0, nullptr, *Ap_, *r_, rt);
-    }
+    axpby(-1.0, scalar_alpha_->data(), 1.0, nullptr, *Ap_, *r_, rt);
 
     // Compute z = M^-1 r.
     mas_precond_.apply(*r_, *z_, rt);
@@ -218,8 +212,8 @@ MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
 
     iterations_ = k;
 
-    // Check convergence every true_residual_period iterations.
-    if (k % 10 == 0) {
+    // Check convergence periodically.
+    if (k % residual_check_period == 0) {
       if (use_preconditioned_residual_norm) {
         float rz_new = scalar_load(scalar_rz_->data(), rt);
         residual_norm_ = ctd::sqrt(rz_new);
