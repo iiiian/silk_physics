@@ -79,7 +79,7 @@ EqualityConstraints gather_pin_constraints(ObjRegistry& registry, int state_num,
     }
 
     if (pin_index->is_all_pinned) {
-      cu::fill_bytes(rt.stream, indicator, true);
+      fill_value(indicator, true, rt);
       if (part) {
         part->permute(target_position, target, rt);
       } else {

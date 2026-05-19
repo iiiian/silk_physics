@@ -41,8 +41,7 @@ __global__ void update_lagrange_mul_kernel(ctd::span<const bool> indicator,
 
   if (indicator[tid]) {
     float tmp = lagrange_mul[tid] + penalty * (state[tid] - target[tid]);
-    lagrange_mul[tid] =
-        ctd::clamp(tmp, -max_lagrange_mul, max_lagrange_mul);
+    lagrange_mul[tid] = ctd::clamp(tmp, -max_lagrange_mul, max_lagrange_mul);
   }
 }
 
@@ -87,7 +86,7 @@ void EqualityConstraints::merge(const EqualityConstraints& other,
 }
 
 void EqualityConstraints::reset_lagrange_mul(CudaRuntime rt) {
-  cu::fill_bytes(rt.stream, lagrange_mul, init_lagrange_mul);
+  fill_value<float>(lagrange_mul, init_lagrange_mul, rt);
 }
 
 void EqualityConstraints::update_lagrange_mul(ctd::span<const float> state,

@@ -4,11 +4,11 @@
 #include <cusparse.h>
 
 #include <cassert>
+#include <cub/device/device_for.cuh>
 #include <cuda/algorithm>
 #include <cuda/atomic>
 #include <cuda/buffer>
 #include <cuda/memory_pool>
-#include <cuda/memory_resource>
 #include <cuda/std/source_location>
 #include <cuda/std/span>
 #include <cuda/stream>
@@ -159,8 +159,16 @@ T scalar_load(const T* device_ptr, CudaRuntime rt) {
 
 /// @brief Async scalar write.
 template <typename T>
-void scalar_write(T* dst, T val, CudaRuntime rt) {
-  cu::fill_bytes(rt.stream, ctd::span<T>{dst, 1}, val);
+void scalar_write(T* device_ptr, T val, CudaRuntime rt) {
+  auto fill = [device_ptr, val] __device__(int i) { *device_ptr = val; };
+  cub::DeviceFor::Bulk(1, fill, rt.stream.get());
+}
+
+/// @brief Async scalar write.
+template <typename T>
+void fill_value(ctd::span<T> device_span, T val, CudaRuntime rt) {
+  auto fill = [device_span, val] __device__(int i) { device_span[i] = val; };
+  cub::DeviceFor::Bulk(device_span.size(), fill, rt.stream.get());
 }
 
 }  // namespace silk::cuda
