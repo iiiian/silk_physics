@@ -36,8 +36,8 @@ residual against an absolute floor plus a relative scale term:
 ||s|| <= eps_dual
 ```
 
-For the primal residual, the natural scale is the larger side of the constraint
-equation:
+For the elastic primal residual, the natural scale is the larger side of the
+constraint equation:
 
 ```text
 eps_primal =
@@ -49,23 +49,31 @@ This prevents a large cloth or large coordinate scale from requiring an
 unreasonably tiny absolute residual, while still allowing small systems to stop
 through the absolute floor.
 
-The full Boyd-style dual threshold uses a stationarity scale such as
-`||S^T u||`. Computing that exactly requires extra reduction/scatter work. The
-current hybrid check uses the main-system right-hand side as a cheaper scale
-proxy. The right-hand side can be very large because it includes inertia terms,
-so the proxy is capped by the larger of the initial dual residual and `1`:
+Equality constraints, such as pins and contact barriers, also report primal
+feasibility as `x - target`. Their norm and scale are added to the total primal
+check, and their component is logged separately from the elastic primal norm.
+
+The dual residual is in state space:
 
 ```text
-dual_scale = max(min(||rhs||, max(initial_dual_norm, 1)), 1)
+s = rho S^T W^T W (z - z_old)
+```
+
+The matching relative scale is assembled in the same state space:
+
+```text
+dual_scale =
+    max(||rho S^T W^T W z||,
+        ||rho S^T W^T W z_old||)
 
 eps_dual =
     sqrt(state_dof) * admm_abs_tol
   + admm_rel_tol * dual_scale
 ```
 
-This is less exact than a full dual scale, but it avoids an additional global
-operator application while still making the dual check less dependent on the
-first observed residual and less permissive when inertia makes `||rhs||` huge.
+This avoids using the main-system right-hand side as a proxy. It also keeps the
+dual threshold symmetric in the two terms whose difference forms the dual
+residual.
 
 ## Adaptive linear tolerance
 

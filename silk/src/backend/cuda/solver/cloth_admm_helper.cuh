@@ -35,7 +35,8 @@ class ClothADMMHelper {
       float max_lagrange_mul, const ClothAssemblyL1Cache& l1_cache,
       ctd::span<const float> state, ctd::span<float> primal_residual_norm2,
       ctd::span<float> primal_scale_x2, ctd::span<float> primal_scale_aux2,
-      ctd::span<float> dual_residual, CudaRuntime rt);
+      ctd::span<float> dual_residual, ctd::span<float> dual_scale_curr,
+      ctd::span<float> dual_scale_prev, CudaRuntime rt);
 
   void solve_main_var(float rel_tol, float abs_tol,
                       const ClothAssemblyL1Cache& l1_cache, bool is_lhs_changed,

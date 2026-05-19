@@ -115,6 +115,8 @@ void update_aux_and_lagrange_mul(ObjRegistry& registry, float max_lagrange_mul,
                                  ctd::span<float> primal_scale_x2,
                                  ctd::span<float> primal_scale_aux2,
                                  ctd::span<float> dual_residual,
+                                 ctd::span<float> dual_scale_curr,
+                                 ctd::span<float> dual_scale_prev,
                                  CudaRuntime rt) {
   auto clothes =
       registry.get_entity_with_components<PhysicalState, ClothAssemblyL1Cache,
@@ -129,9 +131,14 @@ void update_aux_and_lagrange_mul(ObjRegistry& registry, float max_lagrange_mul,
         state.subspan(phy_state->state_offset, phy_state->state_num);
     auto sub_dual =
         dual_residual.subspan(phy_state->state_offset, phy_state->state_num);
+    auto sub_dual_scale_curr =
+        dual_scale_curr.subspan(phy_state->state_offset, phy_state->state_num);
+    auto sub_dual_scale_prev =
+        dual_scale_prev.subspan(phy_state->state_offset, phy_state->state_num);
     admm_helper->update_aux_var_and_lagrange_mul(
         max_lagrange_mul, *l1_cache, sub_state, primal_norm2, primal_scale_x2,
-        primal_scale_aux2, sub_dual, rt);
+        primal_scale_aux2, sub_dual, sub_dual_scale_curr, sub_dual_scale_prev,
+        rt);
   }
 }
 
@@ -296,8 +303,16 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
   auto scalar_primal_norm2 = alloc<float>(rt, 1);
   auto scalar_primal_scale_x2 = alloc<float>(rt, 1);
   auto scalar_primal_scale_aux2 = alloc<float>(rt, 1);
+  auto scalar_equality_primal_norm2 = alloc<float>(rt, 1);
+  auto scalar_equality_primal_scale_x2 = alloc<float>(rt, 1);
+  auto scalar_equality_primal_scale_target2 = alloc<float>(rt, 1);
+  auto scalar_equality_primal_dof = alloc<float>(rt, 1);
   auto dual_residual = alloc<float>(rt, state_num);
+  auto dual_scale_curr = alloc<float>(rt, state_num);
+  auto dual_scale_prev = alloc<float>(rt, state_num);
   auto scalar_dual_norm2 = alloc<float>(rt, 1);
+  auto scalar_dual_scale_curr_norm2 = alloc<float>(rt, 1);
+  auto scalar_dual_scale_prev_norm2 = alloc<float>(rt, 1);
   auto scalar_rhs_norm2 = alloc<float>(rt, 1);
   auto collision_storage = alloc<Collision>(rt, init_narrowphase_cache_size);
   auto pin_constraints = gather_pin_constraints(registry, state_num, rt);
@@ -357,13 +372,29 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
       cu::fill_bytes(rt.stream, scalar_primal_norm2, 0);
       cu::fill_bytes(rt.stream, scalar_primal_scale_x2, 0);
       cu::fill_bytes(rt.stream, scalar_primal_scale_aux2, 0);
+      cu::fill_bytes(rt.stream, scalar_equality_primal_norm2, 0);
+      cu::fill_bytes(rt.stream, scalar_equality_primal_scale_x2, 0);
+      cu::fill_bytes(rt.stream, scalar_equality_primal_scale_target2, 0);
+      cu::fill_bytes(rt.stream, scalar_equality_primal_dof, 0);
       cu::fill_bytes(rt.stream, dual_residual, 0);
+      cu::fill_bytes(rt.stream, dual_scale_curr, 0);
+      cu::fill_bytes(rt.stream, dual_scale_prev, 0);
       update_aux_and_lagrange_mul(registry, max_lagrange_mul, inner_tmp,
                                   scalar_primal_norm2, scalar_primal_scale_x2,
-                                  scalar_primal_scale_aux2, dual_residual, rt);
+                                  scalar_primal_scale_aux2, dual_residual,
+                                  dual_scale_curr, dual_scale_prev, rt);
       pin_constraints.update_lagrange_mul(inner_tmp, rt);
+      pin_constraints.accum_primal_residual(
+          inner_tmp, scalar_equality_primal_norm2,
+          scalar_equality_primal_scale_x2,
+          scalar_equality_primal_scale_target2, scalar_equality_primal_dof, rt);
       if (barrier_constraints) {
         barrier_constraints->update_lagrange_mul(inner_tmp, rt);
+        barrier_constraints->accum_primal_residual(
+            inner_tmp, scalar_equality_primal_norm2,
+            scalar_equality_primal_scale_x2,
+            scalar_equality_primal_scale_target2, scalar_equality_primal_dof,
+            rt);
       }
 
       if (inner_it == 0) {
@@ -378,27 +409,47 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
         return Error::Diverge;
       }
 
+      float h_elastic_primal_norm2 =
+          scalar_load(scalar_primal_norm2.data(), rt);
+      float h_elastic_primal_scale_x2 =
+          scalar_load(scalar_primal_scale_x2.data(), rt);
+      float h_elastic_primal_scale_aux2 =
+          scalar_load(scalar_primal_scale_aux2.data(), rt);
+      float h_equality_primal_norm2 =
+          scalar_load(scalar_equality_primal_norm2.data(), rt);
+      float h_equality_primal_scale_x2 =
+          scalar_load(scalar_equality_primal_scale_x2.data(), rt);
+      float h_equality_primal_scale_target2 =
+          scalar_load(scalar_equality_primal_scale_target2.data(), rt);
+      float h_equality_primal_dof =
+          scalar_load(scalar_equality_primal_dof.data(), rt);
       float h_primal_norm =
-          std::sqrt(scalar_load(scalar_primal_norm2.data(), rt));
-      float h_primal_scale_x =
-          std::sqrt(scalar_load(scalar_primal_scale_x2.data(), rt));
-      float h_primal_scale_aux =
-          std::sqrt(scalar_load(scalar_primal_scale_aux2.data(), rt));
+          std::sqrt(h_elastic_primal_norm2 + h_equality_primal_norm2);
+      float h_primal_scale_x = std::sqrt(h_elastic_primal_scale_x2 +
+                                         h_equality_primal_scale_x2);
+      float h_primal_scale_aux = std::sqrt(h_elastic_primal_scale_aux2 +
+                                           h_equality_primal_scale_target2);
       inner_product(dual_residual, dual_residual, scalar_dual_norm2, rt);
+      inner_product(dual_scale_curr, dual_scale_curr,
+                    scalar_dual_scale_curr_norm2, rt);
+      inner_product(dual_scale_prev, dual_scale_prev,
+                    scalar_dual_scale_prev_norm2, rt);
       float h_dual_norm = std::sqrt(scalar_load(scalar_dual_norm2.data(), rt));
-      float h_rhs_norm = std::sqrt(scalar_load(scalar_rhs_norm2.data(), rt));
+      float h_dual_scale_curr =
+          std::sqrt(scalar_load(scalar_dual_scale_curr_norm2.data(), rt));
+      float h_dual_scale_prev =
+          std::sqrt(scalar_load(scalar_dual_scale_prev_norm2.data(), rt));
 
       if (inner_it == 1) {
         h_init_primal_norm = h_primal_norm;
         h_init_dual_norm = h_dual_norm;
       }
-      float h_primal_dof = primal_dof;
+      float h_primal_dof = primal_dof + h_equality_primal_dof;
       float h_state_dof = state_num;
       float h_primal_eps =
           std::sqrt(h_primal_dof) * non_linear_abs_tol +
           non_linear_rel_tol * std::max(h_primal_scale_x, h_primal_scale_aux);
-      float h_dual_scale = std::max(
-          std::min(h_rhs_norm, std::max(h_init_dual_norm, 1.0f)), 1.0f);
+      float h_dual_scale = std::max(h_dual_scale_curr, h_dual_scale_prev);
       float h_dual_eps = std::sqrt(h_state_dof) * non_linear_abs_tol +
                          non_linear_rel_tol * h_dual_scale;
       bool primal_converged = h_primal_norm <= h_primal_eps;
@@ -407,10 +458,14 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
       float h_dual_denom = std::max(h_init_dual_norm, non_linear_abs_tol);
       h_adaptive_ratio =
           std::max(h_primal_norm / h_primal_denom, h_dual_norm / h_dual_denom);
-      SPDLOG_INFO("Primal norm {}. Hybrid criteria {}. Abs tol {}.",
-                  h_primal_norm, h_primal_eps, non_linear_abs_tol);
-      SPDLOG_INFO("Dual norm {}. Hybrid criteria {}. Abs tol {}.", h_dual_norm,
-                  h_dual_eps, non_linear_abs_tol);
+      SPDLOG_INFO("Primal norm {}. Criteria {}. Abs tol {}.", h_primal_norm,
+                  h_primal_eps, non_linear_abs_tol);
+      SPDLOG_INFO("Elastic primal norm {}. Equality primal norm {}.",
+                  std::sqrt(h_elastic_primal_norm2),
+                  std::sqrt(h_equality_primal_norm2));
+      SPDLOG_INFO("Dual norm {}. Criteria {}. Abs tol {}. Scale curr {} prev {}.",
+                  h_dual_norm, h_dual_eps, non_linear_abs_tol,
+                  h_dual_scale_curr, h_dual_scale_prev);
       if (primal_converged && dual_converged) {
         SPDLOG_INFO("ADMM residual [{}, {}], NL loop terminate", h_primal_norm,
                     h_dual_norm);

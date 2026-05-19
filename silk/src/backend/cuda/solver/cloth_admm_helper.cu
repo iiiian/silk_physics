@@ -30,7 +30,9 @@ __global__ void solve_and_update_elastic_aux(
     ctd::span<float> primal_norm2,
     ctd::span<float> primal_scale_x2,
     ctd::span<float> primal_scale_aux2,
-    ctd::span<float> dual_residual)
+    ctd::span<float> dual_residual,
+    ctd::span<float> dual_scale_curr,
+    ctd::span<float> dual_scale_prev)
 // clang-format on
 {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -113,12 +115,18 @@ __global__ void solve_and_update_elastic_aux(
     // Per state dof dual residual.
     // r = rho * S^T W^T W (z - z_old)
     auto S_tr = jop.view().transpose();
-    auto dual = ax(penalty * w * w, mat_mul(S_tr, vsub(aux, old_aux)));
+    auto dual_curr = ax(penalty * w * w, mat_mul(S_tr, aux));
+    auto dual_prev = ax(penalty * w * w, mat_mul(S_tr, old_aux));
+    auto dual = vsub(dual_curr, dual_prev);
     for (int i = 0; i < 3; ++i) {
       int out_offset = 3 * faces[tid * 3 + i];
 #pragma unroll
       for (int j = 0; j < 3; ++j) {
         atomicAdd(dual_residual.data() + out_offset + j, dual(3 * i + j));
+        atomicAdd(dual_scale_curr.data() + out_offset + j,
+                  dual_curr(3 * i + j));
+        atomicAdd(dual_scale_prev.data() + out_offset + j,
+                  dual_prev(3 * i + j));
       }
     }
 
@@ -373,7 +381,8 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
     float max_lagrange_mul, const ClothAssemblyL1Cache& l1_cache,
     ctd::span<const float> state, ctd::span<float> primal_residual_norm2,
     ctd::span<float> primal_scale_x2, ctd::span<float> primal_scale_aux2,
-    ctd::span<float> dual_residual, CudaRuntime rt) {
+    ctd::span<float> dual_residual, ctd::span<float> dual_scale_curr,
+    ctd::span<float> dual_scale_prev, CudaRuntime rt) {
   int grid_num = div_round_up(l1_cache.face_num, 128);
   // clang-format off
   solve_and_update_elastic_aux<<<grid_num, 128, 0, rt.stream.get()>>>(
@@ -390,7 +399,9 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
         primal_residual_norm2,
         primal_scale_x2,
         primal_scale_aux2,
-        dual_residual);
+        dual_residual,
+        dual_scale_curr,
+        dual_scale_prev);
   // clang-format on
 
   // solve_and_update_bending_aux(
