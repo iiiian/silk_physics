@@ -922,7 +922,6 @@ void MASPreconditioner::factorize(DynamicBSRView A,
 #endif
   assert(A.diag.size() == A.mat.dim * A.mat.block_dim);
 
-  initialized_ = false;
   block_dim_ = A.mat.block_dim;
 
   auto total_begin = clock::now();
@@ -973,13 +972,10 @@ void MASPreconditioner::factorize(DynamicBSRView A,
   SPDLOG_TRACE("[factorize_allocate_coarse_vectors] [{:.6f}]",
                elapsed(phase_begin));
   SPDLOG_TRACE("[factorize_total] [{:.6f}]", elapsed(total_begin));
-
-  initialized_ = true;
 }
 
 void MASPreconditioner::apply(ctd::span<const float> r, ctd::span<float> z,
                               CudaRuntime rt) {
-  assert(initialized_);
   assert(r.size() == z.size());
 
   cu::fill_bytes(rt.stream, *(coarse_vectors_.multi_level_r), 0);

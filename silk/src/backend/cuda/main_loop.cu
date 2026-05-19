@@ -138,8 +138,7 @@ void update_aux_and_lagrange_mul(ObjRegistry& registry, float max_lagrange_mul,
 void update_main(ObjRegistry& registry, float rel_tol, float abs_tol,
                  ctd::span<const float> lhs_diag, ctd::span<const float> rhs,
                  ctd::span<const float> inertia_mod, ctd::span<float> state,
-                 ctd::span<float> rhs_norm2,
-                 CudaRuntime rt) {
+                 ctd::span<float> rhs_norm2, CudaRuntime rt) {
   auto clothes =
       registry.get_entity_with_components<PhysicalState, ClothAssemblyL1Cache,
                                           ClothADMMHelper>();
@@ -153,10 +152,6 @@ void update_main(ObjRegistry& registry, float rel_tol, float abs_tol,
     admm_helper->solve_main_var(rel_tol, abs_tol, *l1_cache, lhs_diag, rhs,
                                 inertia_mod, x, rhs_norm2, rt);
   }
-}
-
-float clamp_tol(float value, float min_value, float max_value) {
-  return std::max(min_value, std::min(value, max_value));
 }
 
 int primal_residual_dof(ObjRegistry& registry) {
@@ -345,11 +340,11 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
         float h_linear_rel_tol = linear_rel_tol_max;
         if (inner_it > 1) {
           h_linear_rel_tol =
-              clamp_tol(linear_adaptive_factor * h_adaptive_ratio,
-                        linear_rel_tol_min, linear_rel_tol_max);
+              ctd::clamp(linear_adaptive_factor * h_adaptive_ratio,
+                         linear_rel_tol_min, linear_rel_tol_max);
         }
-        SPDLOG_INFO("Linear solver tolerance rel={} abs={}",
-                    h_linear_rel_tol, linear_abs_tol);
+        SPDLOG_INFO("Linear solver tolerance rel={} abs={}", h_linear_rel_tol,
+                    linear_abs_tol);
         update_main(registry, h_linear_rel_tol, linear_abs_tol, lhs_diag, rhs,
                     inertia_mod, inner_tmp, scalar_rhs_norm2, rt);
       }
@@ -398,21 +393,20 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
       float h_primal_eps =
           std::sqrt(h_primal_dof) * non_linear_abs_tol +
           non_linear_rel_tol * std::max(h_primal_scale_x, h_primal_scale_aux);
-      float h_dual_scale =
-          std::max(std::min(h_rhs_norm, std::max(h_init_dual_norm, 1.0f)),
-                   1.0f);
+      float h_dual_scale = std::max(
+          std::min(h_rhs_norm, std::max(h_init_dual_norm, 1.0f)), 1.0f);
       float h_dual_eps = std::sqrt(h_state_dof) * non_linear_abs_tol +
                          non_linear_rel_tol * h_dual_scale;
       bool primal_converged = h_primal_norm <= h_primal_eps;
       bool dual_converged = h_dual_norm <= h_dual_eps;
       float h_primal_denom = std::max(h_init_primal_norm, non_linear_abs_tol);
       float h_dual_denom = std::max(h_init_dual_norm, non_linear_abs_tol);
-      h_adaptive_ratio = std::max(h_primal_norm / h_primal_denom,
-                                  h_dual_norm / h_dual_denom);
+      h_adaptive_ratio =
+          std::max(h_primal_norm / h_primal_denom, h_dual_norm / h_dual_denom);
       SPDLOG_INFO("Primal norm {}. Hybrid criteria {}. Abs tol {}.",
                   h_primal_norm, h_primal_eps, non_linear_abs_tol);
-      SPDLOG_INFO("Dual norm {}. Hybrid criteria {}. Abs tol {}.",
-                  h_dual_norm, h_dual_eps, non_linear_abs_tol);
+      SPDLOG_INFO("Dual norm {}. Hybrid criteria {}. Abs tol {}.", h_dual_norm,
+                  h_dual_eps, non_linear_abs_tol);
       if (primal_converged && dual_converged) {
         SPDLOG_INFO("ADMM residual [{}, {}], NL loop terminate", h_primal_norm,
                     h_dual_norm);

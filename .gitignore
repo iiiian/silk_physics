@@ -29,3 +29,6 @@ vcpkg_installed
 # Clion
 .idea
 /.codex
+
+# nvidia profiler
+report*

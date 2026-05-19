@@ -65,8 +65,6 @@ struct CoarseVectors {
 
 class MASPreconditioner {
  public:
-  bool empty() const { return !initialized_; }
-
   /// @brief Initialize MAS preconditioner. Build coarse space, compute inverse,
   /// allocate buffer...
   /// @param A Input matrix and scalar diagonal update sorted by graph
@@ -83,7 +81,6 @@ class MASPreconditioner {
   void apply(ctd::span<const float> r, ctd::span<float> z, CudaRuntime rt);
 
  private:
-  bool initialized_ = false;
   int block_dim_ = 0;
   PaddedTopology padded_topology_;
   CoarseSpace coarse_space_;
