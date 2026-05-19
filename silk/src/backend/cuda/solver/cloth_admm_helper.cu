@@ -400,14 +400,11 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
   //     *uz_, *z_, rt);
 }
 
-void ClothADMMHelper::solve_main_var(float rel_tol, float abs_tol,
-                                     const ClothAssemblyL1Cache& l1_cache,
-                                     ctd::span<const float> extern_lhs,
-                                     ctd::span<const float> extern_rhs,
-                                     ctd::span<const float> inertia_mod,
-                                     ctd::span<float> state,
-                                     ctd::span<float> rhs_norm2,
-                                     CudaRuntime rt) {
+void ClothADMMHelper::solve_main_var(
+    float rel_tol, float abs_tol, const ClothAssemblyL1Cache& l1_cache,
+    ctd::span<const float> extern_lhs, ctd::span<const float> extern_rhs,
+    ctd::span<const float> inertia_mod, ctd::span<float> state,
+    ctd::span<float> rhs_norm2, CudaRuntime rt) {
   auto lhs_diag = alloc<float>(rt, l1_cache.state_num);
   cu::copy_bytes(rt.stream, extern_lhs, lhs_diag);
   auto rhs = alloc<float>(rt, l1_cache.state_num);

@@ -60,9 +60,10 @@ void graph_partition(ctd::span<int> row_ptr, ctd::span<int> cols,
     adjncy[i] = static_cast<kaminpar_node_id_t>(cols[i]);
   }
 
-  auto *adjwgt = weights.empty()
-                     ? nullptr
-                     : reinterpret_cast<kaminpar_edge_weight_t *>(weights.data());
+  auto *adjwgt =
+      weights.empty()
+          ? nullptr
+          : reinterpret_cast<kaminpar_edge_weight_t *>(weights.data());
 
   kaminpar_context_t *ctx = kaminpar_create_context_by_preset_name("default");
   assert(ctx);
@@ -74,10 +75,9 @@ void graph_partition(ctd::span<int> row_ptr, ctd::span<int> cols,
   assert(partitioner);
 
   kaminpar_set_output_level(partitioner, KAMINPAR_OUTPUT_LEVEL_QUIET);
-kaminpar_borrow_and_mutate_graph(partitioner,
+  kaminpar_borrow_and_mutate_graph(partitioner,
                                    static_cast<kaminpar_node_id_t>(node_num),
-                                   xadj.data(), adjncy.data(), nullptr,
-                                   adjwgt);
+                                   xadj.data(), adjncy.data(), nullptr, adjwgt);
 
   // Impl Eq.7 of arXiv:2411.06224
 
@@ -93,9 +93,8 @@ kaminpar_borrow_and_mutate_graph(partitioner,
   // K way partition with absolution max block weight.
   // Since our node weight is uniform, this is equivalent to limiting parition
   // size.
-  kaminpar_compute_partition_with_max_block_weights(partitioner, k,
-                                                      max_block_weights.data(),
-                                                      partition.data());
+  kaminpar_compute_partition_with_max_block_weights(
+      partitioner, k, max_block_weights.data(), partition.data());
 
   kaminpar_context_free(ctx);
   kaminpar_free(partitioner);

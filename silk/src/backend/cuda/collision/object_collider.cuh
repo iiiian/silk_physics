@@ -4,8 +4,8 @@
 #include <cuda/std/span>
 
 #include "backend/cuda/collision/bbox.cuh"
-#include "backend/cuda/collision/oibvh.cuh"
 #include "backend/cuda/collision/mesh_collider.cuh"
+#include "backend/cuda/collision/oibvh.cuh"
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/pin.hpp"
 #include "common/config_plus.hpp"
