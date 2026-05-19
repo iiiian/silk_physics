@@ -83,8 +83,8 @@ class HeadlessCloth : public IObject {
       cloth.pin_index_ = pin_selection::select_bbox_vertices(
           cloth.verts_, *config.pin_selection->bbox);
       if (cloth.pin_index_.empty()) {
-        spdlog::warn(
-            "Pin selection for cloth '{}' matched no vertices.", cloth.name_);
+        spdlog::warn("Pin selection for cloth '{}' matched no vertices.",
+                     cloth.name_);
       } else {
         spdlog::info("Pin selection for cloth '{}' matched {} vertices.",
                      cloth.name_, cloth.pin_index_.size());
@@ -359,8 +359,7 @@ silk::GlobalConfig make_global_config(const config::Global& global_cfg) {
   cfg.linear_solver_abs_tol = global_cfg.linear_solver_abs_tol;
   cfg.linear_solver_rel_tol_min = global_cfg.linear_solver_rel_tol_min;
   cfg.linear_solver_rel_tol_max = global_cfg.linear_solver_rel_tol_max;
-  cfg.linear_solver_adaptive_factor =
-      global_cfg.linear_solver_adaptive_factor;
+  cfg.linear_solver_adaptive_factor = global_cfg.linear_solver_adaptive_factor;
   cfg.admm_abs_tol = global_cfg.admm_abs_tol;
   cfg.admm_rel_tol = global_cfg.admm_rel_tol;
 
@@ -368,7 +367,7 @@ silk::GlobalConfig make_global_config(const config::Global& global_cfg) {
 }
 
 void headless_run(const SimConfig& sim_config, const std::string& out_path,
-                  silk::Backend backend) {
+                  silk::Backend backend, bool bench) {
   silk::World world;
   // Initialize backend before creating any objects or running solver.
   if (!world.init(backend)) {
@@ -416,6 +415,10 @@ void headless_run(const SimConfig& sim_config, const std::string& out_path,
     return;
   }
 
+  if (bench) {
+    spdlog::info("Benchmark mode: skipping solution copy-back and output.");
+  }
+
   int total_steps = sim_config.global.total_steps;
   spdlog::info("Headless simulation start. Total time {}s. Total steps {}",
                total_steps * global_cfg.dt, total_steps);
@@ -437,11 +440,14 @@ void headless_run(const SimConfig& sim_config, const std::string& out_path,
 
     float current_time = (step + 1) * global_cfg.dt;
     spdlog::info("Finish step {}. Current time {}s", step, current_time);
-    for (auto& object : objects) {
-      if (!object->sim_step_post(current_time)) {
-        spdlog::error("Headless simulation aborted during post-step for '{}'.",
-                      object->get_name());
-        return;
+    if (!bench) {
+      for (auto& object : objects) {
+        if (!object->sim_step_post(current_time)) {
+          spdlog::error(
+              "Headless simulation aborted during post-step for '{}'.",
+              object->get_name());
+          return;
+        }
       }
     }
   }
@@ -453,9 +459,11 @@ void headless_run(const SimConfig& sim_config, const std::string& out_path,
     }
   }
 
-  if (!write_scene(out_path, objects)) {
-    spdlog::error("Failed to export headless simulation to '{}'.", out_path);
-  } else {
-    spdlog::info("Headless simulation exported to '{}'.", out_path);
+  if (!bench) {
+    if (!write_scene(out_path, objects)) {
+      spdlog::error("Failed to export headless simulation to '{}'.", out_path);
+    } else {
+      spdlog::info("Headless simulation exported to '{}'.", out_path);
+    }
   }
 }

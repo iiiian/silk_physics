@@ -41,6 +41,12 @@ int main(int argc, char** argv) {
       .help("Select backend: cpu or cuda (default: cpu)")
       .store_into(backend_opt);
 
+  bool is_bench = false;
+  program.add_argument("--bench")
+      .help("Benchmark mode: skip copying solution back to host")
+      .flag()
+      .store_into(is_bench);
+
   try {
     program.parse_args(argc, argv);
   } catch (const std::exception& err) {
@@ -78,7 +84,7 @@ int main(int argc, char** argv) {
       return 1;
     }
     spdlog::info("Headless mode.");
-    headless_run(*sim_config, out_path, backend_sel);
+    headless_run(*sim_config, out_path, backend_sel, is_bench);
     return 0;
   } else {
     spdlog::info("GUI mode.");
