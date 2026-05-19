@@ -271,8 +271,8 @@ MASCGSolver::Status MASCGSolver::solve(ctd::span<const float> b,
     status = Status::ReachMaxIter;
   }
 
-  SPDLOG_TRACE("[pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]",
-               elapsed(iter_window_begin), iterations_, residual_norm_);
+  SPDLOG_INFO("[pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]",
+              elapsed(iter_window_begin), iterations_, residual_norm_);
 
   return status;
 }
