@@ -1,3 +1,7 @@
+## Tone
+
+- do not add useless fillers like "you are right", "I apologize". Be direct and concise.
+
 ## To config and build:
 
 cmake --preset <preset name>
