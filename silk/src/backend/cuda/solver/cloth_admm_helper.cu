@@ -51,13 +51,18 @@ __device__ Vec6f solve_elastic_aux(float penalty, float stiffness, float weight,
 }
 
 // clang-format off
-__global__ void update_bending_u_and_primal_residual(
-    float penalty,
+__global__ void solve_bending_aux_and_prepare_dual(
     float max_u,
-    ctd::span<const float> z,
-    ctd::span<const float> w,
+    float bending_stiffness,
+    float penalty,
     ctd::span<const float> Sx,
+    ctd::span<const float> w,
+    ctd::span<const float> rest_curvature,
     ctd::span<float> u,
+    ctd::span<float> z,
+    ctd::span<float> weighted_delta,
+    ctd::span<float> weighted_curr,
+    ctd::span<float> weighted_prev,
     ctd::span<float> primal_norm2,
     ctd::span<float> primal_scale_x2,
     ctd::span<float> primal_scale_aux2)
@@ -68,16 +73,34 @@ __global__ void update_bending_u_and_primal_residual(
   float local_primal_scale_x2 = 0.0f;
   float local_primal_scale_aux2 = 0.0f;
 
-  if (tid < u.size()) {
-    float primal = w[tid] * (Sx[tid] - z[tid]);
+  if (tid < z.size()) {
+    // Solve bending aux: z lies between y = Sx + u / (rho w) and rest
+    // curvature p = Cx0.
+    float old_z = z[tid];
+    float weight = w[tid];
+    float y = Sx[tid] + u[tid] / (penalty * weight);
+    float r = bending_stiffness / (bending_stiffness + penalty);
+    float new_z = (1.0f - r) * y + r * rest_curvature[tid];
+    z[tid] = new_z;
+
+    // Primal residual: W(Sx - z).
+    float primal = weight * (Sx[tid] - new_z);
     local_primal_norm2 = primal * primal;
-    float wSx = w[tid] * Sx[tid];
+    float wSx = weight * Sx[tid];
     local_primal_scale_x2 = wSx * wSx;
-    float wz = w[tid] * z[tid];
+    float wz = weight * new_z;
     local_primal_scale_aux2 = wz * wz;
 
+    // Lagrange multiplier update: u += rho W(Sx - z).
     float delta = penalty * primal;
     u[tid] = ctd::clamp(u[tid] + delta, -max_u, max_u);
+
+    // Precompute rho W^T W z terms; the caller applies S^T.
+    float dual_curr = penalty * weight * weight * new_z;
+    float dual_prev = penalty * weight * weight * old_z;
+    weighted_delta[tid] = dual_curr - dual_prev;
+    weighted_curr[tid] = dual_curr;
+    weighted_prev[tid] = dual_prev;
   }
 
   using BlockReduce = cub::BlockReduce<float, 128>;
@@ -96,17 +119,18 @@ __global__ void update_bending_u_and_primal_residual(
   if (threadIdx.x == 0) {
     atomicAdd(primal_scale_aux2.data(), reduced);
   }
-};
+}
 
-__global__ void compute_bending_weighted_z_delta(float penalty,
-                                                 ctd::span<const float> w,
-                                                 ctd::span<const float> z,
-                                                 ctd::span<float> z_old) {
+__global__ void prepare_bending_rhs_vec(float penalty, ctd::span<const float> w,
+                                        ctd::span<const float> u,
+                                        ctd::span<const float> z,
+                                        ctd::span<float> out) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  if (tid >= w.size()) {
+  if (tid >= out.size()) {
     return;
   }
-  z_old[tid] = penalty * w[tid] * w[tid] * (z[tid] - z_old[tid]);
+  // RHS contribution before S^T: -W u + rho W^T W z.
+  out[tid] = -w[tid] * u[tid] + penalty * w[tid] * w[tid] * z[tid];
 }
 
 // @brief Solve elastic aux and its multipliers.
@@ -263,6 +287,31 @@ __global__ void solve_and_update_elastic_aux(
   }
 }
 
+// y += Ax
+void Axpy(BSRView A, ctd::span<const float> x, ctd::span<float> y,
+          const CuSparseHandle& cusparse_handle,
+          cu::device_buffer<char>& cusparse_workspace, CudaRuntime rt) {
+  cusparseSetStream(cusparse_handle.raw, rt.stream.get());
+  CuSparseBSR cusparse_ops{A};
+  CuSparseConstVec cusparse_in{x};
+  CuSparseVec cusparse_out{y};
+
+  float alpha = 1.0f;
+  float beta = 1.0f;
+  size_t workspace_size;
+  cusparseSpMV_bufferSize(cusparse_handle.raw, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                          &alpha, cusparse_ops.raw, cusparse_in.raw, &beta,
+                          cusparse_out.raw, CUDA_R_32F,
+                          CUSPARSE_SPMV_ALG_DEFAULT, &workspace_size);
+  if (cusparse_workspace.size() < workspace_size) {
+    cusparse_workspace = alloc<char>(rt, workspace_size);
+  }
+  cusparseSpMV(cusparse_handle.raw, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha,
+               cusparse_ops.raw, cusparse_in.raw, &beta, cusparse_out.raw,
+               CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT,
+               cusparse_workspace.data());
+}
+
 // @brief Solve bending aux and its multipliers.
 //
 // ADMM objective:
@@ -278,9 +327,8 @@ __global__ void solve_and_update_elastic_aux(
 // In projective dynamic, z is the curvature and p is the projection of
 // curvature on rest manifold. a.k.a. Rest curvature from initial position.
 // The energy is simply the distance between current curvature and rest
-// curvature. Under the assumption that cloth in-plane deformation is small, we
-// can reuse the rest cotagent matrix as laplacian operator S. Weight w is the
-// voroni mass sqrt.
+// curvature. Under the assumption that cloth barely stretches, S is the
+// cotangent matrix from rest position and weight w is inverse voroni mass sqrt.
 //
 // To solve z, we observe that
 // ∂L/∂z=0 -> argmin_z min_p ( ½ k||w(z-p)||^2 + ½ rho||w(Sx-z+u/(wp))||^2 )
@@ -292,18 +340,18 @@ __global__ void solve_and_update_elastic_aux(
 // different as I use unweighted u.
 // clang-format off
 void solve_and_update_bending_aux(
-    int vert_num,
     float max_lagrange_mul,
     float bending_stiffness,
     float penalty,
     ctd::span<const float> position,
     BSRView laplacian_ops,
-    ctd::span<const float> voroni_mass_sqrt,
+    ctd::span<const float> bending_weight_sqrt,
     ctd::span<const float> rest_curvature,
     const CuSparseHandle& cusparse_handle,
     cu::device_buffer<char>& cusparse_workspace,
     cu::device_buffer<float>& Sx_tmp,
-    ctd::span<float> aux_old_tmp,
+    cu::device_buffer<float>& weighted_curr_tmp,
+    cu::device_buffer<float>& weighted_prev_tmp,
     ctd::span<float> lagrange_mul,
     ctd::span<float> aux_var,
     ctd::span<float> primal_norm2,
@@ -322,11 +370,17 @@ void solve_and_update_bending_aux(
   if (Sx_tmp.size() < position.size()) {
     Sx_tmp = alloc<float>(rt, position.size());
   }
+  if (weighted_curr_tmp.size() < position.size()) {
+    weighted_curr_tmp = alloc<float>(rt, position.size());
+  }
+  if (weighted_prev_tmp.size() < position.size()) {
+    weighted_prev_tmp = alloc<float>(rt, position.size());
+  }
   CuSparseVec cusparse_Sx{Sx_tmp};
 
-  // Compute Sx.
-  float alpha = 1.0;
-  float beta = 0.0;
+  // Compute curvature Sx = Cx.
+  float alpha = 1.0f;
+  float beta = 0.0f;
   size_t workspace_size;
   cusparseSpMV_bufferSize(cusparse_handle.raw, CUSPARSE_OPERATION_NON_TRANSPOSE,
                           &alpha, cusparse_lap.raw, cusparse_x.raw, &beta,
@@ -340,26 +394,21 @@ void solve_and_update_bending_aux(
                CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT,
                cusparse_workspace.data());
 
-  cu::copy_bytes(rt.stream, aux_var, aux_old_tmp);
-
-  // Compute aux variables.
-  float r = bending_stiffness / (bending_stiffness + penalty);
-  ctd::span<const float> Sx{Sx_tmp};
-  auto compute_aux_var = [proj = rest_curvature, Sx, u = lagrange_mul,
-                          w = voroni_mass_sqrt, penalty, r,
-                          aux_var] __device__(int i) {
-    float y = Sx[i] + u[i] / (penalty * w[i]);
-    aux_var[i] = (1.0 - r) * y + r * proj[i];
-  };
-  cub::DeviceFor::Bulk(aux_var.size(), compute_aux_var, rt.stream.get());
-
-  // Compute new lagrange_mul and primal residual.
+  // Solve z, update u, and prepare rho W^T W z terms.
   int grid_num = div_round_up(lagrange_mul.size(), 128);
-  update_bending_u_and_primal_residual<<<grid_num, 128, 0, rt.stream.get()>>>(
-      penalty, max_lagrange_mul, aux_var, voroni_mass_sqrt, Sx, lagrange_mul,
-      primal_norm2, primal_scale_x2, primal_scale_aux2);
+  solve_bending_aux_and_prepare_dual<<<grid_num, 128, 0, rt.stream.get()>>>(
+      max_lagrange_mul, bending_stiffness, penalty, Sx_tmp, bending_weight_sqrt,
+      rest_curvature, lagrange_mul, aux_var, Sx_tmp, weighted_curr_tmp,
+      weighted_prev_tmp, primal_norm2, primal_scale_x2, primal_scale_aux2);
 
-  // Compute dual residual.
+  // Compute dual residual: S^T rho W^T W (z_curr - z_prev).
+  ctd::span<const float> weighted_delta{Sx_tmp};
+  Axpy(laplacian_ops, weighted_delta, dual_residual, cusparse_handle,
+       cusparse_workspace, rt);
+  Axpy(laplacian_ops, weighted_curr_tmp, dual_scale_curr, cusparse_handle,
+       cusparse_workspace, rt);
+  Axpy(laplacian_ops, weighted_prev_tmp, dual_scale_prev, cusparse_handle,
+       cusparse_workspace, rt);
 }
 
 __global__ void assemble_inertia(float dt, ctd::span<const float> mass,
@@ -431,7 +480,8 @@ __global__ void assemble_elastic_rhs(
   }
 }
 
-void assemble_bending_rhs(float penalty, BSRView weighted_laplacian_ops,
+void assemble_bending_rhs(float penalty, BSRView laplacian_ops,
+                          ctd::span<const float> bending_weight_sqrt,
                           ctd::span<const float> lagrange_mul,
                           ctd::span<const float> aux_var,
                           const CuSparseHandle& cusparse_handle,
@@ -439,50 +489,15 @@ void assemble_bending_rhs(float penalty, BSRView weighted_laplacian_ops,
                           cu::device_buffer<float>& tmp, ctd::span<float> rhs,
                           CudaRuntime rt) {
   cusparseSetStream(cusparse_handle.raw, rt.stream.get());
-  CuSparseBSR cusparse_lap{weighted_laplacian_ops};
-  CuSparseConstVec cusparse_x{aux_var};
-  CuSparseConstVec cusparse_u{lagrange_mul};
 
   if (tmp.size() < rhs.size()) {
     tmp = alloc<float>(rt, rhs.size());
   }
-  CuSparseVec cusparse_tmp{tmp};
+  int grid_num = div_round_up(tmp.size(), 128);
+  prepare_bending_rhs_vec<<<grid_num, 128, 0, rt.stream.get()>>>(
+      penalty, bending_weight_sqrt, lagrange_mul, aux_var, tmp);
 
-  // Compute -Su.
-  float alpha = -1.0;
-  float beta = 0.0;
-  size_t workspace_size;
-  cusparseSpMV_bufferSize(cusparse_handle.raw, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                          &alpha, cusparse_lap.raw, cusparse_u.raw, &beta,
-                          cusparse_tmp.raw, CUDA_R_32F,
-                          CUSPARSE_SPMV_ALG_DEFAULT, &workspace_size);
-  if (cusparse_workspace.size() < workspace_size) {
-    cusparse_workspace = alloc<char>(rt, workspace_size);
-  }
-  cusparseSpMV(cusparse_handle.raw, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha,
-               cusparse_lap.raw, cusparse_u.raw, &beta, cusparse_tmp.raw,
-               CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT,
-               cusparse_workspace.data());
-
-  // Compute penalty * Sx.
-  alpha = penalty;
-  beta = 1.0;
-  cusparseSpMV_bufferSize(cusparse_handle.raw, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                          &alpha, cusparse_lap.raw, cusparse_x.raw, &beta,
-                          cusparse_tmp.raw, CUDA_R_32F,
-                          CUSPARSE_SPMV_ALG_DEFAULT, &workspace_size);
-  if (cusparse_workspace.size() < workspace_size) {
-    cusparse_workspace = alloc<char>(rt, workspace_size);
-  }
-  cusparseSpMV(cusparse_handle.raw, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha,
-               cusparse_lap.raw, cusparse_x.raw, &beta, cusparse_tmp.raw,
-               CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT,
-               cusparse_workspace.data());
-
-  auto accum = [rhs, tmp_span = ctd::span<const float>{tmp}] __device__(int i) {
-    rhs[i] += tmp_span[i];
-  };
-  cub::DeviceFor::Bulk(rhs.size(), accum, rt.stream.get());
+  Axpy(laplacian_ops, tmp, rhs, cusparse_handle, cusparse_workspace, rt);
 }
 
 }  // namespace
@@ -498,6 +513,8 @@ ClothADMMHelper::ClothADMMHelper(int vert_num, int face_num, CudaRuntime rt) {
 
   cusparse_workspace_ = alloc<char>(rt, 0);
   float_tmp_ = alloc<float>(rt, 0);
+  float_tmp2_ = alloc<float>(rt, 0);
+  float_tmp3_ = alloc<float>(rt, 0);
 }
 
 void ClothADMMHelper::reset_aux_lagrange_mul(CudaRuntime rt) {
@@ -532,13 +549,30 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
         dual_residual,
         dual_scale_curr,
         dual_scale_prev);
-  // clang-format on
 
-  // solve_and_update_bending_aux(
-  //     l1_cache.vert_num, max_lagrange_mul, l1_cache.bending_stiffness,
-  //     l1_cache.penalty, state, l1_cache.weighted_laplacian_ops.view(),
-  //     *l1_cache.C0, cusparse_handle_, *cusparse_workspace_, *float_tmp_,
-  //     *uz_, *z_, rt);
+  solve_and_update_bending_aux(
+        max_lagrange_mul,
+        l1_cache.bending_stiffness,
+        l1_cache.bending_stiffness,
+        state,
+        l1_cache.laplacian_ops.view(),
+        *l1_cache.bending_weight_sqrt,
+        *l1_cache.rest_curvature,
+        cusparse_handle_,
+        *cusparse_workspace_,
+        *float_tmp_,
+        *float_tmp2_,
+        *float_tmp3_,
+        *ub_,
+        *zb_,
+        primal_residual_norm2,
+        primal_scale_x2,
+        primal_scale_aux2,
+        dual_residual,
+        dual_scale_curr,
+        dual_scale_prev,
+        rt);
+  // clang-format on
 }
 
 void ClothADMMHelper::solve_main_var(float rel_tol, float abs_tol,
@@ -565,10 +599,12 @@ void ClothADMMHelper::solve_main_var(float rel_tol, float abs_tol,
   if (!float_tmp_) {
     float_tmp_ = alloc<float>(rt, rhs.size());
   }
-  // assemble_bending_rhs(l1_cache.penalty,
-  //                      l1_cache.weighted_laplacian_ops.view(), *uz_, *z_,
-  //                      cusparse_handle_, *cusparse_workspace_, *float_tmp_,
-  //                      rhs, rt);
+  if (l1_cache.bending_stiffness > 0.0f) {
+    assemble_bending_rhs(
+        l1_cache.bending_stiffness, l1_cache.laplacian_ops.view(),
+        *l1_cache.bending_weight_sqrt, *ub_, *zb_, cusparse_handle_,
+        *cusparse_workspace_, *float_tmp_, rhs, rt);
+  }
 
   DynamicBSRView dyn_A{lhs_diag, l1_cache.weighted_AA.view()};
   if (is_lhs_changed) {

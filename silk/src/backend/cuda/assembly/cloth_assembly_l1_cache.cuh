@@ -23,8 +23,9 @@ class ClothAssemblyL1Cache {
   float bending_stiffness;
 
   Buf<int> faces;
-  BSRMatrix weighted_laplacian_ops;
-  Buf<float> C0;
+  BSRMatrix laplacian_ops;
+  Buf<float> bending_weight_sqrt;
+  Buf<float> rest_curvature;
   Buf<float> jacobian_ops;
   Buf<float> area_sqrt;
   Buf<float> mass;

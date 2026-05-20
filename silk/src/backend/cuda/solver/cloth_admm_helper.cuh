@@ -22,6 +22,8 @@ class ClothADMMHelper {
   Buf<char> cusparse_workspace_;
   // Other tmp.
   Buf<float> float_tmp_;
+  Buf<float> float_tmp2_;
+  Buf<float> float_tmp3_;
 
   MASCGSolver linear_solver_;
 

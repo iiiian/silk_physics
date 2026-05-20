@@ -37,7 +37,11 @@ class ClothAssemblyL2Cache {
   Eigen::SparseMatrix<float> laplacian_ops;
 
   // Rest curvature per vertex (vnum x 3).
+  // (legacy field for cpu backend)
   RMatrixX3f C0;
+
+  // Cotangent-Laplacian rest curvature per vertex (vnum x 3).
+  RMatrixX3f rest_curvature;
 
   // Area-weighted in-plane elastic matrix (state_num x state_num).
   Eigen::SparseMatrix<float> JWJ;

@@ -105,6 +105,7 @@ ClothAssemblyL2Cache::ClothAssemblyL2Cache(const TriMesh& mesh) {
 
   // Rest curvature C0.
   C0 = CWC * m.V;
+  rest_curvature = laplacian_ops * m.V;
 
   // In‑plane deformation energy JWJ and jacobian ops.
   std::vector<Eigen::Triplet<float>> JWJ_triplets;
