@@ -18,8 +18,7 @@ __device__ void compute_barrier(int state_offset, int index, float toi,
     return;
   }
 
-  Vec3f reflection = axpby(1.0, pos, toi, vel_before);
-  reflection = axpby(1.0, reflection, 1.0 - toi, vel_after);
+  Vec3f reflection = axpby(1.0, pos, 1.0 - toi, vel_after);
 
   // TODO: small ms specialization?
   int offset = state_offset + 3 * index;
