@@ -35,23 +35,43 @@ void scalar_division(ctd::span<const float> num, ctd::span<const float> denom,
   cub::DeviceFor::Bulk(1, op, rt.stream.get());
 }
 
-/// Compute alpha * x + beta * y.
-/// @params h_alpha Host alpha.
-/// @params d_alpha Device alpha. nullptr implies 1.0.
-/// @params h_beta Host beta.
-/// @params d_beta Device beta. nullptr implies 1.0.
-/// @params x Device vector x.
-/// @params y Device vector y and the output.
-/// @params rt Cuda runtime.
-void axpby(float h_alpha, const float *d_alpha, float h_beta,
-           const float *d_beta, ctd::span<const float> x, ctd::span<float> y,
-           CudaRuntime rt) {
-  auto op = [h_alpha, d_alpha, h_beta, d_beta, x, y] __device__(int idx) {
-    float alpha = h_alpha * ((d_alpha == nullptr) ? 1.0 : *d_alpha);
-    float beta = h_beta * ((d_beta == nullptr) ? 1.0 : *d_beta);
-    y[idx] = alpha * x[idx] + beta * y[idx];
-  };
-  cub::DeviceFor::Bulk(x.size(), op, rt.stream.get());
+__global__ void compute_residual_kernel(ctd::span<const float> b,
+                                        ctd::span<float> r) {
+  int tid = blockDim.x * blockIdx.x + threadIdx.x;
+  if (tid >= r.size()) {
+    return;
+  }
+  r[tid] = b[tid] - r[tid];
+}
+
+__global__ void update_x_kernel(ctd::span<const float> p, const float *d_alpha,
+                                ctd::span<float> x) {
+  int tid = blockDim.x * blockIdx.x + threadIdx.x;
+  if (tid >= x.size()) {
+    return;
+  }
+  float alpha = *d_alpha;
+  x[tid] = alpha * p[tid] + x[tid];
+}
+
+__global__ void update_r_kernel(ctd::span<const float> Ap, const float *d_alpha,
+                                ctd::span<float> r) {
+  int tid = blockDim.x * blockIdx.x + threadIdx.x;
+  if (tid >= r.size()) {
+    return;
+  }
+  float alpha = *d_alpha;
+  r[tid] = -alpha * Ap[tid] + r[tid];
+}
+
+__global__ void update_p_kernel(ctd::span<const float> z, const float *d_beta,
+                                ctd::span<float> p) {
+  int tid = blockDim.x * blockIdx.x + threadIdx.x;
+  if (tid >= p.size()) {
+    return;
+  }
+  float beta = *d_beta;
+  p[tid] = z[tid] + beta * p[tid];
 }
 
 __global__ void add_diag_kernel(ctd::span<const float> diag,
@@ -169,7 +189,8 @@ MASCGSolver::Status MASCGSolver::solve(DynamicBSRView A,
 
   // Compute initial residual r = b-Ax.
   spmv(x, *r_, rt);
-  axpby(1.0, nullptr, -1.0, nullptr, b, *r_, rt);
+  int grid_num = div_round_up(b.size(), 128);
+  compute_residual_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(b, *r_);
 
   // Compute z = M^-1 r.
   mas_precond_.apply(*r_, *z_, rt);
@@ -202,10 +223,14 @@ MASCGSolver::Status MASCGSolver::solve(DynamicBSRView A,
     // Compute alpha = (r M^-1 r) / (p^T A p).
     scalar_division(*scalar_rz_, *scalar_pAp_, *scalar_alpha_, rt);
     // Compute x = x + alpha p.
-    axpby(1.0, scalar_alpha_->data(), 1.0, nullptr, *p_, x, rt);
+    grid_num = div_round_up(x.size(), 128);
+    update_x_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
+        *p_, scalar_alpha_->data(), x);
 
     // Compute residual update using r' = r - alpha A p.
-    axpby(-1.0, scalar_alpha_->data(), 1.0, nullptr, *Ap_, *r_, rt);
+    grid_num = div_round_up(r_->size(), 128);
+    update_r_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
+        *Ap_, scalar_alpha_->data(), *r_);
 
     // Compute z = M^-1 r.
     mas_precond_.apply(*r_, *z_, rt);
@@ -249,7 +274,9 @@ MASCGSolver::Status MASCGSolver::solve(DynamicBSRView A,
     // Compute beta = rz / rz_old.
     scalar_division(*scalar_rz_, *scalar_rz_old_, *scalar_beta_, rt);
     // Compute direction update p' = M^-1 r + beta p.
-    axpby(1.0, nullptr, 1.0, scalar_beta_->data(), *z_, *p_, rt);
+    grid_num = div_round_up(p_->size(), 128);
+    update_p_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
+        *z_, scalar_beta_->data(), *p_);
   }
 
   if (iterations_ == max_iter) {
