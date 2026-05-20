@@ -50,6 +50,65 @@ __device__ Vec6f solve_elastic_aux(float penalty, float stiffness, float weight,
   return aux;
 }
 
+// clang-format off
+__global__ void update_bending_u_and_primal_residual(
+    float penalty,
+    float max_u,
+    ctd::span<const float> z,
+    ctd::span<const float> w,
+    ctd::span<const float> Sx,
+    ctd::span<float> u,
+    ctd::span<float> primal_norm2,
+    ctd::span<float> primal_scale_x2,
+    ctd::span<float> primal_scale_aux2)
+// clang-format on
+{
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  float local_primal_norm2 = 0.0f;
+  float local_primal_scale_x2 = 0.0f;
+  float local_primal_scale_aux2 = 0.0f;
+
+  if (tid < u.size()) {
+    float primal = w[tid] * (Sx[tid] - z[tid]);
+    local_primal_norm2 = primal * primal;
+    float wSx = w[tid] * Sx[tid];
+    local_primal_scale_x2 = wSx * wSx;
+    float wz = w[tid] * z[tid];
+    local_primal_scale_aux2 = wz * wz;
+
+    float delta = penalty * primal;
+    u[tid] = ctd::clamp(u[tid] + delta, -max_u, max_u);
+  }
+
+  using BlockReduce = cub::BlockReduce<float, 128>;
+  __shared__ BlockReduce::TempStorage reduce_tmp;
+  float reduced = BlockReduce(reduce_tmp).Sum(local_primal_norm2);
+  if (threadIdx.x == 0) {
+    atomicAdd(primal_norm2.data(), reduced);
+  }
+  __syncthreads();
+  reduced = BlockReduce(reduce_tmp).Sum(local_primal_scale_x2);
+  if (threadIdx.x == 0) {
+    atomicAdd(primal_scale_x2.data(), reduced);
+  }
+  __syncthreads();
+  reduced = BlockReduce(reduce_tmp).Sum(local_primal_scale_aux2);
+  if (threadIdx.x == 0) {
+    atomicAdd(primal_scale_aux2.data(), reduced);
+  }
+};
+
+__global__ void compute_bending_weighted_z_delta(float penalty,
+                                                 ctd::span<const float> w,
+                                                 ctd::span<const float> z,
+                                                 ctd::span<float> z_old) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid >= w.size()) {
+    return;
+  }
+  z_old[tid] = penalty * w[tid] * w[tid] * (z[tid] - z_old[tid]);
+}
+
 // @brief Solve elastic aux and its multipliers.
 //
 // ADMM objective:
@@ -67,7 +126,7 @@ __device__ Vec6f solve_elastic_aux(float penalty, float stiffness, float weight,
 // Practically we achieve this by doing SVD then clamp diagonal between 0.9
 // and 1.1 as cloth is generallly not stretchable. The energy is simply the
 // distance between F and rest F. Naturally, S here is the jacobian operator and
-// weight w is triangle area.
+// weight w is triangle area sqrt.
 //
 // To solve z, we observe that
 // ∂L/∂z=0 -> argmin_z min_p ( ½ k||w(z-p)||^2 + ½ rho||w(Sx-z+u/(wp))||^2 )
@@ -204,31 +263,66 @@ __global__ void solve_and_update_elastic_aux(
   }
 }
 
+// @brief Solve bending aux and its multipliers.
+//
+// ADMM objective:
+// L(x,z) = f(x) + g(z) + u||W(Sx-z)|| + ½ rho||W(Sx-z)||^2
+// g(z) = min_p ( ½ k||W(z-p)||^2 )
+//
+// x = Main variables, z = Bending aux variables.
+// f(x) = Main function, typically momentum term.
+// g(z) = Bending energy. Projective dynamic style.
+// u = Lagrange multipliers, rho = Penalty
+// k = Stiffness, W = Weight, p = Projection.
+//
+// In projective dynamic, z is the curvature and p is the projection of
+// curvature on rest manifold. a.k.a. Rest curvature from initial position.
+// The energy is simply the distance between current curvature and rest
+// curvature. Under the assumption that cloth in-plane deformation is small, we
+// can reuse the rest cotagent matrix as laplacian operator S. Weight w is the
+// voroni mass sqrt.
+//
+// To solve z, we observe that
+// ∂L/∂z=0 -> argmin_z min_p ( ½ k||w(z-p)||^2 + ½ rho||w(Sx-z+u/(wp))||^2 )
+// Let y = Sx+u/(wp), intuitively, z must lies on line y <-> p where p =
+// proj(y). So we first solve p then compute z based on the ratio between k and
+// rho.
+//
+// See paper 10.5555/2982818.2982822 for detail. The formulation is slightly
+// different as I use unweighted u.
 // clang-format off
-[[maybe_unused]] void solve_and_update_bending_aux(
+void solve_and_update_bending_aux(
     int vert_num,
     float max_lagrange_mul,
     float bending_stiffness,
     float penalty,
     ctd::span<const float> position,
-    BSRView weighted_laplacian_ops,
+    BSRView laplacian_ops,
+    ctd::span<const float> voroni_mass_sqrt,
     ctd::span<const float> rest_curvature,
     const CuSparseHandle& cusparse_handle,
     cu::device_buffer<char>& cusparse_workspace,
-    cu::device_buffer<float>& tmp,
+    cu::device_buffer<float>& Sx_tmp,
+    ctd::span<float> aux_old_tmp,
     ctd::span<float> lagrange_mul,
     ctd::span<float> aux_var,
+    ctd::span<float> primal_norm2,
+    ctd::span<float> primal_scale_x2,
+    ctd::span<float> primal_scale_aux2,
+    ctd::span<float> dual_residual,
+    ctd::span<float> dual_scale_curr,
+    ctd::span<float> dual_scale_prev,
     CudaRuntime rt)
 // clang-format on
 {
   cusparseSetStream(cusparse_handle.raw, rt.stream.get());
-  CuSparseBSR cusparse_lap{weighted_laplacian_ops};
+  CuSparseBSR cusparse_lap{laplacian_ops};
   CuSparseConstVec cusparse_x{position};
 
-  if (tmp.size() < position.size()) {
-    tmp = alloc<float>(rt, position.size());
+  if (Sx_tmp.size() < position.size()) {
+    Sx_tmp = alloc<float>(rt, position.size());
   }
-  CuSparseVec cusparse_Sx{tmp};
+  CuSparseVec cusparse_Sx{Sx_tmp};
 
   // Compute Sx.
   float alpha = 1.0;
@@ -246,23 +340,26 @@ __global__ void solve_and_update_elastic_aux(
                CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT,
                cusparse_workspace.data());
 
+  cu::copy_bytes(rt.stream, aux_var, aux_old_tmp);
+
   // Compute aux variables.
   float r = bending_stiffness / (bending_stiffness + penalty);
-  ctd::span<const float> Sx{tmp};
-  auto compute_aux_var = [proj = rest_curvature, Sx, lagrange_mul, penalty, r,
+  ctd::span<const float> Sx{Sx_tmp};
+  auto compute_aux_var = [proj = rest_curvature, Sx, u = lagrange_mul,
+                          w = voroni_mass_sqrt, penalty, r,
                           aux_var] __device__(int i) {
-    float y = Sx[i] + lagrange_mul[i] / penalty;
+    float y = Sx[i] + u[i] / (penalty * w[i]);
     aux_var[i] = (1.0 - r) * y + r * proj[i];
   };
   cub::DeviceFor::Bulk(aux_var.size(), compute_aux_var, rt.stream.get());
 
-  // Update lagrange multiplers.
-  auto update_mul = [lagrange_mul, Sx, aux_var, penalty,
-                     max_lagrange_mul] __device__(int i) {
-    float delta = penalty * (Sx[i] - aux_var[i]);
-    lagrange_mul[i] = min(lagrange_mul[i] + delta, max_lagrange_mul);
-  };
-  cub::DeviceFor::Bulk(lagrange_mul.size(), update_mul, rt.stream.get());
+  // Compute new lagrange_mul and primal residual.
+  int grid_num = div_round_up(lagrange_mul.size(), 128);
+  update_bending_u_and_primal_residual<<<grid_num, 128, 0, rt.stream.get()>>>(
+      penalty, max_lagrange_mul, aux_var, voroni_mass_sqrt, Sx, lagrange_mul,
+      primal_norm2, primal_scale_x2, primal_scale_aux2);
+
+  // Compute dual residual.
 }
 
 __global__ void assemble_inertia(float dt, ctd::span<const float> mass,
@@ -334,12 +431,13 @@ __global__ void assemble_elastic_rhs(
   }
 }
 
-[[maybe_unused]] void assemble_bending_rhs(
-    float penalty, BSRView weighted_laplacian_ops,
-    ctd::span<const float> lagrange_mul, ctd::span<const float> aux_var,
-    const CuSparseHandle& cusparse_handle,
-    cu::device_buffer<char>& cusparse_workspace, cu::device_buffer<float>& tmp,
-    ctd::span<float> rhs, CudaRuntime rt) {
+void assemble_bending_rhs(float penalty, BSRView weighted_laplacian_ops,
+                          ctd::span<const float> lagrange_mul,
+                          ctd::span<const float> aux_var,
+                          const CuSparseHandle& cusparse_handle,
+                          cu::device_buffer<char>& cusparse_workspace,
+                          cu::device_buffer<float>& tmp, ctd::span<float> rhs,
+                          CudaRuntime rt) {
   cusparseSetStream(cusparse_handle.raw, rt.stream.get());
   CuSparseBSR cusparse_lap{weighted_laplacian_ops};
   CuSparseConstVec cusparse_x{aux_var};
