@@ -21,37 +21,43 @@ __both__ bool object_collision_filter(const ObjectCollider& a,
           (a.is_physical || b.is_physical));
 };
 
-__both__ bool pt_inter_collision_filter(const TriangleCollider& a,
-                                        const PointCollider& b) {
-  bool is_both_pinned =
-      ((b.inv_mass + a.inv_mass(0) + a.inv_mass(1) + a.inv_mass(2)) == 0.0f);
-  return !is_both_pinned;
+struct PTInterCollisionFilter {
+  __both__ bool operator()(const TriangleCollider& a,
+                           const PointCollider& b) const {
+    bool is_both_pinned =
+        ((b.inv_mass + a.inv_mass(0) + a.inv_mass(1) + a.inv_mass(2)) == 0.0f);
+    return !is_both_pinned;
+  }
 };
 
-__both__ bool pt_self_collision_filter(const TriangleCollider& a,
-                                       const PointCollider& b) {
-  bool is_both_pinned =
-      ((b.inv_mass + a.inv_mass(0) + a.inv_mass(1) + a.inv_mass(2)) == 0.0f);
-  bool is_neighbor =
-      (a.index(0) == b.index || a.index(1) == b.index || a.index(2) == b.index);
+struct PTSelfCollisionFilter {
+  __both__ bool operator()(const TriangleCollider& a,
+                           const PointCollider& b) const {
+    bool is_both_pinned =
+        ((b.inv_mass + a.inv_mass(0) + a.inv_mass(1) + a.inv_mass(2)) == 0.0f);
+    bool is_neighbor = (a.index(0) == b.index || a.index(1) == b.index ||
+                        a.index(2) == b.index);
 
-  return !is_both_pinned && !is_neighbor;
+    return !is_both_pinned && !is_neighbor;
+  }
 };
 
-__both__ bool ee_inter_collision_filter(const EdgeCollider& a,
-                                        const EdgeCollider& b) {
-  bool is_both_pinned =
-      ((a.inv_mass(0) + a.inv_mass(1) + b.inv_mass(0) + b.inv_mass(1)) == 0.0f);
-  return !is_both_pinned;
+struct EEInterCollisionFilter {
+  __both__ bool operator()(const EdgeCollider& a, const EdgeCollider& b) const {
+    bool is_both_pinned = ((a.inv_mass(0) + a.inv_mass(1) + b.inv_mass(0) +
+                            b.inv_mass(1)) == 0.0f);
+    return !is_both_pinned;
+  }
 };
 
-__both__ bool ee_self_collision_filter(const EdgeCollider& a,
-                                       const EdgeCollider& b) {
-  bool is_both_pinned =
-      ((a.inv_mass(0) + a.inv_mass(1) + b.inv_mass(0) + b.inv_mass(1)) == 0.0f);
-  bool is_neighbor = (a.index(0) == b.index(0) || a.index(0) == b.index(1) ||
-                      a.index(1) == b.index(0) || a.index(1) == b.index(1));
-  return !is_both_pinned && !is_neighbor;
+struct EESelfCollisionFilter {
+  __both__ bool operator()(const EdgeCollider& a, const EdgeCollider& b) const {
+    bool is_both_pinned = ((a.inv_mass(0) + a.inv_mass(1) + b.inv_mass(0) +
+                            b.inv_mass(1)) == 0.0f);
+    bool is_neighbor = (a.index(0) == b.index(0) || a.index(0) == b.index(1) ||
+                        a.index(1) == b.index(0) || a.index(1) == b.index(1));
+    return !is_both_pinned && !is_neighbor;
+  }
 };
 
 ctd::span<Collision> find_collision(ObjRegistry& registry, float dt,
@@ -93,7 +99,7 @@ ctd::span<Collision> find_collision(ObjRegistry& registry, float dt,
 
   for (auto& [oa, ob] : object_ccache) {
     oa->triangle_collider_tree.test_ext_collision<PointCollider>(
-        ob->point_colliders.value(), pt_inter_collision_filter, pt_ccache,
+        ob->point_colliders.value(), PTInterCollisionFilter{}, pt_ccache,
         pt_ccache_fill, rt);
     if (pt_ccache_fill == pt_ccache.size()) {
       pt_narrowphase(pt_ccache, collisions, collision_fill, rt);
@@ -101,10 +107,10 @@ ctd::span<Collision> find_collision(ObjRegistry& registry, float dt,
     }
 
     ob->triangle_collider_tree.test_ext_collision<PointCollider>(
-        oa->point_colliders.value(), pt_inter_collision_filter, pt_ccache,
+        oa->point_colliders.value(), PTInterCollisionFilter{}, pt_ccache,
         pt_ccache_fill, rt);
     oa->edge_collider_tree.test_ext_collision<EdgeCollider>(
-        ob->edge_collider_tree.get_colliders(), ee_inter_collision_filter,
+        ob->edge_collider_tree.get_colliders(), EEInterCollisionFilter{},
         ee_ccache, ee_ccache_fill, rt);
 
     if (pt_ccache_fill == pt_ccache.size()) {
@@ -126,10 +132,10 @@ ctd::span<Collision> find_collision(ObjRegistry& registry, float dt,
     }
 
     o.triangle_collider_tree.test_ext_collision<PointCollider>(
-        o.point_colliders.value(), pt_self_collision_filter, pt_ccache,
+        o.point_colliders.value(), PTSelfCollisionFilter{}, pt_ccache,
         pt_ccache_fill, rt);
-    o.edge_collider_tree.test_self_collision(ee_self_collision_filter,
-                                             ee_ccache, ee_ccache_fill, rt);
+    o.edge_collider_tree.test_self_collision(EESelfCollisionFilter{}, ee_ccache,
+                                             ee_ccache_fill, rt);
 
     if (pt_ccache_fill == pt_ccache.size()) {
       pt_narrowphase(pt_ccache, collisions, collision_fill, rt);
