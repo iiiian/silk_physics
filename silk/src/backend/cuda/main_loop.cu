@@ -1,13 +1,9 @@
 #include "backend/cuda/main_loop.cuh"
 
-#include <Eigen/Core>
-#include <algorithm>
-#include <cmath>
 #include <cub/cub.cuh>
-#include <cuda/algorithm>
 #include <cuda/atomic>
 #include <cuda/functional>
-#include <cuda/std/limits>
+#include <memory>
 #include <optional>
 
 #include "backend/cuda/assembly/cloth_assembler.cuh"
@@ -16,12 +12,9 @@
 #include "backend/cuda/collision/find_collision.cuh"
 #include "backend/cuda/collision/object_collider.cuh"
 #include "backend/cuda/cuda_utils.cuh"
-#include "backend/cuda/ecs.hpp"
 #include "backend/cuda/physical_state.cuh"
+#include "backend/cuda/simple_linalg.cuh"
 #include "backend/cuda/solver/barrier_constraints.cuh"
-#include "backend/cuda/solver/cloth_admm_helper.cuh"
-#include "backend/cuda/solver/equality_constraints.cuh"
-#include "backend/cuda/solver/inner_product.cuh"
 #include "backend/cuda/solver/pin_constraints.cuh"
 #include "common/logger.hpp"
 #include "silk/silk.hpp"
@@ -30,7 +23,6 @@ namespace silk::cuda {
 
 namespace {
 
-/// @brief Lazily init all entity and collect solver state into global array.
 std::optional<MainLoop::Error> init(ObjRegistry& registry,
                                     cu::device_buffer<float>& global_state,
                                     cu::device_buffer<float>& global_velocity,
@@ -94,11 +86,9 @@ __global__ void predict(int vert_num, float dt, Vec3f acc,
     return;
   }
 
-  // TODO: adaptive prediction.
   auto x = Vec3f::vec_like(state.data() + 3 * tid);
   auto v = Vec3f::vec_like(velocity.data() + 3 * tid);
 
-  // x_next = x + dt*velocity + dt*dt*acceleration.
   Vec3f next;
   next = axpby(1.0, x, dt, v);
   next = axpby(1.0, next, dt * dt, acc);
@@ -107,125 +97,6 @@ __global__ void predict(int vert_num, float dt, Vec3f acc,
   for (int i = 0; i < 3; ++i) {
     next_state[3 * tid + i] = next(i);
   }
-}
-
-void update_aux_and_lagrange_mul(ObjRegistry& registry, float max_lagrange_mul,
-                                 ctd::span<const float> state,
-                                 ctd::span<float> primal_norm2,
-                                 ctd::span<float> primal_scale_x2,
-                                 ctd::span<float> primal_scale_aux2,
-                                 ctd::span<float> dual_residual,
-                                 ctd::span<float> dual_scale_curr,
-                                 ctd::span<float> dual_scale_prev,
-                                 CudaRuntime rt) {
-  auto clothes =
-      registry.get_entity_with_components<PhysicalState, ClothAssemblyL1Cache,
-                                          ClothADMMHelper>();
-  for (uint32_t e : clothes) {
-    auto phy_state = registry.get<PhysicalState>(e);
-    auto l1_cache = registry.get<ClothAssemblyL1Cache>(e);
-    auto admm_helper = registry.get<ClothADMMHelper>(e);
-    assert(phy_state && l1_cache && admm_helper);
-
-    auto sub_state =
-        state.subspan(phy_state->state_offset, phy_state->state_num);
-    auto sub_dual =
-        dual_residual.subspan(phy_state->state_offset, phy_state->state_num);
-    auto sub_dual_scale_curr =
-        dual_scale_curr.subspan(phy_state->state_offset, phy_state->state_num);
-    auto sub_dual_scale_prev =
-        dual_scale_prev.subspan(phy_state->state_offset, phy_state->state_num);
-    admm_helper->update_aux_var_and_lagrange_mul(
-        max_lagrange_mul, *l1_cache, sub_state, primal_norm2, primal_scale_x2,
-        primal_scale_aux2, sub_dual, sub_dual_scale_curr, sub_dual_scale_prev,
-        rt);
-  }
-}
-
-void update_main(ObjRegistry& registry, int inner_iter, float rel_tol,
-                 float abs_tol, ctd::span<const float> lhs_diag,
-                 ctd::span<const float> rhs, ctd::span<const float> inertia_mod,
-                 ctd::span<float> state, ctd::span<float> rhs_norm2,
-                 CudaRuntime rt) {
-  auto clothes =
-      registry.get_entity_with_components<PhysicalState, ClothAssemblyL1Cache,
-                                          ClothADMMHelper>();
-  for (uint32_t e : clothes) {
-    auto phy_state = registry.get<PhysicalState>(e);
-    auto l1_cache = registry.get<ClothAssemblyL1Cache>(e);
-    auto admm_helper = registry.get<ClothADMMHelper>(e);
-    assert(phy_state && l1_cache && admm_helper);
-
-    auto x = state.subspan(phy_state->state_offset, phy_state->state_num);
-    bool is_lhs_changed = (inner_iter == 1);
-    admm_helper->solve_main_var(rel_tol, abs_tol, *l1_cache, is_lhs_changed,
-                                lhs_diag, rhs, inertia_mod, x, rhs_norm2, rt);
-  }
-}
-
-int primal_residual_dof(ObjRegistry& registry) {
-  int dof = 0;
-  auto clothes =
-      registry.get_entity_with_components<PhysicalState, ClothAssemblyL1Cache,
-                                          ClothADMMHelper>();
-  for (uint32_t e : clothes) {
-    auto l1_cache = registry.get<ClothAssemblyL1Cache>(e);
-    assert(l1_cache);
-    dof += 6 * l1_cache->face_num;
-  }
-  return dof;
-}
-
-__global__ void min_max_kernel(ctd::span<const float> values, float* min_out,
-                               float* max_out) {
-  using BlockReduce = cub::BlockReduce<float, 128>;
-  __shared__ BlockReduce::TempStorage tmp;
-
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  float min = ctd::numeric_limits<float>::infinity();
-  float max = -ctd::numeric_limits<float>::infinity();
-  if (tid < values.size()) {
-    min = values[tid];
-    max = values[tid];
-  }
-
-  float block_min = BlockReduce(tmp).Reduce(min, cu::minimum<float>{});
-  if (threadIdx.x == 0) {
-    cu::atomic_ref<float> amin{*min_out};
-    amin.fetch_min(block_min);
-  }
-  __syncthreads();
-
-  float block_max = BlockReduce(tmp).Reduce(max, cu::maximum<float>{});
-  if (threadIdx.x == 0) {
-    cu::atomic_ref<float> amax{*max_out};
-    amax.fetch_max(block_max);
-  }
-}
-
-std::pair<float, float> min_max(ctd::span<const float> values, CudaRuntime rt) {
-  auto d_min = alloc<float>(rt, 1, ctd::numeric_limits<float>::infinity());
-  auto d_max = alloc<float>(rt, 1, -ctd::numeric_limits<float>::infinity());
-
-  int grid_num = div_round_up(values.size(), 128);
-  min_max_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(values, d_min.data(),
-                                                        d_max.data());
-  // scalar load already sync stream.
-  float h_min = scalar_load(d_min.data(), rt);
-  float h_max = scalar_load(d_max.data(), rt);
-  return std::make_pair(h_min, h_max);
-}
-
-__global__ void compute_inertia_mod(float dt, ctd::span<const float> state,
-                                    ctd::span<const float> velocity, Vec3f acc,
-                                    ctd::span<float> out) {
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  if (tid >= state.size()) {
-    return;
-  }
-
-  float a = acc(tid % 3);
-  out[tid] = -state[tid] / (dt * dt) - velocity[tid] / dt - a;
 }
 
 __global__ void min_toi(ctd::span<const Collision> collisions, float* out) {
@@ -282,206 +153,32 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     return err;
   }
 
-  // prev_state/velocity: state at previous time step.
-  // outer_state/velocity: current state in outer loop.
-  // inner_state: current state in inner loop.
-  // inner_tmp: intermediate state in inner loop.
-
   int state_num = prev_state.size();
   auto outer_state = alloc<float>(rt, state_num);
   cu::copy_bytes(rt.stream, prev_state, outer_state);
   auto outer_velocity = alloc<float>(rt, state_num);
   cu::copy_bytes(rt.stream, prev_velocity, outer_velocity);
   auto inner_state = alloc<float>(rt, state_num);
-  auto inner_tmp = alloc<float>(rt, state_num);
 
   float remaining_step = 1.0f;
-  auto lhs_diag = alloc<float>(rt, state_num, 0);
-  auto rhs = alloc<float>(rt, state_num, 0);
-  auto inertia_mod = alloc<float>(rt, state_num);
   auto scalar_min_toi = alloc<float>(rt, 1);
-  auto scalar_primal_norm2 = alloc<float>(rt, 1);
-  auto scalar_primal_scale_x2 = alloc<float>(rt, 1);
-  auto scalar_primal_scale_aux2 = alloc<float>(rt, 1);
-  auto scalar_equality_primal_norm2 = alloc<float>(rt, 1);
-  auto scalar_equality_primal_scale_x2 = alloc<float>(rt, 1);
-  auto scalar_equality_primal_scale_target2 = alloc<float>(rt, 1);
-  auto scalar_equality_primal_dof = alloc<float>(rt, 1);
-  auto dual_residual = alloc<float>(rt, state_num);
-  auto dual_scale_curr = alloc<float>(rt, state_num);
-  auto dual_scale_prev = alloc<float>(rt, state_num);
-  auto scalar_dual_norm2 = alloc<float>(rt, 1);
-  auto scalar_dual_scale_curr_norm2 = alloc<float>(rt, 1);
-  auto scalar_dual_scale_prev_norm2 = alloc<float>(rt, 1);
-  auto scalar_rhs_norm2 = alloc<float>(rt, 1);
   auto collision_storage = alloc<Collision>(rt, init_narrowphase_cache_size);
   auto pin_constraints = gather_pin_constraints(registry, state_num, rt);
-  std::optional<EqualityConstraints> barrier_constraints;
-  int primal_dof = primal_residual_dof(registry);
+  std::unique_ptr<EqualityConstraints> barrier_constraints;
 
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
     // Prediction based on linear velocity.
     int vert_num = state_num / 3;
-    int grid_num = div_round_up(state_num / 3, 128);
+    int grid_num = div_round_up(vert_num, 128);
     predict<<<grid_num, 128, 0, rt.stream.get()>>>(
         vert_num, dt, const_acceleration, outer_state, outer_velocity,
         inner_state);
 
-    // Compute inertia mod.
-    grid_num = div_round_up(state_num, 128);
-    compute_inertia_mod<<<grid_num, 128, 0, rt.stream.get()>>>(
-        dt, prev_state, prev_velocity, const_acceleration, inertia_mod);
-
-    pin_constraints.reset_lagrange_mul(rt);
-    if (barrier_constraints) {
-      barrier_constraints->reset_lagrange_mul(rt);
-    }
-
-    // Inner loop.
-    float h_init_primal_norm = 0.0f;
-    float h_init_dual_norm = 0.0f;
-    float h_adaptive_ratio = 1.0f;
-    cu::copy_bytes(rt.stream, inner_state, inner_tmp);
-    for (int inner_it = 0; inner_it < max_inner_iteration; ++inner_it) {
-      SPDLOG_INFO("Inner iter {}", inner_it);
-
-      // Sovle main.
-      // Skip iter 0 as aux variables are not initialized yet.
-      if (inner_it != 0) {
-        cu::fill_bytes(rt.stream, lhs_diag, 0);
-        cu::fill_bytes(rt.stream, rhs, 0);
-        cu::fill_bytes(rt.stream, scalar_rhs_norm2, 0);
-        pin_constraints.eval(lhs_diag, rhs, rt);
-        if (barrier_constraints) {
-          barrier_constraints->eval(lhs_diag, rhs, rt);
-        }
-        float h_linear_rel_tol = linear_rel_tol_max;
-        if (inner_it > 1) {
-          h_linear_rel_tol =
-              ctd::clamp(linear_adaptive_factor * h_adaptive_ratio,
-                         linear_rel_tol_min, linear_rel_tol_max);
-        }
-        SPDLOG_INFO("Linear solver tolerance rel={} abs={}", h_linear_rel_tol,
-                    linear_abs_tol);
-        update_main(registry, inner_it, h_linear_rel_tol, linear_abs_tol,
-                    lhs_diag, rhs, inertia_mod, inner_tmp, scalar_rhs_norm2,
-                    rt);
-      }
-
-      // Update all aux variables and lagrange multipliers.
-      cu::fill_bytes(rt.stream, scalar_primal_norm2, 0);
-      cu::fill_bytes(rt.stream, scalar_primal_scale_x2, 0);
-      cu::fill_bytes(rt.stream, scalar_primal_scale_aux2, 0);
-      cu::fill_bytes(rt.stream, scalar_equality_primal_norm2, 0);
-      cu::fill_bytes(rt.stream, scalar_equality_primal_scale_x2, 0);
-      cu::fill_bytes(rt.stream, scalar_equality_primal_scale_target2, 0);
-      cu::fill_bytes(rt.stream, scalar_equality_primal_dof, 0);
-      cu::fill_bytes(rt.stream, dual_residual, 0);
-      cu::fill_bytes(rt.stream, dual_scale_curr, 0);
-      cu::fill_bytes(rt.stream, dual_scale_prev, 0);
-      update_aux_and_lagrange_mul(registry, max_lagrange_mul, inner_tmp,
-                                  scalar_primal_norm2, scalar_primal_scale_x2,
-                                  scalar_primal_scale_aux2, dual_residual,
-                                  dual_scale_curr, dual_scale_prev, rt);
-      pin_constraints.update_lagrange_mul(inner_tmp, rt);
-      pin_constraints.accum_primal_residual(
-          inner_tmp, scalar_equality_primal_norm2,
-          scalar_equality_primal_scale_x2,
-          scalar_equality_primal_scale_target2, scalar_equality_primal_dof, rt);
-      if (barrier_constraints) {
-        barrier_constraints->update_lagrange_mul(inner_tmp, rt);
-        barrier_constraints->accum_primal_residual(
-            inner_tmp, scalar_equality_primal_norm2,
-            scalar_equality_primal_scale_x2,
-            scalar_equality_primal_scale_target2, scalar_equality_primal_dof,
-            rt);
-      }
-
-      if (inner_it == 0) {
-        continue;
-      }
-
-      // Convergence check.
-
-      auto [min, max] = min_max(inner_tmp, rt);
-      if (!(std::isfinite(min) && std::isfinite(max))) {
-        SPDLOG_ERROR("solver explodes");
-        return Error::Diverge;
-      }
-
-      float h_elastic_primal_norm2 =
-          scalar_load(scalar_primal_norm2.data(), rt);
-      float h_elastic_primal_scale_x2 =
-          scalar_load(scalar_primal_scale_x2.data(), rt);
-      float h_elastic_primal_scale_aux2 =
-          scalar_load(scalar_primal_scale_aux2.data(), rt);
-      float h_equality_primal_norm2 =
-          scalar_load(scalar_equality_primal_norm2.data(), rt);
-      float h_equality_primal_scale_x2 =
-          scalar_load(scalar_equality_primal_scale_x2.data(), rt);
-      float h_equality_primal_scale_target2 =
-          scalar_load(scalar_equality_primal_scale_target2.data(), rt);
-      float h_equality_primal_dof =
-          scalar_load(scalar_equality_primal_dof.data(), rt);
-      float h_primal_norm =
-          std::sqrt(h_elastic_primal_norm2 + h_equality_primal_norm2);
-      float h_primal_scale_x = std::sqrt(h_elastic_primal_scale_x2 +
-                                         h_equality_primal_scale_x2);
-      float h_primal_scale_aux = std::sqrt(h_elastic_primal_scale_aux2 +
-                                           h_equality_primal_scale_target2);
-      inner_product(dual_residual, dual_residual, scalar_dual_norm2, rt);
-      inner_product(dual_scale_curr, dual_scale_curr,
-                    scalar_dual_scale_curr_norm2, rt);
-      inner_product(dual_scale_prev, dual_scale_prev,
-                    scalar_dual_scale_prev_norm2, rt);
-      float h_dual_norm = std::sqrt(scalar_load(scalar_dual_norm2.data(), rt));
-      float h_dual_scale_curr =
-          std::sqrt(scalar_load(scalar_dual_scale_curr_norm2.data(), rt));
-      float h_dual_scale_prev =
-          std::sqrt(scalar_load(scalar_dual_scale_prev_norm2.data(), rt));
-
-      if (inner_it == 1) {
-        h_init_primal_norm = h_primal_norm;
-        h_init_dual_norm = h_dual_norm;
-      }
-      float h_primal_dof = primal_dof + h_equality_primal_dof;
-      float h_state_dof = state_num;
-      float h_primal_eps =
-          std::sqrt(h_primal_dof) * non_linear_abs_tol +
-          non_linear_rel_tol * std::max(h_primal_scale_x, h_primal_scale_aux);
-      float h_dual_scale = std::max(h_dual_scale_curr, h_dual_scale_prev);
-      float h_dual_eps = std::sqrt(h_state_dof) * non_linear_abs_tol +
-                         non_linear_rel_tol * h_dual_scale;
-      bool primal_converged = h_primal_norm <= h_primal_eps;
-      bool dual_converged = h_dual_norm <= h_dual_eps;
-      float h_primal_denom = std::max(h_init_primal_norm, non_linear_abs_tol);
-      float h_dual_denom = std::max(h_init_dual_norm, non_linear_abs_tol);
-      h_adaptive_ratio =
-          std::max(h_primal_norm / h_primal_denom, h_dual_norm / h_dual_denom);
-      SPDLOG_INFO("Primal norm {}. Criteria {}. Abs tol {}.", h_primal_norm,
-                  h_primal_eps, non_linear_abs_tol);
-      SPDLOG_INFO("Elastic primal norm {}. Equality primal norm {}.",
-                  std::sqrt(h_elastic_primal_norm2),
-                  std::sqrt(h_equality_primal_norm2));
-      SPDLOG_INFO("Dual norm {}. Criteria {}. Abs tol {}. Scale curr {} prev {}.",
-                  h_dual_norm, h_dual_eps, non_linear_abs_tol,
-                  h_dual_scale_curr, h_dual_scale_prev);
-      if (primal_converged && dual_converged) {
-        SPDLOG_INFO("ADMM residual [{}, {}], NL loop terminate", h_primal_norm,
-                    h_dual_norm);
-        cu::copy_bytes(rt.stream, inner_tmp, inner_state);
-        break;
-      }
-
-      cu::copy_bytes(rt.stream, inner_tmp, inner_state);
-    }
-
-    // Project to barrier targets to prevent accumulation of small violations,
-    // which could otherwise cause zero-TOI contacts in later steps.
-    // TODO: maybe not required anymore?
-    pin_constraints.enforce(inner_state, rt);
-    if (barrier_constraints) {
-      barrier_constraints->enforce(inner_state, rt);
+    auto admm_err = admm_solver.solve(
+        registry, prev_state, prev_velocity, inner_state, pin_constraints,
+        barrier_constraints.get(), dt, const_acceleration, rt);
+    if (admm_err) {
+      return Error::Diverge;
     }
 
     rt.stream.sync();
@@ -542,7 +239,8 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     };
     cub::DeviceFor::Bulk(collisions.size(), update_all_toi, rt.stream.get());
 
-    barrier_constraints = gather_barrier_constraints(state_num, collisions, rt);
+    barrier_constraints = std::make_unique<EqualityConstraints>(
+        gather_barrier_constraints(state_num, collisions, rt));
   }
 
   // Write solution back to registry
