@@ -52,8 +52,7 @@ void update_aux_and_lagrange_mul(
 void update_main(ObjRegistry& registry, int inner_iter, float rel_tol,
                  float abs_tol, ctd::span<const float> lhs_diag,
                  ctd::span<const float> rhs, ctd::span<const float> inertia_mod,
-                 ctd::span<float> state, ctd::span<float> rhs_norm2,
-                 CudaRuntime rt) {
+                 ctd::span<float> state, CudaRuntime rt) {
   auto clothes =
       registry.get_entity_with_components<PhysicalState, ClothAssemblyL1Cache,
                                           ClothADMMHelper>();
@@ -66,7 +65,7 @@ void update_main(ObjRegistry& registry, int inner_iter, float rel_tol,
     auto x = state.subspan(phy_state->state_offset, phy_state->state_num);
     bool is_lhs_changed = (inner_iter == 1);
     admm_helper->solve_main_var(rel_tol, abs_tol, *l1_cache, is_lhs_changed,
-                                lhs_diag, rhs, inertia_mod, x, rhs_norm2, rt);
+                                lhs_diag, rhs, inertia_mod, x, rt);
   }
 }
 
@@ -163,7 +162,6 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
     scalar_dual_norm2_ = alloc<float>(rt, 1);
     scalar_dual_scale_curr_norm2_ = alloc<float>(rt, 1);
     scalar_dual_scale_prev_norm2_ = alloc<float>(rt, 1);
-    scalar_rhs_norm2_ = alloc<float>(rt, 1);
     cached_state_num_ = state_num;
   }
 
@@ -186,7 +184,6 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
     if (inner_it != 0) {
       cu::fill_bytes(rt.stream, *lhs_diag_, 0);
       cu::fill_bytes(rt.stream, *rhs_, 0);
-      cu::fill_bytes(rt.stream, *scalar_rhs_norm2_, 0);
       pin_constraints.eval(*lhs_diag_, *rhs_, rt);
       if (barrier_constraints) {
         barrier_constraints->eval(*lhs_diag_, *rhs_, rt);
@@ -199,8 +196,7 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
       SPDLOG_INFO("Linear solver tolerance rel={} abs={}", h_linear_rel_tol,
                   linear_abs_tol);
       update_main(registry, inner_it, h_linear_rel_tol, linear_abs_tol,
-                  *lhs_diag_, *rhs_, *inertia_mod_, *inner_tmp_,
-                  *scalar_rhs_norm2_, rt);
+                  *lhs_diag_, *rhs_, *inertia_mod_, *inner_tmp_, rt);
     }
 
     cu::fill_bytes(rt.stream, *scalar_primal_norm2_, 0);

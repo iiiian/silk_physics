@@ -8,13 +8,75 @@
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/cusparse_wrapper.hpp"
 #include "backend/cuda/simple_linalg.cuh"
-#include "backend/cuda/solver/inner_product.cuh"
 #include "backend/cuda/solver/svd.cuh"
 
 namespace silk::cuda {
 
 namespace {
 
+using Vec6f = Mat<float, 6, 1>;
+
+__device__ Vec6f solve_elastic_aux(float penalty, float stiffness, float weight,
+                                   const Vec6f& Sx, const Vec6f& u) {
+  auto y = axpby(1.0, Sx, 1.0f / (penalty * weight), u);
+  // SVD decomposition D = U S V^T via svd32 (backed by the 3x3 ref SVD).
+  Mat32f U;
+  Mat22f S = Mat22f::zeros();
+  Mat22f V;
+  svd32(
+      // input D encoded as [d11,d21,d31,d12,d22,d32]
+      y(0), y(1), y(2), y(3), y(4), y(5),
+      // output U (3x2, column-major)
+      U(0, 0), U(1, 0), U(2, 0), U(0, 1), U(1, 1), U(2, 1),
+      // output singular values
+      S(0, 0), S(1, 1),
+      // output V (2x2, column-major)
+      V(0, 0), V(1, 0), V(0, 1), V(1, 1));
+  S(0, 0) = ctd::clamp(S(0, 0), 0.9f, 1.1f);
+  S(1, 1) = ctd::clamp(S(1, 1), 0.9f, 1.1f);
+  // proj = U S' V^T where S' is clamped.
+  Mat32f proj = mat_mul(U, mat_mul(S, V.view().transpose()));
+  // Vectorize.
+  Mat<float, 6, 1> proj_vec;
+  proj_vec(0) = proj(0, 0);
+  proj_vec(1) = proj(1, 0);
+  proj_vec(2) = proj(2, 0);
+  proj_vec(3) = proj(0, 1);
+  proj_vec(4) = proj(1, 1);
+  proj_vec(5) = proj(2, 1);
+  float r = stiffness / (stiffness + penalty);
+  Mat<float, 6, 1> aux = axpby(1 - r, y, r, proj_vec);
+
+  return aux;
+}
+
+// @brief Solve elastic aux and its multipliers.
+//
+// ADMM objective:
+// L(x,z) = f(x) + g(z) + u||W(Sx-z)|| + ½ rho||W(Sx-z)||^2
+// g(z) = min_p ( ½ k||W(z-p)||^2 )
+//
+// x = Main variables, z = Elastic aux variables.
+// f(x) = Main function, typically momentum term.
+// g(z) = Elastic energy. Projective dynamic style.
+// u = Lagrange multipliers, rho = Penalty
+// k = Stiffness, W = Weight, p = Projection.
+//
+// In projective dynamic, z is the deformation gradient F and p is the
+// projection of F on rest manifold. a.k.a. Nearest F where deformation is zero.
+// Practically we achieve this by doing SVD then clamp diagonal between 0.9
+// and 1.1 as cloth is generallly not stretchable. The energy is simply the
+// distance between F and rest F. Naturally, S here is the jacobian operator and
+// weight w is triangle area.
+//
+// To solve z, we observe that
+// ∂L/∂z=0 -> argmin_z min_p ( ½ k||w(z-p)||^2 + ½ rho||w(Sx-z+u/(wp))||^2 )
+// Let y = Sx+u/(wp), intuitively, z must lies on line y <-> p where p =
+// proj(y). So we first solve p then compute z based on the ratio between k and
+// rho.
+//
+// See paper 10.5555/2982818.2982822 for detail. The formulation is slightly
+// different as I use unweighted u.
 // clang-format off
 __global__ void solve_and_update_elastic_aux(
     int face_num,
@@ -58,11 +120,11 @@ __global__ void solve_and_update_elastic_aux(
       u(i) = lagrange_mul[u_offset + i];
     }
     // Gather old aux variable.
-    Mat<float, 6, 1> old_aux;
+    Mat<float, 6, 1> old_z;
     int aux_var_offset = tid * 6;
 #pragma unroll
     for (int i = 0; i < 6; ++i) {
-      old_aux(i) = aux_var[aux_var_offset + i];
+      old_z(i) = aux_var[aux_var_offset + i];
     }
     // Gather jacobian op.
     Mat<float, 6, 9> jop;
@@ -73,50 +135,22 @@ __global__ void solve_and_update_elastic_aux(
     // Gather weight.
     float w = area_sqrt[tid];
 
-    // Compute Sx.
-    auto Sx = mat_mul(jop, x);
-
     // Compute aux variable.
-    auto y = axpby(1.0, Sx, 1.0f / (penalty * w), u);
-    // SVD decomposition D = U S V^T via svd32 (backed by the 3x3 ref SVD).
-    Mat32f U;
-    Mat22f S = Mat22f::zeros();
-    Mat22f V;
-    svd32(
-        // input D encoded as [d11,d21,d31,d12,d22,d32]
-        y(0), y(1), y(2), y(3), y(4), y(5),
-        // output U (3x2, column-major)
-        U(0, 0), U(1, 0), U(2, 0), U(0, 1), U(1, 1), U(2, 1),
-        // output singular values
-        S(0, 0), S(1, 1),
-        // output V (2x2, column-major)
-        V(0, 0), V(1, 0), V(0, 1), V(1, 1));
-    S(0, 0) = ctd::clamp(S(0, 0), 0.9f, 1.1f);
-    S(1, 1) = ctd::clamp(S(1, 1), 0.9f, 1.1f);
-    // proj = U S' V^T where S' is clamped.
-    Mat32f proj = mat_mul(U, mat_mul(S, V.view().transpose()));
-    Mat<float, 6, 1> proj_vec;
-    proj_vec(0) = proj(0, 0);
-    proj_vec(1) = proj(1, 0);
-    proj_vec(2) = proj(2, 0);
-    proj_vec(3) = proj(0, 1);
-    proj_vec(4) = proj(1, 1);
-    proj_vec(5) = proj(2, 1);
-    float r = elastic_stiffness / (elastic_stiffness + penalty);
-    Mat<float, 6, 1> aux = axpby(1 - r, y, r, proj_vec);
+    Vec6f Sx = mat_mul(jop, x);
+    Vec6f z = solve_elastic_aux(penalty, elastic_stiffness, w, Sx, u);
 
     // Per face primal residual.
     // r = W(Sx - z)
-    auto primal = ax(w, vsub(Sx, aux));
+    auto primal = ax(w, vsub(Sx, z));
     local_primal_norm2 = squared_norm(primal);
     local_primal_scale_x2 = squared_norm(ax(w, Sx));
-    local_primal_scale_aux2 = squared_norm(ax(w, aux));
+    local_primal_scale_aux2 = squared_norm(ax(w, z));
 
     // Per state dof dual residual.
     // r = rho * S^T W^T W (z - z_old)
     auto S_tr = jop.view().transpose();
-    auto dual_curr = ax(penalty * w * w, mat_mul(S_tr, aux));
-    auto dual_prev = ax(penalty * w * w, mat_mul(S_tr, old_aux));
+    auto dual_curr = ax(penalty * w * w, mat_mul(S_tr, z));
+    auto dual_prev = ax(penalty * w * w, mat_mul(S_tr, old_z));
     auto dual = vsub(dual_curr, dual_prev);
     for (int i = 0; i < 3; ++i) {
       int out_offset = 3 * faces[tid * 3 + i];
@@ -133,16 +167,21 @@ __global__ void solve_and_update_elastic_aux(
     // Write aux var.
 #pragma unroll
     for (int i = 0; i < 6; ++i) {
-      aux_var[aux_var_offset + i] = aux(i);
+      aux_var[aux_var_offset + i] = z(i);
     }
 
     // Update lagrange multipliers.
-    auto delta = axpby(w * penalty, Sx, -w * penalty, aux);
+    // u += rho W (Sx-z).
+    auto delta = axpby(w * penalty, Sx, -w * penalty, z);
+#pragma unroll
+    for (int i = 0; i < 6; ++i) {
+      u(i) = ctd::clamp(u(i) + delta(i), -max_lagrange_mul, max_lagrange_mul);
+    }
+
     int mul_offset = tid * 6;
 #pragma unroll
     for (int i = 0; i < 6; ++i) {
-      lagrange_mul[mul_offset + i] =
-          ctd::clamp(u(i) + delta(i), -max_lagrange_mul, max_lagrange_mul);
+      lagrange_mul[mul_offset + i] = u(i);
     }
   }
 
@@ -238,13 +277,6 @@ __global__ void assemble_inertia(float dt, ctd::span<const float> mass,
 
   lhs_diag[tid] += mass[tid] / (dt * dt);
   rhs[tid] -= mass[tid] * inertia_mod[tid];
-}
-
-__global__ void add_scalar_kernel(ctd::span<const float> value,
-                                  ctd::span<float> out) {
-  if (threadIdx.x == 0 && blockIdx.x == 0) {
-    atomicAdd(out.data(), value[0]);
-  }
 }
 
 // clang-format off
@@ -411,11 +443,13 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
   //     *uz_, *z_, rt);
 }
 
-void ClothADMMHelper::solve_main_var(
-    float rel_tol, float abs_tol, const ClothAssemblyL1Cache& l1_cache,
-    bool is_lhs_changed, ctd::span<const float> extern_lhs,
-    ctd::span<const float> extern_rhs, ctd::span<const float> inertia_mod,
-    ctd::span<float> state, ctd::span<float> rhs_norm2, CudaRuntime rt) {
+void ClothADMMHelper::solve_main_var(float rel_tol, float abs_tol,
+                                     const ClothAssemblyL1Cache& l1_cache,
+                                     bool is_lhs_changed,
+                                     ctd::span<const float> extern_lhs,
+                                     ctd::span<const float> extern_rhs,
+                                     ctd::span<const float> inertia_mod,
+                                     ctd::span<float> state, CudaRuntime rt) {
   auto lhs_diag = alloc<float>(rt, l1_cache.state_num);
   cu::copy_bytes(rt.stream, extern_lhs, lhs_diag);
   auto rhs = alloc<float>(rt, l1_cache.state_num);
@@ -437,11 +471,6 @@ void ClothADMMHelper::solve_main_var(
   //                      l1_cache.weighted_laplacian_ops.view(), *uz_, *z_,
   //                      cusparse_handle_, *cusparse_workspace_, *float_tmp_,
   //                      rhs, rt);
-
-  auto scalar_local_rhs_norm2 = alloc<float>(rt, 1);
-  inner_product(rhs, rhs, scalar_local_rhs_norm2, rt);
-  add_scalar_kernel<<<1, 1, 0, rt.stream.get()>>>(scalar_local_rhs_norm2,
-                                                  rhs_norm2);
 
   DynamicBSRView dyn_A{lhs_diag, l1_cache.weighted_AA.view()};
   if (is_lhs_changed) {

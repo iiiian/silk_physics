@@ -50,7 +50,6 @@ class ADMMSolver {
   Buf<float> scalar_dual_norm2_;
   Buf<float> scalar_dual_scale_curr_norm2_;
   Buf<float> scalar_dual_scale_prev_norm2_;
-  Buf<float> scalar_rhs_norm2_;
 };
 
 }  // namespace silk::cuda
