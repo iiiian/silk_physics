@@ -11,12 +11,12 @@ namespace silk::cuda {
 
 class ClothADMMHelper {
  private:
-  // y := in-plane elastic aux state.
-  Buf<float> y_;
-  Buf<float> uy_;
-  // z := bending aux state.
-  Buf<float> z_;
-  Buf<float> uz_;
+  // In-plane elastic aux state.
+  Buf<float> ze_;
+  Buf<float> ue_;
+  // Bending aux state.
+  Buf<float> zb_;
+  Buf<float> ub_;
   // cusparse related.
   CuSparseHandle cusparse_handle_;
   Buf<char> cusparse_workspace_;
@@ -31,18 +31,17 @@ class ClothADMMHelper {
 
   void reset_aux_lagrange_mul(CudaRuntime rt);
 
-  /// @brief Update ADMM aux variables and it's lagrange multipliers.
-  /// @param max_lagrange_mul Max abs value of lagrange multipliers.
-  /// @param l1_cache
-  /// @param state
-  /// @param primal_residual_norm2
-  /// @param primal_scale_x2
-  /// @param primal_scale_aux2
-  /// @param dual_residual
-  /// @param dual_scale_curr
-  /// @param dual_scale_prev
-  /// @param rt
   // clang-format off
+  /// @brief Update aux variables z and lagrange multipliers. Accumulate primal/dual residual norms.
+  /// @param[in] max_lagrange_mul         Clamp lagrange multipliers to this value.
+  /// @param[in] l1_cache                 Precomputed assembly data.
+  /// @param[in] state                    Current position vector.
+  /// @param[out] primal_residual_norm2   ||W(Sx - z)||^2.
+  /// @param[out] primal_scale_x2         ||W * Sx||^2.
+  /// @param[out] primal_scale_aux2       ||W * z||^2.
+  /// @param[out] dual_residual           rho * S^T W^T W (z_curr - z_prev).
+  /// @param[out] dual_scale_curr         rho * S^T W^T W * z_curr.
+  /// @param[out] dual_scale_prev         rho * S^T W^T W * z_prev.
   void update_aux_var_and_lagrange_mul(float max_lagrange_mul,
                                        const ClothAssemblyL1Cache& l1_cache,
                                        ctd::span<const float> state,
@@ -55,17 +54,16 @@ class ClothADMMHelper {
                                        CudaRuntime rt);
   // clang-format on
 
-  /// @brief Solve main ADMM variables.
-  /// @param rel_tol
-  /// @param abs_tol
-  /// @param l1_cache
-  /// @param is_lhs_changed
-  /// @param extern_lhs
-  /// @param extern_rhs
-  /// @param inertia_mod
-  /// @param state
-  /// @param rt
   // clang-format off
+  /// @brief Solve ADMM primal x.
+  /// @param[in] rel_tol         Relative tolerance for linear solver.
+  /// @param[in] abs_tol         Absolute tolerance for linear solver.
+  /// @param[in] l1_cache        Precomputed assembly data.
+  /// @param[in] is_lhs_changed  True if LHS matrix changed.
+  /// @param[in] extern_lhs      External diagonal LHS contributions.
+  /// @param[in] extern_rhs      External RHS contributions.
+  /// @param[in] inertia_mod     Inertia term: -x_prev/dt^2 - v_prev/dt - acc.
+  /// @param[in/out] state       Input is treated as initial guess.
   void solve_main_var(float rel_tol,
                       float abs_tol,
                       const ClothAssemblyL1Cache& l1_cache,

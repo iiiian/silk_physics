@@ -11,7 +11,7 @@ The config file will be a json file containing below sections:
     - `linear_solver_abs_tol`
     - `linear_solver_rel_tol_min`
     - `linear_solver_rel_tol_max`
-    - `linear_solver_adaptive_factor`
+    - `initial_linear_rel_tol`
   - ADMM tolerances
     - `admm_abs_tol`
     - `admm_rel_tol`

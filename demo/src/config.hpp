@@ -19,7 +19,7 @@ struct Global {
   float linear_solver_abs_tol = 1e-7;
   float linear_solver_rel_tol_min = 1e-6;
   float linear_solver_rel_tol_max = 1e-3;
-  float linear_solver_adaptive_factor = 1e-2;
+  float initial_linear_rel_tol = 1e-2;
   float admm_abs_tol = 1e-5;
   float admm_rel_tol = 1e-3;
 };

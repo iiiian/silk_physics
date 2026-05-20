@@ -391,22 +391,22 @@ __global__ void assemble_elastic_rhs(
 
 ClothADMMHelper::ClothADMMHelper(int vert_num, int face_num, CudaRuntime rt) {
   int jacobian_dof = 6 * face_num;
-  y_ = alloc<float>(rt, jacobian_dof);
-  uy_ = alloc<float>(rt, jacobian_dof, 0);
+  ze_ = alloc<float>(rt, jacobian_dof);
+  ue_ = alloc<float>(rt, jacobian_dof, 0);
   // Curvature is per vertex coordinate.
   int curvature_dof = 3 * vert_num;
-  z_ = alloc<float>(rt, curvature_dof);
-  uz_ = alloc<float>(rt, curvature_dof, 0);
+  zb_ = alloc<float>(rt, curvature_dof);
+  ub_ = alloc<float>(rt, curvature_dof, 0);
 
   cusparse_workspace_ = alloc<char>(rt, 0);
   float_tmp_ = alloc<float>(rt, 0);
 }
 
 void ClothADMMHelper::reset_aux_lagrange_mul(CudaRuntime rt) {
-  cu::fill_bytes(rt.stream, *y_, 0);
-  cu::fill_bytes(rt.stream, *uy_, 0);
-  cu::fill_bytes(rt.stream, *z_, 0);
-  cu::fill_bytes(rt.stream, *uz_, 0);
+  cu::fill_bytes(rt.stream, *ze_, 0);
+  cu::fill_bytes(rt.stream, *ue_, 0);
+  cu::fill_bytes(rt.stream, *zb_, 0);
+  cu::fill_bytes(rt.stream, *ub_, 0);
 }
 
 void ClothADMMHelper::update_aux_var_and_lagrange_mul(
@@ -426,8 +426,8 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
         state,
         *l1_cache.jacobian_ops,
         *l1_cache.area_sqrt,
-        *uy_,
-        *y_,
+        *ue_,
+        *ze_,
         primal_residual_norm2,
         primal_scale_x2,
         primal_scale_aux2,
@@ -462,7 +462,7 @@ void ClothADMMHelper::solve_main_var(float rel_tol, float abs_tol,
   grid_num = div_round_up(l1_cache.face_num, 128);
   assemble_elastic_rhs<<<grid_num, 128, 0, rt.stream.get()>>>(
       l1_cache.face_num, l1_cache.penalty, *l1_cache.faces,
-      *l1_cache.jacobian_ops, *l1_cache.area_sqrt, *uy_, *y_, rhs);
+      *l1_cache.jacobian_ops, *l1_cache.area_sqrt, *ue_, *ze_, rhs);
 
   if (!float_tmp_) {
     float_tmp_ = alloc<float>(rt, rhs.size());

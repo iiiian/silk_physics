@@ -18,7 +18,7 @@ class ADMMSolver {
   float linear_abs_tol = 1e-7;
   float linear_rel_tol_min = 1e-6;
   float linear_rel_tol_max = 1e-3;
-  float linear_adaptive_factor = 1e-2;
+  float initial_linear_rel_tol = 1e-2;
   float non_linear_rel_tol = 1e-3;
   float non_linear_abs_tol = 1e-5;
 
@@ -36,14 +36,12 @@ class ADMMSolver {
 
  private:
   int cached_state_num_ = 0;
-  Buf<float> inner_tmp_;
   Buf<float> lhs_diag_;
   Buf<float> rhs_;
   Buf<float> inertia_mod_;
   Buf<float> scalar_primal_norm2_;
   Buf<float> scalar_primal_scale_x2_;
   Buf<float> scalar_primal_scale_aux2_;
-  Buf<float> scalar_equality_primal_dof_;
   Buf<float> dual_residual_;
   Buf<float> dual_scale_curr_;
   Buf<float> dual_scale_prev_;

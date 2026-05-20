@@ -34,14 +34,13 @@ void update_aux_and_lagrange_mul(
     auto admm_helper = registry.get<ClothADMMHelper>(e);
     assert(phy_state && l1_cache && admm_helper);
 
-    auto sub_state =
-        state.subspan(phy_state->state_offset, phy_state->state_num);
-    auto sub_dual =
-        dual_residual.subspan(phy_state->state_offset, phy_state->state_num);
-    auto sub_dual_scale_curr =
-        dual_scale_curr.subspan(phy_state->state_offset, phy_state->state_num);
-    auto sub_dual_scale_prev =
-        dual_scale_prev.subspan(phy_state->state_offset, phy_state->state_num);
+    int off = phy_state->state_offset;
+    int num = phy_state->state_num;
+    auto sub_state = state.subspan(off, num);
+    auto sub_dual = dual_residual.subspan(off, num);
+    auto sub_dual_scale_curr = dual_scale_curr.subspan(off, num);
+    auto sub_dual_scale_prev = dual_scale_prev.subspan(off, num);
+
     admm_helper->update_aux_var_and_lagrange_mul(
         max_lagrange_mul, *l1_cache, sub_state, primal_norm2, primal_scale_x2,
         primal_scale_aux2, sub_dual, sub_dual_scale_curr, sub_dual_scale_prev,
@@ -63,6 +62,9 @@ void update_main(ObjRegistry& registry, int inner_iter, float rel_tol,
     assert(phy_state && l1_cache && admm_helper);
 
     auto x = state.subspan(phy_state->state_offset, phy_state->state_num);
+
+    // We don't update collision in inner loop, so except the first solve skip
+    // factorization.
     bool is_lhs_changed = (inner_iter == 1);
     admm_helper->solve_main_var(rel_tol, abs_tol, *l1_cache, is_lhs_changed,
                                 lhs_diag, rhs, inertia_mod, x, rt);
@@ -120,11 +122,7 @@ std::pair<float, float> min_max(ctd::span<const float> values, CudaRuntime rt) {
   return std::make_pair(h_min, h_max);
 }
 
-}  // namespace
-
-namespace {
-
-int primal_residual_dof(ObjRegistry& registry) {
+int compute_physical_primal_residual_dof(ObjRegistry& registry) {
   int dof = 0;
   auto clothes =
       registry.get_entity_with_components<PhysicalState, ClothAssemblyL1Cache,
@@ -137,6 +135,27 @@ int primal_residual_dof(ObjRegistry& registry) {
   return dof;
 }
 
+/// @brief ADMM convergence tolerance.
+///
+/// ADMM residual has the form r = ||a-b||.
+///
+/// Absolute tolerance should scale with sqrt(r_dof).
+/// Relative tolerance should scale with max(||a||, ||b||).
+class StoppingCriteria {
+ public:
+  float eps = 0.0;
+
+  StoppingCriteria(int dof, float a2, float b2, float abs_tol, float rel_tol) {
+    float sqrt_dof = std::sqrt(dof);
+    float a = std::sqrt(a2);
+    float b = std::sqrt(b2);
+    float max_scale = std::max(a, b);
+    eps = sqrt_dof * abs_tol + max_scale * rel_tol;
+  }
+
+  bool has_converged(float residual) const { return (residual <= eps); }
+};
+
 }  // namespace
 
 std::optional<ADMMSolver::Error> ADMMSolver::solve(
@@ -146,16 +165,13 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
     EqualityConstraints* barrier_constraints, float dt,
     Vec3f const_acceleration, CudaRuntime rt) {
   int state_num = prev_state.size();
-  int primal_dof = primal_residual_dof(registry);
   if (state_num != cached_state_num_) {
-    inner_tmp_ = alloc<float>(rt, state_num);
     lhs_diag_ = alloc<float>(rt, state_num, 0);
     rhs_ = alloc<float>(rt, state_num, 0);
     inertia_mod_ = alloc<float>(rt, state_num);
     scalar_primal_norm2_ = alloc<float>(rt, 1);
     scalar_primal_scale_x2_ = alloc<float>(rt, 1);
     scalar_primal_scale_aux2_ = alloc<float>(rt, 1);
-    scalar_equality_primal_dof_ = alloc<float>(rt, 1);
     dual_residual_ = alloc<float>(rt, state_num);
     dual_scale_curr_ = alloc<float>(rt, state_num);
     dual_scale_prev_ = alloc<float>(rt, state_num);
@@ -176,11 +192,16 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
 
   float h_init_primal_norm = 0.0f;
   float h_init_dual_norm = 0.0f;
-  float h_adaptive_ratio = 1.0f;
-  cu::copy_bytes(rt.stream, inner_state, *inner_tmp_);
+  float h_linear_tol_adaptive_ratio = 1.0f;
   for (int inner_it = 0; inner_it < max_inner_iteration; ++inner_it) {
     SPDLOG_INFO("Inner iter {}", inner_it);
 
+    // 1. Optimize main variables
+    // (except iter 0 since aux variables are not initialized).
+    // 2. Optimize aux variables.
+    // 3. Update lagrange multiplers.
+
+    // Update main.
     if (inner_it != 0) {
       cu::fill_bytes(rt.stream, *lhs_diag_, 0);
       cu::fill_bytes(rt.stream, *rhs_, 0);
@@ -188,102 +209,106 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
       if (barrier_constraints) {
         barrier_constraints->eval(*lhs_diag_, *rhs_, rt);
       }
-      float h_linear_rel_tol = linear_rel_tol_max;
-      if (inner_it > 1) {
-        h_linear_rel_tol = ctd::clamp(linear_adaptive_factor * h_adaptive_ratio,
-                                      linear_rel_tol_min, linear_rel_tol_max);
-      }
+
+      // Linear solve tolerance is scaled by ADMM residual reduction ratio.
+      // ratio = curr ADMM residual / init ADMM residual.
+      float h_linear_rel_tol =
+          ctd::clamp(initial_linear_rel_tol * h_linear_tol_adaptive_ratio,
+                     linear_rel_tol_min, linear_rel_tol_max);
       SPDLOG_INFO("Linear solver tolerance rel={} abs={}", h_linear_rel_tol,
                   linear_abs_tol);
+
       update_main(registry, inner_it, h_linear_rel_tol, linear_abs_tol,
-                  *lhs_diag_, *rhs_, *inertia_mod_, *inner_tmp_, rt);
+                  *lhs_diag_, *rhs_, *inertia_mod_, inner_state, rt);
     }
 
+    // Update aux and lagrange multipliers.
     cu::fill_bytes(rt.stream, *scalar_primal_norm2_, 0);
     cu::fill_bytes(rt.stream, *scalar_primal_scale_x2_, 0);
     cu::fill_bytes(rt.stream, *scalar_primal_scale_aux2_, 0);
-    cu::fill_bytes(rt.stream, *scalar_equality_primal_dof_, 0);
     cu::fill_bytes(rt.stream, *dual_residual_, 0);
     cu::fill_bytes(rt.stream, *dual_scale_curr_, 0);
     cu::fill_bytes(rt.stream, *dual_scale_prev_, 0);
-    update_aux_and_lagrange_mul(registry, max_lagrange_mul, *inner_tmp_,
+    update_aux_and_lagrange_mul(registry, max_lagrange_mul, inner_state,
                                 *scalar_primal_norm2_, *scalar_primal_scale_x2_,
                                 *scalar_primal_scale_aux2_, *dual_residual_,
                                 *dual_scale_curr_, *dual_scale_prev_, rt);
-    pin_constraints.update_lagrange_mul(*inner_tmp_, rt);
-    pin_constraints.accum_primal_residual(
-        *inner_tmp_, *scalar_primal_norm2_, *scalar_primal_scale_x2_,
-        *scalar_primal_scale_aux2_, *scalar_equality_primal_dof_, rt);
+    pin_constraints.update_lagrange_mul(inner_state, rt);
+    pin_constraints.accum_primal_residual(inner_state, *scalar_primal_norm2_,
+                                          *scalar_primal_scale_x2_,
+                                          *scalar_primal_scale_aux2_, rt);
     if (barrier_constraints) {
-      barrier_constraints->update_lagrange_mul(*inner_tmp_, rt);
+      barrier_constraints->update_lagrange_mul(inner_state, rt);
       barrier_constraints->accum_primal_residual(
-          *inner_tmp_, *scalar_primal_norm2_, *scalar_primal_scale_x2_,
-          *scalar_primal_scale_aux2_, *scalar_equality_primal_dof_, rt);
+          inner_state, *scalar_primal_norm2_, *scalar_primal_scale_x2_,
+          *scalar_primal_scale_aux2_, rt);
     }
 
+    // Skip convergence check for iter 0.
     if (inner_it == 0) {
       continue;
     }
 
-    auto [min, max] = min_max(*inner_tmp_, rt);
+    auto [min, max] = min_max(inner_state, rt);
     if (!(std::isfinite(min) && std::isfinite(max))) {
       SPDLOG_ERROR("solver explodes");
       return Error::Diverge;
     }
 
-    float h_primal_norm2 = scalar_load(scalar_primal_norm2_->data(), rt);
+    // Compute primal residual and it's stopping criteria.
+    float h_primal_norm =
+        std::sqrt(scalar_load(scalar_primal_norm2_->data(), rt));
+    if (inner_it == 1) {
+      h_init_primal_norm = h_primal_norm;
+    }
     float h_primal_scale_x2 = scalar_load(scalar_primal_scale_x2_->data(), rt);
     float h_primal_scale_aux2 =
         scalar_load(scalar_primal_scale_aux2_->data(), rt);
-    float h_equality_primal_dof =
-        scalar_load(scalar_equality_primal_dof_->data(), rt);
-    float h_primal_norm = std::sqrt(h_primal_norm2);
-    float h_primal_scale_x = std::sqrt(h_primal_scale_x2);
-    float h_primal_scale_aux = std::sqrt(h_primal_scale_aux2);
+    int h_primal_residual_dof = compute_physical_primal_residual_dof(registry);
+    h_primal_residual_dof += pin_constraints.get_active_dof();
+    if (barrier_constraints) {
+      h_primal_residual_dof += barrier_constraints->get_active_dof();
+    }
+    StoppingCriteria primal_criteria{h_primal_residual_dof, h_primal_scale_x2,
+                                     h_primal_scale_aux2, non_linear_abs_tol,
+                                     non_linear_rel_tol};
+
+    // Compute dual residual and it's stopping criteria.
     inner_product(*dual_residual_, *dual_residual_, *scalar_dual_norm2_, rt);
+    float h_dual_norm = std::sqrt(scalar_load(scalar_dual_norm2_->data(), rt));
+    if (inner_it == 1) {
+      h_init_dual_norm = h_dual_norm;
+    }
     inner_product(*dual_scale_curr_, *dual_scale_curr_,
                   *scalar_dual_scale_curr_norm2_, rt);
     inner_product(*dual_scale_prev_, *dual_scale_prev_,
                   *scalar_dual_scale_prev_norm2_, rt);
-    float h_dual_norm = std::sqrt(scalar_load(scalar_dual_norm2_->data(), rt));
-    float h_dual_scale_curr =
-        std::sqrt(scalar_load(scalar_dual_scale_curr_norm2_->data(), rt));
-    float h_dual_scale_prev =
-        std::sqrt(scalar_load(scalar_dual_scale_prev_norm2_->data(), rt));
+    float h_dual_scale_curr2 =
+        scalar_load(scalar_dual_scale_curr_norm2_->data(), rt);
+    float h_dual_scale_prev2 =
+        scalar_load(scalar_dual_scale_prev_norm2_->data(), rt);
+    StoppingCriteria dual_criteria{state_num, h_dual_scale_curr2,
+                                   h_dual_scale_prev2, non_linear_abs_tol,
+                                   non_linear_rel_tol};
 
-    if (inner_it == 1) {
-      h_init_primal_norm = h_primal_norm;
-      h_init_dual_norm = h_dual_norm;
-    }
-    float h_primal_dof_total = primal_dof + h_equality_primal_dof;
-    float h_state_dof = state_num;
-    float h_primal_eps =
-        std::sqrt(h_primal_dof_total) * non_linear_abs_tol +
-        non_linear_rel_tol * std::max(h_primal_scale_x, h_primal_scale_aux);
-    float h_dual_scale = std::max(h_dual_scale_curr, h_dual_scale_prev);
-    float h_dual_eps = std::sqrt(h_state_dof) * non_linear_abs_tol +
-                       non_linear_rel_tol * h_dual_scale;
-    bool primal_converged = h_primal_norm <= h_primal_eps;
-    bool dual_converged = h_dual_norm <= h_dual_eps;
+    // Update linear solver tolerance scaling.
     float h_primal_denom = std::max(h_init_primal_norm, non_linear_abs_tol);
     float h_dual_denom = std::max(h_init_dual_norm, non_linear_abs_tol);
-    h_adaptive_ratio =
+    h_linear_tol_adaptive_ratio =
         std::max(h_primal_norm / h_primal_denom, h_dual_norm / h_dual_denom);
-    SPDLOG_INFO("Primal norm {}. Criteria {}. Abs tol {}.", h_primal_norm,
-                h_primal_eps, non_linear_abs_tol);
-    SPDLOG_INFO("Dual norm {}. Criteria {}. Abs tol {}. Scale curr {} prev {}.",
-                h_dual_norm, h_dual_eps, non_linear_abs_tol, h_dual_scale_curr,
-                h_dual_scale_prev);
-    if (primal_converged && dual_converged) {
+
+    SPDLOG_INFO("Primal norm {}. Criteria {}.", h_primal_norm,
+                primal_criteria.eps);
+    SPDLOG_INFO("Dual norm {}. Criteria {}.", h_dual_norm, dual_criteria.eps);
+    if (primal_criteria.has_converged(h_primal_norm) &&
+        dual_criteria.has_converged(h_dual_norm)) {
       SPDLOG_INFO("ADMM residual [{}, {}], NL loop terminate", h_primal_norm,
                   h_dual_norm);
-      cu::copy_bytes(rt.stream, *inner_tmp_, inner_state);
       break;
     }
-
-    cu::copy_bytes(rt.stream, *inner_tmp_, inner_state);
   }
 
+  // Small violation of constraints will cause later zero toi.
   pin_constraints.enforce(inner_state, rt);
   if (barrier_constraints) {
     barrier_constraints->enforce(inner_state, rt);

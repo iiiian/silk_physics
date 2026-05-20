@@ -11,6 +11,22 @@ namespace silk::cuda {
 
 namespace {
 
+__global__ void count_indicator(ctd::span<const bool> indicator, int* out) {
+  using BlockReduce = cub::BlockReduce<int, 128>;
+  __shared__ BlockReduce::TempStorage tmp;
+
+  int active = 0;
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid < indicator.size()) {
+    active = static_cast<int>(indicator[tid]);
+  }
+
+  int reduced = BlockReduce(tmp).Sum(active);
+  if (threadIdx.x == 0) {
+    atomicAdd(out, reduced);
+  }
+}
+
 __global__ void merge_kernel(int state_num, ctd::span<bool> indicator,
                              ctd::span<float> target,
                              ctd::span<float> lagrange_mul,
@@ -64,42 +80,34 @@ __global__ void eval_kernel(ctd::span<const bool> indicator,
 __global__ void accum_primal_residual_kernel(
     ctd::span<const bool> indicator, ctd::span<const float> target,
     ctd::span<const float> state, ctd::span<float> primal_norm2,
-    ctd::span<float> primal_scale_x2,
-    ctd::span<float> primal_scale_target2, ctd::span<float> primal_dof) {
+    ctd::span<float> primal_scale_x2, ctd::span<float> primal_scale_target2) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   float local_norm2 = 0.0f;
   float local_scale_x2 = 0.0f;
   float local_scale_target2 = 0.0f;
-  float local_dof = 0.0f;
 
   if (tid < indicator.size() && indicator[tid]) {
     float diff = state[tid] - target[tid];
     local_norm2 = diff * diff;
     local_scale_x2 = state[tid] * state[tid];
     local_scale_target2 = target[tid] * target[tid];
-    local_dof = 1.0f;
   }
 
   using BlockReduce = cub::BlockReduce<float, 128>;
-  __shared__ BlockReduce::TempStorage reduce_tmp;
-  float reduced = BlockReduce(reduce_tmp).Sum(local_norm2);
+  __shared__ BlockReduce::TempStorage tmp;
+  float reduced = BlockReduce(tmp).Sum(local_norm2);
   if (threadIdx.x == 0) {
     atomicAdd(primal_norm2.data(), reduced);
   }
   __syncthreads();
-  reduced = BlockReduce(reduce_tmp).Sum(local_scale_x2);
+  reduced = BlockReduce(tmp).Sum(local_scale_x2);
   if (threadIdx.x == 0) {
     atomicAdd(primal_scale_x2.data(), reduced);
   }
   __syncthreads();
-  reduced = BlockReduce(reduce_tmp).Sum(local_scale_target2);
+  reduced = BlockReduce(tmp).Sum(local_scale_target2);
   if (threadIdx.x == 0) {
     atomicAdd(primal_scale_target2.data(), reduced);
-  }
-  __syncthreads();
-  reduced = BlockReduce(reduce_tmp).Sum(local_dof);
-  if (threadIdx.x == 0) {
-    atomicAdd(primal_dof.data(), reduced);
   }
 }
 
@@ -118,6 +126,35 @@ __global__ void enforce_kernel(ctd::span<const bool> indicator,
 
 }  // namespace
 
+EqualityConstraints::EqualityConstraints(int state_num, float init_penalty,
+                                         float init_lagrange_mul,
+                                         float max_lagrange_mul,
+                                         cu::device_buffer<bool> indicator,
+                                         cu::device_buffer<float> target,
+                                         CudaRuntime rt)
+    : state_num(std::move(state_num)),
+      active_dof(0),
+      indicator(std::move(indicator)),
+      target(target),
+      lagrange_mul(alloc<float>(rt, state_num, init_lagrange_mul)),
+      init_lagrange_mul(init_lagrange_mul),
+      max_lagrange_mul(max_lagrange_mul),
+      init_penalty(init_penalty),
+      penalty(init_penalty) {
+  assert(state_num >= 0);
+  assert(init_penalty > 0);
+  assert(init_lagrange_mul >= 0);
+  assert(max_lagrange_mul > 0 && max_lagrange_mul >= init_lagrange_mul);
+  assert(this->indicator.size() == state_num);
+  assert(this->target.size() == state_num);
+
+  auto d_active_dof = alloc<int>(rt, 1, 0);
+  int grid_num = div_round_up(this->indicator.size(), 128);
+  count_indicator<<<grid_num, 128, 0, rt.stream.get()>>>(this->indicator,
+                                                         d_active_dof.data());
+  active_dof = scalar_load(d_active_dof.data(), rt);
+}
+
 void EqualityConstraints::merge(const EqualityConstraints& other,
                                 CudaRuntime rt) {
   assert(state_num == other.state_num);
@@ -126,6 +163,12 @@ void EqualityConstraints::merge(const EqualityConstraints& other,
   merge_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
       state_num, indicator, target, lagrange_mul, other.indicator, other.target,
       other.lagrange_mul);
+
+  auto d_active_dof = alloc<int>(rt, 1, 0);
+  grid_num = div_round_up(this->indicator.size(), 128);
+  count_indicator<<<grid_num, 128, 0, rt.stream.get()>>>(this->indicator,
+                                                         d_active_dof.data());
+  active_dof = scalar_load(d_active_dof.data(), rt);
 }
 
 void EqualityConstraints::reset_lagrange_mul(CudaRuntime rt) {
@@ -149,11 +192,11 @@ void EqualityConstraints::eval(ctd::span<float> lhs_diag, ctd::span<float> rhs,
 void EqualityConstraints::accum_primal_residual(
     ctd::span<const float> state, ctd::span<float> primal_norm2,
     ctd::span<float> primal_scale_x2, ctd::span<float> primal_scale_target2,
-    ctd::span<float> primal_dof, CudaRuntime rt) const {
+    CudaRuntime rt) const {
   int grid_num = div_round_up(indicator.size(), 128);
   accum_primal_residual_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
       indicator, target, state, primal_norm2, primal_scale_x2,
-      primal_scale_target2, primal_dof);
+      primal_scale_target2);
 }
 
 void EqualityConstraints::enforce(ctd::span<float> state, CudaRuntime rt) {

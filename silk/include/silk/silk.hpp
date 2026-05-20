@@ -67,8 +67,8 @@ struct GlobalConfig {
   float linear_solver_rel_tol_min = 1e-6f;
   /// Maximum adaptive relative tolerance for the linear solver
   float linear_solver_rel_tol_max = 1e-3f;
-  /// Scale factor mapping nonlinear progress to linear relative tolerance
-  float linear_solver_adaptive_factor = 1e-2f;
+  /// Initial relative tolerance for the inner linear solver
+  float initial_linear_rel_tol = 1e-2f;
 
   /// Absolute tolerance for ADMM primal and dual residuals
   float admm_abs_tol = 1e-5f;

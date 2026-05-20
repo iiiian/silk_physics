@@ -404,15 +404,15 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
       g.linear_solver_rel_tol_max = v;
       return true;
     }
-    if (k == "linear_solver_adaptive_factor") {
+    if (k == "initial_linear_rel_tol") {
       float v;
       if (!parse_number(cur, v)) {
         ui_error(
             "Fail to parse global config. Incorrect json field "
-            "'linear_solver_adaptive_factor'");
+            "'initial_linear_rel_tol'");
         return false;
       }
-      g.linear_solver_adaptive_factor = v;
+      g.initial_linear_rel_tol = v;
       return true;
     }
     if (k == "admm_abs_tol") {
@@ -773,10 +773,10 @@ void console_test(const SimConfig& c) {
   ui_info("  total_steps = {}", c.global.total_steps);
   ui_info(
       "  linear_solver_abs_tol = {:.6e}, rel_tol_min = {:.6e}, "
-      "rel_tol_max = {:.6e}, adaptive_factor = {:.6e}",
+      "rel_tol_max = {:.6e}, initial_linear_rel_tol = {:.6e}",
       c.global.linear_solver_abs_tol, c.global.linear_solver_rel_tol_min,
       c.global.linear_solver_rel_tol_max,
-      c.global.linear_solver_adaptive_factor);
+      c.global.initial_linear_rel_tol);
   ui_info("  admm_abs_tol = {:.6e}, admm_rel_tol = {:.6e}",
           c.global.admm_abs_tol, c.global.admm_rel_tol);
 
