@@ -102,7 +102,8 @@ ctd::span<Collision> find_collision(ObjRegistry& registry, float dt,
         ob->point_colliders.value(), PTInterCollisionFilter{}, pt_ccache,
         pt_ccache_fill, rt);
     if (pt_ccache_fill == pt_ccache.size()) {
-      pt_narrowphase(pt_ccache, collisions, collision_fill, rt);
+      pt_narrowphase(ctd::span(pt_ccache.data(), pt_ccache_fill), collisions,
+                     collision_fill, rt);
       pt_ccache_fill = 0;
     }
 
@@ -114,11 +115,13 @@ ctd::span<Collision> find_collision(ObjRegistry& registry, float dt,
         ee_ccache, ee_ccache_fill, rt);
 
     if (pt_ccache_fill == pt_ccache.size()) {
-      pt_narrowphase(pt_ccache, collisions, collision_fill, rt);
+      pt_narrowphase(ctd::span(pt_ccache.data(), pt_ccache_fill), collisions,
+                     collision_fill, rt);
       pt_ccache_fill = 0;
     }
     if (ee_ccache_fill == ee_ccache.size()) {
-      ee_narrowphase(ee_ccache, collisions, collision_fill, rt);
+      ee_narrowphase(ctd::span(ee_ccache.data(), ee_ccache_fill), collisions,
+                     collision_fill, rt);
       ee_ccache_fill = 0;
     }
   }
@@ -138,20 +141,24 @@ ctd::span<Collision> find_collision(ObjRegistry& registry, float dt,
                                              ee_ccache_fill, rt);
 
     if (pt_ccache_fill == pt_ccache.size()) {
-      pt_narrowphase(pt_ccache, collisions, collision_fill, rt);
+      pt_narrowphase(ctd::span(pt_ccache.data(), pt_ccache_fill), collisions,
+                     collision_fill, rt);
       pt_ccache_fill = 0;
     }
     if (ee_ccache_fill == ee_ccache.size()) {
-      ee_narrowphase(ee_ccache, collisions, collision_fill, rt);
+      ee_narrowphase(ctd::span(ee_ccache.data(), ee_ccache_fill), collisions,
+                     collision_fill, rt);
       ee_ccache_fill = 0;
     }
   }
 
   if (pt_ccache_fill != 0) {
-    pt_narrowphase(pt_ccache, collisions, collision_fill, rt);
+    pt_narrowphase(ctd::span(pt_ccache.data(), pt_ccache_fill), collisions,
+                   collision_fill, rt);
   }
   if (ee_ccache_fill != 0) {
-    ee_narrowphase(ee_ccache, collisions, collision_fill, rt);
+    ee_narrowphase(ctd::span(ee_ccache.data(), ee_ccache_fill), collisions,
+                   collision_fill, rt);
   }
 
   return ctd::span<Collision>(collisions.data(), collision_fill);

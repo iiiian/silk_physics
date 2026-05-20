@@ -95,6 +95,34 @@ target_compile_definitions(
 
 if(SILK_ENABLE_CUDA)
     add_executable(
+        oibvh_test
+        oibvh_test.cu
+        abc_file_loader.cpp
+    )
+    target_include_directories(
+        oibvh_test
+        PRIVATE ${SILK_DIR}
+    )
+    target_compile_options(
+        oibvh_test
+        PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda --expt-relaxed-constexpr>
+    )
+    target_link_libraries(
+        oibvh_test
+        PRIVATE CUDA::cudart CCCL::CCCL Eigen3::Eigen
+        PRIVATE spdlog::spdlog
+        PRIVATE Alembic::Alembic
+        PRIVATE Catch2::Catch2WithMain
+        PRIVATE TBB::tbb
+    )
+    target_compile_definitions(
+        oibvh_test
+        PRIVATE
+            PHYSICS_SCENE_ROOT="${CMAKE_SOURCE_DIR}/misc/physics_scene"
+            EIGEN_MALLOC_ALREADY_ALIGNED=0
+    )
+
+    add_executable(
         sym_inverse_benchmark
         sym_inverse_benchmark.cu
     )
@@ -121,5 +149,9 @@ set(SILK_TEST_TARGETS
     sap_benchmark
     sap_kd_tree_benchmark
 )
+
+if(SILK_ENABLE_CUDA)
+    list(APPEND SILK_TEST_TARGETS oibvh_test)
+endif()
 
 catch_discover_tests(${SILK_TEST_TARGETS})
