@@ -145,6 +145,22 @@ __global__ void mix(float w, ctd::span<const float> a, ctd::span<const float> b,
   out[tid] = w * a[tid] + (1.0 - w) * b[tid];
 }
 
+void update_collision_state(ObjRegistry& registry, ctd::span<const float> curr,
+                            ctd::span<const float> prev, CudaRuntime rt) {
+  for (uint32_t e :
+       registry.get_entity_with_components<PhysicalState, ObjectCollider>()) {
+    auto phy_state = registry.get<PhysicalState>(e);
+    auto collider = registry.get<ObjectCollider>(e);
+    assert(phy_state && collider);
+
+    ctd::span<const float> local_curr(curr.data() + phy_state->state_offset,
+                                      phy_state->state_num);
+    ctd::span<const float> local_prev(prev.data() + phy_state->state_offset,
+                                      phy_state->state_num);
+    collider->update_position(local_curr, local_prev, rt);
+  }
+}
+
 }  // namespace
 
 std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
@@ -185,6 +201,39 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
         vert_num, dt, const_acceleration, outer_state, outer_velocity,
         inner_state);
 
+    if (!solved_initial_contacts) {
+      update_collision_state(registry, inner_state, outer_state, rt);
+      auto presolve_collisions = find_collision(
+          registry, dt, init_broadphase_cache_size, collision_storage, rt);
+      if (!presolve_collisions.empty()) {
+        scalar_write(scalar_min_toi.data(), 1.0f, rt);
+        scalar_write(scalar_line_collision_count.data(), 0, rt);
+        scalar_write(scalar_initial_contact_count.data(), 0, rt);
+        grid_num = div_round_up(presolve_collisions.size(), 128);
+        collision_stats<<<grid_num, 128, 0, rt.stream.get()>>>(
+            presolve_collisions, scalar_min_toi.data(),
+            scalar_line_collision_count.data(),
+            scalar_initial_contact_count.data());
+
+        int h_initial_contact_count =
+            scalar_load(scalar_initial_contact_count.data(), rt);
+        if (h_initial_contact_count > 0) {
+          auto initial_constraints =
+              std::make_unique<EqualityConstraints>(gather_barrier_constraints(
+                  state_num, presolve_collisions, rt,
+                  BarrierCollisionFilter::InitialContactsOnly));
+          if (barrier_constraints) {
+            barrier_constraints->merge(*initial_constraints, rt);
+          } else {
+            barrier_constraints = std::move(initial_constraints);
+          }
+          solved_initial_contacts = true;
+          SPDLOG_DEBUG("Outer it {}, pre-solve {} initial contacts.", outer_it,
+                       h_initial_contact_count);
+        }
+      }
+    }
+
     auto admm_err = admm_solver.solve(
         registry, prev_state, prev_velocity, inner_state, pin_constraints,
         barrier_constraints.get(), dt, const_acceleration, rt);
@@ -195,18 +244,7 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     rt.stream.sync();
 
     // Full collision update.
-    for (uint32_t e :
-         registry.get_entity_with_components<PhysicalState, ObjectCollider>()) {
-      auto phy_state = registry.get<PhysicalState>(e);
-      auto collider = registry.get<ObjectCollider>(e);
-      assert(phy_state && collider);
-
-      ctd::span<const float> curr(inner_state.data() + phy_state->state_offset,
-                                  phy_state->state_num);
-      ctd::span<const float> prev(outer_state.data() + phy_state->state_offset,
-                                  phy_state->state_num);
-      collider->update_position(curr, prev, rt);
-    }
+    update_collision_state(registry, inner_state, outer_state, rt);
     auto collisions = find_collision(registry, dt, init_broadphase_cache_size,
                                      collision_storage, rt);
 
