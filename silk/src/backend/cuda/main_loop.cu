@@ -193,8 +193,7 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
   bool solved_initial_contacts = false;
 
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
-    // Adaptive acceleration is based on previous frame velocity, so only use it
-    // before CCD rollback outer iterations mutate the substep state.
+    // Prediction based on linear velocity.
     int vert_num = state_num / 3;
     int grid_num = div_round_up(vert_num, 128);
     predict<<<grid_num, 128, 0, rt.stream.get()>>>(
