@@ -266,8 +266,8 @@ MASCGSolver::Status MASCGSolver::solve(DynamicBSRView A,
     // debug logging
     if (k % 100 == 0) {
       rt.stream.sync();
-      SPDLOG_INFO("[pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]",
-                  elapsed(iter_window_begin), iterations_, residual_norm_);
+      SPDLOG_DEBUG("[pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]",
+                   elapsed(iter_window_begin), iterations_, residual_norm_);
       iter_window_begin = clock::now();
     }
 
@@ -283,8 +283,8 @@ MASCGSolver::Status MASCGSolver::solve(DynamicBSRView A,
     status = Status::ReachMaxIter;
   }
 
-  SPDLOG_INFO("[pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]",
-              elapsed(iter_window_begin), iterations_, residual_norm_);
+  SPDLOG_DEBUG("[pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]",
+               elapsed(iter_window_begin), iterations_, residual_norm_);
 
   return status;
 }

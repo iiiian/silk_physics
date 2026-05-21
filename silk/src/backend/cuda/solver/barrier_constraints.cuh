@@ -8,8 +8,11 @@
 
 namespace silk::cuda {
 
+enum class BarrierCollisionFilter { All, InitialContactsOnly, LineSearchOnly };
+
 EqualityConstraints gather_barrier_constraints(
     int state_num, ctd::span<const ::silk::cuda::Collision> collisions,
-    CudaRuntime rt);
+    CudaRuntime rt,
+    BarrierCollisionFilter filter = BarrierCollisionFilter::All);
 
 }  // namespace silk::cuda

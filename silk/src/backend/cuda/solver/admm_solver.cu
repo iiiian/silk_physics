@@ -195,7 +195,7 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
   float h_init_dual_norm = 0.0f;
   float h_linear_tol_adaptive_ratio = 1.0f;
   for (int inner_it = 0; inner_it < max_inner_iteration; ++inner_it) {
-    SPDLOG_INFO("Inner iter {}", inner_it);
+    SPDLOG_DEBUG("Inner iter {}", inner_it);
 
     // 1. Optimize main variables
     // (except iter 0 since aux variables are not initialized).
@@ -216,8 +216,8 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
       float h_linear_rel_tol =
           ctd::clamp(initial_linear_rel_tol * h_linear_tol_adaptive_ratio,
                      linear_rel_tol_min, linear_rel_tol_max);
-      SPDLOG_INFO("Linear solver tolerance rel={} abs={}", h_linear_rel_tol,
-                  linear_abs_tol);
+      SPDLOG_DEBUG("Linear solver tolerance rel={} abs={}", h_linear_rel_tol,
+                   linear_abs_tol);
 
       update_main(registry, inner_it, h_linear_rel_tol, linear_abs_tol,
                   *lhs_diag_, *rhs_, *inertia_mod_, inner_state, rt);
@@ -298,13 +298,13 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
     h_linear_tol_adaptive_ratio =
         std::max(h_primal_norm / h_primal_denom, h_dual_norm / h_dual_denom);
 
-    SPDLOG_INFO("Primal norm {}. Criteria {}.", h_primal_norm,
-                primal_criteria.eps);
-    SPDLOG_INFO("Dual norm {}. Criteria {}.", h_dual_norm, dual_criteria.eps);
+    SPDLOG_DEBUG("Primal norm {}. Criteria {}.", h_primal_norm,
+                 primal_criteria.eps);
+    SPDLOG_DEBUG("Dual norm {}. Criteria {}.", h_dual_norm, dual_criteria.eps);
     if (primal_criteria.has_converged(h_primal_norm) &&
         dual_criteria.has_converged(h_dual_norm)) {
-      SPDLOG_INFO("ADMM residual [{}, {}], NL loop terminate", h_primal_norm,
-                  h_dual_norm);
+      SPDLOG_DEBUG("ADMM residual [{}, {}], NL loop terminate", h_primal_norm,
+                   h_dual_norm);
       break;
     }
   }

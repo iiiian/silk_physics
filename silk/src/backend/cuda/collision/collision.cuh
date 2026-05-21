@@ -20,6 +20,10 @@ struct Collision {
   /// Time of impact in [0,1].
   float toi;
 
+  /// Collision is already close enough to the current state that it should be
+  /// enforced as a barrier contact, not used as a line-search rollback target.
+  bool is_initial_contact;
+
   /// Minimum separation distance to maintain between primitives.
   float minimal_separation;
 
