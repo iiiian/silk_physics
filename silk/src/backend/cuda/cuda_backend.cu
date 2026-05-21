@@ -330,16 +330,23 @@ Result CudaBackend::set_obstacle_position(uint32_t handle,
     return Result::error(ErrorCode::InvalidHandle);
   }
 
-  auto pos = impl_->registry_.get<PinPosition>(handle);
-  assert(pos);
-  if (pos->curr_position.size() != position.size()) {
+  auto mesh = impl_->registry_.get<TriMesh>(handle);
+  assert(mesh);
+  if (mesh->V.size() != position.size()) {
     return Result::error(ErrorCode::InvalidPosition);
   }
 
-  pos->is_static = false;
-  pos->is_static_twice = false;
-  std::swap(pos->curr_position, pos->prev_position);
-  pos->curr_position.assign(position.begin(), position.end());
+  auto pos = impl_->registry_.get<PinPosition>(handle);
+  if (pos) {
+    assert(pos->curr_position.size() != position.size());
+    pos->is_static = false;
+    pos->is_static_twice = false;
+    std::swap(pos->curr_position, pos->prev_position);
+    pos->curr_position.assign(position.begin(), position.end());
+  } else {
+    impl_->registry_.remove_deps_then_set(handle,
+                                          PinPosition::from_position(position));
+  }
   impl_->sync();
   return Result::ok();
 }
