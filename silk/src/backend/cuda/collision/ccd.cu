@@ -147,11 +147,26 @@ __device__ Vec3f velocity_diff(const Vec3f& v_relative, const Vec3f& n,
                v_parallel);
 }
 
-__device__ bool is_initial_contact_toi(float toi) {
-  constexpr float TOI_PROGRESS_EPS = 1e-6f;
-  return toi <= TOI_PROGRESS_EPS;
-}
+// toi smaller than this is classified as inital contact.
+constexpr float INITIAL_CONTACT_TOI_EPS = 1e-6f;
 
+/// @brief Compute point triangle collision.
+/// @param p Point collider.
+/// @param t Triangle collider.
+/// @param toi Normalized time of impact.
+/// @param y0 Primitive 0 (point vertex) position.
+/// @param y1 Primitive 1 (triangle vertices) position.
+/// @param y2 Primitive 2 (triangle vertices) position.
+/// @param y3 Primitive 3 (triangle vertices) position.
+/// @param d0 Primitive 0 (point vertex) position delta.
+/// @param d1 Primitive 1 (triangle vertices) position delta.
+/// @param d2 Primitive 2 (triangle vertices) position delta.
+/// @param d3 Primitive 3 (triangle vertices) position delta.
+/// @param ms Minimal separation.
+/// @param restitution Collision restitution.
+/// @param friction Collision friction.
+/// @param is_initial_contact True if toi is near 0.
+/// @return Collision if exists. nullopt otherwise.
 __device__ ctd::optional<Collision> make_pt_collision(
     const PointCollider* p, const TriangleCollider* t, float toi, Vec3f y0,
     Vec3f y1, Vec3f y2, Vec3f y3, Vec3f d0, Vec3f d1, Vec3f d2, Vec3f d3,
@@ -221,6 +236,7 @@ __device__ ctd::optional<Collision> make_pt_collision(
   c.v3_t0 = d3;
 
   if (is_initial_contact) {
+    // Ensure minimal separation.
     float gap = ms - sqrt(dist2);
     Vec3f correction = ax(gap, n);
     c.v0_t1 = ax(weight(0), correction);
@@ -239,6 +255,23 @@ __device__ ctd::optional<Collision> make_pt_collision(
   return c;
 }
 
+/// @brief Compute edge edge collision.
+/// @param ea Edge collider a.
+/// @param eb Edge collider b.
+/// @param toi Normalized time of impact.
+/// @param y0 Primitive 0 (edge a vertices) position.
+/// @param y1 Primitive 1 (edge a vertices) position.
+/// @param y2 Primitive 2 (edge b vertices) position.
+/// @param y3 Primitive 3 (edge b vertices) position.
+/// @param d0 Primitive 0 (edge a vertices) position delta.
+/// @param d1 Primitive 1 (edge a vertices) position delta.
+/// @param d2 Primitive 2 (edge b vertices) position delta.
+/// @param d3 Primitive 3 (edge b vertices) position delta.
+/// @param ms Minimal separation.
+/// @param restitution Collision restitution.
+/// @param friction Collision friction.
+/// @param is_initial_contact True if toi is near 0.
+/// @return Collision if exists. nullopt otherwise.
 __device__ ctd::optional<Collision> make_ee_collision(
     const EdgeCollider* ea, const EdgeCollider* eb, float toi, Vec3f y0,
     Vec3f y1, Vec3f y2, Vec3f y3, Vec3f d0, Vec3f d1, Vec3f d2, Vec3f d3,
@@ -309,6 +342,7 @@ __device__ ctd::optional<Collision> make_ee_collision(
   c.v3_t0 = d3;
 
   if (is_initial_contact) {
+    // Ensure minimal separation.
     float gap = ms - sqrt(dist2);
     Vec3f correction = ax(gap, n);
     c.v0_t1 = ax(weight(0), correction);
@@ -334,6 +368,7 @@ __device__ ctd::optional<Collision> pt_ccd(
   auto& t = triangle_collider;
   float ms = ctd::min(p->minimal_separation, t->minimal_separation);
 
+  // TODO: better combination mode?
   float restitution = 0.5 * (p->restitution + t->restitution);
   float friction = 0.5 * (p->friction + t->friction);
 
@@ -346,8 +381,8 @@ __device__ ctd::optional<Collision> pt_ccd(
   Vec3f d3 = vsub(t->v2_t1, t->v2_t0);
 
   auto initial_contact =
-      make_pt_collision(p, t, 0.0f, p->v0_t0, t->v0_t0, t->v1_t0, t->v2_t0,
-                        d0, d1, d2, d3, ms, restitution, friction, true);
+      make_pt_collision(p, t, 0.0f, p->v0_t0, t->v0_t0, t->v1_t0, t->v2_t0, d0,
+                        d1, d2, d3, ms, restitution, friction, true);
   if (initial_contact) {
     return initial_contact;
   }
@@ -363,9 +398,9 @@ __device__ ctd::optional<Collision> pt_ccd(
     Vec3f y2 = axpby(1.0f, t->v1_t0, root(i), d2);
     Vec3f y3 = axpby(1.0f, t->v2_t0, root(i), d3);
 
-    auto c = make_pt_collision(p, t, root(i), y0, y1, y2, y3, d0, d1, d2,
-                               d3, ms, restitution, friction,
-                               is_initial_contact_toi(root(i)));
+    auto c = make_pt_collision(p, t, root(i), y0, y1, y2, y3, d0, d1, d2, d3,
+                               ms, restitution, friction,
+                               (root(i) <= INITIAL_CONTACT_TOI_EPS));
     if (c) {
       return c;
     }
@@ -379,6 +414,7 @@ __device__ ctd::optional<Collision> ee_ccd(
   auto& eb = edge_collider_b;
   float ms = ctd::min(ea->minimal_separation, eb->minimal_separation);
 
+  // TODO: better combination mode?
   float restitution = 0.5 * (ea->restitution + eb->restitution);
   float friction = 0.5 * (ea->friction + eb->friction);
 
@@ -390,10 +426,9 @@ __device__ ctd::optional<Collision> ee_ccd(
   Vec3f d2 = vsub(eb->v0_t1, eb->v0_t0);
   Vec3f d3 = vsub(eb->v1_t1, eb->v1_t0);
 
-  auto initial_contact =
-      make_ee_collision(ea, eb, 0.0f, ea->v0_t0, ea->v1_t0, eb->v0_t0,
-                        eb->v1_t0, d0, d1, d2, d3, ms, restitution, friction,
-                        true);
+  auto initial_contact = make_ee_collision(ea, eb, 0.0f, ea->v0_t0, ea->v1_t0,
+                                           eb->v0_t0, eb->v1_t0, d0, d1, d2, d3,
+                                           ms, restitution, friction, true);
   if (initial_contact) {
     return initial_contact;
   }
@@ -409,9 +444,9 @@ __device__ ctd::optional<Collision> ee_ccd(
     Vec3f y2 = axpby(1.0f, eb->v0_t0, root(i), d2);
     Vec3f y3 = axpby(1.0f, eb->v1_t0, root(i), d3);
 
-    auto c = make_ee_collision(ea, eb, root(i), y0, y1, y2, y3, d0, d1, d2,
-                               d3, ms, restitution, friction,
-                               is_initial_contact_toi(root(i)));
+    auto c = make_ee_collision(ea, eb, root(i), y0, y1, y2, y3, d0, d1, d2, d3,
+                               ms, restitution, friction,
+                               (root(i) <= INITIAL_CONTACT_TOI_EPS));
     if (c) {
       return c;
     }
