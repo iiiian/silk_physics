@@ -303,8 +303,8 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
     SPDLOG_DEBUG("Dual norm {}. Criteria {}.", h_dual_norm, dual_criteria.eps);
     if (primal_criteria.has_converged(h_primal_norm) &&
         dual_criteria.has_converged(h_dual_norm)) {
-      SPDLOG_DEBUG("ADMM residual [{}, {}], NL loop terminate", h_primal_norm,
-                   h_dual_norm);
+      SPDLOG_INFO("ADMM it {}, residual [{}, {}], terminate.", inner_it,
+                  h_primal_norm, h_dual_norm);
       break;
     }
   }

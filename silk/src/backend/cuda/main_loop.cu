@@ -177,9 +177,8 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
   bool solved_initial_contacts = false;
 
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
-    SPDLOG_INFO("Outer iter {}", outer_it);
-
-    // Prediction based on linear velocity.
+    // Adaptive acceleration is based on previous frame velocity, so only use it
+    // before CCD rollback outer iterations mutate the substep state.
     int vert_num = state_num / 3;
     int grid_num = div_round_up(vert_num, 128);
     predict<<<grid_num, 128, 0, rt.stream.get()>>>(
@@ -233,10 +232,11 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
       if (h_line_collision_count > 0) {
         // Back off to 80% of TOI as a safety margin to remain strictly
         // pre-contact and avoid zero toi.
-        h_min_toi = 0.8f * scalar_load(scalar_min_toi.data(), rt);
+        h_min_toi = 1.0f * scalar_load(scalar_min_toi.data(), rt);
       }
-      SPDLOG_INFO("collision stats line={} initial={} earliest toi {}",
-                  h_line_collision_count, h_initial_contact_count, h_min_toi);
+      // SPDLOG_INFO("collision stats line={} initial={} earliest toi {}",
+      //             h_line_collision_count, h_initial_contact_count,
+      //             h_min_toi);
       if (h_min_toi == 0.0) {
         throw std::runtime_error("Zero toi");
       }
@@ -247,8 +247,9 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
         dt, outer_state, inner_state, outer_velocity);
 
     if (h_initial_contact_count > 0 && !solved_initial_contacts) {
-      SPDLOG_INFO("solve {} initial contacts at current outer state",
-                  h_initial_contact_count);
+      SPDLOG_INFO(
+          "Outer it {}, solve {} initial contacts at current outer state.",
+          outer_it, h_initial_contact_count);
       barrier_constraints =
           std::make_unique<EqualityConstraints>(gather_barrier_constraints(
               state_num, collisions, rt,
@@ -259,15 +260,15 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
 
     if (h_min_toi >= remaining_step) {
       SPDLOG_INFO(
-          "earliest toi  {} >= remaining step {}. terminate outer loop.",
-          h_min_toi, remaining_step);
+          "Outer it {}. Earliest toi  {} >= remaining step {}. terminate.",
+          outer_it, h_min_toi, remaining_step);
       grid_num = div_round_up(state_num, 128);
       mix<<<grid_num, 128, 0, rt.stream.get()>>>(remaining_step, inner_state,
                                                  outer_state, outer_state);
       break;
     }
 
-    SPDLOG_INFO("CCD rollback to toi {}", h_min_toi);
+    SPDLOG_INFO("Outer it {}, CCD rollback to toi {}", outer_it, h_min_toi);
     grid_num = div_round_up(state_num, 128);
     mix<<<grid_num, 128, 0, rt.stream.get()>>>(h_min_toi, inner_state,
                                                outer_state, outer_state);
