@@ -39,7 +39,7 @@
 
 // Source: https://github.com/ericjang/svd3/blob/master/svd3_cuda/svd3_cuda.h
 
-#include <cuda_runtime.h>
+#include "backend/cuda/solver/svd.cuh"
 
 namespace silk::cuda {
 

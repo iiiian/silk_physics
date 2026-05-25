@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -15,7 +16,12 @@ struct Global {
   int max_inner_iteration = 50;
   std::array<float, 3> acceleration{0.0, 0.0, -9.8};
   int total_steps = 100;
-  std::string solver_backend = "CPU";  // "CPU", "GPU", or "Auto"
+  float linear_solver_abs_tol = 1e-7;
+  float linear_solver_rel_tol_min = 1e-6;
+  float linear_solver_rel_tol_max = 1e-3;
+  float initial_linear_rel_tol = 1e-2;
+  float admm_abs_tol = 1e-5;
+  float admm_rel_tol = 1e-3;
 };
 
 //********************************/
@@ -49,6 +55,18 @@ struct ClothParams {
 };
 
 //********************************/
+//*        Pin Selection         */
+//********************************/
+struct PinBBox {
+  std::array<float, 3> min{0.0, 0.0, 0.0};
+  std::array<float, 3> max{0.0, 0.0, 0.0};
+};
+
+struct PinSelection {
+  std::optional<PinBBox> bbox;
+};
+
+//********************************/
 //*          Object Base         */
 //********************************/
 
@@ -65,6 +83,7 @@ struct ObjectBase {
 //******** Cloth Object **********/
 struct ClothObject : public ObjectBase {
   ClothParams cloth;
+  std::optional<PinSelection> pin_selection;
   ClothObject() { type = ObjectType::Cloth; }
 };
 

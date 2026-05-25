@@ -3,8 +3,8 @@
 #include <spdlog/spdlog.h>
 
 #include <argparse/argparse.hpp>
-#include <optional>
 #include <cctype>
+#include <optional>
 #include <string>
 
 #include "config.hpp"
@@ -41,6 +41,12 @@ int main(int argc, char** argv) {
       .help("Select backend: cpu or cuda (default: cpu)")
       .store_into(backend_opt);
 
+  bool is_bench = false;
+  program.add_argument("--bench")
+      .help("Benchmark mode: skip copying solution back to host")
+      .flag()
+      .store_into(is_bench);
+
   try {
     program.parse_args(argc, argv);
   } catch (const std::exception& err) {
@@ -61,11 +67,11 @@ int main(int argc, char** argv) {
 
   // Normalize backend option
   for (auto& ch : backend_opt) ch = static_cast<char>(::tolower(ch));
-  silk::Backend backend_sel = silk::Backend::Cpu;
+  silk::Backend backend_sel = silk::Backend::CPU;
   if (backend_opt == "cpu") {
-    backend_sel = silk::Backend::Cpu;
+    backend_sel = silk::Backend::CPU;
   } else if (backend_opt == "cuda") {
-    backend_sel = silk::Backend::Gpu;
+    backend_sel = silk::Backend::GPU;
   } else {
     spdlog::error("Invalid backend '{}'. Allowed: cpu, cuda.", backend_opt);
     return 1;
@@ -78,7 +84,7 @@ int main(int argc, char** argv) {
       return 1;
     }
     spdlog::info("Headless mode.");
-    headless_run(*sim_config, out_path, backend_sel);
+    headless_run(*sim_config, out_path, backend_sel, is_bench);
     return 0;
   } else {
     spdlog::info("GUI mode.");
@@ -90,7 +96,7 @@ int main(int argc, char** argv) {
     py::options::groundPlaneMode = py::GroundPlaneMode::None;
 
     Demo demo_app;
-    if (!demo_app.set_backend(backend_sel)) {
+    if (!demo_app.init(backend_sel)) {
       return 1;
     }
     if (sim_config) {

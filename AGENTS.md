@@ -1,2 +1,21 @@
-- never modify any files without explicitly asking for permission
-- never execute any commands that will modify files without asking for permission
+## Tone
+
+- do not add useless fillers like "you are right", "I apologize". Be direct and concise.
+
+## To config and build:
+
+cmake --preset <preset name>
+cmake --build ./build/<preset name>
+
+On linux, valid presets are linux_debug, linux_profile, and linux_release
+
+## Style guide
+
+- no const for scalar type. Ex. const int, const double.
+- no casting between index type. This repo assumes index type is int and is always large enough.
+  Ex. static_cast<some size_t type> should be avoided. rely on implicit cast.
+
+## CCCL lib
+
+- cuda::std::span is a device compatible span. Common vector like type like std::vector, cuda::buffer can be casted to cuda::std::span implicitly.
+

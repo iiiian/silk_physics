@@ -8,9 +8,11 @@
 #include <array>
 #include <glm/glm.hpp>
 #include <queue>
+#include <span>
 
 #include "../eigen_alias.hpp"
 #include "../gui_utils.hpp"
+#include "../pin_selection.hpp"
 #include "../polyscope_silk_interop.hpp"
 #include "../position_cache.hpp"
 #include "../transform.hpp"
@@ -90,6 +92,22 @@ std::optional<Cloth> Cloth::make_cloth(silk::World* world,
   cloth->collision_config_.group = obj.collision.group;
   cloth->collision_config_.friction = obj.collision.friction;
   cloth->collision_config_.restitution = obj.collision.restitution;
+  if (obj.pin_selection && obj.pin_selection->bbox) {
+    std::vector<int> selected =
+        pin_selection::select_bbox_vertices(cloth->V_, *obj.pin_selection->bbox);
+    if (selected.empty()) {
+      spdlog::warn("Pin selection for cloth '{}' matched no vertices.",
+                   obj.name);
+    } else {
+      spdlog::info("Pin selection for cloth '{}' matched {} vertices.",
+                   obj.name, selected.size());
+    }
+    for (int idx : selected) {
+      cloth->pin_group_.insert(idx);
+    }
+    cloth->update_pin_index();
+    cloth->update_pin_highlight();
+  }
 
   return cloth;
 }
@@ -192,7 +210,7 @@ bool Cloth::init_sim() {
   mesh_->resetTransform();
 
   // Setup cloth in silk
-  silk::ConstSpan<float> vert_span =
+  std::span<const float> vert_span =
       make_const_span_from_position(mesh_->vertexPositions);
 
   if (silk_handle_ != 0 && transform_changed_) {
@@ -213,8 +231,7 @@ bool Cloth::init_sim() {
 
   silk::MeshConfig mesh_config;
   mesh_config.verts = vert_span;
-  mesh_config.faces.data = F_.data();
-  mesh_config.faces.size = F_.size();
+  mesh_config.faces = std::span<const int>(F_.data(), F_.size());
 
   silk::Result r = world_->add_cloth(cloth_config_, collision_config_,
                                      mesh_config, pin_index_, silk_handle_);
@@ -281,7 +298,7 @@ bool Cloth::sim_step_pre() {
 bool Cloth::sim_step_post(float current_time) {
   // Update position in polyscope
   mesh_->vertexPositions.ensureHostBufferAllocated();
-  silk::Span<float> position = make_span_from_position(mesh_->vertexPositions);
+  std::span<float> position = make_span_from_position(mesh_->vertexPositions);
   silk::Result r = world_->get_cloth_position(silk_handle_, position);
   if (!r) {
     spdlog::error("Fail to update cloth {} position. Error: {}", name_,
@@ -291,7 +308,7 @@ bool Cloth::sim_step_post(float current_time) {
   mesh_->vertexPositions.markHostBufferUpdated();
 
   // Also save a copy in simulation cache
-  Eigen::Map<Vert> vert{position.data, position.size / 3, 3};
+  Eigen::Map<Vert> vert{position.data(), (int)position.size() / 3, 3};
   cache_.emplace_back(current_time, vert);
 
   return true;
@@ -349,31 +366,32 @@ void Cloth::handle_pick(const polyscope::PickResult& pick,
     }
   }
 
-  // Update vertex color quantity to visualize current selection as yellow.
-  // Use the mesh base surface color for unselected vertices to preserve
-  // appearance.
-  const glm::vec3 base_color = mesh_->getSurfaceColor();
-  const glm::vec3 selected_color = {1.0f, 1.0f, 0.0f};  // yellow
-
-  // Build a full color array; this is O(nV) but simple and robust.
-  int vert_num = V_.rows();
-  std::vector<glm::vec3> colors(vert_num, base_color);
-  for (int idx : pin_group_) {
-    colors[idx] = selected_color;
-  }
-
-  // Replace existing quantity (if any), or remove when empty selection.
-  mesh_->removeQuantity("pin_highlight");
-  if (!pin_group_.empty()) {
-    auto* q = mesh_->addVertexColorQuantity("pin_highlight", colors);
-    q->setEnabled(true);
-  }
+  update_pin_highlight();
 }
 
 void Cloth::update_pin_index() {
   pin_index_.clear();
   for (int idx : pin_group_) {
     pin_index_.push_back(idx);
+  }
+}
+
+void Cloth::update_pin_highlight() {
+  // Use the mesh base surface color for unselected vertices to preserve
+  // appearance.
+  glm::vec3 base_color = mesh_->getSurfaceColor();
+  glm::vec3 selected_color = {1.0f, 1.0f, 0.0f};  // yellow
+
+  int vert_num = V_.rows();
+  std::vector<glm::vec3> colors(vert_num, base_color);
+  for (int idx : pin_group_) {
+    colors[idx] = selected_color;
+  }
+
+  mesh_->removeQuantity("pin_highlight");
+  if (!pin_group_.empty()) {
+    auto* q = mesh_->addVertexColorQuantity("pin_highlight", colors);
+    q->setEnabled(true);
   }
 }
 

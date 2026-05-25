@@ -7,6 +7,7 @@
 #include <igl/is_vertex_manifold.h>
 
 #include <Eigen/Core>
+#include <span>
 
 #include "common/logger.hpp"
 
@@ -14,8 +15,8 @@ namespace silk {
 
 /// @brief Validates basic schema requirements for mesh data.
 ///
-/// Ensures the input data has valid pointers, correct array sizing (multiples of
-/// 3 for XYZ coordinates and triangle indices), and meets minimum geometry
+/// Ensures the input data has valid pointers, correct array sizing (multiples
+/// of 3 for XYZ coordinates and triangle indices), and meets minimum geometry
 /// requirements.
 ///
 /// @param mc Input mesh configuration to validate
@@ -23,23 +24,23 @@ namespace silk {
 /// @param fnum Minimal face count
 /// @return true if schema is valid, false otherwise
 bool check_schema(const MeshConfig& mc, int min_vnum, int min_fnum) {
-  if (mc.verts.data == nullptr || mc.faces.data == nullptr) {
+  if (mc.verts.data() == nullptr || mc.faces.data() == nullptr) {
     SPDLOG_WARN("Invalid mesh: null pointer(s) in verts or faces.");
     return false;
   }
 
   // Vertex data is packed as [x0,y0,z0,x1,y1,z1,...], faces as
   // [i0,j0,k0,i1,j1,k1,...].
-  if (mc.verts.size % 3 != 0 || mc.faces.size % 3 != 0) {
+  if (mc.verts.size() % 3 != 0 || mc.faces.size() % 3 != 0) {
     SPDLOG_WARN(
         "Invalid mesh: verts.num ({}) and faces.num ({}) must be multiples of "
         "3.",
-        mc.verts.size, mc.faces.size);
+        mc.verts.size(), mc.faces.size());
     return false;
   }
 
-  int vnum = mc.verts.size / 3;
-  int fnum = mc.faces.size / 3;
+  int vnum = mc.verts.size() / 3;
+  int fnum = mc.faces.size() / 3;
   if (vnum < min_vnum) {
     SPDLOG_WARN("Invalid mesh: need at least {} vertices, got {}.", min_vnum,
                 vnum);
@@ -73,8 +74,8 @@ bool check_finite_positions(const RMatrixX3f& V) {
 ///
 /// @param F Face index matrix (#faces × 3)
 /// @param vnum Total number of vertices for bounds checking
-/// @return true if indexing is valid, false if out-of-bounds or degenerate faces
-/// found
+/// @return true if indexing is valid, false if out-of-bounds or degenerate
+/// faces found
 bool check_indexing(const RMatrixX3i& F, int vnum) {
   int min_idx = F.minCoeff();
   int max_idx = F.maxCoeff();
@@ -180,11 +181,13 @@ std::optional<TriMesh> make_cloth_mesh(MeshConfig mesh_config) {
   if (!check_schema(mesh_config, 3, 1)) {
     return std::nullopt;
   }
-  int vnum = mesh_config.verts.size / 3;
-  int fnum = mesh_config.faces.size / 3;
+  int vnum = mesh_config.verts.size() / 3;
+  int fnum = mesh_config.faces.size() / 3;
 
-  RMatrixX3f V = Eigen::Map<const RMatrixX3f>(mesh_config.verts.data, vnum, 3);
-  RMatrixX3i F = Eigen::Map<const RMatrixX3i>(mesh_config.faces.data, fnum, 3);
+  RMatrixX3f V =
+      Eigen::Map<const RMatrixX3f>(mesh_config.verts.data(), vnum, 3);
+  RMatrixX3i F =
+      Eigen::Map<const RMatrixX3i>(mesh_config.faces.data(), fnum, 3);
 
   if (!check_finite_positions(V)) {
     return std::nullopt;
@@ -225,11 +228,13 @@ std::optional<TriMesh> make_obstacle_mesh(MeshConfig mesh_config) {
   if (!check_schema(mesh_config, 1, 0)) {
     return std::nullopt;
   }
-  int vnum = mesh_config.verts.size / 3;
-  int fnum = mesh_config.faces.size / 3;
+  int vnum = mesh_config.verts.size() / 3;
+  int fnum = mesh_config.faces.size() / 3;
 
-  RMatrixX3f V = Eigen::Map<const RMatrixX3f>(mesh_config.verts.data, vnum, 3);
-  RMatrixX3i F = Eigen::Map<const RMatrixX3i>(mesh_config.faces.data, fnum, 3);
+  RMatrixX3f V =
+      Eigen::Map<const RMatrixX3f>(mesh_config.verts.data(), vnum, 3);
+  RMatrixX3i F =
+      Eigen::Map<const RMatrixX3i>(mesh_config.faces.data(), fnum, 3);
 
   if (!check_finite_positions(V)) {
     return std::nullopt;

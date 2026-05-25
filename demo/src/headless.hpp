@@ -10,4 +10,4 @@
 #include <silk/silk.hpp>
 
 void headless_run(const SimConfig& config, const std::string& out_path,
-                  silk::Backend backend);
+                  silk::Backend backend, bool bench);

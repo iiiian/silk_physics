@@ -8,56 +8,23 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <vector>
 
 #include "silk/result.hpp"
 
 namespace silk {
 
-/// Backend selection for the simulation world.
-enum class Backend { Cpu, Gpu };
-
-// Internal backend interface (defined in source tree)
-class IBackend;
-
-/// @brief Non-owning view over contiguous array data.
-/// @tparam T Element type
-template <typename T>
-class Span {
- public:
-  T* data = nullptr;  ///< Pointer to first element (may be null if size is 0)
-  int size = 0;       ///< Number of elements
-
- public:
-  Span() = default;
-  Span(T* ptr, int size) : data(ptr), size(size) {}
-  Span(std::vector<T>& vec) : data(vec.data()), size(vec.size()) {}
-};
-
-/// @brief Non-owning read-only view over contiguous array data.
-/// @tparam T Element type
-template <typename T>
-class ConstSpan {
- public:
-  const T* data =
-      nullptr;   ///< Pointer to first element (may be null if size is 0)
-  int size = 0;  ///< Number of elements
-
- public:
-  ConstSpan() = default;
-  ConstSpan(const T* ptr, int size) : data(ptr), size(size) {}
-  ConstSpan(const std::vector<T>& vec) : data(vec.data()), size(vec.size()) {}
-};
-
 /// @brief Triangle mesh definition for cloth and obstacles.
 struct MeshConfig {
-  ConstSpan<float> verts;  ///< Vertex positions as [x0,y0,z0, x1,y1,z1, ...]
-  ConstSpan<int> faces;    ///< Triangle indices as [i0,j0,k0, i1,j1,k1, ...]
+  std::span<const float>
+      verts;  ///< Vertex positions as [x0,y0,z0, x1,y1,z1, ...]
+  std::span<const int>
+      faces;  ///< Triangle indices as [i0,j0,k0, i1,j1,k1, ...]
 };
 
 /// @brief Collision behavior configuration for entities.
 struct CollisionConfig {
- public:
   bool is_collision_on = true;       ///< Enable collision
   bool is_self_collision_on = true;  ///< Enable self-collision
   int group = 0;                     ///< Collision group
@@ -77,13 +44,6 @@ struct ClothConfig {
   float damping = 0.01f;
 };
 
-/// @brief Solver backend selection
-enum class SolverBackend {
-  CPU,   ///< Use CPU solver (TBB parallel, default)
-  GPU,   ///< Use GPU solver (CUDA acceleration)
-  Auto   ///< Automatically select based on availability and mesh size
-};
-
 /// @brief Global simulation parameters.
 struct GlobalConfig {
   /// Constant acceleration in X direction
@@ -101,25 +61,35 @@ struct GlobalConfig {
   /// Time step size in seconds
   float dt = 1.0f / 60.0f;
 
-  /// Solver backend selection (CPU, GPU, or Auto)
-  SolverBackend solver_backend = SolverBackend::CPU;
+  /// Absolute tolerance for the linear solver residual
+  float linear_solver_abs_tol = 1e-7f;
+  /// Minimum adaptive relative tolerance for the linear solver
+  float linear_solver_rel_tol_min = 1e-6f;
+  /// Maximum adaptive relative tolerance for the linear solver
+  float linear_solver_rel_tol_max = 1e-3f;
+  /// Initial relative tolerance for the inner linear solver
+  float initial_linear_rel_tol = 1e-2f;
+
+  /// Absolute tolerance for ADMM primal and dual residuals
+  float admm_abs_tol = 1e-5f;
+  /// Relative tolerance for ADMM primal and dual residuals
+  float admm_rel_tol = 1e-3f;
 };
+
+/// Backend selection for the simulation world.
+enum class Backend { CPU, GPU };
 
 /// @brief Main simulation world managing all physics entities and systems.
 class World {
- public:
-  class IBackend;
-
  private:
-  std::unique_ptr<IBackend> backend_;
+  class Impl;
+  std::unique_ptr<Impl> impl_;
 
  public:
   World();
+  ~World();
   World(const World&) = delete;
   World(World&&);
-
-  ~World();
-
   World& operator=(const World&) = delete;
   World& operator=(World&&);
 
@@ -127,10 +97,10 @@ class World {
   // Global API
   // ---------------------------------------
 
-  /// @brief Select computation backend (CPU or GPU).
-  /// Defaults to CPU. Switching clears current simulation state.
-  /// @return Success or NoCudaSupport if GPU backend is unavailable.
-  [[nodiscard]] Result set_backend(Backend backend);
+  /// @brief Initialize simulation backend.
+  /// @param backend Simulation backend.
+  /// @return Success or failure result
+  [[nodiscard]] Result init(Backend backend);
 
   /// @brief Configure global simulation parameters.
   /// @param config Global physics settings (gravity, timestep, solver limits)
@@ -140,7 +110,9 @@ class World {
   /// @brief Remove all objects and simulation data.
   void clear();
 
+  // ---------------------------------------
   // Solver API
+  // ---------------------------------------
 
   /// @brief Advance simulation by one timestep.
   ///
@@ -151,7 +123,9 @@ class World {
   /// @return Success result
   [[nodiscard]] Result solver_reset();
 
+  // ---------------------------------------
   // Cloth API
+  // ---------------------------------------
 
   /// @brief Create a new cloth object in the simulation.
   ///
@@ -162,12 +136,14 @@ class World {
   /// @param collision_config Collision settings
   /// @param mesh_config Triangle mesh definition
   /// @param pin_index Indices of vertices to pin in place (may be empty)
-  /// @param handle Output handle for the new cloth object. Set to zero if fails.
+  /// @param handle Output handle for the new cloth object. Set to zero if
+  /// fails.
   /// @return Success with valid handle, or error (InvalidMesh, TooManyBody)
   [[nodiscard]] Result add_cloth(ClothConfig cloth_config,
                                  CollisionConfig collision_config,
                                  MeshConfig mesh_config,
-                                 ConstSpan<int> pin_index, uint32_t& handle);
+                                 std::span<const int> pin_index,
+                                 uint32_t& handle);
 
   /// @brief Remove cloth object from simulation.
   /// @param handle Cloth object handle
@@ -183,7 +159,7 @@ class World {
   /// @param position Output buffer for vertex positions (must be pre-allocated)
   /// @return Success, or InvalidHandle/IncorrectPositionNum on error
   [[nodiscard]] Result get_cloth_position(uint32_t handle,
-                                          Span<float> position) const;
+                                          std::span<float> position) const;
 
   /// @brief Update physical properties of existing cloth.
   ///
@@ -209,7 +185,7 @@ class World {
   /// @param pin_index Vertex indices to pin (may be empty to unpin all)
   /// @return Success, or InvalidHandle if cloth not found
   [[nodiscard]] Result set_cloth_pin_index(uint32_t handle,
-                                           ConstSpan<int> pin_index);
+                                           std::span<const int> pin_index);
 
   /// @brief Move pinned vertices to new target positions.
   ///
@@ -220,7 +196,7 @@ class World {
   /// ...]
   /// @return Success, or InvalidHandle/IncorrectPinNum on error
   [[nodiscard]] Result set_cloth_pin_position(uint32_t handle,
-                                              ConstSpan<float> position);
+                                              std::span<const float> position);
 
   // ---------------------------------------
   // Obstacle API
@@ -259,7 +235,7 @@ class World {
   /// @param position New vertex positions [x0,y0,z0, x1,y1,z1, ...]
   /// @return Success, or InvalidHandle/IncorrectPositionNum on error
   [[nodiscard]] Result set_obstacle_position(uint32_t handle,
-                                             ConstSpan<float> position);
+                                             std::span<const float> position);
 };
 
 }  // namespace silk

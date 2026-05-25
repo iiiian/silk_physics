@@ -1,0 +1,99 @@
+#include "backend/cuda/assembly/cloth_assembly_l1_cache.cuh"
+
+#include <Eigen/Core>
+#include <cmath>
+
+#include "backend/cuda/cuda_utils.cuh"
+#include "backend/cuda/eigen_cuda_interop.cuh"
+#include "common/cloth_assembly_l2_cache.hpp"
+#include "common/eigen_utils.hpp"
+#include "common/logger.hpp"
+#include "silk/silk.hpp"
+
+namespace silk::cuda {
+
+ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
+                                           const MeshPartition& partition,
+                                           const ClothAssemblyL2Cache& l2_cache,
+                                           float dt, CudaRuntime rt) {
+  auto& c = config;
+  auto& l2 = l2_cache;
+  int state_num = 3 * l2.mass.size();
+
+  // TODO: Experiements with penalty.
+  float penalty = c.elastic_stiffness;
+
+  // Assemble H matrix.
+  std::vector<Eigen::Triplet<float>> AA_triplets;
+  // Elastic term.
+  append_triplets_from_sparse(l2.JWJ, 0, 0, c.elastic_stiffness, AA_triplets);
+  // Bending term.
+  append_triplets_from_vectorized_sparse(l2.CWC, 0, 0, c.bending_stiffness,
+                                         AA_triplets);
+  Eigen::SparseMatrix<float> h_AA{state_num, state_num};
+  h_AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
+
+  // Assemble vectorized Laplacian operator.
+  std::vector<Eigen::Triplet<float>> lap_triplets;
+  append_triplets_from_vectorized_sparse(l2.laplacian_ops, 0, 0, 1.0f,
+                                         lap_triplets);
+  Eigen::SparseMatrix<float> h_laplacian_ops{state_num, state_num};
+  h_laplacian_ops.setFromTriplets(lap_triplets.begin(), lap_triplets.end());
+
+  // Assemble jacobian ops.
+  // Convert from Eigen default col major to row major.
+  std::vector<float> h_jacobian_ops(l2.jacobian_ops.size() * 54);
+  for (int i = 0; i < l2.jacobian_ops.size(); ++i) {
+    for (int row = 0; row < 6; ++row) {
+      for (int col = 0; col < 9; ++col) {
+        h_jacobian_ops[54 * i + 9 * row + col] = l2.jacobian_ops[i](row, col);
+      }
+    }
+  }
+
+  // Assemble area_sqrt.
+  Eigen::VectorXf h_area_sqrt = l2_cache.area.array().sqrt();
+
+  // Assemble bending sqrt weight. The bending norm is weighted by inverse
+  // voroni mass.
+  std::vector<float> h_bending_weight_sqrt(state_num);
+  for (int i = 0; i < l2.mass.size(); ++i) {
+    float val = std::sqrt(1.0f / l2.mass(i));
+    h_bending_weight_sqrt[3 * i] = val;
+    h_bending_weight_sqrt[3 * i + 1] = val;
+    h_bending_weight_sqrt[3 * i + 2] = val;
+  }
+
+  // Assemble mass.
+  std::vector<float> h_mass(state_num);
+  for (int i = 0; i < l2.mass.size(); ++i) {
+    float val = c.density * l2.mass(i);
+    h_mass[3 * i] = val;
+    h_mass[3 * i + 1] = val;
+    h_mass[3 * i + 2] = val;
+  }
+
+  this->dt = dt;
+  this->penalty = penalty;
+  this->state_num = state_num;
+  this->vert_num = l2_cache.mass.size();
+  this->face_num = l2_cache.area.size();
+  this->elastic_stiffness = c.elastic_stiffness;
+  this->bending_stiffness = c.bending_stiffness;
+  this->faces = host_eigen_to_device(l2_cache.F, rt);
+  this->laplacian_ops = BSRMatrix{h_laplacian_ops, 3, {}, rt};
+  this->bending_weight_sqrt =
+      vec_like_to_device<float>(h_bending_weight_sqrt, rt);
+  this->rest_curvature =
+      host_eigen_to_device(l2.rest_curvature.reshaped<Eigen::RowMajor>(), rt);
+  this->jacobian_ops = vec_like_to_device<float>(h_jacobian_ops, rt);
+  this->area_sqrt = host_eigen_to_device(h_area_sqrt, rt);
+  this->mass = vec_like_to_device<float>(h_mass, rt);
+  this->weighted_AA = BSRMatrix{h_AA, 3, {}, rt};
+  this->part_offsets =
+      vec_like_to_device<int>(partition.h_partition_offsets, rt);
+
+  rt.stream.sync();
+}
+
+}  // namespace silk::cuda

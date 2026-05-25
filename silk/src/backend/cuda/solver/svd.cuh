@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cuda_runtime.h>
-
 namespace silk::cuda {
 
 __device__ void svd33(

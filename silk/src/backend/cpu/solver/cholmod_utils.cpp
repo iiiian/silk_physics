@@ -1,6 +1,6 @@
 #include "backend/cpu/solver/cholmod_utils.hpp"
 
-namespace silk::cpu::cholmod_raii {
+namespace silk::cpu {
 
 CholmodCommon::CholmodCommon() { cholmod_start(&common_); }
 
@@ -23,4 +23,4 @@ Eigen::Map<Eigen::VectorXf> make_eigen_dense_vector_view(cholmod_dense* v) {
   return Eigen::Map<Eigen::VectorXf>(x, static_cast<Eigen::Index>(v->nrow));
 }
 
-}  // namespace silk::cpu::cholmod_raii
+}  // namespace silk::cpu

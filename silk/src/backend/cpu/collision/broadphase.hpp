@@ -11,6 +11,7 @@
 #include <cassert>
 #include <cstring>
 #include <functional>
+#include <span>
 #include <vector>
 
 #include "backend/cpu/collision/bbox.hpp"
@@ -32,7 +33,7 @@ template <typename C>
 /// Returns pair(mean, variance) across x/y/z. Used to pick SAP axis and to
 /// translate planes toward the current distribution.
 std::pair<Eigen::Vector3f, Eigen::Vector3f> proxy_mean_variance(
-    const std::vector<C>& colliders, const int* proxies, int proxy_num) {
+    std::span<const C> colliders, const int* proxies, int proxy_num) {
   assert((proxy_num > 0));
 
   Eigen::Vector3f mean = Eigen::Vector3f::Zero();
@@ -51,7 +52,7 @@ std::pair<Eigen::Vector3f, Eigen::Vector3f> proxy_mean_variance(
 
 template <typename C>
 /// Select SAP axis as the one with maximal center variance for the group.
-int sap_optimal_axis(const std::vector<C>& colliders, const int* proxies,
+int sap_optimal_axis(std::span<const C> colliders, const int* proxies,
                      int proxy_num) {
   assert((proxy_num > 0));
 
@@ -62,9 +63,15 @@ int sap_optimal_axis(const std::vector<C>& colliders, const int* proxies,
 }
 
 template <typename C>
+int sap_optimal_axis(const std::vector<C>& colliders, const int* proxies,
+                     int proxy_num) {
+  return sap_optimal_axis(std::span<const C>(colliders), proxies, proxy_num);
+}
+
+template <typename C>
 /// Select SAP axis considering two groups (bipartite), pooling variance.
-int sap_optimal_axis(const std::vector<C>& colliders_a, const int* proxies_a,
-                     int proxy_num_a, const std::vector<C>& colliders_b,
+int sap_optimal_axis(std::span<const C> colliders_a, const int* proxies_a,
+                     int proxy_num_a, std::span<const C> colliders_b,
                      const int* proxies_b, int proxy_num_b) {
   assert((proxy_num_a > 0));
   assert((proxy_num_b > 0));
@@ -85,9 +92,18 @@ int sap_optimal_axis(const std::vector<C>& colliders_a, const int* proxies_a,
 }
 
 template <typename C>
+int sap_optimal_axis(const std::vector<C>& colliders_a, const int* proxies_a,
+                     int proxy_num_a, const std::vector<C>& colliders_b,
+                     const int* proxies_b, int proxy_num_b) {
+  return sap_optimal_axis(std::span<const C>(colliders_a), proxies_a,
+                          proxy_num_a, std::span<const C>(colliders_b),
+                          proxies_b, proxy_num_b);
+}
+
+template <typename C>
 /// Sort proxies in-place by AABB min on `axis` for SAP.
-void sap_sort_proxies(const std::vector<C>& colliders, int* proxies,
-                      int proxy_num, int axis) {
+void sap_sort_proxies(std::span<const C> colliders, int* proxies, int proxy_num,
+                      int axis) {
   assert((proxy_num != 0));
 
   auto comp = [axis, &colliders](int a, int b) -> bool {
@@ -96,14 +112,20 @@ void sap_sort_proxies(const std::vector<C>& colliders, int* proxies,
   pdqsort_branchless(proxies, proxies + proxy_num, comp);
 }
 
+template <typename C>
+void sap_sort_proxies(const std::vector<C>& colliders, int* proxies,
+                      int proxy_num, int axis) {
+  sap_sort_proxies(std::span<const C>(colliders), proxies, proxy_num, axis);
+}
+
 /// Sweep one object against a sorted list on `axis`.
 /// Early exits when intervals separate; defers narrow-phase by returning pairs
 /// of pointers to colliders; caller may run additional checks. If flip is true,
 /// return pair [b, a] instead of [a, b].
 template <typename C, bool flip = false, typename FilterT>
-void sap_sorted_collision(C& ca, std::vector<C>& colliders_b,
-                          const int* proxies_b, int proxy_num_b, int axis,
-                          const FilterT& filter, CollisionCache<C>& cache) {
+void sap_sorted_collision(C& ca, std::span<C> colliders_b, const int* proxies_b,
+                          int proxy_num_b, int axis, const FilterT& filter,
+                          CollisionCache<C>& cache) {
   assert((proxy_num_b != 0));
 
   for (int i = 0; i < proxy_num_b; ++i) {
@@ -132,9 +154,9 @@ void sap_sorted_collision(C& ca, std::vector<C>& colliders_b,
 
 template <typename C, typename FilterT>
 /// SAP within one sorted group; each pair passes through `filter`.
-void sap_sorted_group_self_collision(std::vector<C>& colliders,
-                                     const int* proxies, int proxy_num,
-                                     int axis, const FilterT& filter,
+void sap_sorted_group_self_collision(std::span<C> colliders, const int* proxies,
+                                     int proxy_num, int axis,
+                                     const FilterT& filter,
                                      CollisionCache<C>& cache) {
   assert((proxy_num > 0));
 
@@ -146,10 +168,19 @@ void sap_sorted_group_self_collision(std::vector<C>& colliders,
 }
 
 template <typename C, typename FilterT>
+void sap_sorted_group_self_collision(std::vector<C>& colliders,
+                                     const int* proxies, int proxy_num,
+                                     int axis, const FilterT& filter,
+                                     CollisionCache<C>& cache) {
+  sap_sorted_group_self_collision(std::span<C>(colliders), proxies, proxy_num,
+                                  axis, filter, cache);
+}
+
+template <typename C, typename FilterT>
 /// Bipartite SAP between two sorted groups.
-void sap_sorted_group_group_collision(std::vector<C>& colliders_a,
+void sap_sorted_group_group_collision(std::span<C> colliders_a,
                                       const int* proxies_a, int proxy_num_a,
-                                      std::vector<C>& colliders_b,
+                                      std::span<C> colliders_b,
                                       const int* proxies_b, int proxy_num_b,
                                       int axis, const FilterT& filter,
                                       CollisionCache<C>& cache) {
@@ -174,6 +205,18 @@ void sap_sorted_group_group_collision(std::vector<C>& colliders_a,
       ++b;
     }
   }
+}
+
+template <typename C, typename FilterT>
+void sap_sorted_group_group_collision(std::vector<C>& colliders_a,
+                                      const int* proxies_a, int proxy_num_a,
+                                      std::vector<C>& colliders_b,
+                                      const int* proxies_b, int proxy_num_b,
+                                      int axis, const FilterT& filter,
+                                      CollisionCache<C>& cache) {
+  sap_sorted_group_group_collision(std::span<C>(colliders_a), proxies_a,
+                                   proxy_num_a, std::span<C>(colliders_b),
+                                   proxies_b, proxy_num_b, axis, filter, cache);
 }
 
 /// Node of the broad-phase KD-tree.
@@ -295,8 +338,7 @@ class KDTree {
 
   /// Enumerate potentially colliding pairs within this tree.
   /// - Uses SAP per node on the axis of largest variance; schedules node work
-  /// as
-  ///   tbb tasks and merges per-thread caches into `cache`.
+  /// as tbb tasks and merges per-thread caches into `cache`.
   /// - `filter` is applied before AABB checks and can skip domain-excluded
   ///   pairs (e.g. static-static in incremental mode).
   template <typename FilterT>
@@ -459,8 +501,9 @@ class KDTree {
   void find_optimal_plane(KDNode* n) const {
     assert((n->proxy_num() > 0));
 
+    std::span<const C> colliders(colliders_.data(), colliders_.size());
     auto [mean, var] = proxy_mean_variance(
-        colliders_, proxies_.data() + n->proxy_start, n->proxy_num());
+        colliders, proxies_.data() + n->proxy_start, n->proxy_num());
     var.maxCoeff(&n->axis);
     n->position = mean(n->axis);
   }
@@ -992,12 +1035,15 @@ class KDTree {
 
     if (n->ext_num() == 0) {
       // node-node test
-      int axis = sap_optimal_axis(colliders_, proxy_start, proxy_num);
-      sap_sort_proxies(colliders_, proxy_start, proxy_num, axis);
+      std::span<C> colliders(colliders_.data(), colliders_.size());
+      std::span<const C> const_colliders(colliders_.data(), colliders_.size());
+      int axis = sap_optimal_axis(const_colliders, proxy_start, proxy_num);
+      sap_sort_proxies(const_colliders, proxy_start, proxy_num, axis);
 
-      auto task_func = [this, proxy_start, proxy_num, axis, &filter, &cache]() {
-        sap_sorted_group_self_collision(colliders_, proxy_start, proxy_num,
-                                        axis, filter, cache.local());
+      auto task_func = [colliders, proxy_start, proxy_num, axis, &filter,
+                        &cache]() {
+        sap_sorted_group_self_collision(colliders, proxy_start, proxy_num, axis,
+                                        filter, cache.local());
       };
       task_group.run(task_func);
     } else {
@@ -1005,20 +1051,22 @@ class KDTree {
       int* ext_start = buffer_.data() + n->ext_start;
       int ext_num = n->ext_num();
       // most collider resides on leaf, so no need to test external collider
-      int axis = sap_optimal_axis(colliders_, proxy_start, proxy_num);
-      sap_sort_proxies(colliders_, proxy_start, proxy_num, axis);
-      sap_sort_proxies(colliders_, ext_start, ext_num, axis);
+      std::span<C> colliders(colliders_.data(), colliders_.size());
+      std::span<const C> const_colliders(colliders_.data(), colliders_.size());
+      int axis = sap_optimal_axis(const_colliders, proxy_start, proxy_num);
+      sap_sort_proxies(const_colliders, proxy_start, proxy_num, axis);
+      sap_sort_proxies(const_colliders, ext_start, ext_num, axis);
 
       // buffer will be overwrited once main thread traverse to another branch.
       // hence external collider buffer needs to be copied.
       std::vector<int> ext_copy(ext_start, ext_start + ext_num);
 
-      auto task_func = [this, proxy_start, proxy_num, axis, &filter,
+      auto task_func = [colliders, proxy_start, proxy_num, axis, &filter,
                         ext = std::move(ext_copy), ext_num, &cache]() {
-        sap_sorted_group_self_collision(colliders_, proxy_start, proxy_num,
-                                        axis, filter, cache.local());
-        sap_sorted_group_group_collision(colliders_, proxy_start, proxy_num,
-                                         colliders_, ext.data(), ext_num, axis,
+        sap_sorted_group_self_collision(colliders, proxy_start, proxy_num, axis,
+                                        filter, cache.local());
+        sap_sorted_group_group_collision(colliders, proxy_start, proxy_num,
+                                         colliders, ext.data(), ext_num, axis,
                                          filter, cache.local());
       };
       task_group.run(task_func);

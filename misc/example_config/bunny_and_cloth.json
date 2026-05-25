@@ -1,14 +1,20 @@
 {
   "global": {
-    "dt": 0.005,
-    "max_outer_iteration": 120,
-    "max_inner_iteration": 80,
+    "dt": 0.016,
+    "max_outer_iteration": 1000,
+    "max_inner_iteration": 50,
     "acceleration": [
       0.0,
       0.0,
       -9.8
     ],
-    "total_steps": 300
+    "total_steps": 300,
+    "linear_solver_abs_tol": 1e-7,
+    "linear_solver_rel_tol_min": 1e-6,
+    "linear_solver_rel_tol_max": 1e-3,
+    "initial_linear_rel_tol": 1e-3,
+    "admm_abs_tol": 1e-5,
+    "admm_rel_tol": 1e-3
   },
   "objects": [
     {
@@ -17,22 +23,22 @@
       "mesh": "model/dense_sheet.obj",
       "cloth": {
         "elastic_stiffness": 120.0,
-        "bending_stiffness": 0.0001,
+        "bending_stiffness": 0.001,
         "density": 0.1,
-        "damping": 0.015
+        "damping": 0.01
       },
       "collision": {
         "enabled": true,
         "self_collision": true,
         "group": 1,
         "restitution": 0.3,
-        "friction": 0.5
+        "friction": 0.0
       },
       "transform": {
         "translation": [
           0.2,
           0.0,
-          2.2
+          1.72
         ],
         "rotation_euler_deg": [
           0.0,
@@ -55,7 +61,7 @@
         "self_collision": false,
         "group": 1,
         "restitution": 0.1,
-        "friction": 0.6
+        "friction": 0.0
       },
       "transform": {
         "translation": [
@@ -77,4 +83,3 @@
     }
   ]
 }
-

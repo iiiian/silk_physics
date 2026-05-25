@@ -113,8 +113,7 @@ std::vector<Collision> CollisionPipeline::find_collision(Registry& registry,
   scene_vf_err_ = get_numerical_error(abs_max, true);
 
   tbb::enumerable_thread_specific<std::vector<Collision>> thread_collisions;
-  std::vector<ObjectCollider>& object_colliders =
-      registry.get_all<ObjectCollider>();
+  auto object_colliders = registry.get_all_components<ObjectCollider>();
 
   // Three-stage collision detection for inter-object collisions:
   // 1. Object-level broadphase using sweep-and-prune

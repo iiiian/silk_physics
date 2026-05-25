@@ -15,7 +15,7 @@
 
 #include "common/symmetry.hpp"
 
-namespace silk::cpu::cholmod_raii {
+namespace silk::cpu {
 
 /// RAII wrapper for cholmod_common context object.
 ///
@@ -205,8 +205,9 @@ cholmod_dense make_cholmod_dense_view(Eigen::DenseBase<Derived>& M) {
 /// Creates a zero-copy Eigen::Map that allows accessing CHOLMOD dense data
 /// as an Eigen vector. Currently only supports single-precision float vectors.
 ///
-/// @param v CHOLMOD dense vector (must be single-precision, real, single-column)
+/// @param v CHOLMOD dense vector (must be single-precision, real,
+/// single-column)
 /// @return Eigen::Map view of the CHOLMOD vector data
 Eigen::Map<Eigen::VectorXf> make_eigen_dense_vector_view(cholmod_dense* v);
 
-}  // namespace silk::cpu::cholmod_raii
+}  // namespace silk::cpu

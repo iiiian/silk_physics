@@ -3,14 +3,18 @@
 #include <Eigen/Core>
 #include <cassert>
 #include <cstring>
+#include <span>
+#include <utility>
 
 #include "backend/cpu/collision/object_collider.hpp"
 #include "backend/cpu/ecs.hpp"
 #include "backend/cpu/object_state.hpp"
 #include "backend/cpu/obstacle_position.hpp"
+#include "backend/cpu/pin.hpp"
+#include "backend/cpu/solver/cloth_solver_context.hpp"
 #include "backend/cpu/solver/pipeline.hpp"
+#include "common/cloth_assembly_l2_cache.hpp"
 #include "common/mesh.hpp"
-#include "common/pin.hpp"
 
 namespace silk::cpu {
 
@@ -33,11 +37,6 @@ Result CpuBackend::set_global_config(GlobalConfig config) {
   return Result::ok();
 }
 
-void CpuBackend::clear() {
-  impl_->solver_pipeline_.clear(impl_->registry_);
-  impl_->registry_.clear();
-}
-
 Result CpuBackend::solver_step() {
   if (!impl_->solver_pipeline_.step(impl_->registry_)) {
     return Result::error(ErrorCode::CholeskyDecompositionFail);
@@ -52,156 +51,151 @@ Result CpuBackend::solver_reset() {
 
 Result CpuBackend::add_cloth(ClothConfig cloth_config,
                              CollisionConfig collision_config,
-                             MeshConfig mesh_config, ConstSpan<int> pin_index,
-                             uint32_t& handle) {
+                             MeshConfig mesh_config,
+                             std::span<const int> pin_index, uint32_t& handle) {
   auto tri_mesh = make_cloth_mesh(mesh_config);
   if (!tri_mesh) {
     handle = 0;
     return Result::error(ErrorCode::InvalidMesh);
   }
 
-  Pin p;
-  if (pin_index.data != nullptr && pin_index.size != 0) {
-    p.index = Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.size);
-    p.position.resize(3 * p.index.size());
-    for (int i = 0; i < p.index.size(); ++i) {
-      p.position(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(p.index(i));
+  if (pin_index.size() > tri_mesh->V.rows()) {
+    return Result::error(ErrorCode::InvalidPin);
+  }
+  for (int i : pin_index) {
+    if (i < 0 || i >= tri_mesh->V.rows()) {
+      return Result::error(ErrorCode::InvalidPin);
     }
   }
+  Pin p{pin_index, tri_mesh->V};
 
-  auto [h, e] = impl_->registry_.add_entity();
-  if (h.is_empty()) {
+  uint32_t e = impl_->registry_.make_entity();
+  if (e == 0) {
     handle = 0;
     return Result::error(ErrorCode::TooManyBody);
   }
-  assert(e);
-  impl_->registry_.set<ClothConfig>(*e, std::move(cloth_config));
-  impl_->registry_.set<CollisionConfig>(*e, std::move(collision_config));
-  impl_->registry_.set<TriMesh>(*e, std::move(*tri_mesh));
-  impl_->registry_.set<Pin>(*e, std::move(p));
+  impl_->registry_.set(e, std::move(cloth_config));
+  impl_->registry_.set(e, std::move(collision_config));
+  impl_->registry_.set(e, std::move(*tri_mesh));
+  impl_->registry_.set(e, std::move(p));
 
-  handle = h.value;
+  handle = e;
   return Result::ok();
 }
 
 Result CpuBackend::remove_cloth(uint32_t handle) {
-  auto entity = impl_->registry_.get_entity(Handle(handle));
-  if (!entity) {
+  if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = impl_->registry_.get<ClothConfig>(*entity);
+  auto cloth_config = impl_->registry_.get<ClothConfig>(handle);
   if (!cloth_config) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  impl_->registry_.remove_entity(Handle(handle));
+  impl_->registry_.nuke_entity(handle);
   return Result::ok();
 }
 
 Result CpuBackend::get_cloth_position(uint32_t handle,
-                                      Span<float> position) const {
-  const Entity* e = impl_->registry_.get_entity(Handle(handle));
-  if (!e) {
+                                      std::span<float> position) const {
+  if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto obj_state = impl_->registry_.get<ObjectState>(e);
+  auto obj_state = impl_->registry_.get<ObjectState>(handle);
   if (obj_state) {
-    if (position.size < obj_state->state_num) {
-      return Result::error(ErrorCode::IncorrectPositionNum);
+    if ((int)position.size() < obj_state->state_num) {
+      return Result::error(ErrorCode::InvalidPosition);
     }
-    memcpy(position.data, obj_state->curr_state.data(),
+    memcpy(position.data(), obj_state->curr_state.data(),
            obj_state->state_num * sizeof(float));
     return Result::ok();
   }
-  auto mesh = impl_->registry_.get<TriMesh>(e);
+  auto mesh = impl_->registry_.get<TriMesh>(handle);
   if (mesh) {
     int state_num = 3 * mesh->V.rows();
-    if (position.size != state_num) {
-      return Result::error(ErrorCode::IncorrectPositionNum);
+    if ((int)position.size() != state_num) {
+      return Result::error(ErrorCode::InvalidPosition);
     }
-    memcpy(position.data, mesh->V.data(), state_num * sizeof(float));
+    memcpy(position.data(), mesh->V.data(), state_num * sizeof(float));
     return Result::ok();
   }
   return Result::error(ErrorCode::InvalidHandle);
 }
 
 Result CpuBackend::set_cloth_config(uint32_t handle, ClothConfig config) {
-  Entity* e = impl_->registry_.get_entity(Handle(handle));
-  if (!e) {
+  if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = impl_->registry_.get<ClothConfig>(*e);
+  auto cloth_config = impl_->registry_.get<ClothConfig>(handle);
   if (!cloth_config) {
     return Result::error(ErrorCode::InvalidHandle);
   }
   *cloth_config = config;
-  impl_->registry_.remove<ClothSolverContext>(*e);
-  impl_->registry_.remove<ObjectCollider>(*e);
+  impl_->registry_.remove<ClothSolverContext>(handle);
+  impl_->registry_.remove<ObjectCollider>(handle);
   return Result::ok();
 }
 
 Result CpuBackend::set_cloth_collision_config(uint32_t handle,
                                               CollisionConfig config) {
-  Entity* e = impl_->registry_.get_entity(Handle(handle));
-  if (!e) {
+  if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = impl_->registry_.get<ClothConfig>(*e);
+  auto cloth_config = impl_->registry_.get<ClothConfig>(handle);
   if (!cloth_config) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto collision_config = impl_->registry_.get<CollisionConfig>(*e);
+  auto collision_config = impl_->registry_.get<CollisionConfig>(handle);
   assert(collision_config);
   *collision_config = config;
   return Result::ok();
 }
 
 Result CpuBackend::set_cloth_pin_index(uint32_t handle,
-                                       ConstSpan<int> pin_index) {
-  Entity* e = impl_->registry_.get_entity(Handle(handle));
-  if (!e) {
+                                       std::span<const int> pin_index) {
+  if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = impl_->registry_.get<ClothConfig>(*e);
+  auto cloth_config = impl_->registry_.get<ClothConfig>(handle);
   if (!cloth_config) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto tri_mesh = impl_->registry_.get<TriMesh>(*e);
+  auto tri_mesh = impl_->registry_.get<TriMesh>(handle);
   assert(tri_mesh);
-  auto pin = impl_->registry_.get<Pin>(*e);
-  assert(pin);
-  if (pin_index.data != nullptr && pin_index.size != 0) {
-    pin->index =
-        Eigen::Map<const Eigen::VectorXi>(pin_index.data, pin_index.size);
-    pin->position.resize(3 * pin->index.size());
-    for (int i = 0; i < pin->index.size(); ++i) {
-      pin->position(Eigen::seqN(3 * i, 3)) = tri_mesh->V.row(pin->index(i));
+  for (int i : pin_index) {
+    if (i < 0 || i >= tri_mesh->V.rows()) {
+      return Result::error(ErrorCode::InvalidPin);
     }
-  } else {
-    pin->index = {};
-    pin->position = {};
   }
-  impl_->registry_.remove<ClothSolverContext>(*e);
-  impl_->registry_.remove<ObjectCollider>(*e);
+
+  impl_->registry_.set(handle, Pin{pin_index, tri_mesh->V});
+  impl_->registry_.remove<ClothSolverContext>(handle);
+  impl_->registry_.remove<ObjectCollider>(handle);
   return Result::ok();
 }
 
 Result CpuBackend::set_cloth_pin_position(uint32_t handle,
-                                          ConstSpan<float> position) {
-  Entity* e = impl_->registry_.get_entity(Handle(handle));
-  if (!e) {
+                                          std::span<const float> position) {
+  if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto cloth_config = impl_->registry_.get<ClothConfig>(*e);
+  auto cloth_config = impl_->registry_.get<ClothConfig>(handle);
   if (!cloth_config) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto pin = impl_->registry_.get<Pin>(*e);
+  auto pin = impl_->registry_.get<Pin>(handle);
   assert(pin);
-  if (3 * pin->index.size() != position.size) {
-    return Result::error(ErrorCode::IncorrectPinNum);
+  if (3 * pin->index.size() != position.size()) {
+    return Result::error(ErrorCode::InvalidPin);
   }
-  pin->position =
-      Eigen::Map<const Eigen::VectorXf>(position.data, position.size);
+  pin->prev_position = pin->curr_position;
+  if (position.empty()) {
+    pin->curr_position.resize(0);
+  } else {
+    pin->curr_position =
+        Eigen::Map<const Eigen::VectorXf>(position.data(), position.size());
+  }
+  pin->is_static = false;
+  pin->is_static_twice = false;
   return Result::ok();
 }
 
@@ -217,66 +211,62 @@ Result CpuBackend::add_obstacle(CollisionConfig collision_config,
   p.is_static_twice = false;
   p.curr_position = tri_mesh->V.reshaped<Eigen::RowMajor>();
   p.prev_position = p.curr_position;
-  auto [h, e] = impl_->registry_.add_entity();
-  if (h.is_empty()) {
+  uint32_t e = impl_->registry_.make_entity();
+  if (e == 0) {
     handle = 0;
     return Result::error(ErrorCode::TooManyBody);
   }
-  assert(e);
-  impl_->registry_.set<CollisionConfig>(*e, std::move(collision_config));
-  impl_->registry_.set<TriMesh>(*e, std::move(*tri_mesh));
-  impl_->registry_.set<ObstaclePosition>(*e, std::move(p));
-  handle = h.value;
+  impl_->registry_.set(e, std::move(collision_config));
+  impl_->registry_.set(e, std::move(*tri_mesh));
+  impl_->registry_.set(e, std::move(p));
+  handle = e;
   return Result::ok();
 }
 
 Result CpuBackend::remove_obstacle(uint32_t handle) {
-  auto entity = impl_->registry_.get_entity(Handle(handle));
-  if (!entity) {
+  if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto obstacle_position = impl_->registry_.get<ObstaclePosition>(*entity);
+  auto obstacle_position = impl_->registry_.get<ObstaclePosition>(handle);
   if (!obstacle_position) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  impl_->registry_.remove_entity(Handle(handle));
+  impl_->registry_.nuke_entity(handle);
   return Result::ok();
 }
 
 Result CpuBackend::set_obstacle_collision_config(uint32_t handle,
                                                  CollisionConfig config) {
-  Entity* e = impl_->registry_.get_entity(Handle(handle));
-  if (!e) {
+  if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto obstacle_position = impl_->registry_.get<ObstaclePosition>(*e);
+  auto obstacle_position = impl_->registry_.get<ObstaclePosition>(handle);
   if (!obstacle_position) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto collision_config = impl_->registry_.get<CollisionConfig>(*e);
+  auto collision_config = impl_->registry_.get<CollisionConfig>(handle);
   assert(collision_config);
   *collision_config = config;
   return Result::ok();
 }
 
 Result CpuBackend::set_obstacle_position(uint32_t handle,
-                                         ConstSpan<float> position) {
-  Entity* e = impl_->registry_.get_entity(Handle(handle));
-  if (!e) {
+                                         std::span<const float> position) {
+  if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  auto pos = impl_->registry_.get<ObstaclePosition>(*e);
+  auto pos = impl_->registry_.get<ObstaclePosition>(handle);
   if (!pos) {
     return Result::error(ErrorCode::InvalidHandle);
   }
-  if (pos->curr_position.size() != position.size) {
-    return Result::error(ErrorCode::IncorrectPositionNum);
+  if (pos->curr_position.size() != (int)position.size()) {
+    return Result::error(ErrorCode::InvalidPosition);
   }
   pos->is_static = false;
   pos->is_static_twice = false;
   std::swap(pos->curr_position, pos->prev_position);
   pos->curr_position =
-      Eigen::Map<const Eigen::VectorXf>(position.data, position.size);
+      Eigen::Map<const Eigen::VectorXf>(position.data(), position.size());
   return Result::ok();
 }
 

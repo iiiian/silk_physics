@@ -5,6 +5,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/euler_angles.hpp>
+#include <span>
 #include <utility>
 
 #include "../eigen_alias.hpp"
@@ -176,14 +177,13 @@ bool Obstacle::init_sim() {
   mesh_->vertexPositions.markHostBufferUpdated();
   mesh_->resetTransform();
 
-  silk::ConstSpan<float> vert_span =
+  std::span<const float> vert_span =
       make_const_span_from_position(mesh_->vertexPositions);
 
   if (silk_handle_ == 0) {
     silk::MeshConfig mesh_config;
     mesh_config.verts = vert_span;
-    mesh_config.faces.data = F_.data();
-    mesh_config.faces.size = F_.size();
+    mesh_config.faces = std::span<const int>(F_.data(), F_.size());
 
     silk::Result r =
         world_->add_obstacle(collision_config_, mesh_config, silk_handle_);
@@ -219,7 +219,7 @@ bool Obstacle::sim_step_pre() {
 
   if (drag_position_changed_) {
     mesh_->vertexPositions.ensureHostBufferPopulated();
-    silk::ConstSpan<float> vert_span =
+    std::span<const float> vert_span =
         make_const_span_from_position(mesh_->vertexPositions);
     silk::Result r = world_->set_obstacle_position(silk_handle_, vert_span);
     if (!r) {
@@ -235,9 +235,9 @@ bool Obstacle::sim_step_pre() {
 bool Obstacle::sim_step_post(float current_time) {
   if (cache_.empty() || drag_position_changed_) {
     mesh_->vertexPositions.ensureHostBufferPopulated();
-    silk::ConstSpan<float> vert_span =
+    std::span<const float> vert_span =
         make_const_span_from_position(mesh_->vertexPositions);
-    Eigen::Map<const Vert> vert{vert_span.data, vert_span.size / 3, 3};
+    Eigen::Map<const Vert> vert{vert_span.data(), (int)vert_span.size() / 3, 3};
     cache_.emplace_back(current_time, vert);
 
     drag_position_changed_ = false;

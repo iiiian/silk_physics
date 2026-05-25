@@ -21,12 +21,13 @@ namespace silk {
 /// expanding this enum.
 enum class ErrorCode {
   Unknown,
+  NotInitialized,
   InvalidConfig,
   TooManyBody,
   InvalidHandle,
   InvalidMesh,
-  IncorrectPinNum,
-  IncorrectPositionNum,
+  InvalidPin,
+  InvalidPosition,
   CholeskyDecompositionFail,
   NeedInitSolverFirst,
   IterativeSolveFail,

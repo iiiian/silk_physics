@@ -3,18 +3,24 @@
 #include <Eigen/Core>
 #include <optional>
 
+#include "backend/cpu/pin.hpp"
 #include "backend/cpu/solver/cholmod_utils.hpp"
-#include "common/cloth_topology.hpp"
+#include "common/cloth_assembly_l2_cache.hpp"
 #include "common/eigen_utils.hpp"
 #include "common/logger.hpp"
-#include "common/pin.hpp"
 #include "silk/silk.hpp"
 
 namespace silk::cpu {
 
+namespace {
+
+constexpr float CPU_PIN_PENALTY = 1e4f;
+
+}  // namespace
+
 std::optional<ClothSolverContext> ClothSolverContext::make_cloth_solver_context(
-    const ClothConfig& config, const ClothTopology& topology, const Pin& pin,
-    float dt) {
+    const ClothConfig& config, const ClothAssemblyL2Cache& topology,
+    const Pin& pin, float dt) {
   auto& c = config;
   auto& t = topology;
   int state_num = 3 * t.mass.size();
@@ -31,20 +37,20 @@ std::optional<ClothSolverContext> ClothSolverContext::make_cloth_solver_context(
                                          H_triplets, Symmetry::Upper);
   for (int i = 0; i < pin.index.size(); ++i) {
     int offset = 3 * pin.index(i);
-    H_triplets.emplace_back(offset, offset, pin.pin_stiffness);
-    H_triplets.emplace_back(offset + 1, offset + 1, pin.pin_stiffness);
-    H_triplets.emplace_back(offset + 2, offset + 2, pin.pin_stiffness);
+    float stiffness = CPU_PIN_PENALTY;
+    H_triplets.emplace_back(offset, offset, stiffness);
+    H_triplets.emplace_back(offset + 1, offset + 1, stiffness);
+    H_triplets.emplace_back(offset + 2, offset + 2, stiffness);
   }
   Eigen::SparseMatrix<float> H{state_num, state_num};
   H.setFromTriplets(H_triplets.begin(), H_triplets.end());
-  auto H_view = cholmod_raii::make_cholmod_sparse_view(H, Symmetry::Upper);
-  cholmod_raii::CholmodFactor L =
-      cholmod_analyze(&H_view, cholmod_raii::common);
+  auto H_view = make_cholmod_sparse_view(H, Symmetry::Upper);
+  CholmodFactor L = cholmod_analyze(&H_view, common);
   if (L.is_empty()) {
     SPDLOG_DEBUG("cholmod analyze fail");
     return std::nullopt;
   }
-  if (!cholmod_factorize(&H_view, L, cholmod_raii::common)) {
+  if (!cholmod_factorize(&H_view, L, common)) {
     SPDLOG_DEBUG("cholmod factorize fail");
     return std::nullopt;
   }

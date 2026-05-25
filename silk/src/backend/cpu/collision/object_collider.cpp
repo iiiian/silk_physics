@@ -4,13 +4,13 @@
 #include <tbb/parallel_for.h>
 
 #include <Eigen/Core>
+#include <cstdint>
 #include <functional>
 #include <unordered_set>
 
 #include "backend/cpu/obstacle_position.hpp"
-#include "common/handle.hpp"
+#include "backend/cpu/pin.hpp"
 #include "common/mesh.hpp"
-#include "common/pin.hpp"
 #include "silk/silk.hpp"
 
 namespace silk::cpu {
@@ -91,12 +91,11 @@ static std::vector<MeshCollider> make_mesh_colliders(
   return mesh_colliders;
 }
 
-ObjectCollider::ObjectCollider(Handle entity_handle,
-                               const CollisionConfig& config,
+ObjectCollider::ObjectCollider(uint32_t entity, const CollisionConfig& config,
                                const TriMesh& mesh, const Pin& pin,
                                const Eigen::VectorXf& mass, int state_offset) {
   auto& c = config;
-  this->entity_handle = entity_handle;
+  this->entity = entity;
   this->state_offset = state_offset;
   // Pad object AABB by 5% of mesh scale to avoid zero-width degenerate cases.
   bbox_padding = 0.05f * mesh.avg_edge_length;
@@ -122,11 +121,10 @@ ObjectCollider::ObjectCollider(Handle entity_handle,
       make_mesh_colliders(mesh, bbox_padding, get_inv_mass));
 }
 
-ObjectCollider::ObjectCollider(Handle entity_handle,
-                               const CollisionConfig& config,
+ObjectCollider::ObjectCollider(uint32_t entity, const CollisionConfig& config,
                                const TriMesh& mesh) {
   auto& c = config;
-  this->entity_handle = entity_handle;
+  this->entity = entity;
   state_offset = -1;
   // Pad object AABB by 5% of mesh scale to avoid zero-width degenerate cases.
   bbox_padding = 0.05f * mesh.avg_edge_length;

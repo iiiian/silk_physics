@@ -2,52 +2,16 @@
 # Library config
 # -------------------------------------------------
 
-set(SILK_SOURCES 
-    src/backend/cpu/collision/ccd.cpp
-    src/backend/cpu/collision/interval.cpp
-    src/backend/cpu/collision/interval_root_finder.cpp
-    src/backend/cpu/collision/narrowphase.cpp
-    src/backend/cpu/collision/object_collider.cpp
-    src/backend/cpu/collision/pipeline.cpp
-    src/backend/cpu/cpu_backend.cpp
-    src/backend/cpu/ecs.cpp
-    src/backend/cpu/solver/cholmod_utils.cpp
-    src/backend/cpu/solver/cloth_solver_context.cpp
-    src/backend/cpu/solver/cloth_solver_utils.cpp
-    src/backend/cpu/solver/obstacle_solver_utils.cpp
-    src/backend/cpu/solver/pipeline.cpp
-    src/common/cloth_topology.cpp
-    src/common/mesh.cpp
-    src/common/result.cpp
-    src/common/world.cpp
-    src/common/check_cuda_support.cpp
+file(GLOB_RECURSE SILK_SOURCES
+    include/*.hpp include/*.cpp
+    src/common/*.hpp src/common/*.cpp
+    src/ecs/*.hpp src/ecs/*.cpp
+    src/backend/cpu/*.hpp src/backend/cpu/*.cpp
 )
 
-set(SILK_CUDA_SOURCES
-    src/backend/cuda/collision/bbox.cpp
-    src/backend/cuda/collision/ccd.cpp
-    src/backend/cuda/collision/interval.cpp
-    src/backend/cuda/collision/interval_root_finder.cpp
-    src/backend/cuda/collision/narrowphase.cpp
-    src/backend/cuda/collision/object_collider.cpp
-    src/backend/cuda/collision/pipeline.cpp
-    src/backend/cuda/csr_matrix.cpp
-    src/backend/cuda/sparse_matrix_interop.cpp
-    src/backend/cuda/cuda_backend.cpp
-    src/backend/cuda/ecs.cpp
-    src/backend/cuda/object_state.cpp
-    src/backend/cuda/solver/barrier_constrain.cpp
-    src/backend/cuda/solver/cloth_solver_context.cpp
-    src/backend/cuda/solver/cloth_solver_utils.cpp
-    src/backend/cuda/solver/obstacle_solver_utils.cpp
-    src/backend/cuda/solver/pipeline.cpp
-    src/backend/cuda/solver/cloth_solver_kernel.cu
-    src/backend/cuda/solver/pipeline_kernel.cu
-    src/backend/cuda/solver/svd.cu
-    src/backend/cuda/solver/compute_subspace_u.cpp
-    src/backend/cuda/solver/inexact_solver_kernel.cu
-    src/backend/cuda/solver/inexact_solver.cpp
-    src/backend/cuda/solver/a_jacobi_solver.cu
+file(GLOB_RECURSE SILK_CUDA_SOURCES
+    src/backend/cuda/*.hpp src/backend/cuda/*.cpp
+    src/backend/cuda/*.cuh src/backend/cuda/*.cu
 )
 
 add_library(silk ${SILK_SOURCES})
@@ -74,8 +38,17 @@ target_include_directories(
 # Define SILK_WITH_CUDA macro if cuda is enabled.
 target_compile_definitions(
     silk
-    PUBLIC
+    PRIVATE
         $<$<BOOL:${SILK_ENABLE_CUDA}>:SILK_WITH_CUDA=1>
+        # Eigen's aligned malloc/free helpers are header-only and can be
+        # instantiated in both host C++ and CUDA translation units.  If Eigen
+        # auto-detects different EIGEN_MALLOC_ALREADY_ALIGNED values in those
+        # TUs, an Eigen object allocated in one TU can be destroyed in another
+        # with the wrong free path, e.g. handmade_aligned_malloc paired with
+        # plain free(), causing "double free or corruption" during teardown.
+        # Force the conservative handmade aligned allocator for CUDA builds so
+        # allocation and deallocation use the same path everywhere.
+        $<$<BOOL:${SILK_ENABLE_CUDA}>:EIGEN_MALLOC_ALREADY_ALIGNED=0>
 )
 
 target_link_libraries(
@@ -95,8 +68,9 @@ target_link_libraries(
 )
 
 if(SILK_ENABLE_CUDA)
-    target_link_libraries(silk PRIVATE CUDA::cudart CUDA::cusparse Spectra::Spectra)
     target_sources(silk PRIVATE ${SILK_CUDA_SOURCES})
+    target_compile_options(silk PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda --expt-relaxed-constexpr>)
+    target_link_libraries(silk PRIVATE CUDA::cudart CUDA::cusparse CCCL::CCCL KaMinPar::KaMinPar)
 endif()
 
 # -------------------------------------------------

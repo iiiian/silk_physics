@@ -3,9 +3,9 @@
 #include <Eigen/Core>
 #include <optional>
 
+#include "backend/cpu/pin.hpp"
 #include "backend/cpu/solver/cholmod_utils.hpp"
-#include "common/cloth_topology.hpp"
-#include "common/pin.hpp"
+#include "common/cloth_assembly_l2_cache.hpp"
 #include "silk/silk.hpp"
 
 namespace silk::cpu {
@@ -30,10 +30,10 @@ class ClothSolverContext {
   Eigen::SparseMatrix<float> H;
 
   // Cholesky factorization of H produced via CHOLMOD.
-  cholmod_raii::CholmodFactor L;
+  CholmodFactor L;
 
   // Updated factorization to account for barrier constraints.
-  cholmod_raii::CholmodFactor LB;
+  CholmodFactor LB;
 
   // Weighted rest-curvature vector (state_num x 1).
   Eigen::VectorXf C0;
@@ -44,8 +44,8 @@ class ClothSolverContext {
   ///
   ///  Returns std::nullopt if analysis/factorization fails.
   static std::optional<ClothSolverContext> make_cloth_solver_context(
-      const ClothConfig& config, const ClothTopology& topology, const Pin& pin,
-      float dt);
+      const ClothConfig& config, const ClothAssemblyL2Cache& topology,
+      const Pin& pin, float dt);
 
  private:
   ClothSolverContext() = default;

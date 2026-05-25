@@ -25,19 +25,6 @@ target_compile_definitions(
 )
 
 add_executable(
-    manager_test
-    manager_test.cpp
-)
-target_include_directories(
-    manager_test
-    PRIVATE ${SILK_DIR}
-)
-target_link_libraries(
-    manager_test
-    PRIVATE Catch2::Catch2WithMain
-)
-
-add_executable(
     sap_kd_tree_test
     sap_kd_tree_test.cpp
     collision_broadphase_test_utils.cpp
@@ -108,21 +95,48 @@ target_compile_definitions(
 
 if(SILK_ENABLE_CUDA)
     add_executable(
-        elastic_rhs_test
-        elastic_rhs_test.cpp
+        oibvh_test
+        oibvh_test.cu
+        abc_file_loader.cpp
     )
     target_include_directories(
-        elastic_rhs_test
+        oibvh_test
         PRIVATE ${SILK_DIR}
     )
+    target_compile_options(
+        oibvh_test
+        PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda --expt-relaxed-constexpr>
+    )
     target_link_libraries(
-        elastic_rhs_test
-        PRIVATE silk::silk
-        PRIVATE Eigen3::Eigen
+        oibvh_test
+        PRIVATE CUDA::cudart CCCL::CCCL Eigen3::Eigen
         PRIVATE spdlog::spdlog
+        PRIVATE Alembic::Alembic
         PRIVATE Catch2::Catch2WithMain
         PRIVATE TBB::tbb
-        PRIVATE CUDA::cudart
+    )
+    target_compile_definitions(
+        oibvh_test
+        PRIVATE
+            PHYSICS_SCENE_ROOT="${CMAKE_SOURCE_DIR}/misc/physics_scene"
+            EIGEN_MALLOC_ALREADY_ALIGNED=0
+    )
+
+    add_executable(
+        sym_inverse_benchmark
+        sym_inverse_benchmark.cu
+    )
+    target_include_directories(
+        sym_inverse_benchmark
+        PRIVATE ${SILK_DIR}
+    )
+    target_compile_options(
+        sym_inverse_benchmark
+        PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda --expt-relaxed-constexpr>
+    )
+    target_link_libraries(
+        sym_inverse_benchmark
+        PRIVATE CUDA::cudart CCCL::CCCL Eigen3::Eigen
     )
 endif()
 
@@ -130,7 +144,6 @@ include(CTest)
 include(Catch)
 
 set(SILK_TEST_TARGETS
-    manager_test
     sap_test
     sap_kd_tree_test
     sap_benchmark
@@ -138,25 +151,7 @@ set(SILK_TEST_TARGETS
 )
 
 if(SILK_ENABLE_CUDA)
-    add_executable(
-        jacobi_solver_test
-        jacobi_solver_test.cpp
-    )
-    target_include_directories(
-        jacobi_solver_test
-        PRIVATE ${SILK_DIR}
-    )
-    target_link_libraries(
-        jacobi_solver_test
-        PRIVATE silk::silk
-        PRIVATE Eigen3::Eigen
-        PRIVATE spdlog::spdlog
-        PRIVATE Catch2::Catch2WithMain
-        PRIVATE TBB::tbb
-        PRIVATE CUDA::cudart
-    )
-
-    list(APPEND SILK_TEST_TARGETS elastic_rhs_test jacobi_solver_test)
+    list(APPEND SILK_TEST_TARGETS oibvh_test)
 endif()
 
 catch_discover_tests(${SILK_TEST_TARGETS})

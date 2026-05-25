@@ -10,6 +10,8 @@ static std::string error_to_string(ErrorCode error) {
   switch (error) {
     case ErrorCode::Unknown:
       return "Unknown";
+    case ErrorCode::NotInitialized:
+      return "NotInitialized";
     case ErrorCode::InvalidConfig:
       return "InvalidConfig";
     case ErrorCode::TooManyBody:
@@ -18,10 +20,10 @@ static std::string error_to_string(ErrorCode error) {
       return "InvalidHandle";
     case ErrorCode::InvalidMesh:
       return "InvalidMesh";
-    case ErrorCode::IncorrectPinNum:
-      return "IncorrectPinNum";
-    case ErrorCode::IncorrectPositionNum:
-      return "IncorrectPositionNum";
+    case ErrorCode::InvalidPin:
+      return "InvalidPin";
+    case ErrorCode::InvalidPosition:
+      return "InvalidPosition";
     case ErrorCode::CholeskyDecompositionFail:
       return "CholeskyDecompositionFail";
     case ErrorCode::NeedInitSolverFirst:

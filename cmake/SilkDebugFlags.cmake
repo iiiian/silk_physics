@@ -6,7 +6,6 @@ function(silk_debug_warnings target)
         -Wextra
         -Wpedantic
         -fdiagnostics-color
-        -Wno-unused-parameter
         -Wno-sign-compare # libigl emits signed/unsigned comparisons
         -Wno-ctor-dtor-privacy 
     )
@@ -14,8 +13,11 @@ function(silk_debug_warnings target)
     set(_silk_debug_flags_msvc
         /W4
         /permissive-
-        /wd4100 # unused parameter
         /wd4244 # signed/unsigned conversions
+    )
+
+    set(_silk_debug_flags_nvcc
+      -diag-suppress 2361 # signed unsiged narrowing
     )
 
     target_compile_options(
@@ -23,8 +25,10 @@ function(silk_debug_warnings target)
         PRIVATE
             $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>>:${_silk_debug_flags_gnu_clang}>
             $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:CXX,MSVC>>:${_silk_debug_flags_msvc}>
+            $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:CUDA,NVIDIA>>:${_silk_debug_flags_nvcc}>
     )
 
     unset(_silk_debug_flags_gnu_clang)
     unset(_silk_debug_flags_msvc)
+    unset(_silk_debug_flags_nvcc)
 endfunction()

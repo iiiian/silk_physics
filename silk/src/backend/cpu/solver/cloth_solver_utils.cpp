@@ -7,24 +7,31 @@
 #include <Eigen/Geometry>
 #include <Eigen/SparseCore>
 #include <cassert>
+#include <cstdint>
 #include <optional>
 #include <unsupported/Eigen/KroneckerProduct>
 
 #include "backend/cpu/collision/object_collider.hpp"
 #include "backend/cpu/object_state.hpp"
+#include "backend/cpu/pin.hpp"
 #include "backend/cpu/solver/barrier_constrain.hpp"
 #include "backend/cpu/solver/cholmod_utils.hpp"
 #include "backend/cpu/solver/cloth_solver_context.hpp"
-#include "common/cloth_topology.hpp"
+#include "common/cloth_assembly_l2_cache.hpp"
 #include "common/logger.hpp"
 #include "common/mesh.hpp"
-#include "common/pin.hpp"
 #include "silk/silk.hpp"
 
 namespace silk::cpu {
 
+namespace {
+
+constexpr float CPU_PIN_PENALTY = 1e4f;
+
+}  // namespace
+
 void batch_reset_cloth_simulation(Registry& registry) {
-  for (Entity& e : registry.get_all_entities()) {
+  for (uint32_t e : registry.get_all_entities()) {
     auto mesh = registry.get<TriMesh>(e);
     auto state = registry.get<ObjectState>(e);
     auto context = registry.get<ClothSolverContext>(e);
@@ -41,9 +48,9 @@ void batch_reset_cloth_simulation(Registry& registry) {
   }
 }
 
-bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
+bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt,
                               int state_offset) {
-  auto& e = entity;
+  uint32_t e = entity;
 
   auto cloth_config = registry.get<ClothConfig>(e);
   auto collision_config = registry.get<CollisionConfig>(e);
@@ -60,16 +67,15 @@ bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
     new_state.state_num = 3 * mesh->V.rows();
     new_state.curr_state = mesh->V.reshaped<Eigen::RowMajor>();
     new_state.state_velocity = Eigen::VectorXf::Zero(new_state.state_num);
-    state = registry.set<ObjectState>(e, std::move(new_state));
+    state = registry.set(e, std::move(new_state));
   } else {
     state->state_offset = state_offset;
   }
   assert(state != nullptr);
 
-  auto topology = registry.get<ClothTopology>(e);
+  auto topology = registry.get<ClothAssemblyL2Cache>(e);
   if (!topology) {
-    topology =
-        registry.set<ClothTopology>(e, ClothTopology(*cloth_config, *mesh));
+    topology = registry.set(e, ClothAssemblyL2Cache(*mesh));
   }
   assert(topology != nullptr);
 
@@ -82,15 +88,15 @@ bool prepare_cloth_simulation(Registry& registry, Entity& entity, float dt,
     if (!new_context) {
       return false;
     }
-    context = registry.set<ClothSolverContext>(e, std::move(*new_context));
+    context = registry.set(e, std::move(*new_context));
   }
   assert(context != nullptr);
 
   auto collider = registry.get<ObjectCollider>(e);
   if (!collider) {
-    auto new_collider = ObjectCollider(e.self, *collision_config, *mesh, *pin,
+    auto new_collider = ObjectCollider(e, *collision_config, *mesh, *pin,
                                        context->mass, state_offset);
-    collider = registry.set<ObjectCollider>(e, std::move(new_collider));
+    collider = registry.set(e, std::move(new_collider));
   } else {
     collider->state_offset = state_offset;
   }
@@ -107,7 +113,7 @@ void compute_cloth_invariant_rhs(const ClothSolverContext& solver_context,
   // set pin rhs
   for (int i = 0; i < pin.index.size(); ++i) {
     rhs(Eigen::seqN(3 * pin.index(i), 3)) =
-        pin.pin_stiffness * pin.position(Eigen::seqN(3 * i, 3));
+        CPU_PIN_PENALTY * pin.curr_position(Eigen::seqN(3 * i, 3));
   }
 
   // set rest curvature rhs
@@ -116,7 +122,7 @@ void compute_cloth_invariant_rhs(const ClothSolverContext& solver_context,
 
 void batch_compute_cloth_invariant_rhs(Registry& registry,
                                        Eigen::VectorXf& rhs) {
-  for (Entity& e : registry.get_all_entities()) {
+  for (uint32_t e : registry.get_all_entities()) {
     auto state = registry.get<ObjectState>(e);
     auto context = registry.get<ClothSolverContext>(e);
     auto pin = registry.get<Pin>(e);
@@ -172,19 +178,19 @@ bool compute_cloth_outer_loop(
 
   // Update Cholesky factorization using CHOLMOD up/down.
   C = C.cwiseSqrt();
-  cholmod_sparse C_view = cholmod_raii::make_cholmod_sparse_view(C);
+  cholmod_sparse C_view = make_cholmod_sparse_view(C);
 
   // Permute C according to L.Perm as suggested by CHOLMOD for up/down updates.
   int32_t* rset = static_cast<int32_t*>(s.L.raw()->Perm);
   int64_t rset_num = static_cast<int64_t>(s.L.raw()->n);
-  cholmod_raii::CholmodSparse C_perm = cholmod_submatrix(
-      &C_view, rset, rset_num, nullptr, -1, 1, 1, cholmod_raii::common);
+  CholmodSparse C_perm =
+      cholmod_submatrix(&C_view, rset, rset_num, nullptr, -1, 1, 1, common);
   if (C_perm.is_empty()) {
     return false;
   }
 
   s.LB = s.L;
-  if (!cholmod_updown(1, C_perm, s.LB, cholmod_raii::common)) {
+  if (!cholmod_updown(1, C_perm, s.LB, common)) {
     return false;
   }
 
@@ -196,7 +202,7 @@ bool batch_compute_cloth_outer_loop(
     const Eigen::VectorXf& global_state_velocity,
     const Eigen::VectorXf& global_state_acceleration,
     const BarrierConstrain& barrier_constrain, Eigen::VectorXf& rhs) {
-  for (Entity& e : registry.get_all_entities()) {
+  for (uint32_t e : registry.get_all_entities()) {
     auto obj_state = registry.get<ObjectState>(e);
     auto dynamic_data = registry.get<ClothSolverContext>(e);
 
@@ -217,7 +223,7 @@ bool batch_compute_cloth_outer_loop(
 /// Inner loop: Project in-plane elastic constraints followed by a global linear
 /// solve using the cached factorization.
 bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
-                              const ClothTopology& topology,
+                              const ClothAssemblyL2Cache& topology,
                               const ClothSolverContext& solver_context,
                               Eigen::Ref<const Eigen::VectorXf> state,
                               Eigen::Ref<const Eigen::VectorXf> outer_rhs,
@@ -273,16 +279,16 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
   }
 
   // Global solve with (optionally barrier‑updated) Cholesky factorization.
-  cholmod_dense rhs_view = cholmod_raii::make_cholmod_dense_view(rhs);
+  cholmod_dense rhs_view = make_cholmod_dense_view(rhs);
   auto& L = (s.has_barrier_constrain) ? s.LB : s.L;
 
-  cholmod_raii::CholmodDense cholmod_solution =
-      cholmod_solve(CHOLMOD_A, L, &rhs_view, cholmod_raii::common);
+  CholmodDense cholmod_solution =
+      cholmod_solve(CHOLMOD_A, L, &rhs_view, common);
   if (cholmod_solution.is_empty()) {
     return false;
   }
 
-  solution = cholmod_raii::make_eigen_dense_vector_view(cholmod_solution);
+  solution = make_eigen_dense_vector_view(cholmod_solution);
 
   return true;
 }
@@ -291,10 +297,10 @@ bool batch_compute_cloth_inner_loop(Registry& registry,
                                     const Eigen::VectorXf& global_state,
                                     const Eigen::VectorXf& outer_rhs,
                                     Eigen::VectorXf& solution) {
-  for (Entity& e : registry.get_all_entities()) {
+  for (uint32_t e : registry.get_all_entities()) {
     auto config = registry.get<ClothConfig>(e);
     auto mesh = registry.get<TriMesh>(e);
-    auto topology = registry.get<ClothTopology>(e);
+    auto topology = registry.get<ClothAssemblyL2Cache>(e);
     auto solver_context = registry.get<ClothSolverContext>(e);
     auto state = registry.get<ObjectState>(e);
 

@@ -2,6 +2,8 @@ include_guard(GLOBAL)
 
 if (SILK_ENABLE_CUDA)
   find_package(CUDAToolkit REQUIRED)
+  find_package(CCCL 3.2 REQUIRED)
+  find_package(KaMinPar REQUIRED)
 endif()
 
 find_package(eigen3 REQUIRED)
@@ -19,7 +21,6 @@ endif()
 
 find_package(spdlog REQUIRED)
 find_package(tbb REQUIRED)
-find_package(Spectra REQUIRED)
 
 # suite sparse
 find_package(SuiteSparse_config REQUIRED)
