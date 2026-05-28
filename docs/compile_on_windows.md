@@ -1,3 +1,6 @@
+> [!Error] Window support is WIP
+> Some dependecies does not support windows. Fallback mechanism is planned. Stay tuned.
+
 The easiest way to compile on windows is through Visual Studio and vcpkg. 
 
 ## Install Visual Studio
