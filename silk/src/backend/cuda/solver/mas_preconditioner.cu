@@ -20,7 +20,7 @@ namespace {
 
 using clock = std::chrono::steady_clock;
 
-float elapsed(const std::chrono::time_point<clock> &begin) {
+[[maybe_unused]] float elapsed(const std::chrono::time_point<clock> &begin) {
   return std::chrono::duration<float>(clock::now() - begin).count();
 }
 
