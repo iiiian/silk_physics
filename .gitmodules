@@ -1,9 +1,6 @@
 [submodule "misc/ccd-sample-queries"]
 	path = misc/ccd-sample-queries
 	url = https://github.com/Continuous-Collision-Detection/Sample-Queries.git
-[submodule "extern/pdqsort"]
-	path = extern/pdqsort
-	url = https://github.com/orlp/pdqsort.git
 [submodule "extern/portable-file-dialogs"]
 	path = extern/portable-file-dialogs
 	url = https://github.com/Michaelliu1017/portable-file-dialogs
