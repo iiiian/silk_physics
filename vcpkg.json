@@ -7,10 +7,12 @@
     "lapack",
     "eigen3",
     "libigl",
-    {
-      "name": "suitesparse",
-      "features": [ "gpl" ]
-    },
+    "suitesparse-config",
+    "suitesparse-amd",
+    "suitesparse-camd",
+    "suitesparse-colamd",
+    "suitesparse-ccolamd",
+    "suitesparse-cholmod",
     "spdlog",
     "tbb",
     "portable-file-dialogs",
