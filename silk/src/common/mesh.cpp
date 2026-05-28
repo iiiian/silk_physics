@@ -1,10 +1,16 @@
 #include "common/mesh.hpp"
 
+// clang-format off
+// libigl relies on trasient include for assert.
+// Although this bug is fixed on main, updating is not trival because vcpkg latest release is
+// still v2.6.0
+#include <cassert>
 #include <igl/edges.h>
 #include <igl/facet_components.h>
 #include <igl/internal_angles.h>
 #include <igl/is_edge_manifold.h>
 #include <igl/is_vertex_manifold.h>
+// clang-format on
 
 #include <Eigen/Core>
 #include <span>
