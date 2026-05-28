@@ -4,6 +4,10 @@ include_guard(GLOBAL)
 # System dependencies
 # ---------------------------------------------------------------
 
+# SuiteSparse reuqires BLAS and LAPACK.
+# Building BLAS/LAPCK from source is not trivial because:
+# 1. lapack target name conflict with Eigen.
+# 2. Buggy SuiteSparse cmake export setup.
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
 
