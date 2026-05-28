@@ -49,6 +49,7 @@ target_compile_definitions(
         # Force the conservative handmade aligned allocator for CUDA builds so
         # allocation and deallocation use the same path everywhere.
         $<$<BOOL:${SILK_ENABLE_CUDA}>:EIGEN_MALLOC_ALREADY_ALIGNED=0>
+        $<$<BOOL:${SILK_ENABLE_CUDA}>:EIGEN_NO_CUDA>
 )
 
 target_link_libraries(

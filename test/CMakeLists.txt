@@ -120,6 +120,7 @@ if(SILK_ENABLE_CUDA)
         PRIVATE
             PHYSICS_SCENE_ROOT="${CMAKE_SOURCE_DIR}/misc/physics_scene"
             EIGEN_MALLOC_ALREADY_ALIGNED=0
+            EIGEN_NO_CUDA
     )
 
     add_executable(
@@ -134,6 +135,11 @@ if(SILK_ENABLE_CUDA)
         sym_inverse_benchmark
         PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda --expt-relaxed-constexpr>
     )
+    target_compile_definitions(
+        sym_inverse_benchmark
+        PRIVATE EIGEN_NO_CUDA
+    )
+
     target_link_libraries(
         sym_inverse_benchmark
         PRIVATE CUDA::cudart CCCL::CCCL Eigen3::Eigen
