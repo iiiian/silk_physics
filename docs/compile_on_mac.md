@@ -1,3 +1,6 @@
+> [!Error] No MacOS support
+> It might works, but is not tested. And this doc is not up-to-date.
+
 Currently, vcpkg fails to compile some pacakage on MacOS. Hence you need to install all dependencies maually using [homebrew](https://brew.sh/).
 
 First install C++ tooling.
