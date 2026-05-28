@@ -12,11 +12,19 @@
     "suitesparse-camd",
     "suitesparse-colamd",
     "suitesparse-ccolamd",
-    "suitesparse-cholmod",
+    {
+      "name": "suitesparse-cholmod",
+      "features": [
+        "matrixops",
+        "modify"
+      ]
+    },
     "spdlog",
     "tbb",
     "portable-file-dialogs",
     "catch2",
-    "alembic"
+    "alembic",
+    "cccl",
+    "kaminpar"
   ]
 }

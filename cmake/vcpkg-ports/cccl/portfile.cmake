@@ -1,0 +1,29 @@
+vcpkg_from_github(
+    OUT_SOURCE_PATH SOURCE_PATH
+    REPO NVIDIA/cccl
+    REF d84981c797eb186e45f883f85423df94f9ac8bf4
+    SHA512 2780d33b61e1d7f67e8616430096f8faf23aebd45bf9e63548e7766c1d49f3492f7a8239449edbea09b5de7e0e0acbd69a75aff1bbed26a7fc2875d4ca7d45bf
+    HEAD_REF main
+)
+
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS
+        -DCCCL_ENABLE_TESTING=OFF
+        -DCCCL_ENABLE_EXAMPLES=OFF
+        -DCCCL_ENABLE_BENCHMARKS=OFF
+        -DCCCL_ENABLE_C_PARALLEL=OFF
+        -DCCCL_ENABLE_C_EXPERIMENTAL_STF=OFF
+        -DCCCL_ENABLE_NVBENCH_HELPER=OFF
+)
+
+vcpkg_cmake_install()
+
+vcpkg_cmake_config_fixup(PACKAGE_NAME libcudacxx CONFIG_PATH lib/cmake/libcudacxx DO_NOT_DELETE_PARENT_CONFIG_PATH)
+vcpkg_cmake_config_fixup(PACKAGE_NAME cub CONFIG_PATH lib/cmake/cub DO_NOT_DELETE_PARENT_CONFIG_PATH)
+vcpkg_cmake_config_fixup(PACKAGE_NAME thrust CONFIG_PATH lib/cmake/thrust DO_NOT_DELETE_PARENT_CONFIG_PATH)
+vcpkg_cmake_config_fixup(PACKAGE_NAME cccl CONFIG_PATH lib/cmake/cccl)
+
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug" "${CURRENT_PACKAGES_DIR}/lib")
+
+file(INSTALL "${SOURCE_PATH}/LICENSE" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)
