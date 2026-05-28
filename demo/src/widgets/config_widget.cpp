@@ -32,14 +32,14 @@ void ConfigWidget::draw() {
           pfd::message("Invalid file", "Please select a .json file.",
                        pfd::choice::ok, pfd::icon::error);
         } else {
-          ui_info("[Config] Selected JSON file name: {}", picked);
+          ui_info("[Config] Selected JSON file name: {}", picked.string());
 
           auto cfg = parse_config(picked);
           if (cfg) {
-            ui_info("JSON {} Parsing Sucessed.", picked);
+            ui_info("JSON {} Parsing Sucessed.", picked.string());
             apply_config_to_gui(*cfg);
           } else {
-            ui_error("JSON {} Parsing Failed.", picked);
+            ui_error("JSON {} Parsing Failed.", picked.string());
           }
         }
       }
