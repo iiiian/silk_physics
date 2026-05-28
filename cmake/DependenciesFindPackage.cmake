@@ -6,7 +6,7 @@ if (SILK_ENABLE_CUDA)
   find_package(KaMinPar REQUIRED)
 endif()
 
-find_package(eigen3 REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 find_package(libigl REQUIRED)
 # The original libigl export library as igl::core, but vcpkg patch it to igl::igl_core.
@@ -20,7 +20,7 @@ else()
 endif()
 
 find_package(spdlog REQUIRED)
-find_package(tbb REQUIRED)
+find_package(TBB REQUIRED)
 
 # suite sparse
 find_package(SuiteSparse_config REQUIRED)
@@ -33,13 +33,13 @@ find_package(CHOLMOD REQUIRED)
 if(SILK_BUILD_DEMO)
     find_package(argparse REQUIRED)
     find_package(nlohmann_json REQUIRED)
-    find_package(alembic REQUIRED)
+    find_package(Alembic REQUIRED)
     add_subdirectory(extern/polyscope)
     add_subdirectory(extern/portable-file-dialogs)
 endif()
 
 if(SILK_BUILD_TEST)
-    find_package(catch2 REQUIRED)
-    find_package(alembic REQUIRED)
+    find_package(Catch2 REQUIRED)
+    find_package(Alembic REQUIRED)
 endif()
 
