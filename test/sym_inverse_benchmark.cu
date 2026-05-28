@@ -214,14 +214,6 @@ void unpack_upper_to_full(const float *upper, Eigen::MatrixXf &full, int N) {
   }
 }
 
-void pack_full_to_upper(const Eigen::MatrixXf &full, float *upper, int N) {
-  for (int i = 0; i < N; ++i) {
-    for (int j = i; j < N; ++j) {
-      upper[index_upper_mat(N, i, j)] = full(i, j);
-    }
-  }
-}
-
 }  // namespace
 
 int main(int argc, char *argv[]) {
