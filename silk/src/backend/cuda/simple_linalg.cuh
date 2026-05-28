@@ -176,6 +176,10 @@ class Mat {
     return result;
   }
 
+// Sometimes vec_like method is used in host code with host data types.
+// Suppress "call __host__ in __host__ __device__ function" warnings.
+#pragma nv_diag_suppress 20014
+#pragma nv_diag_suppress 20011
   template <typename V>
   __both__ static Mat vec_like(const V& vec) {
     Mat result;
@@ -188,7 +192,13 @@ class Mat {
     }
     return result;
   }
+#pragma nv_diag_default 20014
+#pragma nv_diag_default 20011
 
+// Sometimes mat_like method is used in host code with host data types.
+// Suppress "call __host__ in __host__ __device__ function" warnings.
+#pragma nv_diag_suppress 20014
+#pragma nv_diag_suppress 20011
   template <typename M>
   __both__ static Mat mat_like(const M& mat) {
     Mat result;
@@ -199,6 +209,8 @@ class Mat {
     }
     return result;
   }
+#pragma nv_diag_default 20014
+#pragma nv_diag_default 20011
 
   __both__ constexpr MatView<T, m, n> view() {
     return MatView<T, m, n>::row_major(data.data());
