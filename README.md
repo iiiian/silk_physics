@@ -2,19 +2,22 @@
 
 <img width="1920" height="1080" alt="bunny-teaser" src="https://github.com/user-attachments/assets/66c6c81e-69c4-4e99-b486-c0938d38637b" />
 
-WIP C++17 cloth physics library with continuous collision detection and a GUI demo.
+WIP C++20 cloth physics library.
 
-- Projective Dynamics–based cloth solver
-- Self/obstacle collisions with tight-inclusion CCD
-- GUI demo built with Polyscope (mesh IO: OBJ/OFF/PLY/STL)
+- Maintain 40 FPS on 6K cloth mesh with active collision.
+- Robust continuous collision detection and handling.
+- Fully GPU accelerated pipeline. Including
+    - Custom BVH tree for blazingly fast collision broadphase.
+    - MAS preconditioner CG solver.
+- GUI demo built with Polyscope.
 
-Most third‑party dependencies are downloaded automatically except BLAS/LAPACK implementation.
+Most third‑party dependencies are downloaded automatically except BLAS/LAPACK.
 
 ## Compile From Source
 
-[Windows Compile Guide](docs/compile_on_windows.md)
-
 [Linux Compile Guide](docs/compile_on_linux.md)
+
+[Windows Compile Guide](docs/compile_on_windows.md)
 
 [MacOS Compile Guide](docs/compile_on_mac.md)
 
@@ -113,11 +116,15 @@ int main() {
 
 ## Other Resources
 
+**TODO: update outdated doc**
+
 - [Theoretical background](docs/theoretical_background.md): A gentle introduction to the theory behind the silk engine.
 - [Project Overview](docs/project_overview.md): A breif overview of the code structure.
 - [Style Guideline](docs/style_guidelines.md)
 
 ## Acknowledgments
+
+**TODO: update outdated references**
 
 This project builds on and is inspired by work from the research community and open-source authors. Special thanks to the authors of:
 
