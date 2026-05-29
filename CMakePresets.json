@@ -10,18 +10,38 @@
       }
     },
     {
-      "name": "debug",
+      "name": "linux_debug",
       "inherits": "base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CUDA_FLAGS": "-lineinfo",
+        "VCPKG_OVERLAY_PORTS": {
+          "value": "${sourceDir}/cmake/vcpkg-ports",
+          "type": "PATH"
+        }
       }
     },
     {
-      "name": "release",
+      "name": "linux_profile",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CUDA_FLAGS": "-lineinfo",
+        "VCPKG_OVERLAY_PORTS": {
+          "value": "${sourceDir}/cmake/vcpkg-ports",
+          "type": "PATH"
+        }
+      }
+    },
+    {
+      "name": "linux_release",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "SILK_BUILD_GPU": "ON"
+        "VCPKG_OVERLAY_PORTS": {
+          "value": "${sourceDir}/cmake/vcpkg-ports",
+          "type": "PATH"
+        }
       }
     }
   ]
