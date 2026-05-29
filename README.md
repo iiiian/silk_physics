@@ -1,6 +1,6 @@
 # Silk Physics
 
-![banner](assets/banner.jpg)
+<img width="1920" height="1080" alt="bunny-teaser" src="https://github.com/user-attachments/assets/66c6c81e-69c4-4e99-b486-c0938d38637b" />
 
 WIP C++17 cloth physics library with continuous collision detection and a GUI demo.
 
