@@ -1,5 +1,3 @@
-Most of the style and formating guide is enforced by `clang-format` and the rest are documented in this file. Since I did not start to enforce these rules until later stage of development, some parts of the codebase are inconsistent. If you discover such case, please submit a PR.
-
 ## Types in PascalCase
 
 Keep `class`, `struct`, and `enum` names in PascalCase.
@@ -68,6 +66,8 @@ int sum(const std::vector<int>& vec){
 }
 ```
 
+No const for scalar types like double, int, etc.
+
 ## Always Use `{}`
 
 Always use brackets in `if`, `for` construct.
@@ -79,71 +79,6 @@ if (true){
 }
 ```
 
-## Class Declaration Layout
+## Index type
 
-Explicitly write out `private`/`public` in each sections and follow below layout. 
-
-```c++
-class Basket {
-  public:
-    // anything that is not a method. i.e. class member, constexpr variable, using alias
-    int private_var_;
-  
-  private:
-    // anything that is not a method. i.e. class member, constexpr variable, using alias
-    int public_var_;
-    
-  public:
-    // private class method
-    int count();
-    
-  private:
-    // public class method
-    void clear();
-};
-```
-
-
-
-## Error Handling
-
-Other than interfacing with external libraries, do not use exception. There are two reasons for this decision:
-
-- The code interacts with many C-style numerical libraries, so avoiding exception style error handling make things consistent.
-- Exception throwing is hidden from function signature. Which makes it difficult to reason about hidden code path.
-
-Instead, return `bool`, `std::optional`, or `nullptr` to indicate failure. If detail information is valuable, use `spdlog` library to log it to `stdout`.  
-
-```c++
-std::optional<int> func_that_might_fail(); 
-```
-
-If a class constructor has a change to fail, use factory method instead.
-
-```c++
-class Foo{
-  private:
-  	// Move default ctor to private
-    Foo() = default;
-  
-  public:
-    // Factory function should be static and returns the optional of class type.
-    // The name should be make_<class name>.
-    static std::optional<Foo> make_foo();
-}
-```
-
-## Document and Comments
-
-Start public headers and major interfaces with  `///` blocks that include `@brief`, `@param`, and `@return`.
-
-```cpp
-/// @brief Count pieces of fruit in the basket.
-/// @param basket Storage container to inspect.
-/// @return Number of fruit items currently stored.
-int count_fruit(const Basket& basket);
-```
-
-For code comments, use `//`.
-
-Tips: You can feed misc/llm_guidelines/cpp_comment.md to generate the initial comment/doc. Make sure to review it though.
+Use `int` as index type and always assume it's large enough. static_cast<some size_t type> should be avoided. rely on implicit cast.
