@@ -124,6 +124,32 @@ if(SILK_ENABLE_CUDA)
     )
 
     add_executable(
+        graph_partition_test
+        graph_partition_test.cpp
+    )
+    target_include_directories(
+        graph_partition_test
+        PRIVATE ${SILK_DIR}
+    )
+    target_link_libraries(
+        graph_partition_test
+        PRIVATE silk
+        PRIVATE CCCL::CCCL
+        PRIVATE Catch2::Catch2WithMain
+    )
+    if(SILK_GRAPH_PARTITION_BACKEND STREQUAL "kaminpar")
+        target_link_libraries(graph_partition_test PRIVATE KaMinPar::KaMinPar)
+    elseif(SILK_GRAPH_PARTITION_BACKEND STREQUAL "metis")
+        target_link_libraries(graph_partition_test PRIVATE metis::metis)
+    endif()
+    target_compile_definitions(
+        graph_partition_test
+        PRIVATE
+            $<$<STREQUAL:${SILK_GRAPH_PARTITION_BACKEND},kaminpar>:SILK_GRAPH_PARTITION_BACKEND_KAMINPAR=1>
+            $<$<STREQUAL:${SILK_GRAPH_PARTITION_BACKEND},metis>:SILK_GRAPH_PARTITION_BACKEND_METIS=1>
+    )
+
+    add_executable(
         sym_inverse_benchmark
         sym_inverse_benchmark.cu
     )
@@ -157,7 +183,7 @@ set(SILK_TEST_TARGETS
 )
 
 if(SILK_ENABLE_CUDA)
-    list(APPEND SILK_TEST_TARGETS oibvh_test)
+    list(APPEND SILK_TEST_TARGETS oibvh_test graph_partition_test)
 endif()
 
 catch_discover_tests(${SILK_TEST_TARGETS})

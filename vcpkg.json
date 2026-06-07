@@ -25,6 +25,10 @@
     "catch2",
     "alembic",
     "cccl",
-    "kaminpar"
+    {
+      "name": "kaminpar",
+      "platform": "!windows"
+    },
+    "metis"
   ]
 }

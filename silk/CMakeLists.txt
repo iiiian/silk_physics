@@ -39,6 +39,8 @@ target_compile_definitions(
     silk
     PRIVATE
         $<$<BOOL:${SILK_ENABLE_CUDA}>:SILK_WITH_CUDA=1>
+        $<$<STREQUAL:${SILK_GRAPH_PARTITION_BACKEND},kaminpar>:SILK_GRAPH_PARTITION_BACKEND_KAMINPAR=1>
+        $<$<STREQUAL:${SILK_GRAPH_PARTITION_BACKEND},metis>:SILK_GRAPH_PARTITION_BACKEND_METIS=1>
         # Eigen's aligned malloc/free helpers are header-only and can be
         # instantiated in both host C++ and CUDA translation units.  If Eigen
         # auto-detects different EIGEN_MALLOC_ALREADY_ALIGNED values in those
@@ -70,7 +72,13 @@ target_link_libraries(
 if(SILK_ENABLE_CUDA)
     target_sources(silk PRIVATE ${SILK_CUDA_SOURCES})
     target_compile_options(silk PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda --expt-relaxed-constexpr>)
-    target_link_libraries(silk PRIVATE CUDA::cudart CUDA::cusparse CCCL::CCCL KaMinPar::KaMinPar)
+    target_link_libraries(silk PRIVATE CUDA::cudart CUDA::cusparse CCCL::CCCL)
+
+    if(SILK_GRAPH_PARTITION_BACKEND STREQUAL "kaminpar")
+        target_link_libraries(silk PRIVATE KaMinPar::KaMinPar)
+    elseif(SILK_GRAPH_PARTITION_BACKEND STREQUAL "metis")
+        target_link_libraries(silk PRIVATE metis::metis)
+    endif()
 endif()
 
 # -------------------------------------------------

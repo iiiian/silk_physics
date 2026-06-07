@@ -108,21 +108,29 @@ FetchContent_Declare(
     GIT_TAG d84981c797eb186e45f883f85423df94f9ac8bf4 # version 3.3.3
 )
 
-set(KAMINPAR_BUILD_APPS OFF)
-set(KAMINPAR_BUILD_IO OFF)
-set(KAMINPAR_BUILD_WITH_SPARSEHASH OFF)
-set(KAMINPAR_BUILD_WITH_DEBUG_SYMBOLS OFF)
-set(KAMINPAR_64BIT_WEIGHTS ON)
-set(KAMINPAR_ENABLE_TIMERS OFF)
-# Below hack force kaminpar to use our vendored tbb
-set(KAMINPAR_DOWNLOAD_TBB ON)
-set(TBB_FOUND TRUE)
-FetchContent_Declare(
-    KaMinPar
-    SYSTEM
-    GIT_REPOSITORY https://github.com/KaHIP/KaMinPar.git
-    GIT_TAG 00fa1ef4150b558a1260918fe8dc49dae048ea62 # version 3.7.3
-)
+if(SILK_GRAPH_PARTITION_BACKEND STREQUAL "kaminpar")
+    set(KAMINPAR_BUILD_APPS OFF)
+    set(KAMINPAR_BUILD_IO OFF)
+    set(KAMINPAR_BUILD_WITH_SPARSEHASH OFF)
+    set(KAMINPAR_BUILD_WITH_DEBUG_SYMBOLS OFF)
+    set(KAMINPAR_ENABLE_TIMERS OFF)
+    # Below hack force kaminpar to use our vendored tbb
+    set(KAMINPAR_DOWNLOAD_TBB ON)
+    set(TBB_FOUND TRUE)
+    FetchContent_Declare(
+        KaMinPar
+        SYSTEM
+        GIT_REPOSITORY https://github.com/KaHIP/KaMinPar.git
+        GIT_TAG 00fa1ef4150b558a1260918fe8dc49dae048ea62 # version 3.7.3
+    )
+elseif(SILK_GRAPH_PARTITION_BACKEND STREQUAL "metis")
+    FetchContent_Declare(
+        METIS
+        SYSTEM
+        GIT_REPOSITORY https://github.com/scivision/METIS.git
+        GIT_TAG 777472ae3cd15a8e6d1e5b7d6c347d21947e3ab2
+    )
+endif()
 
 
 FetchContent_MakeAvailable(
@@ -144,12 +152,16 @@ else()
 endif()
 
 if (SILK_ENABLE_CUDA)
-    FetchContent_MakeAvailable(CCCL KaMinPar)
-    # So we could link KaMinPar as shared lib.
-    if (TARGET KaMinParCommon)
-        set_target_properties(KaMinParCommon PROPERTIES
-            POSITION_INDEPENDENT_CODE ON
-        )
+    if(SILK_GRAPH_PARTITION_BACKEND STREQUAL "kaminpar")
+        FetchContent_MakeAvailable(CCCL KaMinPar)
+        # So we could link KaMinPar as shared lib.
+        if (TARGET KaMinParCommon)
+            set_target_properties(KaMinParCommon PROPERTIES
+                POSITION_INDEPENDENT_CODE ON
+            )
+        endif()
+    elseif(SILK_GRAPH_PARTITION_BACKEND STREQUAL "metis")
+        FetchContent_MakeAvailable(CCCL METIS)
     endif()
 endif()
 

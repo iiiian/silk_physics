@@ -56,8 +56,8 @@ __global__ void d_perm_then_assign(ctd::span<const float> in,
 MeshPartition::MeshPartition(const TriMesh& mesh, CudaRuntime rt) {
   std::vector<Eigen::Triplet<float>> triplets;
   for (auto& e : mesh.E.rowwise()) {
-    triplets.emplace_back(e(0), e(1), 0.0);
-    triplets.emplace_back(e(1), e(0), 0.0);
+    triplets.emplace_back(e(0), e(1), 1.0);
+    triplets.emplace_back(e(1), e(0), 1.0);
   }
 
   int vert_num = mesh.V.rows();

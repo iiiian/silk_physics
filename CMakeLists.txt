@@ -11,6 +11,11 @@ if(WIN32)
     set(_silk_fetch_dependencies_default OFF)
 endif()
 
+set(_silk_graph_partition_backend_default "kaminpar")
+if(WIN32)
+    set(_silk_graph_partition_backend_default "metis")
+endif()
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # ---------------------------------------------------------------
@@ -21,6 +26,7 @@ option(SILK_ENABLE_CUDA "Build with CUDA" OFF)
 option(SILK_BUILD_DEMO "Build the GUI demo application" ON)
 option(SILK_BUILD_TEST "Build tests" ON)
 option(SILK_FETCH_DEPENDENCIES "Download dependencies using CMake FetchContent" ${_silk_fetch_dependencies_default})
+option(SILK_GRAPH_PARTITION_BACKEND "Graph partition backend: kaminpar or metis" ${_silk_graph_partition_backend_default})
 
 # ---------------------------------------------------------------
 
