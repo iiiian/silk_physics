@@ -21,6 +21,8 @@ endif()
 
 include(FetchContent)
 
+# Eigen's BUILD_TESTING is a very generic name, which conflicts with GkLib BUILD_TESTING.
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     Eigen3
     SYSTEM
@@ -68,6 +70,18 @@ FetchContent_Declare(
     GIT_TAG 6f468b0385b2104a9f485e49bb55508d0024e32d
 )
 
+set(HWY_ENABLE_CONTRIB OFF CACHE BOOL "" FORCE)
+set(HWY_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(HWY_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(HWY_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+set(HWY_FORCE_STATIC_LIBS ON CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    hwy
+    SYSTEM
+    GIT_REPOSITORY https://github.com/google/highway.git
+    GIT_TAG 2607d3b5b0113992fe84d3848859eae13b3b52c1 # version 1.4.0
+)
+
 FetchContent_Declare(
     nlohmann_json
     SYSTEM
@@ -80,6 +94,27 @@ FetchContent_Declare(
     SYSTEM
     GIT_REPOSITORY https://github.com/p-ranav/argparse.git
     GIT_TAG 3eda91b2e1ce7d569f84ba295507c4cd8fd96910 # version 3.2
+)
+
+FetchContent_Declare(
+    ScalableCCD
+    SYSTEM
+    GIT_REPOSITORY https://github.com/Continuous-Collision-Detection/Scalable-CCD.git
+    GIT_TAG 8f9347c1afc36f2dda17424c15ff5b68087fe8dc
+)
+
+FetchContent_Declare(
+    Embree
+    SYSTEM
+    GIT_REPOSITORY https://github.com/RenderKit/embree.git
+    GIT_TAG f590db83ef6559387df7f6d8725c34fb7acf851d
+)
+
+FetchContent_Declare(
+    cuBQL
+    SYSTEM
+    GIT_REPOSITORY https://github.com/NVIDIA/cuBQL.git
+    GIT_TAG 812464c6510cbfc42f455f0008d3ccff78662993
 )
 
 # A dependency of Alembic.
@@ -139,7 +174,10 @@ FetchContent_MakeAvailable(
     SuiteSparse
     spdlog
     tbb
+    hwy
 )
+
+add_library(hwy::hwy ALIAS hwy)
 
 # The original libigl export library as igl::core, but vcpkg patch it to igl::igl_core.
 # So we check which one is available. 
@@ -165,10 +203,43 @@ if (SILK_ENABLE_CUDA)
     endif()
 endif()
 
+if(SILK_BUILD_DEMO OR SILK_BROADPHASE_BENCHMARKS)
+    FetchContent_MakeAvailable(argparse nlohmann_json)
+endif()
+
 if(SILK_BUILD_DEMO)
-    FetchContent_MakeAvailable(argparse nlohmann_json Imath Alembic)
+    FetchContent_MakeAvailable(Imath Alembic)
     add_subdirectory(extern/polyscope)
     add_subdirectory(extern/portable-file-dialogs)
+endif()
+
+if(SILK_BROADPHASE_BENCHMARKS)
+    set(SCALABLE_CCD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(SCALABLE_CCD_WITH_PROFILER OFF CACHE BOOL "" FORCE)
+    set(SCALABLE_CCD_WITH_CUDA ${SILK_ENABLE_CUDA} CACHE BOOL "" FORCE)
+    set(SCALABLE_CCD_USE_DOUBLE OFF CACHE BOOL "" FORCE)
+
+    set(EMBREE_TUTORIALS OFF CACHE BOOL "" FORCE)
+    set(EMBREE_ISPC_SUPPORT OFF CACHE BOOL "" FORCE)
+    set(EMBREE_SYCL_SUPPORT OFF CACHE BOOL "" FORCE)
+    set(EMBREE_STATIC_LIB ON CACHE BOOL "" FORCE)
+    set(EMBREE_TASKING_SYSTEM TBB CACHE STRING "" FORCE)
+    set(EMBREE_GEOMETRY_TRIANGLE OFF CACHE BOOL "" FORCE)
+    set(EMBREE_GEOMETRY_QUAD OFF CACHE BOOL "" FORCE)
+    set(EMBREE_GEOMETRY_CURVE OFF CACHE BOOL "" FORCE)
+    set(EMBREE_GEOMETRY_SUBDIVISION OFF CACHE BOOL "" FORCE)
+    set(EMBREE_GEOMETRY_INSTANCE OFF CACHE BOOL "" FORCE)
+    set(EMBREE_GEOMETRY_INSTANCE_ARRAY OFF CACHE BOOL "" FORCE)
+    set(EMBREE_GEOMETRY_GRID OFF CACHE BOOL "" FORCE)
+    set(EMBREE_GEOMETRY_POINT OFF CACHE BOOL "" FORCE)
+    set(EMBREE_GEOMETRY_USER ON CACHE BOOL "" FORCE)
+
+    FetchContent_MakeAvailable(ScalableCCD Embree)
+
+    if(SILK_ENABLE_CUDA)
+        set(CUBQL_DISABLE_CUDA OFF CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(cuBQL)
+    endif()
 endif()
 
 if(SILK_BUILD_TEST)

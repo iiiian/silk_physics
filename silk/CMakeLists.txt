@@ -60,6 +60,7 @@ target_link_libraries(
         ${SILK_IGL_CORE}
         spdlog::spdlog
         TBB::tbb
+        $<BUILD_INTERFACE:hwy::hwy>
         # dependencies for SuiteSparse cholmod
         SuiteSparse::SuiteSparseConfig
         SuiteSparse::AMD

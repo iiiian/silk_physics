@@ -25,8 +25,15 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 option(SILK_ENABLE_CUDA "Build with CUDA" OFF)
 option(SILK_BUILD_DEMO "Build the GUI demo application" ON)
 option(SILK_BUILD_TEST "Build tests" ON)
+option(SILK_BROADPHASE_BENCHMARKS "Build broadphase verification and benchmarks" OFF)
 option(SILK_FETCH_DEPENDENCIES "Download dependencies using CMake FetchContent" ${_silk_fetch_dependencies_default})
-option(SILK_GRAPH_PARTITION_BACKEND "Graph partition backend: kaminpar or metis" ${_silk_graph_partition_backend_default})
+set(
+    SILK_GRAPH_PARTITION_BACKEND
+    "${_silk_graph_partition_backend_default}"
+    CACHE STRING
+    "Graph partition backend: kaminpar or metis"
+)
+set_property(CACHE SILK_GRAPH_PARTITION_BACKEND PROPERTY STRINGS kaminpar metis)
 
 # ---------------------------------------------------------------
 
@@ -57,7 +64,7 @@ if(SILK_BUILD_DEMO)
     add_subdirectory(demo)
 endif()
 
-if(SILK_BUILD_TEST)
+if(SILK_BUILD_TEST OR SILK_BROADPHASE_BENCHMARKS)
     enable_testing()
     add_subdirectory(test)
 endif()

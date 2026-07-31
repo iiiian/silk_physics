@@ -53,14 +53,14 @@ struct Bbox {
     return (max_min.array() > min_max.array()).any();
   }
 
-  /// Check if two bounding boxes overlap.
+  /// Check if two bounding boxes overlap, including boundary contact.
   /// @param a First bounding box
   /// @param b Second bounding box
   /// @return True if boxes overlap in all three dimensions
   static inline bool is_colliding(const Bbox& a, const Bbox& b) {
-    return (a.min.x() < b.max.x() && b.min.x() < a.max.x() &&
-            a.min.y() < b.max.y() && b.min.y() < a.max.y() &&
-            a.min.z() < b.max.z() && b.min.z() < a.max.z());
+    return (a.min.x() <= b.max.x() && b.min.x() <= a.max.x() &&
+            a.min.y() <= b.max.y() && b.min.y() <= a.max.y() &&
+            a.min.z() <= b.max.z() && b.min.z() <= a.max.z());
   }
 
   /// Calculate the geometric center of the bounding box.
