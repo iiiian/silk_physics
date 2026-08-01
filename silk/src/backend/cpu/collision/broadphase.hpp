@@ -181,19 +181,14 @@ void sap_sorted_group_group_collision(std::span<C> colliders_a,
 
 /// Test query collider (a) against cadidate collider group b.
 template <typename C, bool flip = false, typename FilterT>
-void sap_sorted_bbox_collision(const BboxSOAView& bboxes_a, int bbox_id_a,
-                               C& collider_a, const BboxSOAView& bboxes_b,
+void sap_sorted_bbox_collision(C& collider_a, const BboxSOAView& bboxes_b,
                                std::span<C> colliders_b,
                                std::span<const int> proxies_b, int axis,
                                const FilterT& filter,
                                std::vector<int>& overlap_proxies,
                                CollisionCache<C>& cache) {
-  Bbox query_bbox{{bboxes_a.min[0][bbox_id_a], bboxes_a.min[1][bbox_id_a],
-                   bboxes_a.min[2][bbox_id_a]},
-                  {bboxes_a.max[0][bbox_id_a], bboxes_a.max[1][bbox_id_a],
-                   bboxes_a.max[2][bbox_id_a]}};
-  int overlap_num =
-      sap_bbox_overlaps(query_bbox, bboxes_b, proxies_b, axis, overlap_proxies);
+  int overlap_num = sap_bbox_overlaps(collider_a.bbox, bboxes_b, proxies_b,
+                                      axis, overlap_proxies);
   for (int i = 0; i < overlap_num; ++i) {
     C& cb = colliders_b[overlap_proxies[i]];
     if constexpr (flip) {
@@ -220,9 +215,9 @@ void sap_sorted_bbox_group_self_collision(std::span<C> colliders,
   int proxy_num = proxies.size();
   for (int i = 0; i < proxy_num - 1; ++i) {
     int p = proxies[i];
-    sap_sorted_bbox_collision<C, false>(
-        bboxes, i, colliders[p], bboxes.subspan(i + 1), colliders,
-        proxies.subspan(i + 1), axis, filter, overlap_proxies, cache);
+    sap_sorted_bbox_collision<C, false>(colliders[p], bboxes.subspan(i + 1),
+                                        colliders, proxies.subspan(i + 1), axis,
+                                        filter, overlap_proxies, cache);
   }
 }
 
@@ -245,15 +240,15 @@ void sap_sorted_bbox_group_group_collision(
     int pb = proxies_b[b];
 
     if (bboxes_a.min[axis][a] < bboxes_b.min[axis][b]) {
-      sap_sorted_bbox_collision<C, false>(
-          bboxes_a, a, colliders_a[pa], bboxes_b.subspan(b), colliders_b,
-          proxies_b.subspan(b), axis, filter, overlap_proxies, cache);
+      sap_sorted_bbox_collision<C, false>(colliders_a[pa], bboxes_b.subspan(b),
+                                          colliders_b, proxies_b.subspan(b),
+                                          axis, filter, overlap_proxies, cache);
       ++a;
     } else {
       // Flip the output pairs to ensure consistent pair order.
-      sap_sorted_bbox_collision<C, true>(
-          bboxes_b, b, colliders_b[pb], bboxes_a.subspan(a), colliders_a,
-          proxies_a.subspan(a), axis, filter, overlap_proxies, cache);
+      sap_sorted_bbox_collision<C, true>(colliders_b[pb], bboxes_a.subspan(a),
+                                         colliders_a, proxies_a.subspan(a),
+                                         axis, filter, overlap_proxies, cache);
       ++b;
     }
   }
@@ -265,10 +260,9 @@ struct KDNode {
   KDNode* left = nullptr;
   KDNode* right = nullptr;
 
-  // Spatial bounds. `bbox` encloses the node region; `plane_bbox` encloses
-  // only the proxies attached to this node (useful when the node isn’t a leaf).
-  Bbox bbox = {};
-  Bbox plane_bbox = {};
+  Bbox bbox = {};         /// Bbox of KD tree partition.
+  Bbox plane_bbox = {};   /// Bbox of primitives on split plane.
+  Bbox query_bbox = {};   /// Bbox of subtree primitives.
   int axis = 0;           // split plane axis
   float position = 0.0f;  // split plane position on `axis`
   int proxy_start = 0;    // [start,end) into the global proxies_ array
@@ -389,6 +383,7 @@ class KDTree {
     root_->bbox = root_bbox;
     lift_unfit_up();
     optimize_structure();
+    refresh_query_bboxes();
   }
 
   /// Enumerate potentially colliding pairs within this tree.
@@ -423,7 +418,7 @@ class KDTree {
     auto bbox = [](const BVTTComponent& component) -> const Bbox& {
       return component.proxies_only && !component.node->is_leaf()
                  ? component.node->plane_bbox
-                 : component.node->bbox;
+                 : component.node->query_bbox;
     };
 
     // Traverse the tree and generate work (pair of nodes to test later).
@@ -559,7 +554,7 @@ class KDTree {
     auto bbox = [](const BVTTComponent& component) -> const Bbox& {
       return component.proxies_only && !component.node->is_leaf()
                  ? component.node->plane_bbox
-                 : component.node->bbox;
+                 : component.node->query_bbox;
     };
 
     // Traverse the tree and generate work (pair of nodes to test later).
@@ -1108,6 +1103,56 @@ class KDTree {
     for (int i = n->proxy_start + 1; i < n->proxy_end; ++i) {
       p = proxies_[i];
       n->plane_bbox.merge_inplace(colliders_[p].bbox);
+    }
+  }
+
+  // Compute exact subtree bounds for BVTT pruning. The maintenance `bbox`
+  // remains a split slab; `query_bbox` is only used to reject node pairs.
+  void refresh_query_bboxes() {
+    stack_.clear();
+    stack_.push_back(root_);
+    for (int i = 0; i < stack_.size(); ++i) {
+      KDNode* n = stack_[i];
+      if (!n->is_leaf()) {
+        stack_.push_back(n->left);
+        stack_.push_back(n->right);
+      }
+    }
+
+    for (int i = stack_.size() - 1; i >= 0; --i) {
+      KDNode* n = stack_[i];
+      bool initialized = false;
+      if (n->proxy_num() > 0) {
+        if (n->is_leaf()) {
+          int p = proxies_[n->proxy_start];
+          n->query_bbox = colliders_[p].bbox;
+          for (int j = n->proxy_start + 1; j < n->proxy_end; ++j) {
+            n->query_bbox.merge_inplace(colliders_[proxies_[j]].bbox);
+          }
+        } else {
+          n->query_bbox = n->plane_bbox;
+        }
+        initialized = true;
+      }
+      if (!n->is_leaf()) {
+        if (n->left->population > 0) {
+          if (!initialized) {
+            n->query_bbox = n->left->query_bbox;
+            initialized = true;
+          } else {
+            n->query_bbox.merge_inplace(n->left->query_bbox);
+          }
+        }
+        if (n->right->population > 0) {
+          if (!initialized) {
+            n->query_bbox = n->right->query_bbox;
+            initialized = true;
+          } else {
+            n->query_bbox.merge_inplace(n->right->query_bbox);
+          }
+        }
+      }
+      assert(initialized == (n->population > 0));
     }
   }
 
