@@ -224,6 +224,8 @@ TestCase load_case(const SceneFiles& scene, int timestep_index) {
                                   vertices_t0.rows(), edges.rows());
   result.required_vf = load_pairs(scene.boxes_vf[timestep_index], QueryKind::VF,
                                   vertices_t0.rows(), edges.rows());
+  result.vertices_t0 = std::move(vertices_t0);
+  result.vertices_t1 = std::move(vertices_t1);
   return result;
 }
 

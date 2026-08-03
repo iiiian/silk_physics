@@ -35,7 +35,7 @@ find_package(COLAMD REQUIRED)
 find_package(CCOLAMD REQUIRED)
 find_package(CHOLMOD REQUIRED)
 
-if(SILK_BUILD_DEMO OR SILK_BROADPHASE_BENCHMARKS)
+if(SILK_BUILD_DEMO OR SILK_BROADPHASE_BENCHMARKS OR SILK_NARROWPHASE_BENCHMARKS)
     find_package(argparse REQUIRED)
     find_package(nlohmann_json REQUIRED)
 endif()
@@ -48,10 +48,21 @@ endif()
 
 if(SILK_BROADPHASE_BENCHMARKS)
     find_package(ScalableCCD CONFIG REQUIRED)
+endif()
+
+if(SILK_NARROWPHASE_BENCHMARKS AND SILK_ENABLE_CUDA)
+    find_package(CCDGPU CONFIG REQUIRED)
+endif()
+
+if(SILK_BROADPHASE_BENCHMARKS)
     find_package(embree 4 CONFIG REQUIRED)
     if(SILK_ENABLE_CUDA)
         find_package(cuBQL CONFIG REQUIRED)
     endif()
+endif()
+
+if(SILK_NARROWPHASE_BENCHMARKS)
+    find_package(TightInclusion CONFIG REQUIRED)
 endif()
 
 if(SILK_BUILD_TEST)

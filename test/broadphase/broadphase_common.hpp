@@ -35,6 +35,8 @@ struct QueryInput {
 struct TestCase {
   std::string scene;
   int timestep = -1;
+  Eigen::MatrixXd vertices_t0;
+  Eigen::MatrixXd vertices_t1;
   std::vector<Box> vertex_boxes;
   std::vector<Box> edge_boxes;
   std::vector<Box> face_boxes;

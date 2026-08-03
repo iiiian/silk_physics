@@ -38,3 +38,7 @@ endif()
 if(SILK_BROADPHASE_BENCHMARKS)
     add_subdirectory(broadphase)
 endif()
+
+if(SILK_NARROWPHASE_BENCHMARKS)
+    add_subdirectory(narrowphase)
+endif()

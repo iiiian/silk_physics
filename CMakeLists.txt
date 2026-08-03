@@ -26,6 +26,7 @@ option(SILK_ENABLE_CUDA "Build with CUDA" OFF)
 option(SILK_BUILD_DEMO "Build the GUI demo application" ON)
 option(SILK_BUILD_TEST "Build tests" ON)
 option(SILK_BROADPHASE_BENCHMARKS "Build broadphase verification and benchmarks" OFF)
+option(SILK_NARROWPHASE_BENCHMARKS "Build narrowphase verification and benchmarks" OFF)
 option(SILK_FETCH_DEPENDENCIES "Download dependencies using CMake FetchContent" ${_silk_fetch_dependencies_default})
 set(
     SILK_GRAPH_PARTITION_BACKEND
@@ -64,7 +65,7 @@ if(SILK_BUILD_DEMO)
     add_subdirectory(demo)
 endif()
 
-if(SILK_BUILD_TEST OR SILK_BROADPHASE_BENCHMARKS)
+if(SILK_BUILD_TEST OR SILK_BROADPHASE_BENCHMARKS OR SILK_NARROWPHASE_BENCHMARKS)
     enable_testing()
     add_subdirectory(test)
 endif()

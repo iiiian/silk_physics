@@ -104,6 +104,20 @@ FetchContent_Declare(
 )
 
 FetchContent_Declare(
+    ScalableCCDPaper
+    SYSTEM
+    GIT_REPOSITORY https://github.com/Continuous-Collision-Detection/Scalable-CCD.git
+    GIT_TAG a3c1a482a7e1b4daf64c2f9b58ffe2d54057cbe9 # v0.1.1 paper code
+)
+
+FetchContent_Declare(
+    TightInclusion
+    SYSTEM
+    GIT_REPOSITORY https://github.com/Continuous-Collision-Detection/Tight-Inclusion.git
+    GIT_TAG 7377d78162f9fdb5fe44b54b6f9c01bc6ce0885a # release 1.0.6
+)
+
+FetchContent_Declare(
     Embree
     SYSTEM
     GIT_REPOSITORY https://github.com/RenderKit/embree.git
@@ -203,7 +217,7 @@ if (SILK_ENABLE_CUDA)
     endif()
 endif()
 
-if(SILK_BUILD_DEMO OR SILK_BROADPHASE_BENCHMARKS)
+if(SILK_BUILD_DEMO OR SILK_BROADPHASE_BENCHMARKS OR SILK_NARROWPHASE_BENCHMARKS)
     FetchContent_MakeAvailable(argparse nlohmann_json)
 endif()
 
@@ -218,7 +232,55 @@ if(SILK_BROADPHASE_BENCHMARKS)
     set(SCALABLE_CCD_WITH_PROFILER OFF CACHE BOOL "" FORCE)
     set(SCALABLE_CCD_WITH_CUDA ${SILK_ENABLE_CUDA} CACHE BOOL "" FORCE)
     set(SCALABLE_CCD_USE_DOUBLE OFF CACHE BOOL "" FORCE)
+    set(SCALABLE_CCD_TOI_PER_QUERY OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(ScalableCCD)
+endif()
 
+if(SILK_NARROWPHASE_BENCHMARKS AND SILK_ENABLE_CUDA)
+    set(GPUTI_WITH_DOUBLE_PRECISION OFF CACHE BOOL "" FORCE)
+    set(CCD_TOI_PER_QUERY ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(ScalableCCDPaper)
+
+    # The benchmark calls the paper root finder directly. Its high-level helper
+    # and broadphase dependency are not part of the narrowphase measurement.
+    get_target_property(_scalable_ccd_paper_sources CCDGPU SOURCES)
+    list(FILTER _scalable_ccd_paper_sources EXCLUDE REGEX "/helper\\.cu$")
+    set_property(TARGET CCDGPU PROPERTY SOURCES ${_scalable_ccd_paper_sources})
+
+    get_target_property(_scalable_ccd_paper_links CCDGPU LINK_LIBRARIES)
+    list(REMOVE_ITEM _scalable_ccd_paper_links STQ::CUDA)
+    set_property(
+        TARGET CCDGPU PROPERTY LINK_LIBRARIES ${_scalable_ccd_paper_links}
+    )
+    get_target_property(
+        _scalable_ccd_paper_interface_links CCDGPU INTERFACE_LINK_LIBRARIES
+    )
+    list(REMOVE_ITEM _scalable_ccd_paper_interface_links STQ::CUDA)
+    set_property(
+        TARGET CCDGPU
+        PROPERTY INTERFACE_LINK_LIBRARIES
+                 ${_scalable_ccd_paper_interface_links}
+    )
+    get_target_property(_stq_include_dirs STQ_CUDA INTERFACE_INCLUDE_DIRECTORIES)
+    set_property(TARGET STQ_CUDA PROPERTY EXCLUDE_FROM_ALL TRUE)
+    target_include_directories(CCDGPU PUBLIC ${_stq_include_dirs})
+    target_compile_options(
+        CCDGPU
+        PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:--pre-include=${CMAKE_SOURCE_DIR}/test/narrowphase/scalable_ccd_v011_compat.cuh>
+    )
+endif()
+
+if(SILK_NARROWPHASE_BENCHMARKS)
+    set(TIGHT_INCLUSION_WITH_CCACHE OFF CACHE BOOL "" FORCE)
+    set(TIGHT_INCLUSION_WITH_DOUBLE_PRECISION OFF CACHE BOOL "" FORCE)
+    set(TIGHT_INCLUSION_WITH_RATIONAL OFF CACHE BOOL "" FORCE)
+    set(TIGHT_INCLUSION_WITH_TIMER OFF CACHE BOOL "" FORCE)
+    set(TIGHT_INCLUSION_LIMIT_QUEUE_SIZE OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(TightInclusion)
+endif()
+
+if(SILK_BROADPHASE_BENCHMARKS)
     set(EMBREE_TUTORIALS OFF CACHE BOOL "" FORCE)
     set(EMBREE_ISPC_SUPPORT OFF CACHE BOOL "" FORCE)
     set(EMBREE_SYCL_SUPPORT OFF CACHE BOOL "" FORCE)
@@ -234,7 +296,7 @@ if(SILK_BROADPHASE_BENCHMARKS)
     set(EMBREE_GEOMETRY_POINT OFF CACHE BOOL "" FORCE)
     set(EMBREE_GEOMETRY_USER ON CACHE BOOL "" FORCE)
 
-    FetchContent_MakeAvailable(ScalableCCD Embree)
+    FetchContent_MakeAvailable(Embree)
 
     if(SILK_ENABLE_CUDA)
         set(CUBQL_DISABLE_CUDA OFF CACHE BOOL "" FORCE)
