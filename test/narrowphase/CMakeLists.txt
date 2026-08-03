@@ -18,9 +18,6 @@ add_executable(
     ../broadphase/broadphase_common.cpp
     ../broadphase/embree_adapter.cpp
     ${SILK_DIR}/common/perf_region_control.cpp
-    ${SILK_DIR}/backend/cpu/collision/ccd.cpp
-    ${SILK_DIR}/backend/cpu/collision/interval.cpp
-    ${SILK_DIR}/backend/cpu/collision/interval_root_finder.cpp
 )
 target_include_directories(narrowphase_benchmark PRIVATE ${SILK_DIR})
 target_link_libraries(
@@ -33,6 +30,7 @@ target_link_libraries(
         argparse::argparse
         nlohmann_json::nlohmann_json
         spdlog::spdlog
+        silk
         tight_inclusion::tight_inclusion
 )
 target_compile_definitions(
@@ -41,7 +39,10 @@ target_compile_definitions(
 )
 
 if(SILK_ENABLE_CUDA)
-    target_sources(narrowphase_benchmark PRIVATE scalable_gpu_adapter.cu)
+    target_sources(
+        narrowphase_benchmark
+        PRIVATE scalable_gpu_adapter.cu silk_hybrid_ticcd_adapter.cu
+    )
     target_link_libraries(
         narrowphase_benchmark
         PRIVATE CUDA::cudart CCCL::CCCL CCDGPU

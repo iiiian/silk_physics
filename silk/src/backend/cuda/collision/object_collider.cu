@@ -21,14 +21,13 @@ namespace silk::cuda {
 std::vector<PointCollider> make_point_colliders(
     const TriMesh& mesh, Eigen::Ref<const RMatrixX3f> init_pos,
     float bbox_padding, int state_offset, float restitution, float friction,
-    float minimal_separation, std::function<float(int)> get_inv_mass) {
+    std::function<float(int)> get_inv_mass) {
   int point_num = mesh.V.rows();
   std::vector<PointCollider> point_colliders;
   for (int i = 0; i < point_num; ++i) {
     PointCollider pc;
     pc.state_offset = state_offset;
     pc.index = i;
-    pc.minimal_separation = minimal_separation;
     pc.restitution = restitution;
     pc.friction = friction;
     pc.inv_mass = get_inv_mass(i);
@@ -48,14 +47,13 @@ std::vector<PointCollider> make_point_colliders(
 std::vector<EdgeCollider> make_edge_colliders(
     const TriMesh& mesh, Eigen::Ref<const RMatrixX3f> init_pos,
     float bbox_padding, int state_offset, float restitution, float friction,
-    float minimal_separation, std::function<float(int)> get_inv_mass) {
+    std::function<float(int)> get_inv_mass) {
   int edge_num = mesh.E.rows();
   std::vector<EdgeCollider> edge_colliders;
   for (int i = 0; i < edge_num; ++i) {
     EdgeCollider ec;
     ec.state_offset = state_offset;
     ec.index = Vec2i::vec_like(mesh.E.row(i));
-    ec.minimal_separation = minimal_separation;
     ec.restitution = restitution;
     ec.friction = friction;
     ec.inv_mass(0) = get_inv_mass(ec.index(0));
@@ -78,14 +76,13 @@ std::vector<EdgeCollider> make_edge_colliders(
 std::vector<TriangleCollider> make_triangle_colliders(
     const TriMesh& mesh, Eigen::Ref<const RMatrixX3f> init_pos,
     float bbox_padding, int state_offset, float restitution, float friction,
-    float minimal_separation, std::function<float(int)> get_inv_mass) {
+    std::function<float(int)> get_inv_mass) {
   int face_num = mesh.F.rows();
   std::vector<TriangleCollider> triangle_colliders;
   for (int i = 0; i < face_num; ++i) {
     TriangleCollider tc;
     tc.state_offset = state_offset;
     tc.index = Vec3i::vec_like(mesh.F.row(i));
-    tc.minimal_separation = minimal_separation;
     tc.restitution = restitution;
     tc.friction = friction;
     tc.inv_mass(0) = get_inv_mass(tc.index(0));
@@ -145,25 +142,25 @@ ObjectCollider ObjectCollider::from_physical(const CollisionConfigPlus& config,
     return 1.0f / mass(index);
   };
 
-  auto host_triangle_colliders = make_triangle_colliders(
-      mesh, pos, oc.bbox_padding, state_offset, c.restitution, c.friction,
-      oc.bbox_padding, get_inv_mass);
+  auto host_triangle_colliders =
+      make_triangle_colliders(mesh, pos, oc.bbox_padding, state_offset,
+                              c.restitution, c.friction, get_inv_mass);
   auto device_triangle_colliders =
       vec_like_to_device<TriangleCollider>(host_triangle_colliders, rt);
   oc.triangle_collider_tree = OIBVHTree<TriangleCollider>(
       oc.bbox, std::move(device_triangle_colliders), rt);
 
-  auto host_edge_colliders = make_edge_colliders(
-      mesh, pos, oc.bbox_padding, state_offset, c.restitution, c.friction,
-      oc.bbox_padding, get_inv_mass);
+  auto host_edge_colliders =
+      make_edge_colliders(mesh, pos, oc.bbox_padding, state_offset,
+                          c.restitution, c.friction, get_inv_mass);
   auto device_edge_colliders =
       vec_like_to_device<EdgeCollider>(host_edge_colliders, rt);
   oc.edge_collider_tree =
       OIBVHTree<EdgeCollider>(oc.bbox, std::move(device_edge_colliders), rt);
 
-  auto host_point_colliders = make_point_colliders(
-      mesh, pos, oc.bbox_padding, state_offset, c.restitution, c.friction,
-      oc.bbox_padding, get_inv_mass);
+  auto host_point_colliders =
+      make_point_colliders(mesh, pos, oc.bbox_padding, state_offset,
+                           c.restitution, c.friction, get_inv_mass);
   oc.point_colliders =
       vec_like_to_device<PointCollider>(host_point_colliders, rt);
 
@@ -199,25 +196,22 @@ ObjectCollider ObjectCollider::from_obstacle(const CollisionConfigPlus& config,
   // Obstacles have infinite mass (zero inverse mass).
   auto get_inv_mass = [](int) { return 0.0f; };
 
-  auto host_triangle_colliders =
-      make_triangle_colliders(mesh, pos, oc.bbox_padding, -1, c.restitution,
-                              c.friction, oc.bbox_padding, get_inv_mass);
+  auto host_triangle_colliders = make_triangle_colliders(
+      mesh, pos, oc.bbox_padding, -1, c.restitution, c.friction, get_inv_mass);
   auto device_triangle_colliders =
       vec_like_to_device<TriangleCollider>(host_triangle_colliders, rt);
   oc.triangle_collider_tree = OIBVHTree<TriangleCollider>(
       oc.bbox, std::move(device_triangle_colliders), rt);
 
-  auto host_edge_colliders =
-      make_edge_colliders(mesh, pos, oc.bbox_padding, -1, c.restitution,
-                          c.friction, oc.bbox_padding, get_inv_mass);
+  auto host_edge_colliders = make_edge_colliders(
+      mesh, pos, oc.bbox_padding, -1, c.restitution, c.friction, get_inv_mass);
   auto device_edge_colliders =
       vec_like_to_device<EdgeCollider>(host_edge_colliders, rt);
   oc.edge_collider_tree =
       OIBVHTree<EdgeCollider>(oc.bbox, std::move(device_edge_colliders), rt);
 
-  auto host_point_colliders =
-      make_point_colliders(mesh, pos, oc.bbox_padding, -1, c.restitution,
-                           c.friction, oc.bbox_padding, get_inv_mass);
+  auto host_point_colliders = make_point_colliders(
+      mesh, pos, oc.bbox_padding, -1, c.restitution, c.friction, get_inv_mass);
   oc.point_colliders =
       vec_like_to_device<PointCollider>(host_point_colliders, rt);
 

@@ -15,42 +15,35 @@ namespace silk::cpu {
 class CollisionPipeline {
  public:
   float ccd_tolerance = 1e-6f;
-  int ccd_max_iter = 1024;
-  int partial_ccd_max_iter = 32;
+  int ccd_max_iter = 4096;
 
-  // Minimum time-of-impact to prevent infinite solver loop.
-  float min_toi = 0.05f;
+  // TODO let user set cdd and dcd distance.
+  // Bbox padding in broadphase is set to 5% edge length. Currently we scale
+  // ccd/dcd distance based on that.
+
+  /// CCD minimal separation distance = scale * minimum scene padding.
+  float ccd_minimum_separation_scale = 0.2f;
+  /// DCD activation distance = scale * minimum scene padding.
+  float dcd_activation_distance_scale = 1.0f;
 
   float collision_stiffness_base = 1e4f;
-  float collision_stiffness_max = 1e4f;
-  float collision_stiffness_growth = 16.0f;
 
-  /// @brief Detect collisions by running broad- and narrow-phase CCD.
+  /// @brief Find the earliest CCD hit without constructing active contacts.
   /// @param registry ECS registry providing colliders to test and update.
   /// @param scene_bbox Axis-aligned bounds enclosing the scene for error
   /// metrics.
-  /// @param dt Simulation timestep size in seconds.
-  /// @return All collisions detected during the timestep.
-  std::vector<Collision> find_collision(Registry& registry,
-                                        const Bbox& scene_bbox, float dt);
+  /// @param time_start Absolute normalized time already consumed.
+  /// @param max_time Maximum remaining normalized time to search.
+  /// @return Earliest conservative TOI, or max_time if no CCD hit exists.
+  float find_earliest_toi(Registry& registry, const Bbox& scene_bbox,
+                          float time_start, float max_time);
 
-  /// @brief Partial CCD update.
-  ///
-  /// Currently this is not used anywhere.
-  ///
-  /// @param global_state_t0 Global state vector at start of timestep
-  /// @param global_state_t1 Global state vector after position update
-  /// @param collisions Collision list to update with new contact data
-  void update_collision(const Eigen::VectorXf& global_state_t0,
-                        const Eigen::VectorXf& global_state_t1,
-                        std::vector<Collision>& collisions) const;
+  /// @brief Build the active contact set using DCD at one fixed state.
+  /// @param frame_time Absolute normalized frame time in [0,1].
+  std::vector<Collision> find_active_collisions(Registry& registry,
+                                                float frame_time);
 
  private:
-  /// @brief Numerical error tolerance for edge-edge CCD queries.
-  Eigen::Array3f scene_ee_err_;
-  /// @brief Numerical error tolerance for vertex-face CCD queries.
-  Eigen::Array3f scene_vf_err_;
-
   CollisionCache<MeshCollider> mesh_ccache_;
 };
 

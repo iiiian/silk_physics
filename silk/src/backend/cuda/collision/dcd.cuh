@@ -1,8 +1,13 @@
 #pragma once
 
+#include <cuda/buffer>
 #include <cuda/std/optional>
+#include <cuda/std/span>
 #include <cuda/std/utility>
 
+#include "backend/cuda/collision/collision.cuh"
+#include "backend/cuda/collision/mesh_collider.cuh"
+#include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/simple_linalg.cuh"
 
 namespace silk::cuda {
@@ -58,5 +63,17 @@ __both__ ctd::optional<ctd::pair<float, float>> exact_ee_uv(const Vec3f& x0,
                                                             const Vec3f& x2,
                                                             const Vec3f& x3,
                                                             float eps);
+
+/// @brief Append active point-triangle DCD contacts.
+void append_pt_dcd_collisions(ctd::span<PTCCache> pt_ccache, float time,
+                              float activation_distance,
+                              cu::device_buffer<Collision>& output, int& fill,
+                              CudaRuntime rt);
+
+/// @brief Append active edge-edge DCD contacts.
+void append_ee_dcd_collisions(ctd::span<EECCache> ee_ccache, float time,
+                              float activation_distance,
+                              cu::device_buffer<Collision>& output, int& fill,
+                              CudaRuntime rt);
 
 }  // namespace silk::cuda

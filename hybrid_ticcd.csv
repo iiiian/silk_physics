@@ -1,0 +1,7 @@
+algorithm,device,scene,query,threads,timesteps,queries,expected_collisions,reported_collisions,false_positives,false_negatives,query_ms,ns_per_query
+silk_hybrid_ticcd,hybrid,armadillo-rollers,ee,20,400,64203554,98757,3184608,347,0,247837,3860.17
+silk_hybrid_ticcd,hybrid,armadillo-rollers,vf,20,400,21870776,32102,1279000,235,0,278448,12731.5
+silk_hybrid_ticcd,hybrid,cloth-ball,ee,20,93,139413234,557667,2420201,16,0,170865,1225.6
+silk_hybrid_ticcd,hybrid,cloth-ball,vf,20,93,47619038,107252,637681,5,0,34219.1,718.602
+silk_hybrid_ticcd,hybrid,cloth-funnel,ee,20,499,26508092,6249,931717,502,0,3855.75,145.456
+silk_hybrid_ticcd,hybrid,cloth-funnel,vf,20,499,7668966,524,546980,277,0,4032.87,525.868

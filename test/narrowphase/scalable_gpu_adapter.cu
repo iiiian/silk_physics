@@ -19,7 +19,6 @@ namespace {
 
 constexpr ccd::Scalar TOLERANCE = 1e-6f;
 constexpr ccd::Scalar NO_COLLISION_TOI = 2;
-constexpr int MAX_ITERATIONS = -1;
 constexpr int CUDA_THREADS = 64;
 
 void check_cuda(cudaError_t error) {
@@ -37,9 +36,10 @@ float parse_toi(const nlohmann::json& value) {
   return static_cast<float>(numerator / denominator);
 }
 
-class ScalableGpuAdapterImpl final : public ScalableGpuAdapter {
+class ScalableGpuAdapterImpl final : public GpuAdapter {
  public:
-  explicit ScalableGpuAdapterImpl(QueryKind kind) : kind_(kind) {}
+  ScalableGpuAdapterImpl(QueryKind kind, int max_iterations)
+      : kind_(kind), max_iterations_(max_iterations) {}
 
   std::string name() const override { return "scalable_ccd"; }
 
@@ -111,7 +111,7 @@ class ScalableGpuAdapterImpl final : public ScalableGpuAdapter {
         record.Clear();
         ccd::run_memory_pool_ccd(device_data, &memory_handler, query_num,
                                  kind_ == QueryKind::EE, unused_results,
-                                 CUDA_THREADS, MAX_ITERATIONS, TOLERANCE, true,
+                                 CUDA_THREADS, max_iterations_, TOLERANCE, true,
                                  true, earliest_toi, overflow, record);
         overflowed = overflow != 0;
       } while (overflowed);
@@ -135,14 +135,16 @@ class ScalableGpuAdapterImpl final : public ScalableGpuAdapter {
 
  private:
   QueryKind kind_;
+  int max_iterations_;
   std::vector<ccd::CCDData> input_;
   std::vector<QueryOutput> outputs_;
 };
 
 }  // namespace
 
-std::unique_ptr<ScalableGpuAdapter> make_scalable_gpu_adapter(QueryKind kind) {
-  return std::make_unique<ScalableGpuAdapterImpl>(kind);
+std::unique_ptr<GpuAdapter> make_scalable_gpu_adapter(
+    QueryKind kind, int max_iterations) {
+  return std::make_unique<ScalableGpuAdapterImpl>(kind, max_iterations);
 }
 
 }  // namespace silk::narrowphase_benchmark

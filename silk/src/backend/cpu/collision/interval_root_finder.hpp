@@ -8,7 +8,7 @@
 
 namespace silk::cpu {
 
-/// @brief Interval root finding (BFS) over (t,u,v) for CCD.
+/// @brief Interval root finding (bucket DFS) over (t,u,v).
 /// @param[in] a_t0 Vertex a at t=0.
 /// @param[in] b_t0 Vertex b at t=0.
 /// @param[in] c_t0 Vertex c at t=0.
@@ -28,7 +28,7 @@ namespace silk::cpu {
 /// @tparam is_vertex_face Switch between vertex–face and edge–edge.
 /// @return CCDResult if a root is found; std::nullopt otherwise.
 template <bool is_vertex_face>
-std::optional<CCDResult> interval_root_finder_BFS(
+std::optional<CCDResult> interval_root_finder_bucket_DFS(
     const Eigen::Vector3f &a_t0, const Eigen::Vector3f &b_t0,
     const Eigen::Vector3f &c_t0, const Eigen::Vector3f &d_t0,
     const Eigen::Vector3f &a_t1, const Eigen::Vector3f &b_t1,
@@ -40,7 +40,6 @@ std::optional<CCDResult> interval_root_finder_BFS(
 /// @brief Compute numeric filter for CCD from scene magnitude.
 /// @param abs_max Per-axis absolute coordinate maxima used for scaling.
 /// @param is_vertex_face True for VF queries; false for EE.
-/// @param using_minimum_separation Whether minimum separation is enabled.
 Eigen::Array3f get_numerical_error(const Eigen::Vector3f &abs_max,
                                    bool is_vertex_face);
 

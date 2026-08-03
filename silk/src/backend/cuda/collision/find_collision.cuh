@@ -8,14 +8,21 @@
 
 namespace silk::cuda {
 
-/// @brief Detect collisions by running broad- and narrow-phase CCD.
+/// @brief Find the minimum CCD time without constructing active contacts.
 /// @param registry ECS registry providing colliders to test and update.
-/// @param dt Simulation timestep size in seconds.
-/// @param collisions Collision output.
+/// @param time_start Absolute normalized time already consumed.
+/// @param max_time Maximum additional normalized time to search.
+/// @param minimum_separation Scene-wide CCD separation distance.
 /// @param rt Cuda runtime.
-/// @return Number of collisions.
-ctd::span<Collision> find_collision(
-    ObjRegistry& registry, float dt, int init_broadphase_cache_size,
-    cu::device_buffer<Collision>& collision_storage, CudaRuntime rt);
+/// @return Earliest conservative TOI, or max_time if no hit exists.
+float find_min_toi(ObjRegistry& registry, int init_broadphase_cache_size,
+                   float time_start, float max_time, float minimum_separation,
+                   float ccd_tolerance, int ccd_max_iter, CudaRuntime rt);
+
+/// @brief Build the active contact set using DCD at one fixed time.
+ctd::span<Collision> find_active_collisions(
+    ObjRegistry& registry, int init_broadphase_cache_size, float time,
+    float activation_distance, cu::device_buffer<Collision>& collision_storage,
+    CudaRuntime rt);
 
 }  // namespace silk::cuda

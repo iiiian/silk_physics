@@ -1,12 +1,204 @@
 #include "backend/cuda/collision/dcd.cuh"
 
+#include <cuda/atomic>
 #include <cuda/std/algorithm>
+#include <cuda/std/cmath>
 #include <cuda/std/optional>
 #include <cuda/std/utility>
 
 #include "backend/cuda/simple_linalg.cuh"
 
 namespace silk::cuda {
+
+namespace {
+
+constexpr int CUDA_THREADS = 128;
+constexpr float DCD_GEOMETRY_EPS = 1e-6f;
+
+__device__ Vec3f position_at_time(const Vec3f& position_t0,
+                                  const Vec3f& position_t1, float time) {
+  return axpby(1.0f - time, position_t0, time, position_t1);
+}
+
+__device__ ctd::optional<Collision> make_pt_collision(
+    const TriangleCollider& triangle, const PointCollider& point, float time,
+    float activation_distance) {
+  Vec3f x0 = position_at_time(point.v0_t0, point.v0_t1, time);
+  Vec3f x1 = position_at_time(triangle.v0_t0, triangle.v0_t1, time);
+  Vec3f x2 = position_at_time(triangle.v1_t0, triangle.v1_t1, time);
+  Vec3f x3 = position_at_time(triangle.v2_t0, triangle.v2_t1, time);
+
+  auto uv = exact_pt_uv(x0, x1, x2, x3, DCD_GEOMETRY_EPS);
+  if (!uv) {
+    return ctd::nullopt;
+  }
+  auto [u, v] = *uv;
+  Vec3f triangle_point = eval_triangle_parameter(u, v, x1, x2, x3);
+  Vec3f displacement = vsub(triangle_point, x0);
+  float distance2 = dot(displacement, displacement);
+  if (distance2 == 0.0f) {
+    return ctd::nullopt;
+  }
+
+  float distance = ctd::sqrt(distance2);
+  if (distance >= activation_distance) {
+    return ctd::nullopt;
+  }
+  Vec3f normal = ax(1.0f / distance, displacement);
+
+  Vec4f parameter = {1.0f, 1.0f - u - v, u, v};
+  Vec4f inv_mass = {point.inv_mass, triangle.inv_mass(0), triangle.inv_mass(1),
+                    triangle.inv_mass(2)};
+  float denominator = 0.0f;
+#pragma unroll
+  for (int i = 0; i < 4; ++i) {
+    denominator += parameter(i) * parameter(i) * inv_mass(i);
+  }
+  if (denominator == 0.0f) {
+    return ctd::nullopt;
+  }
+  Vec4f weight = ax(1.0f / denominator, vmul(parameter, inv_mass));
+  weight(0) *= -1.0f;
+  Vec3f correction = ax(activation_distance - distance, normal);
+
+  Collision collision;
+  collision.type = CollisionType::PointTriangle;
+  collision.state_offset_a = point.state_offset;
+  collision.state_offset_b = triangle.state_offset;
+  collision.index = {point.index, triangle.index(0), triangle.index(1),
+                     triangle.index(2)};
+  collision.activation_distance = activation_distance;
+  collision.inv_mass = inv_mass;
+  collision.x0 = x0;
+  collision.x1 = x1;
+  collision.x2 = x2;
+  collision.x3 = x3;
+  collision.correction0 = ax(weight(0), correction);
+  collision.correction1 = ax(weight(1), correction);
+  collision.correction2 = ax(weight(2), correction);
+  collision.correction3 = ax(weight(3), correction);
+  return collision;
+}
+
+__device__ ctd::optional<Collision> make_ee_collision(
+    const EdgeCollider& edge_a, const EdgeCollider& edge_b, float time,
+    float activation_distance) {
+  Vec3f x0 = position_at_time(edge_a.v0_t0, edge_a.v0_t1, time);
+  Vec3f x1 = position_at_time(edge_a.v1_t0, edge_a.v1_t1, time);
+  Vec3f x2 = position_at_time(edge_b.v0_t0, edge_b.v0_t1, time);
+  Vec3f x3 = position_at_time(edge_b.v1_t0, edge_b.v1_t1, time);
+
+  auto uv = exact_ee_uv(x0, x1, x2, x3, DCD_GEOMETRY_EPS);
+  if (!uv) {
+    return ctd::nullopt;
+  }
+  auto [u, v] = *uv;
+  Vec3f point_a = eval_edge_parameter(u, x0, x1);
+  Vec3f point_b = eval_edge_parameter(v, x2, x3);
+  Vec3f displacement = vsub(point_b, point_a);
+  float distance2 = dot(displacement, displacement);
+  if (distance2 == 0.0f) {
+    return ctd::nullopt;
+  }
+
+  float distance = ctd::sqrt(distance2);
+  if (distance >= activation_distance) {
+    return ctd::nullopt;
+  }
+  Vec3f normal = ax(1.0f / distance, displacement);
+
+  Vec4f parameter = {1.0f - u, u, 1.0f - v, v};
+  Vec4f inv_mass = {edge_a.inv_mass(0), edge_a.inv_mass(1), edge_b.inv_mass(0),
+                    edge_b.inv_mass(1)};
+  float denominator = 0.0f;
+#pragma unroll
+  for (int i = 0; i < 4; ++i) {
+    denominator += parameter(i) * parameter(i) * inv_mass(i);
+  }
+  if (denominator == 0.0f) {
+    return ctd::nullopt;
+  }
+  Vec4f weight = ax(1.0f / denominator, vmul(parameter, inv_mass));
+  weight(0) *= -1.0f;
+  weight(1) *= -1.0f;
+  Vec3f correction = ax(activation_distance - distance, normal);
+
+  Collision collision;
+  collision.type = CollisionType::EdgeEdge;
+  collision.state_offset_a = edge_a.state_offset;
+  collision.state_offset_b = edge_b.state_offset;
+  collision.index = {edge_a.index(0), edge_a.index(1), edge_b.index(0),
+                     edge_b.index(1)};
+  collision.activation_distance = activation_distance;
+  collision.inv_mass = inv_mass;
+  collision.x0 = x0;
+  collision.x1 = x1;
+  collision.x2 = x2;
+  collision.x3 = x3;
+  collision.correction0 = ax(weight(0), correction);
+  collision.correction1 = ax(weight(1), correction);
+  collision.correction2 = ax(weight(2), correction);
+  collision.correction3 = ax(weight(3), correction);
+  return collision;
+}
+
+__global__ void find_pt_collisions(ctd::span<PTCCache> candidates, float time,
+                                   float activation_distance,
+                                   DynSpan<Collision> output) {
+  int thread = blockIdx.x * blockDim.x + threadIdx.x;
+  if (thread >= candidates.size()) {
+    return;
+  }
+
+  auto [triangle, point] = candidates[thread];
+  auto collision =
+      make_pt_collision(*triangle, *point, time, activation_distance);
+  if (!collision) {
+    return;
+  }
+  cu::atomic_ref<int> output_fill{*output.fill};
+  int output_index = output_fill.fetch_add(1);
+  output.data[output_index] = *collision;
+}
+
+__global__ void find_ee_collisions(ctd::span<EECCache> candidates, float time,
+                                   float activation_distance,
+                                   DynSpan<Collision> output) {
+  int thread = blockIdx.x * blockDim.x + threadIdx.x;
+  if (thread >= candidates.size()) {
+    return;
+  }
+
+  auto [edge_a, edge_b] = candidates[thread];
+  auto collision =
+      make_ee_collision(*edge_a, *edge_b, time, activation_distance);
+  if (!collision) {
+    return;
+  }
+  cu::atomic_ref<int> output_fill{*output.fill};
+  int output_index = output_fill.fetch_add(1);
+  output.data[output_index] = *collision;
+}
+
+template <typename Candidate, typename Launch>
+void append_dcd_collisions(ctd::span<Candidate> candidates,
+                           cu::device_buffer<Collision>& output, int& fill,
+                           Launch&& launch, CudaRuntime rt) {
+  if (candidates.empty()) {
+    return;
+  }
+  int required_size = fill + candidates.size();
+  if (required_size > output.size()) {
+    resize_buffer(required_size, output, rt);
+  }
+
+  auto device_fill = alloc<int>(rt, 1, fill);
+  DynSpan<Collision> dynamic_output{.fill = device_fill.data(), .data = output};
+  launch(dynamic_output);
+  fill = scalar_load(device_fill.data(), rt);
+}
+
+}  // namespace
 
 __both__ ctd::optional<ctd::pair<float, float>> exact_pt_uv(const Vec3f& x0,
                                                             const Vec3f& x1,
@@ -87,6 +279,30 @@ __both__ ctd::optional<ctd::pair<float, float>> exact_ee_uv(const Vec3f& x0,
     u = ctd::clamp((b - c) / a, 0.0f, 1.0f);
   }
   return ctd::make_pair(u, v);
+}
+
+void append_pt_dcd_collisions(ctd::span<PTCCache> pt_ccache, float time,
+                              float activation_distance,
+                              cu::device_buffer<Collision>& output, int& fill,
+                              CudaRuntime rt) {
+  auto launch = [&](DynSpan<Collision> dynamic_output) {
+    int grid_num = div_round_up(pt_ccache.size(), CUDA_THREADS);
+    find_pt_collisions<<<grid_num, CUDA_THREADS, 0, rt.stream.get()>>>(
+        pt_ccache, time, activation_distance, dynamic_output);
+  };
+  append_dcd_collisions(pt_ccache, output, fill, launch, rt);
+}
+
+void append_ee_dcd_collisions(ctd::span<EECCache> ee_ccache, float time,
+                              float activation_distance,
+                              cu::device_buffer<Collision>& output, int& fill,
+                              CudaRuntime rt) {
+  auto launch = [&](DynSpan<Collision> dynamic_output) {
+    int grid_num = div_round_up(ee_ccache.size(), CUDA_THREADS);
+    find_ee_collisions<<<grid_num, CUDA_THREADS, 0, rt.stream.get()>>>(
+        ee_ccache, time, activation_distance, dynamic_output);
+  };
+  append_dcd_collisions(ee_ccache, output, fill, launch, rt);
 }
 
 }  // namespace silk::cuda

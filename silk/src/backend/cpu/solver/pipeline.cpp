@@ -20,6 +20,23 @@
 
 namespace silk::cpu {
 
+namespace {
+
+void update_dynamic_colliders(Registry& registry,
+                              const Eigen::VectorXf& current_state,
+                              const Eigen::VectorXf& previous_state) {
+  for (uint32_t entity : registry.get_all_entities()) {
+    auto config = registry.get<CollisionConfig>(entity);
+    auto state = registry.get<ObjectState>(entity);
+    auto collider = registry.get<ObjectCollider>(entity);
+    if (config && state && collider) {
+      collider->update(*config, *state, current_state, previous_state);
+    }
+  }
+}
+
+}  // namespace
+
 void SolverPipeline::reset(Registry& registry) {
   batch_reset_cloth_simulation(registry);
   batch_reset_obstacle_simulation(registry);
@@ -43,7 +60,6 @@ bool SolverPipeline::step(Registry& registry) {
   auto& state_velocity = global_state.state_velocity;
 
   float remaining_step = 1.0f;
-  std::vector<Collision> collisions;
 
   // Scene bbox is used to estimate the termination criteria of the inner loop
   // and the floating-point precision of the collision pipeline.
@@ -55,6 +71,11 @@ bool SolverPipeline::step(Registry& registry) {
 
   // Expand per-vertex acceleration (XYZ per vertex) to the packed state vector.
   Eigen::VectorXf acceleration = const_acceleration.replicate(state_num / 3, 1);
+
+  // Init active collisions.
+  update_dynamic_colliders(registry, curr_state, curr_state);
+  std::vector<Collision> collisions =
+      collision_pipeline.find_active_collisions(registry, 0.0f);
 
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
     SPDLOG_DEBUG("Outer iter {}", outer_it);
@@ -105,30 +126,11 @@ bool SolverPipeline::step(Registry& registry) {
       enforce_barrier_constrain(barrier_constrain, scene_bbox, next_state);
     }
 
-    // Full collision update.
-    for (uint32_t e : registry.get_all_entities()) {
-      auto config = registry.get<CollisionConfig>(e);
-      auto state = registry.get<ObjectState>(e);
-      auto collider = registry.get<ObjectCollider>(e);
-      if (!(config && state && collider)) {
-        continue;
-      }
-      collider->update(*config, *state, next_state, curr_state);
-    }
-    collisions = collision_pipeline.find_collision(registry, scene_bbox, dt);
-
-    // CCD line search over the remaining normalized substep.
-    float earliest_toi = 1.0f;
-    if (!collisions.empty()) {
-      SPDLOG_DEBUG("find {} collisions", collisions.size());
-      for (auto& c : collisions) {
-        earliest_toi = std::min(earliest_toi, c.toi);
-      }
-      // Back off to 80% of TOI as a safety margin to remain strictly
-      // pre-contact and avoid zero toi.
-      earliest_toi *= 0.8f;
-      SPDLOG_DEBUG("earliest toi {}", earliest_toi);
-    }
+    // CCD rollback.
+    update_dynamic_colliders(registry, next_state, curr_state);
+    float time_start = 1.0f - remaining_step;
+    float earliest_toi = collision_pipeline.find_earliest_toi(
+        registry, scene_bbox, time_start, remaining_step);
 
     state_velocity = (next_state - curr_state) / dt;
 
@@ -140,12 +142,19 @@ bool SolverPipeline::step(Registry& registry) {
       break;
     }
 
-    SPDLOG_DEBUG("CCD rollback to toi {}", earliest_toi);
-    curr_state = earliest_toi * (next_state - curr_state) + curr_state;
-    remaining_step -= earliest_toi;
-    for (auto& c : collisions) {
-      c.toi -= earliest_toi;
-    }
+    // Stay strictly before the CCD separation surface.
+    float rollback_toi = 0.8f * earliest_toi;
+    SPDLOG_DEBUG("CCD rollback to toi {}", rollback_toi);
+    curr_state = rollback_toi * (next_state - curr_state) + curr_state;
+    remaining_step -= rollback_toi;
+
+    // Refit dynamic broadphase boxes to the rolled-back state, then use DCD
+    // to build the active set.
+    update_dynamic_colliders(registry, curr_state, curr_state);
+    float frame_time = 1.0f - remaining_step;
+    collisions =
+        collision_pipeline.find_active_collisions(registry, frame_time);
+    SPDLOG_DEBUG("DCD found {} active collisions", collisions.size());
   }
 
   // Write solution back to registry
@@ -255,19 +264,7 @@ BarrierConstrain SolverPipeline::compute_barrier_constrain(
       }
 
       auto seq = Eigen::seqN(offset(i), 3);
-      Eigen::Vector3f position_t0 = state(seq);
-      Eigen::Vector3f reflection;
-
-      // Compute collision reflection as target of barrier constrain.
-      if (c.use_small_ms) {
-        // If use_small_ms is true that means CCD detects zero toi under normal
-        // minimal separation and fallbacks to a smaller one to get non-zero
-        // toi. Thus we assume true toi = 0 and compute reflection aggressively.
-        reflection = position_t0 + c.velocity_t1.col(i);
-      } else {
-        reflection = position_t0 + c.toi * c.velocity_t0.col(i) +
-                     (1.0f - c.toi) * c.velocity_t1.col(i);
-      }
+      Eigen::Vector3f reflection = state(seq) + c.correction.col(i);
 
       lhs(seq) += c.stiffness * Eigen::Vector3f::Ones();
       rhs(seq) += c.stiffness * reflection;

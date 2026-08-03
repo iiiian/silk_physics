@@ -1,7 +1,10 @@
 #include "backend/cuda/collision/find_collision.cuh"
 
+#include <Eigen/Core>
 #include <cassert>
+#include <vector>
 
+#include "backend/cpu/collision/interval_root_finder.hpp"
 #include "backend/cuda/collision/collision.cuh"
 #include "backend/cuda/collision/narrowphase.cuh"
 #include "backend/cuda/collision/object_collider.cuh"
@@ -60,18 +63,16 @@ struct EESelfCollisionFilter {
   }
 };
 
-ctd::span<Collision> find_collision(ObjRegistry& registry, float dt,
-                                    int init_broadphase_cache_size,
-                                    cu::device_buffer<Collision>& collisions,
-                                    CudaRuntime rt) {
+/// Apply narrowphase operation PTFunction and EEFunction after broadphase
+/// culling.
+template <typename PTFunction, typename EEFunction>
+void for_each_collision_candidate_batch(ObjRegistry& registry,
+                                        int initial_cache_size,
+                                        PTFunction&& pt_function,
+                                        EEFunction&& ee_function,
+                                        CudaRuntime rt) {
   auto object_colliders = registry.get_all_components<ObjectCollider>();
 
-  // Three-stage collision detection for inter-object collisions:
-  // 1. Object-level broadphase using sweep-and-prune on CPU.
-  // 2. Mesh-level broadphase using BVH-tree spatial queries on GPU.
-  // 3. Narrowphase using continuous collision detection on GPU.
-
-  // State 1. Object level broadphase on CPU.
   SapCollisionCache<ObjectCollider> object_ccache;
   std::vector<int> object_proxies(object_colliders.size());
   for (int i = 0; i < object_colliders.size(); ++i) {
@@ -85,83 +86,128 @@ ctd::span<Collision> find_collision(ObjRegistry& registry, float dt,
       object_colliders, object_proxies.data(), object_proxies.size(), axis,
       object_collision_filter, object_ccache);
 
-  // Allocated device collision cache.
-  auto pt_ccache =
-      alloc<ctd::pair<const TriangleCollider*, const PointCollider*>>(
-          rt, init_broadphase_cache_size);
-  int pt_ccache_fill = 0;
-  auto ee_ccache = alloc<ctd::pair<const EdgeCollider*, const EdgeCollider*>>(
-      rt, init_broadphase_cache_size);
-  int ee_ccache_fill = 0;
-  int collision_fill = 0;
-
-  // Stage 2-3. Gpu broadphase + narrowphase.
+  auto pt_ccache = alloc<PTCCache>(rt, initial_cache_size);
+  int pt_fill = 0;
+  auto ee_ccache = alloc<EECCache>(rt, initial_cache_size);
+  int ee_fill = 0;
+  auto flush_pt = [&] {
+    if (pt_fill == 0) {
+      return;
+    }
+    pt_function(ctd::span(pt_ccache.data(), pt_fill));
+    pt_fill = 0;
+  };
+  auto flush_ee = [&] {
+    if (ee_fill == 0) {
+      return;
+    }
+    ee_function(ctd::span(ee_ccache.data(), ee_fill));
+    ee_fill = 0;
+  };
 
   for (auto& [oa, ob] : object_ccache) {
     oa->triangle_collider_tree.test_ext_collision<PointCollider>(
         ob->point_colliders.value(), PTInterCollisionFilter{}, pt_ccache,
-        pt_ccache_fill, rt);
-    if (pt_ccache_fill == pt_ccache.size()) {
-      pt_narrowphase(ctd::span(pt_ccache.data(), pt_ccache_fill), collisions,
-                     collision_fill, rt);
-      pt_ccache_fill = 0;
-    }
+        pt_fill, rt);
+    flush_pt();
 
     ob->triangle_collider_tree.test_ext_collision<PointCollider>(
         oa->point_colliders.value(), PTInterCollisionFilter{}, pt_ccache,
-        pt_ccache_fill, rt);
+        pt_fill, rt);
+    flush_pt();
+
     oa->edge_collider_tree.test_ext_collision<EdgeCollider>(
         ob->edge_collider_tree.get_colliders(), EEInterCollisionFilter{},
-        ee_ccache, ee_ccache_fill, rt);
-
-    if (pt_ccache_fill == pt_ccache.size()) {
-      pt_narrowphase(ctd::span(pt_ccache.data(), pt_ccache_fill), collisions,
-                     collision_fill, rt);
-      pt_ccache_fill = 0;
-    }
-    if (ee_ccache_fill == ee_ccache.size()) {
-      ee_narrowphase(ctd::span(ee_ccache.data(), ee_ccache_fill), collisions,
-                     collision_fill, rt);
-      ee_ccache_fill = 0;
-    }
+        ee_ccache, ee_fill, rt);
+    flush_ee();
   }
 
-  // Self-collision detection within individual objects.
-  // Uses same BVH-tree + CCD approach but with stricter filtering.
-  for (auto& o : object_colliders) {
-    // Skip pure obstacles and objects with self-collision disabled.
-    if (!o.is_physical || !o.is_self_collision_on) {
+  for (auto& object : object_colliders) {
+    if (!object.is_physical || !object.is_self_collision_on) {
       continue;
     }
+    object.triangle_collider_tree.test_ext_collision<PointCollider>(
+        object.point_colliders.value(), PTSelfCollisionFilter{}, pt_ccache,
+        pt_fill, rt);
+    flush_pt();
 
-    o.triangle_collider_tree.test_ext_collision<PointCollider>(
-        o.point_colliders.value(), PTSelfCollisionFilter{}, pt_ccache,
-        pt_ccache_fill, rt);
-    o.edge_collider_tree.test_self_collision(EESelfCollisionFilter{}, ee_ccache,
-                                             ee_ccache_fill, rt);
+    object.edge_collider_tree.test_self_collision(EESelfCollisionFilter{},
+                                                  ee_ccache, ee_fill, rt);
+    flush_ee();
+  }
+}
 
-    if (pt_ccache_fill == pt_ccache.size()) {
-      pt_narrowphase(ctd::span(pt_ccache.data(), pt_ccache_fill), collisions,
-                     collision_fill, rt);
-      pt_ccache_fill = 0;
+float find_min_toi(ObjRegistry& registry, int init_broadphase_cache_size,
+                   float time_start, float max_time, float minimum_separation,
+                   float ccd_tolerance, int ccd_max_iter, CudaRuntime rt) {
+  assert(time_start >= 0.0f && max_time >= 0.0f &&
+         time_start + max_time <= 1.0f + ccd_tolerance);
+  assert(minimum_separation >= 0.0f);
+  if (max_time == 0.0f) {
+    return 0.0f;
+  }
+
+  auto object_colliders = registry.get_all_components<ObjectCollider>();
+  if (object_colliders.empty()) {
+    return max_time;
+  }
+
+  // Tight Inclusion uses a scene-wide magnitude to bound floating-point
+  // evaluation error.
+  Vec3f abs_max = Vec3f::zeros();
+  for (const ObjectCollider& collider : object_colliders) {
+    for (int axis = 0; axis < 3; ++axis) {
+      float scene_min = collider.bbox.min(axis) + collider.bbox_padding;
+      float scene_max = collider.bbox.max(axis) - collider.bbox_padding;
+      abs_max(axis) = ctd::max(abs_max(axis), ctd::abs(scene_min));
+      abs_max(axis) = ctd::max(abs_max(axis), ctd::abs(scene_max));
     }
-    if (ee_ccache_fill == ee_ccache.size()) {
-      ee_narrowphase(ctd::span(ee_ccache.data(), ee_ccache_fill), collisions,
-                     collision_fill, rt);
-      ee_ccache_fill = 0;
-    }
   }
+  Eigen::Vector3f eigen_abs_max{abs_max(0), abs_max(1), abs_max(2)};
+  Vec3f ee_err = Vec3f::vec_like(
+      cpu::get_numerical_error(eigen_abs_max, /*is_vertex_face=*/false));
+  Vec3f vf_err = Vec3f::vec_like(
+      cpu::get_numerical_error(eigen_abs_max, /*is_vertex_face=*/true));
 
-  if (pt_ccache_fill != 0) {
-    pt_narrowphase(ctd::span(pt_ccache.data(), pt_ccache_fill), collisions,
-                   collision_fill, rt);
-  }
-  if (ee_ccache_fill != 0) {
-    ee_narrowphase(ctd::span(ee_ccache.data(), ee_ccache_fill), collisions,
-                   collision_fill, rt);
-  }
+  // Tight inclusion CCD is essentially DFS tree traversal, which is wayyy
+  // faster on CPU. So we first cull cadidate on GPU via shallow BFS search then
+  // resolve remaining queries on CPU.
 
-  return ctd::span<Collision>(collisions.data(), collision_fill);
+  float min_toi = max_time;
+  auto find_pt = [&](ctd::span<PTCCache> candidates) {
+    min_toi =
+        find_pt_min_toi(candidates, vf_err, time_start, min_toi,
+                        minimum_separation, ccd_tolerance, ccd_max_iter, rt);
+  };
+  auto find_ee = [&](ctd::span<EECCache> candidates) {
+    min_toi =
+        find_ee_min_toi(candidates, ee_err, time_start, min_toi,
+                        minimum_separation, ccd_tolerance, ccd_max_iter, rt);
+  };
+  for_each_collision_candidate_batch(registry, init_broadphase_cache_size,
+                                     find_pt, find_ee, rt);
+  return min_toi;
+}
+
+ctd::span<Collision> find_active_collisions(
+    ObjRegistry& registry, int init_broadphase_cache_size, float time,
+    float activation_distance, cu::device_buffer<Collision>& collision_storage,
+    CudaRuntime rt) {
+  assert(time >= 0.0f && time <= 1.0f);
+  assert(activation_distance >= 0.0f);
+
+  int collision_fill = 0;
+  auto find_pt = [&](ctd::span<PTCCache> candidates) {
+    find_pt_active_collisions(candidates, time, activation_distance,
+                              collision_storage, collision_fill, rt);
+  };
+  auto find_ee = [&](ctd::span<EECCache> candidates) {
+    find_ee_active_collisions(candidates, time, activation_distance,
+                              collision_storage, collision_fill, rt);
+  };
+  for_each_collision_candidate_batch(registry, init_broadphase_cache_size,
+                                     find_pt, find_ee, rt);
+  return ctd::span<Collision>(collision_storage.data(), collision_fill);
 }
 
 }  // namespace silk::cuda

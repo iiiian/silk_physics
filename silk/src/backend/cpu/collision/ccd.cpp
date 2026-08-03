@@ -121,8 +121,10 @@ std::optional<CCDResult> CCD(
     const Eigen::Vector3f &c_t0, const Eigen::Vector3f &d_t0,
     const Eigen::Vector3f &a_t1, const Eigen::Vector3f &b_t1,
     const Eigen::Vector3f &c_t1, const Eigen::Vector3f &d_t1,
-    const Eigen::Array3f &err, float ms, float tolerance, long max_itr,
-    bool no_zero_toi) {
+    const Eigen::Array3f &err, float ms, float tolerance, long max_iter,
+    bool no_zero_toi, float max_time) {
+  assert(max_time >= 0.0f && max_time <= 1.0f);
+
   // Compute co-domain tolerance.
   Eigen::Array3f tol;
   if constexpr (is_vertex_face) {
@@ -133,18 +135,17 @@ std::optional<CCDResult> CCD(
                                        d_t1, tolerance);
   }
 
-  // Initialize unit domain for t, u, and v.
+  // Initialize the domain [0, max_time] x [0, 1] x [0, 1].
   Interval zero_to_one{0.0f, 1.0f};
   std::array<Interval, 3> iset = {{
-      zero_to_one,
+      Interval{0.0f, max_time},
       zero_to_one,
       zero_to_one,
   }};
 
-  // Breadth-first interval root finding in (t,u,v).
-  auto result = interval_root_finder_BFS<is_vertex_face>(
+  auto result = interval_root_finder_bucket_DFS<is_vertex_face>(
       a_t0, b_t0, c_t0, d_t0, a_t1, b_t1, c_t1, d_t1, iset, tol, tolerance, err,
-      ms, max_itr, true);
+      ms, max_iter, max_time == 1.0f);
 
   if (!no_zero_toi) {
     return result;
@@ -158,13 +159,13 @@ std::optional<CCDResult> CCD(
   constexpr int MS_REFINE_ITER = 1;
   for (int i = 0; i < MS_REFINE_ITER; ++i) {
     ms *= 0.5f;
-    auto refine_result = interval_root_finder_BFS<is_vertex_face>(
+    auto refine_result = interval_root_finder_bucket_DFS<is_vertex_face>(
         a_t0, b_t0, c_t0, d_t0, a_t1, b_t1, c_t1, d_t1, iset, tol, tolerance,
-        err, ms, max_itr, true);
+        err, ms, max_iter, max_time == 1.0f);
 
     if (!refine_result) {
       result->use_small_ms = true;
-      result->small_ms_t = {1.0f, 1.0f};
+      result->small_ms_t = {max_time, max_time};
       return result;
     } else if (refine_result->t(0) > 0.0f) {
       result->use_small_ms = true;
@@ -183,11 +184,11 @@ std::optional<CCDResult> edge_edge_ccd(
     const Eigen::Vector3f &eb0_t0, const Eigen::Vector3f &eb1_t0,
     const Eigen::Vector3f &ea0_t1, const Eigen::Vector3f &ea1_t1,
     const Eigen::Vector3f &eb0_t1, const Eigen::Vector3f &eb1_t1,
-    const Eigen::Array3f &err, float ms, float tolerance, long max_itr,
-    bool no_zero_toi) {
-  return CCD</*is_vertex_face=*/false>(ea0_t0, ea1_t0, eb0_t0, eb1_t0, ea0_t1,
-                                       ea1_t1, eb0_t1, eb1_t1, err, ms,
-                                       tolerance, max_itr, no_zero_toi);
+    const Eigen::Array3f &err, float ms, float tolerance, long max_iter,
+    bool no_zero_toi, float max_time) {
+  return CCD</*is_vertex_face=*/false>(
+      ea0_t0, ea1_t0, eb0_t0, eb1_t0, ea0_t1, ea1_t1, eb0_t1, eb1_t1, err, ms,
+      tolerance, max_iter, no_zero_toi, max_time);
 }
 
 std::optional<CCDResult> vertex_face_ccd(
@@ -195,11 +196,11 @@ std::optional<CCDResult> vertex_face_ccd(
     const Eigen::Vector3f &f1_t0, const Eigen::Vector3f &f2_t0,
     const Eigen::Vector3f &v_t1, const Eigen::Vector3f &f0_t1,
     const Eigen::Vector3f &f1_t1, const Eigen::Vector3f &f2_t1,
-    const Eigen::Array3f &err, float ms, float tolerance, long max_itr,
-    bool no_zero_toi) {
+    const Eigen::Array3f &err, float ms, float tolerance, long max_iter,
+    bool no_zero_toi, float max_time) {
   return CCD</*is_vertex_face=*/true>(v_t0, f0_t0, f1_t0, f2_t0, v_t1, f0_t1,
-                                      f1_t1, f2_t1, err, ms, tolerance, max_itr,
-                                      no_zero_toi);
+                                      f1_t1, f2_t1, err, ms, tolerance,
+                                      max_iter, no_zero_toi, max_time);
 }
 
 }  // namespace silk::cpu

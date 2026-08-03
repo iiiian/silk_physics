@@ -30,6 +30,7 @@ struct Query {
 struct QueryOutput {
   float toi = 1.0f;
   bool hit = false;
+  bool searched_full_interval = true;
 };
 
 using SceneFiles = broadphase_benchmark::SceneFiles;
@@ -50,7 +51,7 @@ class CpuAdapter {
  public:
   virtual ~CpuAdapter() = default;
   virtual std::string name() const = 0;
-  virtual QueryOutput query(const Query& input) = 0;
+  virtual QueryOutput query(const Query& input, float max_time) = 0;
 };
 
 std::vector<SceneFiles> resolve_scene_files(
@@ -58,17 +59,18 @@ std::vector<SceneFiles> resolve_scene_files(
 SceneBounds load_scene_bounds(const SceneFiles& scene_files);
 QueryBatch load_batch(const SceneFiles& scene_files, QueryKind kind,
                       const SceneBounds& scene_bounds, int timestep_index,
-                      broadphase_benchmark::CpuAdapter& broadphase);
+                      broadphase_benchmark::CpuAdapter* broadphase);
 std::string query_name(QueryKind kind);
 float compute_minimum_separation(const Query& query, QueryKind kind);
 
-std::unique_ptr<CpuAdapter> make_silk_ticcd_adapter(QueryKind kind);
-std::unique_ptr<CpuAdapter> make_original_ticcd_adapter(QueryKind kind);
-
+std::unique_ptr<CpuAdapter> make_silk_ticcd_adapter(
+    QueryKind kind, int max_iterations);
+std::unique_ptr<CpuAdapter> make_original_ticcd_adapter(
+    QueryKind kind, int max_iterations);
 #ifdef SILK_NARROWPHASE_HAS_CUDA
-class ScalableGpuAdapter {
+class GpuAdapter {
  public:
-  virtual ~ScalableGpuAdapter() = default;
+  virtual ~GpuAdapter() = default;
   virtual std::string name() const = 0;
   virtual void prepare(std::span<const Query> queries) = 0;
   virtual void synchronize() = 0;
@@ -76,7 +78,10 @@ class ScalableGpuAdapter {
   virtual std::span<const QueryOutput> output() const = 0;
 };
 
-std::unique_ptr<ScalableGpuAdapter> make_scalable_gpu_adapter(QueryKind kind);
+std::unique_ptr<GpuAdapter> make_scalable_gpu_adapter(
+    QueryKind kind, int max_iterations);
+std::unique_ptr<GpuAdapter> make_silk_hybrid_ticcd_adapter(QueryKind kind,
+                                                          int max_iterations);
 #endif
 
 }  // namespace silk::narrowphase_benchmark

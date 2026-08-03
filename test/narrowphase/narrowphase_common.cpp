@@ -15,7 +15,7 @@
 #include <vector>
 
 #include "../broadphase/cpu_adapters.hpp"
-#include "tight_inclusion/interval_root_finder.hpp"
+#include "backend/cpu/collision/interval_root_finder.hpp"
 
 namespace silk::narrowphase_benchmark {
 
@@ -33,7 +33,8 @@ using ExpectedMap = std::unordered_map<Pair, bool, PairHash>;
 
 ExpectedMap load_expected(const SceneFiles& scene_files,
                           const broadphase_benchmark::TestCase& test_case,
-                          QueryKind kind, int timestep_index) {
+                          QueryKind kind, int timestep_index,
+                          std::vector<Pair>* dataset_pairs) {
   const std::filesystem::path& boxes_path =
       kind == QueryKind::EE ? scene_files.boxes_ee[timestep_index]
                             : scene_files.boxes_vf[timestep_index];
@@ -68,6 +69,9 @@ ExpectedMap load_expected(const SceneFiles& scene_files,
   int face_offset = vertex_num + edge_num;
   ExpectedMap expected;
   expected.reserve(pairs.size());
+  if (dataset_pairs != nullptr) {
+    dataset_pairs->reserve(pairs.size());
+  }
   for (int i = 0; i < pairs.size(); ++i) {
     Pair pair{pairs[i][0].get<int>(), pairs[i][1].get<int>()};
     if (kind == QueryKind::EE) {
@@ -81,6 +85,9 @@ ExpectedMap load_expected(const SceneFiles& scene_files,
         std::swap(pair.first, pair.second);
       }
       pair.second -= face_offset;
+    }
+    if (dataset_pairs != nullptr) {
+      dataset_pairs->push_back(pair);
     }
     expected.emplace(pair, labels[i]);
   }
@@ -122,7 +129,6 @@ Query make_query(const broadphase_benchmark::TestCase& test_case,
       }
     }
   }
-
   auto found = expected.find(pair);
   if (found != expected.end()) {
     query.expected = found->second;
@@ -173,27 +179,34 @@ SceneBounds load_scene_bounds(const SceneFiles& scene_files) {
 
 QueryBatch load_batch(const SceneFiles& scene_files, QueryKind kind,
                       const SceneBounds& scene_bounds, int timestep_index,
-                      broadphase_benchmark::CpuAdapter& broadphase) {
+                      broadphase_benchmark::CpuAdapter* broadphase) {
   broadphase_benchmark::TestCase test_case =
       broadphase_benchmark::load_case(scene_files, timestep_index);
-  broadphase_benchmark::QueryKind broadphase_kind =
-      kind == QueryKind::EE ? broadphase_benchmark::QueryKind::EE
-                            : broadphase_benchmark::QueryKind::VF;
-  broadphase_benchmark::QueryInput input =
-      broadphase_benchmark::make_query(test_case, broadphase_kind);
-  broadphase.prepare(input);
-  broadphase.build();
-  broadphase.clear_output();
-  broadphase.query();
-  broadphase.materialize_output();
 
-  Eigen::Array3f err = ticcd::get_numerical_error(
-      {scene_bounds.min, scene_bounds.max}, kind == QueryKind::VF,
-      /*using_minimum_separation=*/true);
-  ExpectedMap expected =
-      load_expected(scene_files, test_case, kind, timestep_index);
+  Eigen::Vector3f abs_max =
+      scene_bounds.min.cwiseAbs().cwiseMax(scene_bounds.max.cwiseAbs());
+  Eigen::Array3f err =
+      cpu::get_numerical_error(abs_max, kind == QueryKind::VF);
+  std::vector<Pair> pairs;
+  ExpectedMap expected = load_expected(
+      scene_files, test_case, kind, timestep_index,
+      broadphase == nullptr ? &pairs : nullptr);
 
-  std::span<const Pair> pairs = broadphase.output();
+  if (broadphase != nullptr) {
+    broadphase_benchmark::QueryKind broadphase_kind =
+        kind == QueryKind::EE ? broadphase_benchmark::QueryKind::EE
+                              : broadphase_benchmark::QueryKind::VF;
+    broadphase_benchmark::QueryInput input =
+        broadphase_benchmark::make_query(test_case, broadphase_kind);
+    broadphase->prepare(input);
+    broadphase->build();
+    broadphase->clear_output();
+    broadphase->query();
+    broadphase->materialize_output();
+    std::span<const Pair> broadphase_pairs = broadphase->output();
+    pairs.assign(broadphase_pairs.begin(), broadphase_pairs.end());
+  }
+
   QueryBatch batch{.scene = scene_files.name, .kind = kind, .timestep_num = 1};
   batch.queries.reserve(pairs.size());
   for (int i = 0; i < pairs.size(); ++i) {
@@ -207,26 +220,8 @@ std::string query_name(QueryKind kind) {
   return kind == QueryKind::EE ? "ee" : "vf";
 }
 
-float compute_minimum_separation(const Query& query, QueryKind kind) {
-  constexpr float MINIMUM_SEPARATION_RATIO = 0.05f;
-
-  float primitive_size;
-  if (kind == QueryKind::EE) {
-    primitive_size = ((query.vertices[1] - query.vertices[0]).norm() +
-                      (query.vertices[3] - query.vertices[2]).norm() +
-                      (query.vertices[5] - query.vertices[4]).norm() +
-                      (query.vertices[7] - query.vertices[6]).norm()) /
-                     4.0f;
-  } else {
-    primitive_size = ((query.vertices[2] - query.vertices[1]).norm() +
-                      (query.vertices[3] - query.vertices[2]).norm() +
-                      (query.vertices[1] - query.vertices[3]).norm() +
-                      (query.vertices[6] - query.vertices[5]).norm() +
-                      (query.vertices[7] - query.vertices[6]).norm() +
-                      (query.vertices[5] - query.vertices[7]).norm()) /
-                     6.0f;
-  }
-  return MINIMUM_SEPARATION_RATIO * primitive_size;
+float compute_minimum_separation(const Query&, QueryKind) {
+  return 0.0f;
 }
 
 }  // namespace silk::narrowphase_benchmark
