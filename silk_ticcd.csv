@@ -1,3 +1,0 @@
-algorithm,device,scene,query,threads,timesteps,queries,expected_collisions,reported_collisions,false_positives,false_negatives,query_ms,ns_per_query
-silk_ticcd,cpu,armadillo-rollers,ee,20,400,64203554,98757,3184608,347,0,340857,5309
-92
