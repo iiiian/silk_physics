@@ -15,6 +15,7 @@
 #include "backend/cuda/solver/barrier_constraints.cuh"
 #include "backend/cuda/solver/pin_constraints.cuh"
 #include "common/logger.hpp"
+#include "common/timer.hpp"
 #include "silk/silk.hpp"
 
 namespace silk::cuda {
@@ -140,6 +141,7 @@ void update_collision_state(ObjRegistry& registry, ctd::span<const float> curr,
 std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
                                               CudaRuntime rt) {
   SPDLOG_DEBUG("solver step");
+  Timer timer_main_loop("cuda backend main loop", rt);
 
   auto prev_state = alloc<float>(rt, 0);
   auto prev_velocity = alloc<float>(rt, 0);
@@ -169,6 +171,8 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
   auto collision_storage = alloc<Collision>(rt, init_narrowphase_cache_size);
   auto pin_constraints = gather_pin_constraints(registry, state_num, rt);
 
+  Timer timer_init_barrier("initial active barrier", rt);
+
   // DCD owns the active set. Initialize it at the beginning of the frame.
   update_collision_state(registry, outer_state, outer_state, rt);
   auto collisions =
@@ -180,25 +184,33 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
         gather_barrier_constraints(state_num, collisions, rt));
   }
 
+  timer_init_barrier.end();
+
+  Timer timer_outer("outer loop", rt);
   float remaining_step = 1.0f;
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
     int vert_num = state_num / 3;
     int grid_num = div_round_up(vert_num, 128);
+    Timer timer_predict("predict solution", rt);
     predict<<<grid_num, 128, 0, rt.stream.get()>>>(
         vert_num, dt, const_acceleration, outer_state, outer_velocity,
         inner_state);
+    timer_predict.end();
 
+    Timer timer_admm_solve("ADMM solve", rt);
     auto admm_err = admm_solver.solve(
         registry, prev_state, prev_velocity, inner_state, pin_constraints,
         barrier_constraints.get(), dt, const_acceleration, rt);
     if (admm_err) {
       return Error::Diverge;
     }
+    timer_admm_solve.end();
     // if (barrier_constraints) {
     //   barrier_constraints->enforce(inner_state, rt);
     // }
     rt.stream.sync();
 
+    Timer timer_ccd("CCD", rt);
     // CCD only determines the safe line-search interval.
     update_collision_state(registry, inner_state, outer_state, rt);
     float time_start = 1.0f - remaining_step;
@@ -224,7 +236,9 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     mix<<<grid_num, 128, 0, rt.stream.get()>>>(rollback_toi, inner_state,
                                                outer_state, outer_state);
     remaining_step -= rollback_toi;
+    timer_ccd.end();
 
+    Timer timer_active_collisions("Find active collisions", rt);
     // Refit to the rolled-back state, then rebuild active contacts with DCD.
     update_collision_state(registry, outer_state, outer_state, rt);
     float time = 1.0f - remaining_step;
@@ -237,8 +251,11 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
       barrier_constraints = std::make_unique<EqualityConstraints>(
           gather_barrier_constraints(state_num, collisions, rt));
     }
+    timer_active_collisions.end();
   }
+  timer_outer.end();
 
+  Timer timer_final_state_update("final state update", rt);
   // Write solution back to registry.
   for (auto& physical_state : registry.get_all_components<PhysicalState>()) {
     int offset = physical_state.state_offset;
@@ -260,6 +277,8 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
   }
 
   rt.stream.sync();
+  timer_final_state_update.end();
+
   return std::nullopt;
 }
 

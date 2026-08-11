@@ -14,6 +14,7 @@
 #include "backend/cuda/solver/cloth_admm_helper.cuh"
 #include "backend/cuda/solver/inner_product.cuh"
 #include "common/logger.hpp"
+#include "common/timer.hpp"
 
 namespace silk::cuda {
 
@@ -167,6 +168,7 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
     Vec3f const_acceleration, CudaRuntime rt) {
   int state_num = prev_state.size();
   if (state_num != cached_state_num_) {
+    Timer timer_alloc_cache("alloc device cache storage");
     lhs_diag_ = alloc<float>(rt, state_num, 0);
     rhs_ = alloc<float>(rt, state_num, 0);
     inertia_mod_ = alloc<float>(rt, state_num);
@@ -182,15 +184,18 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
     cached_state_num_ = state_num;
   }
 
+  Timer timer_compute_inertia_mod("compute intertia mod");
   int grid_num = div_round_up(state_num, 128);
   compute_inertia_mod<<<grid_num, 128, 0, rt.stream.get()>>>(
       dt, prev_state, prev_velocity, const_acceleration, *inertia_mod_);
+  timer_compute_inertia_mod.end();
 
   pin_constraints.reset_lagrange_mul(rt);
   if (barrier_constraints) {
     barrier_constraints->reset_lagrange_mul(rt);
   }
 
+  Timer timer_inner_loop("inner loop");
   float h_init_primal_norm = 0.0f;
   float h_init_dual_norm = 0.0f;
   float h_linear_tol_adaptive_ratio = 1.0f;
@@ -204,6 +209,8 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
 
     // Update main.
     if (inner_it != 0) {
+      Timer timer_update_main("update main");
+
       cu::fill_bytes(rt.stream, *lhs_diag_, 0);
       cu::fill_bytes(rt.stream, *rhs_, 0);
       pin_constraints.eval(*lhs_diag_, *rhs_, rt);
@@ -224,6 +231,7 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
     }
 
     // Update aux and lagrange multipliers.
+    Timer timer_update_aux_and_mul("update aux var and multipliers");
     cu::fill_bytes(rt.stream, *scalar_primal_norm2_, 0);
     cu::fill_bytes(rt.stream, *scalar_primal_scale_x2_, 0);
     cu::fill_bytes(rt.stream, *scalar_primal_scale_aux2_, 0);
@@ -244,12 +252,14 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
           inner_state, *scalar_primal_norm2_, *scalar_primal_scale_x2_,
           *scalar_primal_scale_aux2_, rt);
     }
+    timer_update_aux_and_mul.end();
 
     // Skip convergence check for iter 0.
     if (inner_it == 0) {
       continue;
     }
 
+    Timer timer_convergence_check("convergence check");
     auto [min, max] = min_max(inner_state, rt);
     if (!(std::isfinite(min) && std::isfinite(max))) {
       SPDLOG_ERROR("solver explodes");
@@ -307,13 +317,17 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
                   h_primal_norm, h_dual_norm);
       break;
     }
+    timer_convergence_check.end();
   }
+  timer_inner_loop.end();
 
   // Small violation of constraints will cause later zero toi.
+  Timer timer_enforce_constraints("enforce constraints");
   pin_constraints.enforce(inner_state, rt);
   if (barrier_constraints) {
     barrier_constraints->enforce(inner_state, rt);
   }
+  timer_enforce_constraints.end();
 
   return std::nullopt;
 }

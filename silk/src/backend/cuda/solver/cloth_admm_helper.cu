@@ -9,6 +9,7 @@
 #include "backend/cuda/cusparse_wrapper.hpp"
 #include "backend/cuda/simple_linalg.cuh"
 #include "backend/cuda/solver/svd.cuh"
+#include "common/timer.hpp"
 
 namespace silk::cuda {
 
@@ -582,20 +583,27 @@ void ClothADMMHelper::solve_main_var(float rel_tol, float abs_tol,
                                      ctd::span<const float> extern_rhs,
                                      ctd::span<const float> inertia_mod,
                                      ctd::span<float> state, CudaRuntime rt) {
+  Timer timer_copy_cached("copy cached lhs and rhs");
   auto lhs_diag = alloc<float>(rt, l1_cache.state_num);
   cu::copy_bytes(rt.stream, extern_lhs, lhs_diag);
   auto rhs = alloc<float>(rt, l1_cache.state_num);
   cu::copy_bytes(rt.stream, extern_rhs, rhs);
+  timer_copy_cached.end();
 
+  Timer timer_assemble_inertia("assemble inertia");
   int grid_num = div_round_up(l1_cache.state_num, 128);
   assemble_inertia<<<grid_num, 128, 0, rt.stream.get()>>>(
       l1_cache.dt, *l1_cache.mass, state, inertia_mod, lhs_diag, rhs);
+  timer_assemble_inertia.end();
 
+  Timer timer_assemble_elastic_rhs("assemble elastic rhs");
   grid_num = div_round_up(l1_cache.face_num, 128);
   assemble_elastic_rhs<<<grid_num, 128, 0, rt.stream.get()>>>(
       l1_cache.face_num, l1_cache.penalty, *l1_cache.faces,
       *l1_cache.jacobian_ops, *l1_cache.area_sqrt, *ue_, *ze_, rhs);
+  timer_assemble_elastic_rhs.end();
 
+  Timer timer_assemble_bending_rhs("assemble bending rhs");
   if (!float_tmp_) {
     float_tmp_ = alloc<float>(rt, rhs.size());
   }
@@ -605,14 +613,20 @@ void ClothADMMHelper::solve_main_var(float rel_tol, float abs_tol,
         *l1_cache.bending_weight_sqrt, *ub_, *zb_, cusparse_handle_,
         *cusparse_workspace_, *float_tmp_, rhs, rt);
   }
+  timer_assemble_bending_rhs.end();
 
   DynamicBSRView dyn_A{lhs_diag, l1_cache.weighted_AA.view()};
+  Timer timer_mas_factorize("MAS solver factorize");
   if (is_lhs_changed) {
     linear_solver_.factorize(dyn_A, *l1_cache.part_offsets, rt);
   }
+  timer_mas_factorize.end();
+
   linear_solver_.abs_tol = abs_tol;
   linear_solver_.rel_tol = rel_tol;
+  Timer timer_mas_solve("MAS solve");
   auto status = linear_solver_.solve(dyn_A, rhs, state, rt);
+  timer_mas_solve.end();
   // TODO: handle failure.
 }
 
