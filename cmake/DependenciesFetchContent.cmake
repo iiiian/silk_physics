@@ -218,7 +218,11 @@ if (SILK_ENABLE_CUDA)
 endif()
 
 if(SILK_BUILD_DEMO OR SILK_BROADPHASE_BENCHMARKS OR SILK_NARROWPHASE_BENCHMARKS)
-    FetchContent_MakeAvailable(argparse nlohmann_json)
+    FetchContent_MakeAvailable(argparse)
+endif()
+
+if(SILK_ENABLE_TIMING OR SILK_BUILD_DEMO OR SILK_BROADPHASE_BENCHMARKS OR SILK_NARROWPHASE_BENCHMARKS)
+    FetchContent_MakeAvailable(nlohmann_json)
 endif()
 
 if(SILK_BUILD_DEMO)

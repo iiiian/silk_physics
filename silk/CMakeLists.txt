@@ -38,6 +38,7 @@ target_include_directories(
 target_compile_definitions(
     silk
     PRIVATE
+        SILK_ENABLE_TIMING=$<BOOL:${SILK_ENABLE_TIMING}>
         $<$<BOOL:${SILK_ENABLE_CUDA}>:SILK_WITH_CUDA=1>
         $<$<STREQUAL:${SILK_GRAPH_PARTITION_BACKEND},kaminpar>:SILK_GRAPH_PARTITION_BACKEND_KAMINPAR=1>
         $<$<STREQUAL:${SILK_GRAPH_PARTITION_BACKEND},metis>:SILK_GRAPH_PARTITION_BACKEND_METIS=1>
@@ -69,6 +70,10 @@ target_link_libraries(
         SuiteSparse::CCOLAMD
         SuiteSparse::CHOLMOD
 )
+
+if(SILK_ENABLE_TIMING)
+    target_link_libraries(silk PRIVATE nlohmann_json::nlohmann_json)
+endif()
 
 if(SILK_ENABLE_CUDA)
     target_sources(silk PRIVATE ${SILK_CUDA_SOURCES})

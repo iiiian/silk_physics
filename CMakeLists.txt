@@ -23,6 +23,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 # ---------------------------------------------------------------
 
 option(SILK_ENABLE_CUDA "Build with CUDA" OFF)
+option(SILK_ENABLE_TIMING "Enable hierarchical timing instrumentation" OFF)
 option(SILK_BUILD_DEMO "Build the GUI demo application" ON)
 option(SILK_BUILD_TEST "Build tests" ON)
 option(SILK_BROADPHASE_BENCHMARKS "Build broadphase verification and benchmarks" OFF)
