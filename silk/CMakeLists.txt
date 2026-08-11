@@ -75,6 +75,10 @@ if(SILK_ENABLE_TIMING)
     target_link_libraries(silk PRIVATE nlohmann_json::nlohmann_json)
 endif()
 
+if(SILK_ENABLE_CUDA AND SILK_ENABLE_TIMING)
+    set_source_files_properties(src/common/timer.cpp PROPERTIES LANGUAGE CUDA)
+endif()
+
 if(SILK_ENABLE_CUDA)
     target_sources(silk PRIVATE ${SILK_CUDA_SOURCES})
     target_compile_options(silk PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda --expt-relaxed-constexpr>)

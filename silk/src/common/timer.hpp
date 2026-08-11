@@ -6,6 +6,12 @@
 #define SILK_ENABLE_TIMING 0
 #endif
 
+namespace silk::cuda {
+
+struct CudaRuntime;
+
+}  // namespace silk::cuda
+
 namespace silk {
 
 #if SILK_ENABLE_TIMING
@@ -20,7 +26,12 @@ struct TimingNode;
 /// timer.end(); // Optional early end. Else it stop at scope end.
 class Timer {
  public:
+  /// Create host timer.
   explicit Timer(std::string_view name);
+#ifdef SILK_WITH_CUDA
+  /// Create device timer using cuda event. sync implicitly.
+  Timer(std::string_view name, cuda::CudaRuntime rt);
+#endif
   ~Timer();
 
   Timer(const Timer&) = delete;
@@ -41,6 +52,9 @@ class Timer {
 class Timer {
  public:
   explicit Timer(std::string_view) noexcept {}
+#ifdef SILK_WITH_CUDA
+  Timer(std::string_view, const cuda::CudaRuntime&) noexcept {}
+#endif
 
   Timer(const Timer&) = delete;
   Timer(Timer&&) = delete;

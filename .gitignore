@@ -32,3 +32,4 @@ vcpkg_installed
 
 # nvidia profiler
 report*
+/timings.json
