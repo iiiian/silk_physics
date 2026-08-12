@@ -692,25 +692,13 @@ __global__ void symv_upper_packed(const float *A_upper, const float *x,
 void apply_inverse(const CoarseMatrices &mats, ctd::span<const float> x,
                    ctd::span<float> y, int block_dim, CudaRuntime rt) {
   int mat_num = mats.total_matrix_num;
-  if (mat_num == 0) {
-    return;
-  }
+  // if (mat_num == 0) {
+  //   return;
+  // }
 
-  if (block_dim == 1) {
-    symv_upper_packed<32, 32><<<mat_num, 32, 0, rt.stream.get()>>>(
-        mats.data->data(), x.data(), y.data());
-    return;
-  }
-  if (block_dim == 2) {
-    symv_upper_packed<64, 64><<<mat_num, 64, 0, rt.stream.get()>>>(
-        mats.data->data(), x.data(), y.data());
-    return;
-  }
-  if (block_dim == 3) {
-    symv_upper_packed<96, 96><<<mat_num, 96, 0, rt.stream.get()>>>(
-        mats.data->data(), x.data(), y.data());
-    return;
-  }
+  assert(block_dim == 3);
+  symv_upper_packed<96, 96><<<mat_num, 96, 0, rt.stream.get()>>>(
+      mats.data->data(), x.data(), y.data());
 }
 
 __global__ void gather_multi_level_z(
@@ -984,22 +972,11 @@ void MASPreconditioner::apply(ctd::span<const float> r, ctd::span<float> z,
   cu::fill_bytes(rt.stream, *(coarse_vectors_.multi_level_z), 0);
 
   int gather_r_grid_num = div_round_up(padded_topology_.padded_node_num, 128);
-  if (block_dim_ == 1) {
-    gather_multi_level_r<1><<<gather_r_grid_num, 128, 0, rt.stream.get()>>>(
-        r, *(coarse_vectors_.multi_level_r), *(padded_topology_.padded_to_real),
-        *(coarse_space_.map), coarse_vectors_.level_offsets,
-        coarse_space_.level_num);
-  } else if (block_dim_ == 2) {
-    gather_multi_level_r<2><<<gather_r_grid_num, 128, 0, rt.stream.get()>>>(
-        r, *(coarse_vectors_.multi_level_r), *(padded_topology_.padded_to_real),
-        *(coarse_space_.map), coarse_vectors_.level_offsets,
-        coarse_space_.level_num);
-  } else {
-    gather_multi_level_r<3><<<gather_r_grid_num, 128, 0, rt.stream.get()>>>(
-        r, *(coarse_vectors_.multi_level_r), *(padded_topology_.padded_to_real),
-        *(coarse_space_.map), coarse_vectors_.level_offsets,
-        coarse_space_.level_num);
-  }
+  assert(block_dim_ == 3);
+  gather_multi_level_r<3><<<gather_r_grid_num, 128, 0, rt.stream.get()>>>(
+      r, *(coarse_vectors_.multi_level_r), *(padded_topology_.padded_to_real),
+      *(coarse_space_.map), coarse_vectors_.level_offsets,
+      coarse_space_.level_num);
 
   apply_inverse(coarse_matrices_, *(coarse_vectors_.multi_level_r),
                 *(coarse_vectors_.multi_level_z), block_dim_, rt);

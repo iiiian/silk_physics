@@ -150,7 +150,7 @@ class SilkOibvhAdapter final : public GpuAdapter {
           <<<block_num, 128, 0, context_.stream.get()>>>(*colliders_b_, view,
                                                          filter, output);
     }
-    CHECK_CUDA(cudaGetLastError());
+    silk::cuda::check_cuda(cudaGetLastError());
   }
 
   void materialize_output() override {

@@ -22,7 +22,7 @@ bool is_device_mem(const void* ptr) {
     cudaGetLastError();
     return false;
   }
-  CHECK_CUDA(err);
+  check_cuda(err);
   return attr.type == cudaMemoryTypeDevice;
 }
 

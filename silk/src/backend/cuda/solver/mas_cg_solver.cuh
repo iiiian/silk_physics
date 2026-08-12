@@ -4,6 +4,7 @@
 
 #include "backend/cuda/bsr_matrix.cuh"
 #include "backend/cuda/cuda_utils.cuh"
+#include "backend/cuda/cugraph_wrapper.cuh"
 #include "backend/cuda/cusparse_wrapper.hpp"
 #include "backend/cuda/solver/mas_preconditioner.cuh"
 
@@ -18,11 +19,9 @@ class MASCGSolver {
     InvalidInitialResidual,
   };
 
-  int max_iter = 1e3;              //< Max iterations.
-  int residual_check_period = 10;  //< Iterations to check residual norm.
-  float abs_tol = 1e-20;           //< Absolute tolerance.
-  float rel_tol = 1e-4;            //< Relative tolerance.
-  bool use_preconditioned_residual_norm = false;
+  int max_iter = 1e3;     //< Max iterations.
+  float abs_tol = 1e-20;  //< Absolute tolerance.
+  float rel_tol = 1e-4;   //< Relative tolerance.
 
  private:
   int fine_dim_ = 0;  //< A.dim * A.block_dim.
@@ -36,6 +35,8 @@ class MASCGSolver {
   CuSparseBSR cusparse_A_;       //< Static part of A.
   ctd::span<const float> diag_;  //< Dynamic diagonal update of A.
 
+  CudaGraph solve_graph_;
+
   // PCG variables.
   Buf<float> r_;
   Buf<float> p_;
@@ -48,6 +49,8 @@ class MASCGSolver {
   Buf<float> scalar_beta_;
   Buf<float> scalar_rz_old_;
   Buf<float> scalar_rr_;
+  Buf<int> scalar_iter_;
+  Buf<int> scalar_status_;
 
  public:
   /// @brief Init solver. Must be called before solve.

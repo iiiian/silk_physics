@@ -68,7 +68,9 @@ class ScalableStqAdapter final : public GpuAdapter {
 
   void query() override { output_ = broadphase_.detect_overlaps(); }
 
-  void synchronize() override { CHECK_CUDA(cudaDeviceSynchronize()); }
+  void synchronize() override {
+    silk::cuda::check_cuda(cudaDeviceSynchronize());
+  }
 
   void materialize_output() override {}
 

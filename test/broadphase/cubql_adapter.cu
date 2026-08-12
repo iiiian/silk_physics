@@ -81,7 +81,7 @@ __global__ void cubql_query_kernel(
 
 class CubqlAdapter final : public GpuAdapter {
  public:
-  CubqlAdapter() { CHECK_CUDA(cudaStreamCreate(&stream_)); }
+  CubqlAdapter() { silk::cuda::check_cuda(cudaStreamCreate(&stream_)); }
 
   ~CubqlAdapter() override {
     if (bvh_.nodes != nullptr) {
@@ -124,8 +124,8 @@ class CubqlAdapter final : public GpuAdapter {
   void clear_output() override {
     output_.clear();
     native_output_.clear();
-    CHECK_CUDA(cudaMemsetAsync(thrust::raw_pointer_cast(output_num_.data()), 0,
-                               sizeof(int), stream_));
+    silk::cuda::check_cuda(cudaMemsetAsync(
+        thrust::raw_pointer_cast(output_num_.data()), 0, sizeof(int), stream_));
   }
 
   void query() override {
@@ -134,29 +134,31 @@ class CubqlAdapter final : public GpuAdapter {
                      : thrust::raw_pointer_cast(output_device_.data()),
                  output_device_.size());
     int count = 0;
-    CHECK_CUDA(cudaMemcpyAsync(&count,
-                               thrust::raw_pointer_cast(output_num_.data()),
-                               sizeof(int), cudaMemcpyDeviceToHost, stream_));
-    CHECK_CUDA(cudaStreamSynchronize(stream_));
+    silk::cuda::check_cuda(cudaMemcpyAsync(
+        &count, thrust::raw_pointer_cast(output_num_.data()), sizeof(int),
+        cudaMemcpyDeviceToHost, stream_));
+    silk::cuda::check_cuda(cudaStreamSynchronize(stream_));
     if (count > output_device_.size()) {
       output_device_.resize(count);
-      CHECK_CUDA(cudaMemsetAsync(thrust::raw_pointer_cast(output_num_.data()),
-                                 0, sizeof(int), stream_));
+      silk::cuda::check_cuda(cudaMemsetAsync(
+          thrust::raw_pointer_cast(output_num_.data()), 0, sizeof(int), stream_));
       query_device(thrust::raw_pointer_cast(output_device_.data()),
                    output_device_.size());
     }
 
     native_output_.resize(count);
     if (count > 0) {
-      CHECK_CUDA(cudaMemcpyAsync(
+      silk::cuda::check_cuda(cudaMemcpyAsync(
           native_output_.data(),
           thrust::raw_pointer_cast(output_device_.data()), count * sizeof(int2),
           cudaMemcpyDeviceToHost, stream_));
     }
-    CHECK_CUDA(cudaStreamSynchronize(stream_));
+    silk::cuda::check_cuda(cudaStreamSynchronize(stream_));
   }
 
-  void synchronize() override { CHECK_CUDA(cudaStreamSynchronize(stream_)); }
+  void synchronize() override {
+    silk::cuda::check_cuda(cudaStreamSynchronize(stream_));
+  }
 
   void materialize_output() override {
     output_.reserve(native_output_.size());
@@ -191,14 +193,14 @@ class CubqlAdapter final : public GpuAdapter {
     boxes.resize(host_boxes.size());
     metadata.resize(host_metadata.size());
     if (!host_boxes.empty()) {
-      CHECK_CUDA(cudaMemcpyAsync(thrust::raw_pointer_cast(boxes.data()),
-                                 host_boxes.data(),
-                                 host_boxes.size() * sizeof(cuBQL::box3f),
-                                 cudaMemcpyHostToDevice, stream));
-      CHECK_CUDA(cudaMemcpyAsync(thrust::raw_pointer_cast(metadata.data()),
-                                 host_metadata.data(),
-                                 host_metadata.size() * sizeof(CubqlMetadata),
-                                 cudaMemcpyHostToDevice, stream));
+      silk::cuda::check_cuda(cudaMemcpyAsync(
+          thrust::raw_pointer_cast(boxes.data()), host_boxes.data(),
+          host_boxes.size() * sizeof(cuBQL::box3f), cudaMemcpyHostToDevice,
+          stream));
+      silk::cuda::check_cuda(cudaMemcpyAsync(
+          thrust::raw_pointer_cast(metadata.data()), host_metadata.data(),
+          host_metadata.size() * sizeof(CubqlMetadata), cudaMemcpyHostToDevice,
+          stream));
     }
   }
 
@@ -214,7 +216,7 @@ class CubqlAdapter final : public GpuAdapter {
         thrust::raw_pointer_cast(metadata_a_.data()), bvh_,
         input_.kind == QueryKind::EE, output, output_capacity,
         thrust::raw_pointer_cast(output_num_.data()));
-    CHECK_CUDA(cudaGetLastError());
+    silk::cuda::check_cuda(cudaGetLastError());
   }
 
   cudaStream_t stream_ = nullptr;

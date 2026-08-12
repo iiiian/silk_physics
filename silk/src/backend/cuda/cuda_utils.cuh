@@ -23,44 +23,44 @@ namespace silk::cuda {
 
 #define __both__ __host__ __device__
 
-#define CHECK_CUDA(val) check_cuda((val), #val, __FILE__, __LINE__)
-inline void check_cuda(cudaError_t result, char const* const func,
-                       const char* const file, int const line) {
+inline void check_cuda(
+    cudaError_t result,
+    ctd::source_location location = ctd::source_location::current()) {
   if (result != cudaSuccess) {
     std::string msg;
     msg.reserve(128);  // optional
 
     msg += "CUDA Error at ";
-    msg += file;
+    msg += location.file_name();
     msg += ":";
-    msg += std::to_string(line);
+    msg += std::to_string(location.line());
     msg += " code=";
     msg += std::to_string(static_cast<unsigned int>(result));
-    msg += " \"";
-    msg += func;
-    msg += "\" : ";
+    msg += " ";
+    msg += location.function_name();
+    msg += " : ";
     msg += cudaGetErrorString(result);
 
     throw std::runtime_error(msg);
   }
 }
 
-#define CHECK_CUSPARSE(val) check_cusparse((val), #val, __FILE__, __LINE__)
-inline void check_cusparse(cusparseStatus_t result, char const* const func,
-                           const char* const file, int const line) {
+inline void check_cusparse(
+    cusparseStatus_t result,
+    ctd::source_location location = ctd::source_location::current()) {
   if (result != CUSPARSE_STATUS_SUCCESS) {
     std::string msg;
     msg.reserve(128);  // optional
 
     msg += "cuSparse Error at ";
-    msg += file;
+    msg += location.file_name();
     msg += ":";
-    msg += std::to_string(line);
+    msg += std::to_string(location.line());
     msg += " code=";
     msg += std::to_string(static_cast<unsigned int>(result));
-    msg += " \"";
-    msg += func;
-    msg += "\" : ";
+    msg += " ";
+    msg += location.function_name();
+    msg += " : ";
     msg += cusparseGetErrorString(result);
 
     throw std::runtime_error(msg);
