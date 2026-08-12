@@ -58,6 +58,14 @@ void ConfigWidget::apply_config_to_gui(const SimConfig& config) {
   ctx_.global_config.acceleration_x = c.global.acceleration[0];
   ctx_.global_config.acceleration_y = c.global.acceleration[1];
   ctx_.global_config.acceleration_z = c.global.acceleration[2];
+  ctx_.global_config.linear_solver_abs_tol = c.global.linear_solver_abs_tol;
+  ctx_.global_config.linear_solver_rel_tol_min =
+      c.global.linear_solver_rel_tol_min;
+  ctx_.global_config.linear_solver_rel_tol_max =
+      c.global.linear_solver_rel_tol_max;
+  ctx_.global_config.initial_linear_rel_tol = c.global.initial_linear_rel_tol;
+  ctx_.global_config.admm_abs_tol = c.global.admm_abs_tol;
+  ctx_.global_config.admm_rel_tol = c.global.admm_rel_tol;
 
   for (auto& cloth_cfg : c.cloths) {
     auto cloth = Cloth::make_cloth(&ctx_.silk_world, cloth_cfg);
