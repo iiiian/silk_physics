@@ -136,8 +136,7 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
 
   auto admm_helper = registry.get<ClothADMMHelper>(e);
   if (!admm_helper) {
-    admm_helper = registry.set(
-        e, ClothADMMHelper{l1_cache->vert_num, l1_cache->face_num, rt});
+    admm_helper = registry.set(e, ClothADMMHelper{l1_cache->face_num, rt});
   } else {
     admm_helper->reset_aux_lagrange_mul(rt);
   }

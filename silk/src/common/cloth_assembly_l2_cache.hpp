@@ -36,8 +36,7 @@ class ClothAssemblyL2Cache {
   // Cotangent matrix to compute curvature.
   Eigen::SparseMatrix<float> laplacian_ops;
 
-  // Rest curvature per vertex (vnum x 3).
-  // (legacy field for cpu backend)
+  // Bending rest-shape RHS before stiffness scaling (vnum x 3).
   RMatrixX3f C0;
 
   // Cotangent-Laplacian rest curvature per vertex (vnum x 3).

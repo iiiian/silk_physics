@@ -4,7 +4,6 @@
 
 #include "backend/cuda/assembly/cloth_assembly_l1_cache.cuh"
 #include "backend/cuda/cuda_utils.cuh"
-#include "backend/cuda/cusparse_wrapper.hpp"
 #include "backend/cuda/solver/mas_cg_solver.cuh"
 
 namespace silk::cuda {
@@ -14,22 +13,12 @@ class ClothADMMHelper {
   // In-plane elastic aux state.
   Buf<float> ze_;
   Buf<float> ue_;
-  // Bending aux state.
-  Buf<float> zb_;
-  Buf<float> ub_;
-  // cusparse related.
-  CuSparseHandle cusparse_handle_;
-  Buf<char> cusparse_workspace_;
-  // Other tmp.
-  Buf<float> float_tmp_;
-  Buf<float> float_tmp2_;
-  Buf<float> float_tmp3_;
 
   MASCGSolver linear_solver_;
 
  public:
   ClothADMMHelper() = default;
-  ClothADMMHelper(int vert_num, int face_num, CudaRuntime rt);
+  ClothADMMHelper(int face_num, CudaRuntime rt);
 
   void reset_aux_lagrange_mul(CudaRuntime rt);
 
@@ -57,7 +46,7 @@ class ClothADMMHelper {
   // clang-format on
 
   // clang-format off
-  /// @brief Solve ADMM primal x.
+  /// @brief Solve ADMM primal x with inertia and the full bending energy.
   /// @param[in] rel_tol         Relative tolerance for linear solver.
   /// @param[in] abs_tol         Absolute tolerance for linear solver.
   /// @param[in] l1_cache        Precomputed assembly data.

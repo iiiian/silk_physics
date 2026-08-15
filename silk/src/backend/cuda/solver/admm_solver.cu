@@ -132,7 +132,6 @@ int compute_physical_primal_residual_dof(ObjRegistry& registry) {
     auto l1_cache = registry.get<ClothAssemblyL1Cache>(e);
     assert(l1_cache);
     dof += 6 * l1_cache->face_num;
-    dof += l1_cache->state_num;
   }
   return dof;
 }

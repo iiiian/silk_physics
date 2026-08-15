@@ -16,19 +16,16 @@ class ClothAssemblyL1Cache {
  public:
   float dt;
   float penalty;
-  int vert_num;
   int face_num;
   int state_num;
   float elastic_stiffness;
-  float bending_stiffness;
 
   Buf<int> faces;
-  BSRMatrix laplacian_ops;
-  Buf<float> bending_weight_sqrt;
-  Buf<float> rest_curvature;
   Buf<float> jacobian_ops;
   Buf<float> area_sqrt;
   Buf<float> mass;
+  // k C^T W C x_rest, the constant bending contribution to the main RHS.
+  Buf<float> bending_rhs;
   BSRMatrix weighted_AA;
   Buf<int> part_offsets;
 
