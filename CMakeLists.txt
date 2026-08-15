@@ -28,6 +28,7 @@ option(SILK_BUILD_DEMO "Build the GUI demo application" ON)
 option(SILK_BUILD_TEST "Build tests" ON)
 option(SILK_BROADPHASE_BENCHMARKS "Build broadphase verification and benchmarks" OFF)
 option(SILK_NARROWPHASE_BENCHMARKS "Build narrowphase verification and benchmarks" OFF)
+option(SILK_USE_CUBQL_BVH "Use cuBQL for production broadphase trees" OFF)
 option(SILK_FETCH_DEPENDENCIES "Download dependencies using CMake FetchContent" ${_silk_fetch_dependencies_default})
 set(
     SILK_GRAPH_PARTITION_BACKEND

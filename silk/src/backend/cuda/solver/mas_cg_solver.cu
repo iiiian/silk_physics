@@ -3,7 +3,6 @@
 #include <cuda_runtime.h>
 
 #include <chrono>
-#include <cub/cub.cuh>
 #include <cuda/algorithm>
 #include <cuda/std/cmath>
 #include <cuda/std/span>
@@ -28,17 +27,6 @@ using clock = std::chrono::steady_clock;
   return std::chrono::duration<float>(clock::now() - begin).count();
 }
 
-/// Device scalar devision num / denom.
-/// Defaults to zero when denom is small because beta should be zero after
-/// arriving at the solution.
-void scalar_division(ctd::span<const float> num, ctd::span<const float> denom,
-                     ctd::span<float> out, CudaRuntime rt) {
-  auto op = [num, denom, out] __device__(int) {
-    out[0] = (ctd::abs(denom[0]) < 1e-20) ? 0.0 : (num[0] / denom[0]);
-  };
-  cub::DeviceFor::Bulk(1, op, rt.stream.get());
-}
-
 __global__ void compute_residual_kernel(ctd::span<const float> b,
                                         ctd::span<float> r) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
@@ -48,33 +36,31 @@ __global__ void compute_residual_kernel(ctd::span<const float> b,
   r[tid] = b[tid] - r[tid];
 }
 
-__global__ void update_x_kernel(ctd::span<const float> p, const float *d_alpha,
-                                ctd::span<float> x) {
+__global__ void update_x_r_kernel(ctd::span<const float> p,
+                                  ctd::span<const float> Ap, const float *rz,
+                                  const float *pAp, ctd::span<float> x,
+                                  ctd::span<float> r) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
   if (tid >= x.size()) {
     return;
   }
-  float alpha = *d_alpha;
+  float alpha = (ctd::abs(*pAp) < 1e-20) ? 0.0f : (*rz / *pAp);
   x[tid] = alpha * p[tid] + x[tid];
-}
-
-__global__ void update_r_kernel(ctd::span<const float> Ap, const float *d_alpha,
-                                ctd::span<float> r) {
-  int tid = blockDim.x * blockIdx.x + threadIdx.x;
-  if (tid >= r.size()) {
-    return;
-  }
-  float alpha = *d_alpha;
   r[tid] = -alpha * Ap[tid] + r[tid];
 }
 
-__global__ void update_p_kernel(ctd::span<const float> z, const float *d_beta,
-                                ctd::span<float> p) {
+/// Device scalar devision num / denom.
+/// Defaults to zero when denom is small because beta should be zero after
+/// arriving at the solution.
+__global__ void update_p_from_scalars_kernel(ctd::span<const float> z,
+                                             const float *rz,
+                                             const float *rz_old,
+                                             ctd::span<float> p) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
   if (tid >= p.size()) {
     return;
   }
-  float beta = *d_beta;
+  float beta = (ctd::abs(*rz_old) < 1e-20) ? 0.0f : (*rz / *rz_old);
   p[tid] = z[tid] + beta * p[tid];
 }
 
@@ -187,8 +173,6 @@ void MASCGSolver::factorize(DynamicBSRView A, ctd::span<const int> part_offset,
 
   scalar_rz_ = alloc<float>(rt, 1);
   scalar_pAp_ = alloc<float>(rt, 1);
-  scalar_alpha_ = alloc<float>(rt, 1);
-  scalar_beta_ = alloc<float>(rt, 1);
   scalar_rz_old_ = alloc<float>(rt, 1);
   scalar_rr_ = alloc<float>(rt, 1);
   scalar_iter_ = alloc<int>(rt, 1);
@@ -216,7 +200,6 @@ MASCGSolver::Status MASCGSolver::solve(DynamicBSRView A,
   assert(x.size() == fine_dim_);
 
   diag_ = A.diag;
-
   // Compute initial residual r = b-Ax.
   spmv(x, *r_, rt);
   int grid_num = div_round_up(b.size(), 128);
@@ -228,14 +211,13 @@ MASCGSolver::Status MASCGSolver::solve(DynamicBSRView A,
   cu::copy_bytes(rt.stream, *z_, *p_);
 
   // Compute rz = r^T M^-1 r.
-  inner_product(*r_, *z_, *scalar_rz_, rt);
+  // Compute rr = r^T r.
+  inner_product_and_norm(*r_, *z_, *scalar_rz_, *scalar_rr_, rt);
   float rz0 = scalar_load(scalar_rz_->data(), rt);
   if (ctd::isnan(rz0) || !ctd::isfinite(rz0)) {
     return Status::InvalidInitialResidual;
   }
 
-  // Compute rr = r^T r.
-  inner_product(*r_, *r_, *scalar_rr_, rt);
   float rr0 = scalar_load(scalar_rr_->data(), rt);
   residual_norm_ = std::sqrt(rr0);
 
@@ -274,38 +256,30 @@ MASCGSolver::Status MASCGSolver::solve(DynamicBSRView A,
   // Compute pAp = p^T * A * p.
   inner_product(*p_, *Ap_, *scalar_pAp_, rt);
   // Compute alpha = (r M^-1 r) / (p^T A p).
-  scalar_division(*scalar_rz_, *scalar_pAp_, *scalar_alpha_, rt);
   // Compute x = x + alpha p.
-  grid_num = div_round_up(x.size(), 128);
-  update_x_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
-      *p_, scalar_alpha_->data(), x);
-
   // Compute residual update using r' = r - alpha A p.
-  grid_num = div_round_up(r_->size(), 128);
-  update_r_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
-      *Ap_, scalar_alpha_->data(), *r_);
+  grid_num = div_round_up(x.size(), 128);
+  update_x_r_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
+      *p_, *Ap_, scalar_rz_->data(), scalar_pAp_->data(), x, *r_);
 
   // Compute z = M^-1 r.
   mas_precond_.apply(*r_, *z_, rt);
-
   // Compute rz = r M^-1 r.
   check_cuda(cudaMemcpyAsync(scalar_rz_old_->data(), scalar_rz_->data(),
                              sizeof(float), cudaMemcpyDeviceToDevice,
                              rt.stream.get()));
-  inner_product(*r_, *z_, *scalar_rz_, rt);
+  inner_product_and_norm(*r_, *z_, *scalar_rz_, *scalar_rr_, rt);
 
   // Check convergence.
-  inner_product(*r_, *r_, *scalar_rr_, rt);
   check_convergence<<<1, 1, 0, rt.stream.get()>>>(
       cond_handle, scalar_rr_->data(), scalar_iter_->data(),
       scalar_status_->data(), rr0, rel_tol, abs_tol, max_iter);
 
   // Compute beta = rz / rz_old.
-  scalar_division(*scalar_rz_, *scalar_rz_old_, *scalar_beta_, rt);
   // Compute direction update p' = M^-1 r + beta p.
   grid_num = div_round_up(p_->size(), 128);
-  update_p_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
-      *z_, scalar_beta_->data(), *p_);
+  update_p_from_scalars_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
+      *z_, scalar_rz_->data(), scalar_rz_old_->data(), *p_);
 
   // -------------------------------------------
   // Stop capture PCG logic

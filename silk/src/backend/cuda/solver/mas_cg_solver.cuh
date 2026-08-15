@@ -45,8 +45,6 @@ class MASCGSolver {
   Buf<char> reduction_storage_;
   Buf<float> scalar_rz_;
   Buf<float> scalar_pAp_;
-  Buf<float> scalar_alpha_;
-  Buf<float> scalar_beta_;
   Buf<float> scalar_rz_old_;
   Buf<float> scalar_rr_;
   Buf<int> scalar_iter_;
