@@ -4,6 +4,7 @@
 #include <cuda/std/span>
 
 #include "backend/cuda/collision/bbox.cuh"
+#include "backend/cuda/collision/cubql_bvh.cuh"
 #include "backend/cuda/collision/mesh_collider.cuh"
 #include "backend/cuda/collision/oibvh.cuh"
 #include "backend/cuda/cuda_utils.cuh"
@@ -12,6 +13,14 @@
 #include "common/mesh.hpp"
 
 namespace silk::cuda {
+
+#if defined(SILK_USE_CUBQL_BVH)
+template <typename T>
+using BroadphaseBVHTree = CubqlBVH<T>;
+#else
+template <typename T>
+using BroadphaseBVHTree = OIBVHTree<T>;
+#endif
 
 class ObjectCollider {
  public:
@@ -25,8 +34,8 @@ class ObjectCollider {
   float bbox_padding;
   // Broadphase collision culling data struture
   Buf<PointCollider> point_colliders;
-  OIBVHTree<TriangleCollider> triangle_collider_tree;
-  OIBVHTree<EdgeCollider> edge_collider_tree;
+  BroadphaseBVHTree<TriangleCollider> triangle_collider_tree;
+  BroadphaseBVHTree<EdgeCollider> edge_collider_tree;
 
  public:
   ObjectCollider() = default;

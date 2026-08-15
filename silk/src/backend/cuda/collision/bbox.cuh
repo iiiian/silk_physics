@@ -6,7 +6,7 @@
 namespace silk::cuda {
 
 /// @brief Axis-aligned bounding box.
-/// The box is invalid if any element of min is smaller or equal to max;
+/// The box is invalid if any element of min is greater than or equal to max.
 class Bbox {
  public:
   Vec3f min;
@@ -25,7 +25,7 @@ class Bbox {
   __both__ static inline bool is_colliding(const Bbox& a, const Bbox& b) {
     Vec3f max_min = vmax(a.min, b.min);
     Vec3f min_max = vmin(a.max, b.max);
-    return all_lt(max_min, min_max);
+    return all_leq(max_min, min_max);
   }
 
   /// Compute (min + max) / 2.

@@ -62,8 +62,8 @@ class SilkKdTreeAdapter : public CpuAdapter {
     if (kind_ == QueryKind::EE) {
       tree_a_.test_self_collision(CanCollide{}, cache_);
     } else {
-      silk::cpu::KDTree<SilkCollider>::test_tree_collision(tree_a_, tree_b_,
-                                                           CanCollide{}, cache_);
+      silk::cpu::KDTree<SilkCollider>::test_tree_collision(
+          tree_a_, tree_b_, CanCollide{}, cache_);
     }
   }
 

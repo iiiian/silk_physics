@@ -63,10 +63,10 @@ QueryBatch load_batch(const SceneFiles& scene_files, QueryKind kind,
 std::string query_name(QueryKind kind);
 float compute_minimum_separation(const Query& query, QueryKind kind);
 
-std::unique_ptr<CpuAdapter> make_silk_ticcd_adapter(
-    QueryKind kind, int max_iterations);
-std::unique_ptr<CpuAdapter> make_original_ticcd_adapter(
-    QueryKind kind, int max_iterations);
+std::unique_ptr<CpuAdapter> make_silk_ticcd_adapter(QueryKind kind,
+                                                    int max_iterations);
+std::unique_ptr<CpuAdapter> make_original_ticcd_adapter(QueryKind kind,
+                                                        int max_iterations);
 #ifdef SILK_NARROWPHASE_HAS_CUDA
 class GpuAdapter {
  public:
@@ -78,10 +78,10 @@ class GpuAdapter {
   virtual std::span<const QueryOutput> output() const = 0;
 };
 
-std::unique_ptr<GpuAdapter> make_scalable_gpu_adapter(
-    QueryKind kind, int max_iterations);
+std::unique_ptr<GpuAdapter> make_scalable_gpu_adapter(QueryKind kind,
+                                                      int max_iterations);
 std::unique_ptr<GpuAdapter> make_silk_hybrid_ticcd_adapter(QueryKind kind,
-                                                          int max_iterations);
+                                                           int max_iterations);
 #endif
 
 }  // namespace silk::narrowphase_benchmark

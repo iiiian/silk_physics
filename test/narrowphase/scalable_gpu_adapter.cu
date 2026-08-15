@@ -142,8 +142,8 @@ class ScalableGpuAdapterImpl final : public GpuAdapter {
 
 }  // namespace
 
-std::unique_ptr<GpuAdapter> make_scalable_gpu_adapter(
-    QueryKind kind, int max_iterations) {
+std::unique_ptr<GpuAdapter> make_scalable_gpu_adapter(QueryKind kind,
+                                                      int max_iterations) {
   return std::make_unique<ScalableGpuAdapterImpl>(kind, max_iterations);
 }
 

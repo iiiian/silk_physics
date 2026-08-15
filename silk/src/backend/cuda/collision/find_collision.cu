@@ -117,8 +117,8 @@ void for_each_collision_candidate_batch(ObjRegistry& registry,
     flush_pt();
 
     oa->edge_collider_tree.test_ext_collision<EdgeCollider>(
-        ob->edge_collider_tree.get_colliders(), EEInterCollisionFilter{},
-        ee_ccache, ee_fill, rt);
+        ob->edge_collider_tree, EEInterCollisionFilter{}, ee_ccache, ee_fill,
+        rt);
     flush_ee();
   }
 

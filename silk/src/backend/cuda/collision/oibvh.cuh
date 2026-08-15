@@ -81,6 +81,7 @@ class OIBVHTree {
 
   /// @brief Get non-owning writable view of colliders.
   ctd::span<X> get_colliders() { return *colliders_; }
+  ctd::span<const X> get_colliders() const { return *colliders_; }
 
   /// @brief Update the tree to reflect latest collider states.
   void update(const Bbox& root_bbox, CudaRuntime rt);
@@ -99,6 +100,10 @@ class OIBVHTree {
   /// @param fill The actual size of out cache. 0 -> empty, out.size() -> full.
   template <typename Y, typename Filter>
   void test_ext_collision(ctd::span<const Y> colliders, Filter filter,
+                          CollisionCache<X, Y>& out, int& fill, CudaRuntime rt);
+
+  template <typename Y, typename Filter>
+  void test_ext_collision(const OIBVHTree<Y>& colliders, Filter filter,
                           CollisionCache<X, Y>& out, int& fill, CudaRuntime rt);
 };
 
@@ -680,6 +685,14 @@ void OIBVHTree<X>::test_ext_collision(ctd::span<const Y> colliders,
         <<<grid_num, 128, 0, rt.stream.get()>>>(colliders, tree, filter,
                                                 dyn_out);
   }
+}
+
+template <typename X>
+template <typename Y, typename Filter>
+void OIBVHTree<X>::test_ext_collision(const OIBVHTree<Y>& colliders,
+                                      Filter filter, CollisionCache<X, Y>& out,
+                                      int& fill, CudaRuntime rt) {
+  test_ext_collision(colliders.get_colliders(), filter, out, fill, rt);
 }
 
 }  // namespace silk::cuda

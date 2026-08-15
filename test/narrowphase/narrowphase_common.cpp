@@ -185,12 +185,11 @@ QueryBatch load_batch(const SceneFiles& scene_files, QueryKind kind,
 
   Eigen::Vector3f abs_max =
       scene_bounds.min.cwiseAbs().cwiseMax(scene_bounds.max.cwiseAbs());
-  Eigen::Array3f err =
-      cpu::get_numerical_error(abs_max, kind == QueryKind::VF);
+  Eigen::Array3f err = cpu::get_numerical_error(abs_max, kind == QueryKind::VF);
   std::vector<Pair> pairs;
-  ExpectedMap expected = load_expected(
-      scene_files, test_case, kind, timestep_index,
-      broadphase == nullptr ? &pairs : nullptr);
+  ExpectedMap expected =
+      load_expected(scene_files, test_case, kind, timestep_index,
+                    broadphase == nullptr ? &pairs : nullptr);
 
   if (broadphase != nullptr) {
     broadphase_benchmark::QueryKind broadphase_kind =
@@ -220,8 +219,6 @@ std::string query_name(QueryKind kind) {
   return kind == QueryKind::EE ? "ee" : "vf";
 }
 
-float compute_minimum_separation(const Query&, QueryKind) {
-  return 0.0f;
-}
+float compute_minimum_separation(const Query&, QueryKind) { return 0.0f; }
 
 }  // namespace silk::narrowphase_benchmark

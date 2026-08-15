@@ -78,13 +78,13 @@ class OriginalTiccdAdapter final : public CpuAdapter {
 
 }  // namespace
 
-std::unique_ptr<CpuAdapter> make_silk_ticcd_adapter(
-    QueryKind kind, int max_iterations) {
+std::unique_ptr<CpuAdapter> make_silk_ticcd_adapter(QueryKind kind,
+                                                    int max_iterations) {
   return std::make_unique<SilkTiccdAdapter>(kind, max_iterations);
 }
 
-std::unique_ptr<CpuAdapter> make_original_ticcd_adapter(
-    QueryKind kind, int max_iterations) {
+std::unique_ptr<CpuAdapter> make_original_ticcd_adapter(QueryKind kind,
+                                                        int max_iterations) {
   return std::make_unique<OriginalTiccdAdapter>(kind, max_iterations);
 }
 

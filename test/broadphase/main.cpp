@@ -100,8 +100,10 @@ std::string query_name(QueryKind kind) {
   return kind == QueryKind::EE ? "ee" : "vf";
 }
 
-void verify_output(const QueryInput& input, std::span<const Pair> raw_output,
-                   const std::string& algorithm, const TestCase& test_case) {
+std::vector<Pair> canonical_output(const QueryInput& input,
+                                   std::span<const Pair> raw_output,
+                                   const std::string& algorithm,
+                                   const TestCase& test_case) {
   std::vector<Pair> output;
   output.reserve(raw_output.size());
   for (Pair pair : raw_output) {
@@ -119,6 +121,13 @@ void verify_output(const QueryInput& input, std::span<const Pair> raw_output,
 
   std::sort(output.begin(), output.end());
   output.erase(std::unique(output.begin(), output.end()), output.end());
+  return output;
+}
+
+void verify_output(const QueryInput& input, std::span<const Pair> raw_output,
+                   const std::string& algorithm, const TestCase& test_case) {
+  std::vector<Pair> output =
+      canonical_output(input, raw_output, algorithm, test_case);
 
   if (!std::includes(output.begin(), output.end(), input.required_pairs.begin(),
                      input.required_pairs.end())) {
@@ -328,6 +337,91 @@ void verify_gpu_adapter(const SceneFiles& scene_files,
     }
   }
 }
+
+void run_gpu_verification_step(GpuAdapter& adapter, const QueryInput& input) {
+  adapter.prepare(input);
+  adapter.synchronize();
+  adapter.build();
+  adapter.synchronize();
+  adapter.clear_output();
+  adapter.synchronize();
+  adapter.query();
+  adapter.synchronize();
+  adapter.materialize_output();
+}
+
+void verify_touching_boxes_are_candidates() {
+  std::array<Box, 2> boxes = {
+      Box{.min = Eigen::Vector3f(0.0f, 0.0f, 0.0f),
+          .max = Eigen::Vector3f(1.0f, 1.0f, 1.0f),
+          .vertex_ids = {0, 1, -1},
+          .id = 0},
+      Box{.min = Eigen::Vector3f(1.0f, 0.25f, 0.25f),
+          .max = Eigen::Vector3f(2.0f, 0.75f, 0.75f),
+          .vertex_ids = {2, 3, -1},
+          .id = 1},
+  };
+  QueryInput input{.kind = QueryKind::EE, .group_a = boxes};
+  TestCase test_case{.scene = "touching-boxes", .timestep = 0};
+  auto oibvh = make_silk_oibvh_adapter();
+  auto cubql = make_cubql_adapter();
+  run_gpu_verification_step(*oibvh, input);
+  run_gpu_verification_step(*cubql, input);
+
+  const std::vector<Pair> expected = {{0, 1}};
+  std::vector<Pair> oibvh_output =
+      canonical_output(input, oibvh->output(), oibvh->name(), test_case);
+  std::vector<Pair> cubql_output =
+      canonical_output(input, cubql->output(), cubql->name(), test_case);
+  if (oibvh_output != expected || cubql_output != expected) {
+    throw std::runtime_error(
+        "Touching boxes were not emitted by both OIBVH and cuBQL");
+  }
+}
+
+void verify_cubql_matches_oibvh(const SceneFiles& scene_files) {
+  for (QueryKind kind : {QueryKind::EE, QueryKind::VF}) {
+    auto oibvh = make_silk_oibvh_adapter();
+    auto cubql = make_cubql_adapter();
+    for (int timestep_index = 0; timestep_index < scene_files.boxes_ee.size();
+         ++timestep_index) {
+      TestCase test_case = load_case(scene_files, timestep_index);
+      QueryInput input = make_query(test_case, kind);
+      run_gpu_verification_step(*oibvh, input);
+      run_gpu_verification_step(*cubql, input);
+
+      std::vector<Pair> oibvh_output =
+          canonical_output(input, oibvh->output(), oibvh->name(), test_case);
+      std::vector<Pair> cubql_output =
+          canonical_output(input, cubql->output(), cubql->name(), test_case);
+      if (oibvh_output != cubql_output) {
+        std::vector<Pair> missing;
+        std::vector<Pair> extra;
+        std::set_difference(oibvh_output.begin(), oibvh_output.end(),
+                            cubql_output.begin(), cubql_output.end(),
+                            std::back_inserter(missing));
+        std::set_difference(cubql_output.begin(), cubql_output.end(),
+                            oibvh_output.begin(), oibvh_output.end(),
+                            std::back_inserter(extra));
+        std::string difference;
+        if (!missing.empty()) {
+          difference += " missing (" + std::to_string(missing.front().first) +
+                        ", " + std::to_string(missing.front().second) + ")";
+        }
+        if (!extra.empty()) {
+          difference += " extra (" + std::to_string(extra.front().first) +
+                        ", " + std::to_string(extra.front().second) + ")";
+        }
+        throw std::runtime_error("cuBQL candidate set differs from OIBVH in " +
+                                 test_case.scene + "/" +
+                                 std::to_string(test_case.timestep) + " (" +
+                                 query_name(kind) + "):" + difference);
+      }
+    }
+  }
+  spdlog::info("[cubql] Exact candidate sets match OIBVH for {}.",
+               scene_files.name);
+}
 #endif
 
 void print_result_header(std::ostream& output) {
@@ -389,6 +483,13 @@ int main(int argc, char** argv) {
       }
       print_result_header(output);
     }
+#ifdef SILK_BROADPHASE_HAS_CUDA
+    if (options.verify &&
+        (options.broadphase.empty() || options.broadphase == "cubql" ||
+         options.broadphase == "silk_oibvh")) {
+      verify_touching_boxes_are_candidates();
+    }
+#endif
     for (const SceneFiles& scene_files : scenes) {
       if (!is_selected(scene_files.name, options.scene)) {
         continue;
@@ -428,6 +529,11 @@ int main(int argc, char** argv) {
           print_completed_results(results, scene_files.name, adapter->name(),
                                   "gpu", options.thread_num, output);
         }
+      }
+      if (options.verify &&
+          (options.broadphase.empty() || options.broadphase == "cubql" ||
+           options.broadphase == "silk_oibvh")) {
+        verify_cubql_matches_oibvh(scene_files);
       }
 #endif
     }

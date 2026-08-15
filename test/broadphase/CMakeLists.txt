@@ -48,6 +48,7 @@ if(SILK_ENABLE_CUDA)
             silk_oibvh_adapter.cu
             scalable_stq_adapter.cu
             cubql_adapter.cu
+            ${SILK_DIR}/backend/cuda/collision/cubql_bvh.cu
     )
     target_link_libraries(
         broadphase_benchmark

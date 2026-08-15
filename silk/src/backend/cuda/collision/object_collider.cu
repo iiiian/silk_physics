@@ -147,7 +147,7 @@ ObjectCollider ObjectCollider::from_physical(const CollisionConfigPlus& config,
                               c.restitution, c.friction, get_inv_mass);
   auto device_triangle_colliders =
       vec_like_to_device<TriangleCollider>(host_triangle_colliders, rt);
-  oc.triangle_collider_tree = OIBVHTree<TriangleCollider>(
+  oc.triangle_collider_tree = BroadphaseBVHTree<TriangleCollider>(
       oc.bbox, std::move(device_triangle_colliders), rt);
 
   auto host_edge_colliders =
@@ -155,8 +155,8 @@ ObjectCollider ObjectCollider::from_physical(const CollisionConfigPlus& config,
                           c.restitution, c.friction, get_inv_mass);
   auto device_edge_colliders =
       vec_like_to_device<EdgeCollider>(host_edge_colliders, rt);
-  oc.edge_collider_tree =
-      OIBVHTree<EdgeCollider>(oc.bbox, std::move(device_edge_colliders), rt);
+  oc.edge_collider_tree = BroadphaseBVHTree<EdgeCollider>(
+      oc.bbox, std::move(device_edge_colliders), rt);
 
   auto host_point_colliders =
       make_point_colliders(mesh, pos, oc.bbox_padding, state_offset,
@@ -200,15 +200,15 @@ ObjectCollider ObjectCollider::from_obstacle(const CollisionConfigPlus& config,
       mesh, pos, oc.bbox_padding, -1, c.restitution, c.friction, get_inv_mass);
   auto device_triangle_colliders =
       vec_like_to_device<TriangleCollider>(host_triangle_colliders, rt);
-  oc.triangle_collider_tree = OIBVHTree<TriangleCollider>(
+  oc.triangle_collider_tree = BroadphaseBVHTree<TriangleCollider>(
       oc.bbox, std::move(device_triangle_colliders), rt);
 
   auto host_edge_colliders = make_edge_colliders(
       mesh, pos, oc.bbox_padding, -1, c.restitution, c.friction, get_inv_mass);
   auto device_edge_colliders =
       vec_like_to_device<EdgeCollider>(host_edge_colliders, rt);
-  oc.edge_collider_tree =
-      OIBVHTree<EdgeCollider>(oc.bbox, std::move(device_edge_colliders), rt);
+  oc.edge_collider_tree = BroadphaseBVHTree<EdgeCollider>(
+      oc.bbox, std::move(device_edge_colliders), rt);
 
   auto host_point_colliders = make_point_colliders(
       mesh, pos, oc.bbox_padding, -1, c.restitution, c.friction, get_inv_mass);

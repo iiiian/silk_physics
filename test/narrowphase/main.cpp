@@ -3,8 +3,8 @@
 #include <tbb/parallel_for.h>
 
 #include <algorithm>
-#include <atomic>
 #include <argparse/argparse.hpp>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -184,8 +184,8 @@ OutputSummary verify_output(const QueryBatch& batch,
       continue;
     }
     summary.expected_collision_num += query.expected;
-    summary.false_negative_num += query.expected && !output[i].hit &&
-                                  output[i].searched_full_interval;
+    summary.false_negative_num +=
+        query.expected && !output[i].hit && output[i].searched_full_interval;
     summary.false_positive_num += !query.expected && output[i].hit;
   }
   return summary;
@@ -270,13 +270,11 @@ std::vector<QueryOutput> run_cpu(CpuAdapter& adapter, const QueryBatch& batch,
       std::atomic<float> earliest_toi{1.0f};
       time_ms += measure_wall_time([&]() {
         tbb::parallel_for(begin, end, [&](int i) {
-          float max_time = verify
-                               ? 1.0f
-                               : earliest_toi.load(std::memory_order_relaxed);
+          float max_time =
+              verify ? 1.0f : earliest_toi.load(std::memory_order_relaxed);
           if (max_time <= 0.0f) {
-            output[i] = {.toi = 1.0f,
-                         .hit = false,
-                         .searched_full_interval = false};
+            output[i] = {
+                .toi = 1.0f, .hit = false, .searched_full_interval = false};
             return;
           }
 
@@ -303,9 +301,9 @@ std::vector<QueryOutput> run_cpu(CpuAdapter& adapter, const QueryBatch& batch,
 }
 
 #ifdef SILK_NARROWPHASE_HAS_CUDA
-std::vector<QueryOutput> run_gpu(GpuAdapter& adapter,
-                                 const QueryBatch& batch, bool verify,
-                                 int repetitions, std::vector<double>& times) {
+std::vector<QueryOutput> run_gpu(GpuAdapter& adapter, const QueryBatch& batch,
+                                 bool verify, int repetitions,
+                                 std::vector<double>& times) {
   std::vector<QueryOutput> output(batch.queries.size());
   int run_num = verify ? 1 : repetitions;
   if (times.empty()) {
@@ -349,10 +347,9 @@ void print_result(const std::string& scene, QueryKind kind, int timestep_num,
          << query_name(kind) << ',' << reported_thread_num << ','
          << timestep_num << ',' << query_count << ','
          << summary.pruned_query_num << ',' << summary.expected_collision_num
-         << ','
-         << summary.reported_collision_num << ',' << summary.false_positive_num
-         << ',' << summary.false_negative_num << ',' << query_ms << ','
-         << ns_per_query << '\n'
+         << ',' << summary.reported_collision_num << ','
+         << summary.false_positive_num << ',' << summary.false_negative_num
+         << ',' << query_ms << ',' << ns_per_query << '\n'
          << std::flush;
   if (!output) {
     throw std::runtime_error("Unable to write benchmark CSV output");
@@ -445,8 +442,7 @@ int main(int argc, char** argv) {
           int timestep = scene.first_timestep + timestep_index;
           // The published n-body archive omits these ground-truth queries.
           if (scene.name == "n-body-simulation" &&
-              ((kind == QueryKind::VF && timestep == 53) ||
-               (timestep == 56))) {
+              ((kind == QueryKind::VF && timestep == 53) || (timestep == 56))) {
             continue;
           }
           QueryBatch batch = load_batch(scene, kind, scene_bounds,
@@ -454,8 +450,8 @@ int main(int argc, char** argv) {
           generated_query_num += batch.queries.size();
           std::vector<QueryOutput> reference_output;
           if (reference_adapter) {
-            reference_output = run_cpu(*reference_adapter, batch, true, 1,
-                                       reference_times);
+            reference_output =
+                run_cpu(*reference_adapter, batch, true, 1, reference_times);
             verify_analytical_output(batch, reference_output,
                                      reference_adapter->name());
           }
@@ -515,10 +511,9 @@ int main(int argc, char** argv) {
           spdlog::info("[{}] Processed {} {} queries for {}.",
                        run.adapter->name(), run.query_count, query_name(kind),
                        scene.name);
-          bool output_mismatch =
-              run.summary.false_negative_num != 0 ||
-              run.summary.false_positive_num != 0 ||
-              run.summary.toi_mismatch_num != 0;
+          bool output_mismatch = run.summary.false_negative_num != 0 ||
+                                 run.summary.false_positive_num != 0 ||
+                                 run.summary.toi_mismatch_num != 0;
           if (options.verify && output_mismatch) {
             throw std::runtime_error(
                 run.adapter->name() + " differs from original_ticcd: " +
@@ -543,8 +538,7 @@ int main(int argc, char** argv) {
                 "[{}] Compared against original_ticcd: {} hit mismatches, "
                 "{} TOI mismatches, maximum TOI error {}.",
                 run.adapter->name(),
-                run.summary.false_negative_num +
-                    run.summary.false_positive_num,
+                run.summary.false_negative_num + run.summary.false_positive_num,
                 run.summary.toi_mismatch_num, run.summary.max_toi_error);
           }
           if (!options.verify) {
@@ -560,10 +554,9 @@ int main(int argc, char** argv) {
           spdlog::info("[{}] Processed {} {} queries for {}.",
                        run.adapter->name(), run.query_count, query_name(kind),
                        scene.name);
-          bool output_mismatch =
-              run.summary.false_negative_num != 0 ||
-              run.summary.false_positive_num != 0 ||
-              run.summary.toi_mismatch_num != 0;
+          bool output_mismatch = run.summary.false_negative_num != 0 ||
+                                 run.summary.false_positive_num != 0 ||
+                                 run.summary.toi_mismatch_num != 0;
           if (options.verify && output_mismatch) {
             throw std::runtime_error(
                 run.adapter->name() + " differs from original_ticcd: " +
@@ -588,14 +581,12 @@ int main(int argc, char** argv) {
                 "[{}] Compared against original_ticcd: {} hit mismatches, "
                 "{} TOI mismatches, maximum TOI error {}.",
                 run.adapter->name(),
-                run.summary.false_negative_num +
-                    run.summary.false_positive_num,
+                run.summary.false_negative_num + run.summary.false_positive_num,
                 run.summary.toi_mismatch_num, run.summary.max_toi_error);
           }
           if (!options.verify) {
-            std::string device = run.adapter->name() == "silk_hybrid_ticcd"
-                                     ? "hybrid"
-                                     : "gpu";
+            std::string device =
+                run.adapter->name() == "silk_hybrid_ticcd" ? "hybrid" : "gpu";
             print_result(scene.name, kind, timestep_num, run.query_count,
                          run.adapter->name(), device, options.thread_num,
                          run.summary, run.times, output);

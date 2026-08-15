@@ -1,29 +1,55 @@
-#include <cuBQL/bvh.h>
-
-// cuBQL's CUDA builder header requires the BVH declarations first.
-#include <cuBQL/builder/cuda.h>
-#include <cuBQL/traversal/fixedBoxQuery.h>
-#include <thrust/device_vector.h>
-
+#include <cstdint>
+#include <optional>
+#include <utility>
 #include <vector>
 
+#include "backend/cuda/collision/cubql_bvh.cuh"
 #include "gpu_adapter_common.cuh"
 
 namespace silk::broadphase_benchmark {
 namespace {
 
-struct CubqlMetadata {
+struct GpuCollider {
+  silk::cuda::Bbox bbox;
   int vertex_ids[3];
+  int id;
 };
 
-__device__ bool cubql_overlap(const cuBQL::box3f& a, const cuBQL::box3f& b) {
-  return a.lower.x <= b.upper.x && b.lower.x <= a.upper.x &&
-         a.lower.y <= b.upper.y && b.lower.y <= a.upper.y &&
-         a.lower.z <= b.upper.z && b.lower.z <= a.upper.z;
+silk::cuda::Vec3f make_silk_vec(const Eigen::Vector3f& value) {
+  silk::cuda::Vec3f result;
+  for (int i = 0; i < 3; ++i) {
+    result(i) = value(i);
+  }
+  return result;
 }
 
-__device__ bool cubql_share_vertex(const CubqlMetadata& a,
-                                   const CubqlMetadata& b) {
+std::vector<GpuCollider> make_gpu_colliders(std::span<const Box> boxes) {
+  std::vector<GpuCollider> result;
+  result.reserve(boxes.size());
+  for (const Box& box : boxes) {
+    result.push_back({{make_silk_vec(box.min), make_silk_vec(box.max)},
+                      {box.vertex_ids[0], box.vertex_ids[1], box.vertex_ids[2]},
+                      box.id});
+  }
+  return result;
+}
+
+silk::cuda::Bbox make_root_bbox(std::span<const Box> a,
+                                std::span<const Box> b) {
+  Eigen::Vector3f min = a.front().min;
+  Eigen::Vector3f max = a.front().max;
+  for (const Box& box : a) {
+    min = min.cwiseMin(box.min);
+    max = max.cwiseMax(box.max);
+  }
+  for (const Box& box : b) {
+    min = min.cwiseMin(box.min);
+    max = max.cwiseMax(box.max);
+  }
+  return {make_silk_vec(min), make_silk_vec(max)};
+}
+
+__device__ bool gpu_share_vertex(const GpuCollider& a, const GpuCollider& b) {
   for (int i = 0; i < 3; ++i) {
     if (a.vertex_ids[i] < 0) {
       continue;
@@ -37,202 +63,101 @@ __device__ bool cubql_share_vertex(const CubqlMetadata& a,
   return false;
 }
 
-// clang-format off
-__global__ void cubql_query_kernel(
-    const cuBQL::box3f* query_boxes,
-    const CubqlMetadata* query_metadata,
-    int query_num,
-    const cuBQL::box3f* target_boxes,
-    const CubqlMetadata* target_metadata,
-    cuBQL::bvh3f bvh,
-    bool self_query,
-    int2* output,
-    int output_capacity,
-    int* output_num)
-// clang-format on
-{
-  int query_id = blockIdx.x * blockDim.x + threadIdx.x;
-  if (query_id >= query_num) {
-    return;
-  }
-  cuBQL::fixedBoxQuery::forEachPrim(
-      [=] __device__(int target_id) {
-        if (self_query && target_id <= query_id) {
-          return CUBQL_CONTINUE_TRAVERSAL;
-        }
-        if (cubql_share_vertex(query_metadata[query_id],
-                               target_metadata[target_id])) {
-          return CUBQL_CONTINUE_TRAVERSAL;
-        }
-        if (!cubql_overlap(query_boxes[query_id], target_boxes[target_id])) {
-          return CUBQL_CONTINUE_TRAVERSAL;
-        }
-
-        int output_id = atomicAdd(output_num, 1);
-        if (output_id < output_capacity) {
-          int2 pair = self_query ? make_int2(query_id, target_id)
-                                 : make_int2(target_id, query_id);
-          output[output_id] = pair;
-        }
-        return CUBQL_CONTINUE_TRAVERSAL;
-      },
-      bvh, query_boxes[query_id]);
-}
-
 class CubqlAdapter final : public GpuAdapter {
+ private:
+  using Tree = silk::cuda::CubqlBVH<GpuCollider>;
+  using CollisionPair =
+      silk::cuda::CubqlCollisionPair<GpuCollider, GpuCollider>;
+
  public:
-  CubqlAdapter() { silk::cuda::check_cuda(cudaStreamCreate(&stream_)); }
-
-  ~CubqlAdapter() override {
-    if (bvh_.nodes != nullptr) {
-      cuBQL::cuda::free(bvh_, stream_);
-      cudaStreamSynchronize(stream_);
-    }
-    if (stream_ != nullptr) {
-      cudaStreamDestroy(stream_);
-    }
-  }
-
   std::string name() const override { return "cubql"; }
 
   void prepare(const QueryInput& input) override {
     input_ = input;
-    make_host_boxes(input.group_a, host_boxes_a_, host_metadata_a_);
-    make_host_boxes(input.group_b, host_boxes_b_, host_metadata_b_);
+    host_a_ = make_gpu_colliders(input.group_a);
+    host_b_ = input.group_b.empty() ? std::vector<GpuCollider>{}
+                                    : make_gpu_colliders(input.group_b);
     output_.clear();
     native_output_.clear();
   }
 
   void build() override {
-    upload_boxes(host_boxes_a_, host_metadata_a_, boxes_a_, metadata_a_,
-                 stream_);
-    upload_boxes(host_boxes_b_, host_metadata_b_, boxes_b_, metadata_b_,
-                 stream_);
-    if (output_num_.empty()) {
-      output_num_.resize(1);
+    silk::cuda::Bbox root_bbox = make_root_bbox(input_.group_a, input_.group_b);
+    if (!tree_.has_value()) {
+      auto colliders_a = silk::cuda::vec_like_to_device<GpuCollider>(
+          host_a_, context_.runtime());
+      if (!host_b_.empty()) {
+        colliders_b_ = silk::cuda::vec_like_to_device<GpuCollider>(
+            host_b_, context_.runtime());
+      }
+      tree_.emplace(root_bbox, std::move(colliders_a), context_.runtime());
+      collision_cache_ =
+          silk::cuda::alloc<CollisionPair>(context_.runtime(), 1);
+    } else {
+      cu::copy_bytes(context_.stream, host_a_, tree_->get_colliders());
+      if (input_.kind == QueryKind::VF) {
+        cu::copy_bytes(context_.stream, host_b_, *colliders_b_);
+      }
+      tree_->update(root_bbox, context_.runtime());
     }
-    if (bvh_.nodes != nullptr) {
-      cuBQL::cuda::free(bvh_, stream_);
-      bvh_ = {};
-    }
-    cuBQL::BuildConfig config;
-    config.makeLeafThreshold = 4;
-    cuBQL::cuda::radixBuilder(bvh_, thrust::raw_pointer_cast(boxes_a_.data()),
-                              boxes_a_.size(), config, stream_);
   }
 
   void clear_output() override {
     output_.clear();
     native_output_.clear();
-    silk::cuda::check_cuda(cudaMemsetAsync(
-        thrust::raw_pointer_cast(output_num_.data()), 0, sizeof(int), stream_));
   }
 
   void query() override {
-    query_device(output_device_.empty()
-                     ? nullptr
-                     : thrust::raw_pointer_cast(output_device_.data()),
-                 output_device_.size());
     int count = 0;
-    silk::cuda::check_cuda(cudaMemcpyAsync(
-        &count, thrust::raw_pointer_cast(output_num_.data()), sizeof(int),
-        cudaMemcpyDeviceToHost, stream_));
-    silk::cuda::check_cuda(cudaStreamSynchronize(stream_));
-    if (count > output_device_.size()) {
-      output_device_.resize(count);
-      silk::cuda::check_cuda(cudaMemsetAsync(
-          thrust::raw_pointer_cast(output_num_.data()), 0, sizeof(int), stream_));
-      query_device(thrust::raw_pointer_cast(output_device_.data()),
-                   output_device_.size());
+    const auto filter = [] __device__(const GpuCollider& a,
+                                      const GpuCollider& b) {
+      return !gpu_share_vertex(a, b);
+    };
+    if (input_.kind == QueryKind::EE) {
+      tree_->test_self_collision(filter, *collision_cache_, count,
+                                 context_.runtime());
+    } else {
+      tree_->test_ext_collision<GpuCollider>(
+          *colliders_b_, filter, *collision_cache_, count, context_.runtime());
     }
 
-    native_output_.resize(count);
     if (count > 0) {
-      silk::cuda::check_cuda(cudaMemcpyAsync(
-          native_output_.data(),
-          thrust::raw_pointer_cast(output_device_.data()), count * sizeof(int2),
-          cudaMemcpyDeviceToHost, stream_));
+      native_output_ = silk::cuda::vec_like_to_host<CollisionPair>(
+          ctd::span<const CollisionPair>(collision_cache_->data(), count),
+          context_.runtime());
     }
-    silk::cuda::check_cuda(cudaStreamSynchronize(stream_));
   }
 
-  void synchronize() override {
-    silk::cuda::check_cuda(cudaStreamSynchronize(stream_));
-  }
+  void synchronize() override { context_.stream.sync(); }
 
   void materialize_output() override {
+    const uintptr_t base_a =
+        reinterpret_cast<uintptr_t>(tree_->view().colliders.data());
+    const uintptr_t base_b =
+        input_.kind == QueryKind::EE
+            ? base_a
+            : reinterpret_cast<uintptr_t>(colliders_b_->data());
     output_.reserve(native_output_.size());
-    for (const int2 pair : native_output_) {
-      output_.emplace_back(pair.x, pair.y);
+    for (const CollisionPair& pair : native_output_) {
+      int a = (reinterpret_cast<uintptr_t>(pair.first) - base_a) /
+              sizeof(GpuCollider);
+      int b = (reinterpret_cast<uintptr_t>(pair.second) - base_b) /
+              sizeof(GpuCollider);
+      output_.emplace_back(a, b);
     }
   }
 
   std::span<const Pair> output() const override { return output_; }
 
  private:
-  static void make_host_boxes(std::span<const Box> input,
-                              std::vector<cuBQL::box3f>& boxes,
-                              std::vector<CubqlMetadata>& metadata) {
-    boxes.clear();
-    metadata.clear();
-    boxes.reserve(input.size());
-    metadata.reserve(input.size());
-    for (const Box& box : input) {
-      boxes.emplace_back(cuBQL::vec3f(box.min.x(), box.min.y(), box.min.z()),
-                         cuBQL::vec3f(box.max.x(), box.max.y(), box.max.z()));
-      metadata.push_back(
-          {{box.vertex_ids[0], box.vertex_ids[1], box.vertex_ids[2]}});
-    }
-  }
-
-  static void upload_boxes(const std::vector<cuBQL::box3f>& host_boxes,
-                           const std::vector<CubqlMetadata>& host_metadata,
-                           thrust::device_vector<cuBQL::box3f>& boxes,
-                           thrust::device_vector<CubqlMetadata>& metadata,
-                           cudaStream_t stream) {
-    boxes.resize(host_boxes.size());
-    metadata.resize(host_metadata.size());
-    if (!host_boxes.empty()) {
-      silk::cuda::check_cuda(cudaMemcpyAsync(
-          thrust::raw_pointer_cast(boxes.data()), host_boxes.data(),
-          host_boxes.size() * sizeof(cuBQL::box3f), cudaMemcpyHostToDevice,
-          stream));
-      silk::cuda::check_cuda(cudaMemcpyAsync(
-          thrust::raw_pointer_cast(metadata.data()), host_metadata.data(),
-          host_metadata.size() * sizeof(CubqlMetadata), cudaMemcpyHostToDevice,
-          stream));
-    }
-  }
-
-  void query_device(int2* output, int output_capacity) {
-    const auto& query_boxes =
-        input_.kind == QueryKind::EE ? boxes_a_ : boxes_b_;
-    const auto& query_metadata =
-        input_.kind == QueryKind::EE ? metadata_a_ : metadata_b_;
-    cubql_query_kernel<<<(query_boxes.size() + 127) / 128, 128, 0, stream_>>>(
-        thrust::raw_pointer_cast(query_boxes.data()),
-        thrust::raw_pointer_cast(query_metadata.data()), query_boxes.size(),
-        thrust::raw_pointer_cast(boxes_a_.data()),
-        thrust::raw_pointer_cast(metadata_a_.data()), bvh_,
-        input_.kind == QueryKind::EE, output, output_capacity,
-        thrust::raw_pointer_cast(output_num_.data()));
-    silk::cuda::check_cuda(cudaGetLastError());
-  }
-
-  cudaStream_t stream_ = nullptr;
+  GpuContext context_;
   QueryInput input_;
-  cuBQL::bvh3f bvh_;
-  std::vector<cuBQL::box3f> host_boxes_a_;
-  std::vector<cuBQL::box3f> host_boxes_b_;
-  std::vector<CubqlMetadata> host_metadata_a_;
-  std::vector<CubqlMetadata> host_metadata_b_;
-  thrust::device_vector<cuBQL::box3f> boxes_a_;
-  thrust::device_vector<cuBQL::box3f> boxes_b_;
-  thrust::device_vector<CubqlMetadata> metadata_a_;
-  thrust::device_vector<CubqlMetadata> metadata_b_;
-  thrust::device_vector<int2> output_device_;
-  thrust::device_vector<int> output_num_;
-  std::vector<int2> native_output_;
+  std::vector<GpuCollider> host_a_;
+  std::vector<GpuCollider> host_b_;
+  std::optional<Tree> tree_;
+  silk::cuda::Buf<GpuCollider> colliders_b_;
+  silk::cuda::Buf<CollisionPair> collision_cache_;
+  std::vector<CollisionPair> native_output_;
   std::vector<Pair> output_;
 };
 

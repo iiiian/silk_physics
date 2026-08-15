@@ -39,6 +39,7 @@ target_compile_definitions(
     silk
     PRIVATE
         SILK_ENABLE_TIMING=$<BOOL:${SILK_ENABLE_TIMING}>
+        $<$<BOOL:${SILK_USE_CUBQL_BVH}>:SILK_USE_CUBQL_BVH=1>
         $<$<BOOL:${SILK_ENABLE_CUDA}>:SILK_WITH_CUDA=1>
         $<$<STREQUAL:${SILK_GRAPH_PARTITION_BACKEND},kaminpar>:SILK_GRAPH_PARTITION_BACKEND_KAMINPAR=1>
         $<$<STREQUAL:${SILK_GRAPH_PARTITION_BACKEND},metis>:SILK_GRAPH_PARTITION_BACKEND_METIS=1>
@@ -82,7 +83,10 @@ endif()
 if(SILK_ENABLE_CUDA)
     target_sources(silk PRIVATE ${SILK_CUDA_SOURCES})
     target_compile_options(silk PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda --expt-relaxed-constexpr>)
-    target_link_libraries(silk PRIVATE CUDA::cudart CUDA::cusparse CCCL::CCCL)
+    target_link_libraries(
+        silk PRIVATE CUDA::cudart CUDA::cusparse CCCL::CCCL
+                     cuBQL_cuda_float3_static
+    )
 
     if(SILK_GRAPH_PARTITION_BACKEND STREQUAL "kaminpar")
         target_link_libraries(silk PRIVATE KaMinPar::KaMinPar)
