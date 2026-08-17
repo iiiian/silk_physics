@@ -163,7 +163,7 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
 
     auto new_collider = ObjectCollider::from_physical(
         *collision_config, *perm_mesh, *perm_pin, perm_init_pos, collider_mass,
-        state_offset, rt);
+        state_offset, entity, rt);
     collider = registry.set(e, std::move(new_collider));
   } else {
     collider->update_state_offset(state_offset, rt);

@@ -53,7 +53,8 @@ class ObjectCollider {
                                       const TriMesh& mesh, const PinIndex& pin,
                                       ctd::span<const float> init_pos,
                                       const Eigen::VectorXf& mass,
-                                      int state_offset, CudaRuntime rt);
+                                      int state_offset, uint32_t object_id,
+                                      CudaRuntime rt);
 
   /// @brief Build a collider for pure obstacle.
   ///
@@ -64,7 +65,7 @@ class ObjectCollider {
   static ObjectCollider from_obstacle(const CollisionConfigPlus& config,
                                       const TriMesh& mesh,
                                       ctd::span<const float> init_pos,
-                                      CudaRuntime rt);
+                                      uint32_t object_id, CudaRuntime rt);
 
   /// @brief Update collider collision config.
   void update_collision_config(const CollisionConfigPlus& config,

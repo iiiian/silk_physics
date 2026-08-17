@@ -26,6 +26,7 @@ endif()
 find_package(spdlog REQUIRED)
 find_package(TBB REQUIRED)
 find_package(hwy CONFIG REQUIRED)
+find_package(TightInclusion CONFIG REQUIRED)
 
 # suite sparse
 find_package(SuiteSparse_config REQUIRED)
@@ -62,10 +63,6 @@ if(SILK_BROADPHASE_BENCHMARKS)
     if(SILK_ENABLE_CUDA)
         find_package(cuBQL CONFIG REQUIRED)
     endif()
-endif()
-
-if(SILK_NARROWPHASE_BENCHMARKS)
-    find_package(TightInclusion CONFIG REQUIRED)
 endif()
 
 if(SILK_BUILD_TEST)

@@ -89,6 +89,7 @@ struct ClothObject : public ObjectBase {
 
 //******* Obstacle Object *******/
 struct ObstacleObject : public ObjectBase {
+  std::array<float, 3> angular_velocity_deg_s{0.0, 0.0, 0.0};
   ObstacleObject() { type = ObjectType::Obstacle; }
 };
 

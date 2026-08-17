@@ -683,6 +683,7 @@ bool parse_object_item(jx::Cur& cur, SimConfig& cfg) {
   config::Collision col{};
   config::Transform tr{};
   config::ClothParams clothp{};
+  std::array<float, 3> angular_velocity_deg_s{0.0f, 0.0f, 0.0f};
   std::optional<config::PinSelection> pin_selection;
 
   if (!parse_object(cur, [&](const std::string& k) -> bool {
@@ -712,6 +713,9 @@ bool parse_object_item(jx::Cur& cur, SimConfig& cfg) {
           pin_selection = selection;
           return true;
         }
+        if (k == "angular_velocity_deg_s") {
+          return parse_number_array3(cur, angular_velocity_deg_s);
+        }
         return jx::skip_value(cur);
       }))
     return false;
@@ -733,6 +737,7 @@ bool parse_object_item(jx::Cur& cur, SimConfig& cfg) {
     oo.mesh = mesh;
     oo.collision = col;
     oo.transform = tr;
+    oo.angular_velocity_deg_s = angular_velocity_deg_s;
     cfg.obstacles.emplace_back(std::move(oo));
   } else {
     ui_error("Unknown object type: {}", type_str);

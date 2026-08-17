@@ -34,7 +34,7 @@ class IObject {
 
   // simulation hooks
   virtual bool init_sim() = 0;
-  virtual bool sim_step_pre() = 0;
+  virtual bool sim_step_pre(float dt) = 0;
   virtual bool sim_step_post(float current_time) = 0;
   virtual bool exit_sim() = 0;
 

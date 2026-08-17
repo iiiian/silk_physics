@@ -40,7 +40,7 @@ void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
     ctd::span<const float> init_pos(init_state->position.data(),
                                     init_state->position.size());
     auto new_collider =
-        ObjectCollider::from_obstacle(*config, *mesh, init_pos, rt);
+        ObjectCollider::from_obstacle(*config, *mesh, init_pos, entity, rt);
     collider = registry.set<ObjectCollider>(e, std::move(new_collider));
   }
   assert(collider != nullptr);

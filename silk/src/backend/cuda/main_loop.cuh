@@ -21,7 +21,7 @@ class MainLoop {
   int init_broadphase_cache_size = 10000;
   int init_narrowphase_cache_size = 1000;
   float ccd_tolerance = 1e-6f;
-  int ccd_max_iter = 1024;
+  int ccd_max_iter = 4096;
   float ccd_minimum_separation_scale = 0.2f;
   float dcd_activation_distance_scale = 1.0f;
 

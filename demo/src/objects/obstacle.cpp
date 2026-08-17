@@ -54,6 +54,9 @@ std::optional<Obstacle> Obstacle::make_obstacle(silk::World* world,
   o.collision_config_changed_ = false;
   o.position_ = glm::vec3(0.0f);
   o.rotation_ = glm::vec3(0.0f);
+  o.angular_velocity_ = glm::vec3(0.0f);
+  o.rotation_pivot_ = glm::vec3(o.V_.col(0).mean(), o.V_.col(1).mean(),
+                                o.V_.col(2).mean());
   o.scale_ = 1.0f;
   o.transform_changed_ = false;
   o.drag_position_changed_ = false;
@@ -83,6 +86,9 @@ std::optional<Obstacle> Obstacle::make_obstacle(
   obstacle->collision_config_.group = obj.collision.group;
   obstacle->collision_config_.friction = obj.collision.friction;
   obstacle->collision_config_.restitution = obj.collision.restitution;
+  obstacle->angular_velocity_ = glm::radians(glm::vec3(
+      obj.angular_velocity_deg_s[0], obj.angular_velocity_deg_s[1],
+      obj.angular_velocity_deg_s[2]));
 
   return obstacle;
 }
@@ -124,6 +130,8 @@ void Obstacle::swap(Obstacle& other) noexcept {
   std::swap(collision_config_changed_, other.collision_config_changed_);
   std::swap(position_, other.position_);
   std::swap(rotation_, other.rotation_);
+  std::swap(angular_velocity_, other.angular_velocity_);
+  std::swap(rotation_pivot_, other.rotation_pivot_);
   std::swap(scale_, other.scale_);
   std::swap(transform_changed_, other.transform_changed_);
   std::swap(drag_position_changed_, other.drag_position_changed_);
@@ -205,7 +213,7 @@ bool Obstacle::init_sim() {
   return true;
 }
 
-bool Obstacle::sim_step_pre() {
+bool Obstacle::sim_step_pre(float dt) {
   if (collision_config_changed_) {
     silk::Result r =
         world_->set_obstacle_collision_config(silk_handle_, collision_config_);
@@ -215,6 +223,21 @@ bool Obstacle::sim_step_pre() {
       return false;
     }
     collision_config_changed_ = false;
+  }
+
+  if (angular_velocity_ != glm::vec3(0.0f)) {
+    mesh_->vertexPositions.ensureHostBufferPopulated();
+    for (glm::vec3& vertex : mesh_->vertexPositions.data) {
+      vertex -= rotation_pivot_;
+    }
+    AffineTransformer transformer{glm::vec3(0.0f), dt * angular_velocity_,
+                                  1.0f};
+    transformer.apply(mesh_->vertexPositions.data);
+    for (glm::vec3& vertex : mesh_->vertexPositions.data) {
+      vertex += rotation_pivot_;
+    }
+    mesh_->vertexPositions.markHostBufferUpdated();
+    drag_position_changed_ = true;
   }
 
   if (drag_position_changed_) {

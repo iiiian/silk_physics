@@ -6,6 +6,7 @@
 #include "backend/cuda/ecs.hpp"
 #include "backend/cuda/simple_linalg.cuh"
 #include "backend/cuda/solver/equality_constraints.cuh"
+#include "backend/cuda/solver/contact_constraints.cuh"
 
 namespace silk::cuda {
 
@@ -28,7 +29,7 @@ class ADMMSolver {
                              ctd::span<const float> prev_velocity,
                              ctd::span<float> inner_state,
                              EqualityConstraints& pin_constraints,
-                             EqualityConstraints* barrier_constraints,
+                             ContactConstraints* contact_constraints,
                              float dt,
                              Vec3f const_acceleration,
                              CudaRuntime rt);

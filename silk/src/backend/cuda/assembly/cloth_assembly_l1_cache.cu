@@ -1,6 +1,8 @@
 #include "backend/cuda/assembly/cloth_assembly_l1_cache.cuh"
 
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
+#include <algorithm>
 
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/eigen_cuda_interop.cuh"
@@ -55,6 +57,26 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
     h_mass[3 * i + 2] = val;
   }
 
+  std::vector<float> h_contact_weight(state_num);
+  for (int vertex = 0; vertex < l2.mass.size(); ++vertex) {
+    Eigen::Matrix3f diagonal_block;
+    for (int row = 0; row < 3; ++row) {
+      for (int col = 0; col < 3; ++col) {
+        diagonal_block(row, col) =
+            h_AA.coeff(3 * vertex + row, 3 * vertex + col);
+      }
+      diagonal_block(row, row) += h_mass[3 * vertex] / (dt * dt);
+    }
+    float eta = Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f>(diagonal_block)
+                    .eigenvalues()
+                    .minCoeff();
+    float inertia = h_mass[3 * vertex] / (dt * dt);
+    float weight = std::max(0.001f * eta, std::min(25.0f * inertia, eta));
+    for (int axis = 0; axis < 3; ++axis) {
+      h_contact_weight[3 * vertex + axis] = weight;
+    }
+  }
+
   this->dt = dt;
   this->penalty = penalty;
   this->state_num = state_num;
@@ -64,6 +86,7 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
   this->jacobian_ops = vec_like_to_device<float>(h_jacobian_ops, rt);
   this->area_sqrt = host_eigen_to_device(h_area_sqrt, rt);
   this->mass = vec_like_to_device<float>(h_mass, rt);
+  this->contact_weight = vec_like_to_device<float>(h_contact_weight, rt);
   this->bending_rhs = host_eigen_to_device(
       (c.bending_stiffness * l2.C0).reshaped<Eigen::RowMajor>(), rt);
   this->weighted_AA = BSRMatrix{h_AA, 3, {}, rt};

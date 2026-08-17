@@ -164,7 +164,7 @@ class HeadlessCloth : public IObject {
   }
 
   // dummy
-  bool sim_step_pre() override { return true; }
+  bool sim_step_pre(float) override { return true; }
 
   bool sim_step_post(float current_time) override {
     Vert buffer;
@@ -215,6 +215,8 @@ class HeadlessObstacle : public IObject {
   Vert verts_;
   Face faces_;
   silk::CollisionConfig collision_config_;
+  std::array<float, 3> angular_velocity_{};
+  Eigen::Vector3f rotation_pivot_ = Eigen::Vector3f::Zero();
   uint32_t handle_ = 0;
   PositionCache cache_;
 
@@ -245,6 +247,11 @@ class HeadlessObstacle : public IObject {
     obstacle.verts_ = std::move(mesh->verts);
     obstacle.faces_ = std::move(mesh->faces);
     obstacle.collision_config_ = to_collision_config(config.collision);
+    obstacle.rotation_pivot_ = obstacle.verts_.colwise().mean().transpose();
+    for (int axis = 0; axis < 3; ++axis) {
+      obstacle.angular_velocity_[axis] =
+          glm::radians(config.angular_velocity_deg_s[axis]);
+    }
     obstacle.handle_ = 0;
     obstacle.cache_ = {};
     obstacle.cache_.emplace_back(0.0f, obstacle.verts_);
@@ -319,11 +326,35 @@ class HeadlessObstacle : public IObject {
     return true;
   }
 
-  // dummy
-  bool sim_step_pre() override { return true; }
+  bool sim_step_pre(float dt) override {
+    if (angular_velocity_ == std::array<float, 3>{}) {
+      return true;
+    }
 
-  // dummy
-  bool sim_step_post(float current_time) override { return true; }
+    std::array<float, 3> rotation{dt * angular_velocity_[0],
+                                  dt * angular_velocity_[1],
+                                  dt * angular_velocity_[2]};
+    AffineTransformer transformer{std::array<float, 3>{0.0f, 0.0f, 0.0f},
+                                  rotation, 1.0f};
+    verts_.rowwise() -= rotation_pivot_.transpose();
+    transformer.apply(verts_);
+    verts_.rowwise() += rotation_pivot_.transpose();
+    std::span<const float> vert_span(verts_.data(), verts_.size());
+    silk::Result r = world_->set_obstacle_position(handle_, vert_span);
+    if (!r) {
+      spdlog::error("Failed to rotate obstacle '{}'. Error: {}", name_,
+                    r.to_string());
+      return false;
+    }
+    return true;
+  }
+
+  bool sim_step_post(float current_time) override {
+    if (angular_velocity_ != std::array<float, 3>{}) {
+      cache_.emplace_back(current_time, verts_);
+    }
+    return true;
+  }
 
   // dummy
   bool exit_sim() override { return true; }
@@ -343,6 +374,8 @@ class HeadlessObstacle : public IObject {
     std::swap(verts_, other.verts_);
     std::swap(faces_, other.faces_);
     std::swap(collision_config_, other.collision_config_);
+    std::swap(angular_velocity_, other.angular_velocity_);
+    std::swap(rotation_pivot_, other.rotation_pivot_);
     std::swap(handle_, other.handle_);
     std::swap(cache_, other.cache_);
   }
@@ -424,7 +457,7 @@ void headless_run(const SimConfig& sim_config, const std::string& out_path,
                total_steps * global_cfg.dt, total_steps);
   for (int step = 0; step < total_steps; ++step) {
     for (auto& object : objects) {
-      if (!object->sim_step_pre()) {
+      if (!object->sim_step_pre(global_cfg.dt)) {
         spdlog::error("Headless simulation aborted during pre-step for '{}'.",
                       object->get_name());
         return;

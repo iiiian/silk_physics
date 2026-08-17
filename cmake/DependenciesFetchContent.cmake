@@ -114,8 +114,14 @@ FetchContent_Declare(
     TightInclusion
     SYSTEM
     GIT_REPOSITORY https://github.com/Continuous-Collision-Detection/Tight-Inclusion.git
-    GIT_TAG 7377d78162f9fdb5fe44b54b6f9c01bc6ce0885a # release 1.0.6
+    GIT_TAG 6f84001a790a9d3362b7c13d410037140d83fa2c # v1.1.0
 )
+
+set(TIGHT_INCLUSION_WITH_CCACHE OFF CACHE BOOL "" FORCE)
+set(TIGHT_INCLUSION_WITH_DOUBLE_PRECISION OFF CACHE BOOL "" FORCE)
+set(TIGHT_INCLUSION_WITH_RATIONAL OFF CACHE BOOL "" FORCE)
+set(TIGHT_INCLUSION_WITH_TIMER OFF CACHE BOOL "" FORCE)
+set(TIGHT_INCLUSION_LIMIT_QUEUE_SIZE OFF CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
     Embree
@@ -189,6 +195,7 @@ FetchContent_MakeAvailable(
     spdlog
     tbb
     hwy
+    TightInclusion
 )
 
 add_library(hwy::hwy ALIAS hwy)
@@ -273,15 +280,6 @@ if(SILK_NARROWPHASE_BENCHMARKS AND SILK_ENABLE_CUDA)
         PRIVATE
             $<$<COMPILE_LANGUAGE:CUDA>:--pre-include=${CMAKE_SOURCE_DIR}/test/narrowphase/scalable_ccd_v011_compat.cuh>
     )
-endif()
-
-if(SILK_NARROWPHASE_BENCHMARKS)
-    set(TIGHT_INCLUSION_WITH_CCACHE OFF CACHE BOOL "" FORCE)
-    set(TIGHT_INCLUSION_WITH_DOUBLE_PRECISION OFF CACHE BOOL "" FORCE)
-    set(TIGHT_INCLUSION_WITH_RATIONAL OFF CACHE BOOL "" FORCE)
-    set(TIGHT_INCLUSION_WITH_TIMER OFF CACHE BOOL "" FORCE)
-    set(TIGHT_INCLUSION_LIMIT_QUEUE_SIZE OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(TightInclusion)
 endif()
 
 if(SILK_BROADPHASE_BENCHMARKS)

@@ -1,7 +1,6 @@
 #include "backend/cuda/main_loop.cuh"
 
 #include <cub/cub.cuh>
-#include <memory>
 #include <optional>
 
 #include "backend/cuda/assembly/cloth_assembler.cuh"
@@ -12,7 +11,7 @@
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/physical_state.cuh"
 #include "backend/cuda/simple_linalg.cuh"
-#include "backend/cuda/solver/barrier_constraints.cuh"
+#include "backend/cuda/solver/contact_constraints.cuh"
 #include "backend/cuda/solver/pin_constraints.cuh"
 #include "common/logger.hpp"
 #include "common/timer.hpp"
@@ -171,20 +170,16 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
   auto collision_storage = alloc<Collision>(rt, init_narrowphase_cache_size);
   auto pin_constraints = gather_pin_constraints(registry, state_num, rt);
 
-  Timer timer_init_barrier("initial active barrier", rt);
+  Timer timer_init_contacts("initial active contacts", rt);
 
   // DCD owns the active set. Initialize it at the beginning of the frame.
   update_collision_state(registry, outer_state, outer_state, rt);
   auto collisions =
       find_active_collisions(registry, init_broadphase_cache_size, 0.0f,
                              dcd_activation_distance, collision_storage, rt);
-  std::unique_ptr<EqualityConstraints> barrier_constraints;
-  if (!collisions.empty()) {
-    barrier_constraints = std::make_unique<EqualityConstraints>(
-        gather_barrier_constraints(state_num, collisions, rt));
-  }
+  ContactConstraints contact_constraints(registry, state_num, collisions, rt);
 
-  timer_init_barrier.end();
+  timer_init_contacts.end();
 
   Timer timer_outer("outer loop", rt);
   float remaining_step = 1.0f;
@@ -200,14 +195,11 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     Timer timer_admm_solve("ADMM solve", rt);
     auto admm_err = admm_solver.solve(
         registry, prev_state, prev_velocity, inner_state, pin_constraints,
-        barrier_constraints.get(), dt, const_acceleration, rt);
+        &contact_constraints, dt, const_acceleration, rt);
     if (admm_err) {
       return Error::Diverge;
     }
     timer_admm_solve.end();
-    // if (barrier_constraints) {
-    //   barrier_constraints->enforce(inner_state, rt);
-    // }
     rt.stream.sync();
 
     Timer timer_ccd("CCD", rt);
@@ -226,36 +218,39 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
       SPDLOG_INFO(
           "Outer it {}. Earliest toi {} >= remaining step {}. terminate.",
           outer_it, min_toi, remaining_step);
-      mix<<<grid_num, 128, 0, rt.stream.get()>>>(remaining_step, inner_state,
-                                                 outer_state, outer_state);
+      cu::copy_bytes(rt.stream, inner_state, outer_state);
       break;
     }
 
     float rollback_toi = 0.8f * min_toi;
     SPDLOG_INFO("Outer it {}, CCD rollback to toi {}", outer_it, rollback_toi);
-    mix<<<grid_num, 128, 0, rt.stream.get()>>>(rollback_toi, inner_state,
+    float rollback_fraction = rollback_toi / remaining_step;
+    mix<<<grid_num, 128, 0, rt.stream.get()>>>(rollback_fraction, inner_state,
                                                outer_state, outer_state);
     remaining_step -= rollback_toi;
     timer_ccd.end();
 
     Timer timer_active_collisions("Find active collisions", rt);
-    // Refit to the rolled-back state, then rebuild active contacts with DCD.
+    // Refit to the rolled-back state, then expand active contacts with DCD.
     update_collision_state(registry, outer_state, outer_state, rt);
     float time = 1.0f - remaining_step;
     collisions =
         find_active_collisions(registry, init_broadphase_cache_size, time,
                                dcd_activation_distance, collision_storage, rt);
-    if (collisions.empty()) {
-      barrier_constraints.reset();
-    } else {
-      barrier_constraints = std::make_unique<EqualityConstraints>(
-          gather_barrier_constraints(state_num, collisions, rt));
-    }
+    int new_contact_num = contact_constraints.append_contacts(collisions, rt);
+    SPDLOG_DEBUG("DCD appended {} contacts; {} active this timestep.",
+                 new_contact_num, contact_constraints.get_contact_num());
     timer_active_collisions.end();
   }
   timer_outer.end();
 
   Timer timer_final_state_update("final state update", rt);
+  // CCD may accept the frame through several rollback segments. Reconstruct
+  // velocity from the complete accepted displacement, not the final segment.
+  int grid_num = div_round_up(state_num, 128);
+  update_velocity<<<grid_num, 128, 0, rt.stream.get()>>>(
+      dt, prev_state, outer_state, outer_velocity);
+
   // Write solution back to registry.
   for (auto& physical_state : registry.get_all_components<PhysicalState>()) {
     int offset = physical_state.state_offset;

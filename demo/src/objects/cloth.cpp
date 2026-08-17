@@ -248,7 +248,7 @@ bool Cloth::init_sim() {
   return true;
 }
 
-bool Cloth::sim_step_pre() {
+bool Cloth::sim_step_pre(float) {
   if (pin_index_changed_) {
     update_pin_index();
     silk::Result r = world_->set_cloth_pin_index(silk_handle_, pin_index_);

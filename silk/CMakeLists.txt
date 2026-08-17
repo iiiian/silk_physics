@@ -63,6 +63,7 @@ target_link_libraries(
         spdlog::spdlog
         TBB::tbb
         $<BUILD_INTERFACE:hwy::hwy>
+        tight_inclusion::tight_inclusion
         # dependencies for SuiteSparse cholmod
         SuiteSparse::SuiteSparseConfig
         SuiteSparse::AMD
@@ -100,6 +101,24 @@ endif()
 # -------------------------------------------------
 
 include(GNUInstallDirs)
+
+if(SILK_FETCH_DEPENDENCIES)
+    # Silk uses Tight Inclusion privately, but a static Silk archive still
+    # requires the Tight Inclusion archive during final linking. Export the
+    # binary target without exposing its headers as part of Silk's API.
+    set_property(
+        TARGET tight_inclusion
+        PROPERTY INTERFACE_INCLUDE_DIRECTORIES
+                 "$<BUILD_INTERFACE:${tightinclusion_SOURCE_DIR}/src>"
+    )
+    install(
+        TARGETS tight_inclusion tight_inclusion_warnings
+        EXPORT silkTargets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+endif()
 
 install(
     TARGETS silk

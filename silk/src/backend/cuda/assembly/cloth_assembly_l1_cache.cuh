@@ -24,6 +24,8 @@ class ClothAssemblyL1Cache {
   Buf<float> jacobian_ops;
   Buf<float> area_sqrt;
   Buf<float> mass;
+  /// Scalar Daviet contact penalty repeated for each vertex coordinate.
+  Buf<float> contact_weight;
   // k C^T W C x_rest, the constant bending contribution to the main RHS.
   Buf<float> bending_rhs;
   BSRMatrix weighted_AA;

@@ -175,14 +175,14 @@ float find_min_toi(ObjRegistry& registry, int init_broadphase_cache_size,
 
   float min_toi = max_time;
   auto find_pt = [&](ctd::span<PTCCache> candidates) {
-    min_toi =
-        find_pt_min_toi(candidates, vf_err, time_start, min_toi,
-                        minimum_separation, ccd_tolerance, ccd_max_iter, rt);
+    min_toi = find_pt_min_toi(candidates, vf_err, time_start, max_time,
+                              min_toi, minimum_separation, ccd_tolerance,
+                              ccd_max_iter, rt);
   };
   auto find_ee = [&](ctd::span<EECCache> candidates) {
-    min_toi =
-        find_ee_min_toi(candidates, ee_err, time_start, min_toi,
-                        minimum_separation, ccd_tolerance, ccd_max_iter, rt);
+    min_toi = find_ee_min_toi(candidates, ee_err, time_start, max_time,
+                              min_toi, minimum_separation, ccd_tolerance,
+                              ccd_max_iter, rt);
   };
   for_each_collision_candidate_batch(registry, init_broadphase_cache_size,
                                      find_pt, find_ee, rt);

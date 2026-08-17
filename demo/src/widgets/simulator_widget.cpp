@@ -60,7 +60,7 @@ void SimulatorWidget::leave_sim_mode() {
 void SimulatorWidget::solver_step(int substep) {
   // pre-step hooks
   for (auto& pobj : ctx_.objects) {
-    if (!pobj->sim_step_pre()) {
+    if (!pobj->sim_step_pre(ctx_.global_config.dt)) {
       spdlog::info("Object {} fails to compute pre-simulation step.",
                    pobj->get_name());
       return;

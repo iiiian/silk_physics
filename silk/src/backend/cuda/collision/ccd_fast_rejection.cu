@@ -15,11 +15,12 @@ constexpr int CUDA_THREADS = 128;
 
 __device__ void set_trajectory(const Vec3f& source_t0, const Vec3f& source_t1,
                                int state_offset, float time_start,
+                               float interval_time,
                                Vec3f& position_t0, Vec3f& position_t1) {
   Vec3f delta = vsub(source_t1, source_t0);
   if (state_offset == -1) {
     position_t0 = axpby(1.0f, source_t0, time_start, delta);
-    position_t1 = vadd(position_t0, delta);
+    position_t1 = axpby(1.0f, position_t0, interval_time, delta);
   } else {
     position_t0 = source_t0;
     position_t1 = source_t1;
@@ -28,38 +29,40 @@ __device__ void set_trajectory(const Vec3f& source_t0, const Vec3f& source_t1,
 
 __device__ CCDQuery make_pt_query(const PointCollider& p,
                                   const TriangleCollider& t, int source_index,
-                                  float time_start, float minimum_separation) {
+                                  float time_start, float interval_time,
+                                  float minimum_separation) {
   CCDQuery query;
   query.source_index = source_index;
   query.state_offset = {p.state_offset, t.state_offset};
   query.vertex_index = {p.index, t.index(0), t.index(1), t.index(2)};
   query.minimal_separation = minimum_separation;
-  set_trajectory(p.v0_t0, p.v0_t1, p.state_offset, time_start,
+  set_trajectory(p.v0_t0, p.v0_t1, p.state_offset, time_start, interval_time,
                  query.position_t0[0], query.position_t1[0]);
-  set_trajectory(t.v0_t0, t.v0_t1, t.state_offset, time_start,
+  set_trajectory(t.v0_t0, t.v0_t1, t.state_offset, time_start, interval_time,
                  query.position_t0[1], query.position_t1[1]);
-  set_trajectory(t.v1_t0, t.v1_t1, t.state_offset, time_start,
+  set_trajectory(t.v1_t0, t.v1_t1, t.state_offset, time_start, interval_time,
                  query.position_t0[2], query.position_t1[2]);
-  set_trajectory(t.v2_t0, t.v2_t1, t.state_offset, time_start,
+  set_trajectory(t.v2_t0, t.v2_t1, t.state_offset, time_start, interval_time,
                  query.position_t0[3], query.position_t1[3]);
   return query;
 }
 
 __device__ CCDQuery make_ee_query(const EdgeCollider& ea,
                                   const EdgeCollider& eb, int source_index,
-                                  float time_start, float minimum_separation) {
+                                  float time_start, float interval_time,
+                                  float minimum_separation) {
   CCDQuery query;
   query.source_index = source_index;
   query.state_offset = {ea.state_offset, eb.state_offset};
   query.vertex_index = {ea.index(0), ea.index(1), eb.index(0), eb.index(1)};
   query.minimal_separation = minimum_separation;
-  set_trajectory(ea.v0_t0, ea.v0_t1, ea.state_offset, time_start,
+  set_trajectory(ea.v0_t0, ea.v0_t1, ea.state_offset, time_start, interval_time,
                  query.position_t0[0], query.position_t1[0]);
-  set_trajectory(ea.v1_t0, ea.v1_t1, ea.state_offset, time_start,
+  set_trajectory(ea.v1_t0, ea.v1_t1, ea.state_offset, time_start, interval_time,
                  query.position_t0[1], query.position_t1[1]);
-  set_trajectory(eb.v0_t0, eb.v0_t1, eb.state_offset, time_start,
+  set_trajectory(eb.v0_t0, eb.v0_t1, eb.state_offset, time_start, interval_time,
                  query.position_t0[2], query.position_t1[2]);
-  set_trajectory(eb.v1_t0, eb.v1_t1, eb.state_offset, time_start,
+  set_trajectory(eb.v1_t0, eb.v1_t1, eb.state_offset, time_start, interval_time,
                  query.position_t0[3], query.position_t1[3]);
   return query;
 }
@@ -283,7 +286,7 @@ __device__ bool fixed_depth_rejection(const CCDQuery& query, const Vec3f& err,
 }
 
 __global__ void reject_pt_queries(ctd::span<PTCCache> input, Vec3f err,
-                                  float time_start, float max_time,
+                                  float time_start, float interval_time,
                                   float minimum_separation,
                                   DynSpan<CCDQuery> output) {
   int global_thread = blockIdx.x * blockDim.x + threadIdx.x;
@@ -295,9 +298,9 @@ __global__ void reject_pt_queries(ctd::span<PTCCache> input, Vec3f err,
 
   auto [triangle, point] = input[query_index];
   CCDQuery query = make_pt_query(*point, *triangle, query_index, time_start,
-                                 minimum_separation);
+                                 interval_time, minimum_separation);
   bool leaf_may_collide =
-      fixed_depth_rejection<true>(query, err, max_time, lane);
+      fixed_depth_rejection<true>(query, err, 1.0f, lane);
   bool query_may_collide = __any_sync(0xffffffff, leaf_may_collide);
 
   if (lane == 0 && query_may_collide) {
@@ -310,7 +313,7 @@ __global__ void reject_pt_queries(ctd::span<PTCCache> input, Vec3f err,
 }
 
 __global__ void reject_ee_queries(ctd::span<EECCache> input, Vec3f err,
-                                  float time_start, float max_time,
+                                  float time_start, float interval_time,
                                   float minimum_separation,
                                   DynSpan<CCDQuery> output) {
   int global_thread = blockIdx.x * blockDim.x + threadIdx.x;
@@ -322,9 +325,9 @@ __global__ void reject_ee_queries(ctd::span<EECCache> input, Vec3f err,
 
   auto [edge_a, edge_b] = input[query_index];
   CCDQuery query = make_ee_query(*edge_a, *edge_b, query_index, time_start,
-                                 minimum_separation);
+                                 interval_time, minimum_separation);
   bool leaf_may_collide =
-      fixed_depth_rejection<false>(query, err, max_time, lane);
+      fixed_depth_rejection<false>(query, err, 1.0f, lane);
   bool query_may_collide = __any_sync(0xffffffff, leaf_may_collide);
 
   if (lane == 0 && query_may_collide) {
@@ -356,6 +359,34 @@ __global__ void reject_queries(ctd::span<const CCDQuery> input, Vec3f err,
       output.data[output_index] = input[query_index];
     }
   }
+}
+
+__global__ void build_pt_queries(ctd::span<const PTCCache> candidates,
+                                 float time_start, float interval_time,
+                                 float minimum_separation,
+                                 ctd::span<CCDQuery> queries) {
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index >= candidates.size()) {
+    return;
+  }
+  const auto& [triangle, point] = candidates[index];
+  queries[index] =
+      make_pt_query(*point, *triangle, index, time_start, interval_time,
+                    minimum_separation);
+}
+
+__global__ void build_ee_queries(ctd::span<const EECCache> candidates,
+                                 float time_start, float interval_time,
+                                 float minimum_separation,
+                                 ctd::span<CCDQuery> queries) {
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index >= candidates.size()) {
+    return;
+  }
+  const auto& [edge_a, edge_b] = candidates[index];
+  queries[index] =
+      make_ee_query(*edge_a, *edge_b, index, time_start, interval_time,
+                    minimum_separation);
 }
 
 template <typename LaunchRejection>
@@ -392,28 +423,58 @@ std::vector<CCDQuery> run_ticcd_rejection(int query_num,
 
 }  // namespace
 
+std::vector<CCDQuery> make_pt_ccd_queries(ctd::span<PTCCache> pt_ccache,
+                                          float time_start,
+                                          float interval_time,
+                                          float minimum_separation,
+                                          CudaRuntime rt) {
+  if (pt_ccache.empty()) {
+    return {};
+  }
+  auto queries = alloc<CCDQuery>(rt, pt_ccache.size());
+  int block_num = div_round_up(pt_ccache.size(), CUDA_THREADS);
+  build_pt_queries<<<block_num, CUDA_THREADS, 0, rt.stream.get()>>>(
+      pt_ccache, time_start, interval_time, minimum_separation, queries);
+  return vec_like_to_host<CCDQuery>(queries, rt);
+}
+
+std::vector<CCDQuery> make_ee_ccd_queries(ctd::span<EECCache> ee_ccache,
+                                          float time_start,
+                                          float interval_time,
+                                          float minimum_separation,
+                                          CudaRuntime rt) {
+  if (ee_ccache.empty()) {
+    return {};
+  }
+  auto queries = alloc<CCDQuery>(rt, ee_ccache.size());
+  int block_num = div_round_up(ee_ccache.size(), CUDA_THREADS);
+  build_ee_queries<<<block_num, CUDA_THREADS, 0, rt.stream.get()>>>(
+      ee_ccache, time_start, interval_time, minimum_separation, queries);
+  return vec_like_to_host<CCDQuery>(queries, rt);
+}
+
 std::vector<CCDQuery> pt_ticcd_rejection(ctd::span<PTCCache> pt_ccache,
                                          const Vec3f& err, float time_start,
-                                         float max_time,
+                                         float interval_time,
                                          float minimum_separation,
                                          CudaRuntime rt) {
   int block_num = div_round_up(pt_ccache.size(), CUDA_THREADS / WARP_SIZE);
   auto launch_rejection = [&](DynSpan<CCDQuery> output) {
     reject_pt_queries<<<block_num, CUDA_THREADS, 0, rt.stream.get()>>>(
-        pt_ccache, err, time_start, max_time, minimum_separation, output);
+        pt_ccache, err, time_start, interval_time, minimum_separation, output);
   };
   return run_ticcd_rejection(pt_ccache.size(), launch_rejection, rt);
 }
 
 std::vector<CCDQuery> ee_ticcd_rejection(ctd::span<EECCache> ee_ccache,
                                          const Vec3f& err, float time_start,
-                                         float max_time,
+                                         float interval_time,
                                          float minimum_separation,
                                          CudaRuntime rt) {
   int block_num = div_round_up(ee_ccache.size(), CUDA_THREADS / WARP_SIZE);
   auto launch_rejection = [&](DynSpan<CCDQuery> output) {
     reject_ee_queries<<<block_num, CUDA_THREADS, 0, rt.stream.get()>>>(
-        ee_ccache, err, time_start, max_time, minimum_separation, output);
+        ee_ccache, err, time_start, interval_time, minimum_separation, output);
   };
   return run_ticcd_rejection(ee_ccache.size(), launch_rejection, rt);
 }

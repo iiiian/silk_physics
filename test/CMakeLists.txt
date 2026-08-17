@@ -31,8 +31,21 @@ if(SILK_BUILD_TEST AND SILK_ENABLE_CUDA)
         PRIVATE CUDA::cudart CCCL::CCCL Eigen3::Eigen
     )
 
+    add_executable(friction_contact_test friction_contact_test.cu)
+    target_include_directories(friction_contact_test PRIVATE ${SILK_DIR})
+    target_compile_options(
+        friction_contact_test
+        PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda --expt-relaxed-constexpr>
+    )
+    target_compile_definitions(friction_contact_test PRIVATE EIGEN_NO_CUDA)
+    target_link_libraries(
+        friction_contact_test
+        PRIVATE silk CUDA::cudart CCCL::CCCL Catch2::Catch2WithMain
+    )
+
     include(Catch)
     catch_discover_tests(graph_partition_test)
+    catch_discover_tests(friction_contact_test)
 endif()
 
 if(SILK_BROADPHASE_BENCHMARKS)

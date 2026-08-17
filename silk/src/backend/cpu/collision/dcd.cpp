@@ -46,34 +46,37 @@ std::optional<std::pair<float, float>> exact_ee_uv(const Eigen::Vector3f& x0,
   const Eigen::Vector3f& p2 = x2;
   const Eigen::Vector3f& q2 = x3;
 
-  Eigen::Vector3f d1 = q1 - p1;
-  Eigen::Vector3f d2 = q2 - p2;
-  Eigen::Vector3f r = p1 - p2;
-  float a = d1.dot(d1);
-  float b = d1.dot(d2);
-  float c = d1.dot(r);
-  float e = d2.dot(d2);
-  float f = d2.dot(r);
+  // To handle near parallel edge better, use double precision
+  Eigen::Vector3d d1 = (q1 - p1).cast<double>();
+  Eigen::Vector3d d2 = (q2 - p2).cast<double>();
+  Eigen::Vector3d r = (p1 - p2).cast<double>();
+  double a = d1.dot(d1);
+  double b = d1.dot(d2);
+  double c = d1.dot(r);
+  double e = d2.dot(d2);
+  double f = d2.dot(r);
 
-  // If either edge is degenerate, skip.
-  if (a < eps || e < eps) {
+  double eps2 = static_cast<double>(eps) * eps;
+  double length_scale2 = std::max(a, e);
+  // skip degenerate edge.
+  if (a <= eps2 * length_scale2 || e <= eps2 * length_scale2) {
     return std::nullopt;
   }
 
-  float denominator = a * e - b * b;
-  float u = denominator > eps
-                ? std::clamp((b * f - c * e) / denominator, 0.0f, 1.0f)
-                : 0.0f;
+  double denominator = a * e - b * b;
+  double u = denominator > eps2 * a * e
+                 ? std::clamp((b * f - c * e) / denominator, 0.0, 1.0)
+                 : 0.0;
 
-  float v = (b * u + f) / e;
-  if (v < 0.0f) {
-    v = 0.0f;
-    u = std::clamp(-c / a, 0.0f, 1.0f);
-  } else if (v > 1.0f) {
-    v = 1.0f;
-    u = std::clamp((b - c) / a, 0.0f, 1.0f);
+  double v = (b * u + f) / e;
+  if (v < 0.0) {
+    v = 0.0;
+    u = std::clamp(-c / a, 0.0, 1.0);
+  } else if (v > 1.0) {
+    v = 1.0;
+    u = std::clamp((b - c) / a, 0.0, 1.0);
   }
-  return std::make_pair(u, v);
+  return std::make_pair(static_cast<float>(u), static_cast<float>(v));
 }
 
 }  // namespace silk::cpu

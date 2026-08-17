@@ -44,9 +44,10 @@ __device__ ctd::optional<Collision> make_pt_collision(
   if (distance >= activation_distance) {
     return ctd::nullopt;
   }
-  Vec3f normal = ax(1.0f / distance, displacement);
+  Vec3f normal = ax(-1.0f / distance, displacement);
 
   Vec4f parameter = {1.0f, 1.0f - u - v, u, v};
+  Vec4f coefficient = {1.0f, -parameter(1), -parameter(2), -parameter(3)};
   Vec4f inv_mass = {point.inv_mass, triangle.inv_mass(0), triangle.inv_mass(1),
                     triangle.inv_mass(2)};
   float denominator = 0.0f;
@@ -58,21 +59,40 @@ __device__ ctd::optional<Collision> make_pt_collision(
     return ctd::nullopt;
   }
   Vec4f weight = ax(1.0f / denominator, vmul(parameter, inv_mass));
-  weight(0) *= -1.0f;
+  weight(1) *= -1.0f;
+  weight(2) *= -1.0f;
+  weight(3) *= -1.0f;
   Vec3f correction = ax(activation_distance - distance, normal);
 
   Collision collision;
   collision.type = CollisionType::PointTriangle;
+  collision.object_id_a = point.object_id;
+  collision.object_id_b = triangle.object_id;
   collision.state_offset_a = point.state_offset;
   collision.state_offset_b = triangle.state_offset;
   collision.index = {point.index, triangle.index(0), triangle.index(1),
                      triangle.index(2)};
   collision.activation_distance = activation_distance;
+  collision.friction = ctd::sqrt(point.friction * triangle.friction);
+  collision.normal = normal;
+  collision.coefficient = coefficient;
   collision.inv_mass = inv_mass;
   collision.x0 = x0;
   collision.x1 = x1;
   collision.x2 = x2;
   collision.x3 = x3;
+  collision.prescribed_displacement = Vec3f::zeros();
+  if (point.state_offset < 0) {
+    collision.prescribed_displacement =
+        ax(coefficient(0), vsub(point.v0_t1, x0));
+  }
+  if (triangle.state_offset < 0) {
+    collision.prescribed_displacement = vadd(
+        collision.prescribed_displacement,
+        vadd(ax(coefficient(1), vsub(triangle.v0_t1, x1)),
+             vadd(ax(coefficient(2), vsub(triangle.v1_t1, x2)),
+                  ax(coefficient(3), vsub(triangle.v2_t1, x3)))));
+  }
   collision.correction0 = ax(weight(0), correction);
   collision.correction1 = ax(weight(1), correction);
   collision.correction2 = ax(weight(2), correction);
@@ -105,9 +125,11 @@ __device__ ctd::optional<Collision> make_ee_collision(
   if (distance >= activation_distance) {
     return ctd::nullopt;
   }
-  Vec3f normal = ax(1.0f / distance, displacement);
+  Vec3f normal = ax(-1.0f / distance, displacement);
 
   Vec4f parameter = {1.0f - u, u, 1.0f - v, v};
+  Vec4f coefficient = {parameter(0), parameter(1), -parameter(2),
+                       -parameter(3)};
   Vec4f inv_mass = {edge_a.inv_mass(0), edge_a.inv_mass(1), edge_b.inv_mass(0),
                     edge_b.inv_mass(1)};
   float denominator = 0.0f;
@@ -119,22 +141,39 @@ __device__ ctd::optional<Collision> make_ee_collision(
     return ctd::nullopt;
   }
   Vec4f weight = ax(1.0f / denominator, vmul(parameter, inv_mass));
-  weight(0) *= -1.0f;
-  weight(1) *= -1.0f;
+  weight(2) *= -1.0f;
+  weight(3) *= -1.0f;
   Vec3f correction = ax(activation_distance - distance, normal);
 
   Collision collision;
   collision.type = CollisionType::EdgeEdge;
+  collision.object_id_a = edge_a.object_id;
+  collision.object_id_b = edge_b.object_id;
   collision.state_offset_a = edge_a.state_offset;
   collision.state_offset_b = edge_b.state_offset;
   collision.index = {edge_a.index(0), edge_a.index(1), edge_b.index(0),
                      edge_b.index(1)};
   collision.activation_distance = activation_distance;
+  collision.friction = ctd::sqrt(edge_a.friction * edge_b.friction);
+  collision.normal = normal;
+  collision.coefficient = coefficient;
   collision.inv_mass = inv_mass;
   collision.x0 = x0;
   collision.x1 = x1;
   collision.x2 = x2;
   collision.x3 = x3;
+  collision.prescribed_displacement = Vec3f::zeros();
+  if (edge_a.state_offset < 0) {
+    collision.prescribed_displacement =
+        vadd(ax(coefficient(0), vsub(edge_a.v0_t1, x0)),
+             ax(coefficient(1), vsub(edge_a.v1_t1, x1)));
+  }
+  if (edge_b.state_offset < 0) {
+    collision.prescribed_displacement = vadd(
+        collision.prescribed_displacement,
+        vadd(ax(coefficient(2), vsub(edge_b.v0_t1, x2)),
+             ax(coefficient(3), vsub(edge_b.v1_t1, x3))));
+  }
   collision.correction0 = ax(weight(0), correction);
   collision.correction1 = ax(weight(1), correction);
   collision.correction2 = ax(weight(2), correction);
@@ -237,48 +276,42 @@ __both__ ctd::optional<ctd::pair<float, float>> exact_ee_uv(const Vec3f& x0,
                                                             const Vec3f& x2,
                                                             const Vec3f& x3,
                                                             float eps) {
-  auto& p1 = x0;
-  auto& q1 = x1;
-  auto& p2 = x2;
-  auto& q2 = x3;
+  // To handle near parallel edege better use double precision.
+  double d1x = static_cast<double>(x1(0)) - x0(0);
+  double d1y = static_cast<double>(x1(1)) - x0(1);
+  double d1z = static_cast<double>(x1(2)) - x0(2);
+  double d2x = static_cast<double>(x3(0)) - x2(0);
+  double d2y = static_cast<double>(x3(1)) - x2(1);
+  double d2z = static_cast<double>(x3(2)) - x2(2);
+  double rx = static_cast<double>(x0(0)) - x2(0);
+  double ry = static_cast<double>(x0(1)) - x2(1);
+  double rz = static_cast<double>(x0(2)) - x2(2);
+  double a = d1x * d1x + d1y * d1y + d1z * d1z;
+  double b = d1x * d2x + d1y * d2y + d1z * d2z;
+  double c = d1x * rx + d1y * ry + d1z * rz;
+  double e = d2x * d2x + d2y * d2y + d2z * d2z;
+  double f = d2x * rx + d2y * ry + d2z * rz;
 
-  Vec3f d1 = vsub(q1, p1);
-  Vec3f d2 = vsub(q2, p2);
-  Vec3f r = vsub(p1, p2);
-  float a = dot(d1, d1);
-  float b = dot(d1, d2);
-  float c = dot(d1, r);
-  float e = dot(d2, d2);
-  float f = dot(d2, r);
-
-  // If either edge is degenerated, skip.
-  if (a < eps || e < eps) {
+  double eps2 = static_cast<double>(eps) * eps;
+  double length_scale2 = ctd::max(a, e);
+  // ignore degenerate edge.
+  if (a <= eps2 * length_scale2 || e <= eps2 * length_scale2) {
     return ctd::nullopt;
   }
 
-  float denom = a * e - b * b;
-
-  float u, v;
-
-  // Non parallel.
-  if (denom > eps) {
-    u = ctd::clamp((b * f - c * e) / denom, 0.0f, 1.0f);
+  double denominator = a * e - b * b;
+  double u = denominator > eps2 * a * e
+                 ? ctd::clamp((b * f - c * e) / denominator, 0.0, 1.0)
+                 : 0.0;  // test end point for parallel edge.
+  double v = (b * u + f) / e;
+  if (v < 0.0) {
+    v = 0.0;
+    u = ctd::clamp(-c / a, 0.0, 1.0);
+  } else if (v > 1.0) {
+    v = 1.0;
+    u = ctd::clamp((b - c) / a, 0.0, 1.0);
   }
-  // Parallel.
-  else {
-    u = 0.0f;
-  }
-
-  v = (b * u + f) / e;
-  if (v < 0.0f) {
-    v = 0.0f;
-    // TODO: double check
-    u = ctd::clamp(-c / a, 0.0f, 1.0f);
-  } else if (v > 1.0f) {
-    v = 1.0f;
-    u = ctd::clamp((b - c) / a, 0.0f, 1.0f);
-  }
-  return ctd::make_pair(u, v);
+  return ctd::make_pair(static_cast<float>(u), static_cast<float>(v));
 }
 
 void append_pt_dcd_collisions(ctd::span<PTCCache> pt_ccache, float time,

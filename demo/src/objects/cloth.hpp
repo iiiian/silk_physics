@@ -78,7 +78,7 @@ class Cloth : public IObject {
 
   // simulation hooks
   bool init_sim() override;
-  bool sim_step_pre() override;
+  bool sim_step_pre(float dt) override;
   bool sim_step_post(float current_time) override;
   bool exit_sim() override;
 

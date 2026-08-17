@@ -6,10 +6,10 @@
 #include <atomic>
 #include <cuda/buffer>
 #include <cuda/std/span>
-#include <optional>
+#include <limits>
+#include <tight_inclusion/ccd.hpp>
 #include <vector>
 
-#include "backend/cpu/collision/ccd.hpp"
 #include "backend/cuda/collision/ccd_fast_rejection.cuh"
 #include "backend/cuda/collision/collision.cuh"
 #include "backend/cuda/collision/dcd.cuh"
@@ -41,29 +41,30 @@ float solve_min_toi(ctd::span<const CCDQuery> queries, const Vec3f& err,
     }
 
     const CCDQuery& query = queries[i];
-    std::optional<cpu::CCDResult> result;
+    float toi = std::numeric_limits<float>::infinity();
+    float output_tolerance = tolerance;
+    bool hit;
     if constexpr (is_vertex_face) {
-      result = cpu::vertex_face_ccd(
+      hit = ticcd::vertexFaceCCD(
           to_eigen(query.position_t0[0]), to_eigen(query.position_t0[1]),
           to_eigen(query.position_t0[2]), to_eigen(query.position_t0[3]),
           to_eigen(query.position_t1[0]), to_eigen(query.position_t1[1]),
           to_eigen(query.position_t1[2]), to_eigen(query.position_t1[3]),
-          numerical_error, query.minimal_separation, tolerance, max_iter, true,
-          query_max_time);
+          numerical_error, query.minimal_separation, toi, tolerance,
+          query_max_time, max_iter, output_tolerance, true);
     } else {
-      result = cpu::edge_edge_ccd(
+      hit = ticcd::edgeEdgeCCD(
           to_eigen(query.position_t0[0]), to_eigen(query.position_t0[1]),
           to_eigen(query.position_t0[2]), to_eigen(query.position_t0[3]),
           to_eigen(query.position_t1[0]), to_eigen(query.position_t1[1]),
           to_eigen(query.position_t1[2]), to_eigen(query.position_t1[3]),
-          numerical_error, query.minimal_separation, tolerance, max_iter, true,
-          query_max_time);
+          numerical_error, query.minimal_separation, toi, tolerance,
+          query_max_time, max_iter, output_tolerance, true);
     }
-    if (!result) {
+    if (!hit) {
       return;
     }
 
-    float toi = result->use_small_ms ? result->small_ms_t(0) : result->t(0);
     if (toi == 0.0f) {
       return;
     }
@@ -78,22 +79,31 @@ float solve_min_toi(ctd::span<const CCDQuery> queries, const Vec3f& err,
 }  // namespace
 
 float find_pt_min_toi(ctd::span<PTCCache> pt_ccache, const Vec3f& vf_err,
-                      float time_start, float max_time,
+                      float time_start, float interval_time, float max_toi,
                       float minimum_separation, float tolerance, int max_iter,
                       CudaRuntime rt) {
-  std::vector<CCDQuery> unresolved = pt_ticcd_rejection(
-      pt_ccache, vf_err, time_start, max_time, minimum_separation, rt);
-  return solve_min_toi<true>(unresolved, vf_err, max_time, tolerance, max_iter);
+  std::vector<CCDQuery> unresolved =
+      make_pt_ccd_queries(pt_ccache, time_start, interval_time,
+                          minimum_separation, rt);
+  float local_max_toi = max_toi / interval_time;
+  float local_tolerance = tolerance / interval_time;
+  float local_toi = solve_min_toi<true>(unresolved, vf_err, local_max_toi,
+                                        local_tolerance, max_iter);
+  return interval_time * local_toi;
 }
 
 float find_ee_min_toi(ctd::span<EECCache> ee_ccache, const Vec3f& ee_err,
-                      float time_start, float max_time,
+                      float time_start, float interval_time, float max_toi,
                       float minimum_separation, float tolerance, int max_iter,
                       CudaRuntime rt) {
-  std::vector<CCDQuery> unresolved = ee_ticcd_rejection(
-      ee_ccache, ee_err, time_start, max_time, minimum_separation, rt);
-  return solve_min_toi<false>(unresolved, ee_err, max_time, tolerance,
-                              max_iter);
+  std::vector<CCDQuery> unresolved =
+      make_ee_ccd_queries(ee_ccache, time_start, interval_time,
+                          minimum_separation, rt);
+  float local_max_toi = max_toi / interval_time;
+  float local_tolerance = tolerance / interval_time;
+  float local_toi = solve_min_toi<false>(unresolved, ee_err, local_max_toi,
+                                         local_tolerance, max_iter);
+  return interval_time * local_toi;
 }
 
 void find_pt_active_collisions(ctd::span<PTCCache> pt_ccache, float time,

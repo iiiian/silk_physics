@@ -14,13 +14,14 @@ namespace silk::cuda {
 /// @param pt_ccache Candidate pairs.
 /// @param vf_err Scene-wide numerical error bounds for point-triangle tests.
 /// @param time_start Absolute normalized time already consumed.
-/// @param max_time Maximum additional normalized time to search.
+/// @param interval_time Additional normalized time represented by the query.
+/// @param max_toi Current upper bound on additional normalized collision time.
 /// @param minimum_separation Scene-wide CCD separation distance.
 /// @param tolerance Tight Inclusion solving precision.
 /// @param max_iter Tight Inclusion maximum iteration count.
 /// @param rt Cuda runtime.
 float find_pt_min_toi(ctd::span<PTCCache> pt_ccache, const Vec3f& vf_err,
-                      float time_start, float max_time,
+                      float time_start, float interval_time, float max_toi,
                       float minimum_separation, float tolerance, int max_iter,
                       CudaRuntime rt);
 
@@ -28,13 +29,14 @@ float find_pt_min_toi(ctd::span<PTCCache> pt_ccache, const Vec3f& vf_err,
 /// @param ee_ccache Candidate pairs.
 /// @param ee_err Scene-wide numerical error bounds for edge-edge tests.
 /// @param time_start Absolute normalized time already consumed.
-/// @param max_time Maximum additional normalized time to search.
+/// @param interval_time Additional normalized time represented by the query.
+/// @param max_toi Current upper bound on additional normalized collision time.
 /// @param minimum_separation Scene-wide CCD separation distance.
 /// @param tolerance Tight Inclusion solving precision.
 /// @param max_iter Tight Inclusion maximum iteration count.
 /// @param rt Cuda runtime.
 float find_ee_min_toi(ctd::span<EECCache> ee_ccache, const Vec3f& ee_err,
-                      float time_start, float max_time,
+                      float time_start, float interval_time, float max_toi,
                       float minimum_separation, float tolerance, int max_iter,
                       CudaRuntime rt);
 

@@ -1,4 +1,8 @@
 @PACKAGE_INIT@
 
-include("${CMAKE_CURRENT_LIST_DIR}/silkTargets.cmake")
+if(NOT @SILK_FETCH_DEPENDENCIES@)
+    include(CMakeFindDependencyMacro)
+    find_dependency(TightInclusion CONFIG)
+endif()
 
+include("${CMAKE_CURRENT_LIST_DIR}/silkTargets.cmake")

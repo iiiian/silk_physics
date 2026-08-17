@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <cuda/std/utility>
 
 #include "backend/cuda/collision/bbox.cuh"
@@ -9,6 +10,7 @@ namespace silk::cuda {
 
 struct PointCollider {
   Bbox bbox;
+  uint32_t object_id;
   /// entity offset in global state
   int state_offset;
   /// vertex index
@@ -27,6 +29,7 @@ struct PointCollider {
 
 struct EdgeCollider {
   Bbox bbox;
+  uint32_t object_id;
   /// entity offset in global state
   int state_offset;
   /// vertex index
@@ -47,6 +50,7 @@ struct EdgeCollider {
 
 struct TriangleCollider {
   Bbox bbox;
+  uint32_t object_id;
   /// entity offset in global state
   int state_offset;
   /// vertex index

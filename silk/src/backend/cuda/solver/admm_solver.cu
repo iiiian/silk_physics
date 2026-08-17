@@ -62,13 +62,19 @@ void update_main(ObjRegistry& registry, int inner_iter, float rel_tol,
     auto admm_helper = registry.get<ClothADMMHelper>(e);
     assert(phy_state && l1_cache && admm_helper);
 
-    auto x = state.subspan(phy_state->state_offset, phy_state->state_num);
+    int offset = phy_state->state_offset;
+    int state_num = phy_state->state_num;
+    auto x = state.subspan(offset, state_num);
+    auto local_lhs_diag = lhs_diag.subspan(offset, state_num);
+    auto local_rhs = rhs.subspan(offset, state_num);
+    auto local_inertia_mod = inertia_mod.subspan(offset, state_num);
 
     // We don't update collision in inner loop, so except the first solve skip
     // factorization.
     bool is_lhs_changed = (inner_iter == 1);
     admm_helper->solve_main_var(rel_tol, abs_tol, *l1_cache, is_lhs_changed,
-                                lhs_diag, rhs, inertia_mod, x, rt);
+                                local_lhs_diag, local_rhs, local_inertia_mod, x,
+                                rt);
   }
 }
 
@@ -163,8 +169,8 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
     ObjRegistry& registry, ctd::span<const float> prev_state,
     ctd::span<const float> prev_velocity, ctd::span<float> inner_state,
     EqualityConstraints& pin_constraints,
-    EqualityConstraints* barrier_constraints, float dt,
-    Vec3f const_acceleration, CudaRuntime rt) {
+    ContactConstraints* contact_constraints, float dt, Vec3f const_acceleration,
+    CudaRuntime rt) {
   int state_num = prev_state.size();
   if (state_num != cached_state_num_) {
     Timer timer_alloc_cache("alloc device cache storage");
@@ -190,9 +196,6 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
   timer_compute_inertia_mod.end();
 
   pin_constraints.reset_lagrange_mul(rt);
-  if (barrier_constraints) {
-    barrier_constraints->reset_lagrange_mul(rt);
-  }
 
   Timer timer_inner_loop("inner loop");
   float h_init_primal_norm = 0.0f;
@@ -213,8 +216,8 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
       cu::fill_bytes(rt.stream, *lhs_diag_, 0);
       cu::fill_bytes(rt.stream, *rhs_, 0);
       pin_constraints.eval(*lhs_diag_, *rhs_, rt);
-      if (barrier_constraints) {
-        barrier_constraints->eval(*lhs_diag_, *rhs_, rt);
+      if (contact_constraints) {
+        contact_constraints->eval(*lhs_diag_, *rhs_, rt);
       }
 
       // Linear solve tolerance is scaled by ADMM residual reduction ratio.
@@ -245,11 +248,11 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
     pin_constraints.accum_primal_residual(inner_state, *scalar_primal_norm2_,
                                           *scalar_primal_scale_x2_,
                                           *scalar_primal_scale_aux2_, rt);
-    if (barrier_constraints) {
-      barrier_constraints->update_lagrange_mul(inner_state, rt);
-      barrier_constraints->accum_primal_residual(
+    if (contact_constraints) {
+      contact_constraints->update_aux_var_and_lagrange_mul(
           inner_state, *scalar_primal_norm2_, *scalar_primal_scale_x2_,
-          *scalar_primal_scale_aux2_, rt);
+          *scalar_primal_scale_aux2_, *dual_residual_, *dual_scale_curr_,
+          *dual_scale_prev_, rt);
     }
     timer_update_aux_and_mul.end();
 
@@ -276,8 +279,8 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
         scalar_load(scalar_primal_scale_aux2_->data(), rt);
     int h_primal_residual_dof = compute_physical_primal_residual_dof(registry);
     h_primal_residual_dof += pin_constraints.get_active_dof();
-    if (barrier_constraints) {
-      h_primal_residual_dof += barrier_constraints->get_active_dof();
+    if (contact_constraints) {
+      h_primal_residual_dof += contact_constraints->get_active_dof();
     }
     StoppingCriteria primal_criteria{h_primal_residual_dof, h_primal_scale_x2,
                                      h_primal_scale_aux2, non_linear_abs_tol,
@@ -323,8 +326,8 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
   // Small violation of constraints will cause later zero toi.
   Timer timer_enforce_constraints("enforce constraints");
   pin_constraints.enforce(inner_state, rt);
-  if (barrier_constraints) {
-    barrier_constraints->enforce(inner_state, rt);
+  if (contact_constraints) {
+    contact_constraints->project(inner_state, rt);
   }
   timer_enforce_constraints.end();
 

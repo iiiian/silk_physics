@@ -32,6 +32,8 @@ class Obstacle : public IObject {
   // transform
   glm::vec3 position_;
   glm::vec3 rotation_;
+  glm::vec3 angular_velocity_;
+  glm::vec3 rotation_pivot_;
   float scale_;
 
   bool collision_config_changed_;
@@ -67,7 +69,7 @@ class Obstacle : public IObject {
   void draw() override;
 
   bool init_sim() override;
-  bool sim_step_pre() override;
+  bool sim_step_pre(float dt) override;
   bool sim_step_post(float current_time) override;
   bool exit_sim() override;
 
