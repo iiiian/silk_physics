@@ -310,21 +310,21 @@ void ClothADMMHelper::solve_main_var(float rel_tol, float abs_tol,
                                      ctd::span<const float> extern_rhs,
                                      ctd::span<const float> inertia_mod,
                                      ctd::span<float> state, CudaRuntime rt) {
-  Timer timer_copy_cached("copy cached lhs and rhs");
+  Timer timer_copy_cached("copy cached lhs and rhs", rt);
   auto lhs_diag = alloc<float>(rt, l1_cache.state_num);
   cu::copy_bytes(rt.stream, extern_lhs, lhs_diag);
   auto rhs = alloc<float>(rt, l1_cache.state_num);
   cu::copy_bytes(rt.stream, extern_rhs, rhs);
   timer_copy_cached.end();
 
-  Timer timer_assemble_inertia_bending("assemble inertia and bending");
+  Timer timer_assemble_inertia_bending("assemble inertia and bending", rt);
   int grid_num = div_round_up(l1_cache.state_num, 128);
   assemble_inertia_and_bending<<<grid_num, 128, 0, rt.stream.get()>>>(
       l1_cache.dt, *l1_cache.mass, inertia_mod, *l1_cache.bending_rhs, lhs_diag,
       rhs);
   timer_assemble_inertia_bending.end();
 
-  Timer timer_assemble_elastic_rhs("assemble elastic rhs");
+  Timer timer_assemble_elastic_rhs("assemble elastic rhs", rt);
   grid_num = div_round_up(l1_cache.face_num, 128);
   assemble_elastic_rhs<<<grid_num, 128, 0, rt.stream.get()>>>(
       l1_cache.face_num, l1_cache.penalty, *l1_cache.faces,
@@ -332,7 +332,7 @@ void ClothADMMHelper::solve_main_var(float rel_tol, float abs_tol,
   timer_assemble_elastic_rhs.end();
 
   DynamicBSRView dyn_A{lhs_diag, l1_cache.weighted_AA.view()};
-  Timer timer_mas_factorize("MAS solver factorize");
+  Timer timer_mas_factorize("MAS solver factorize", rt);
   if (is_lhs_changed) {
     linear_solver_.factorize(dyn_A, *l1_cache.part_offsets, rt);
   }
@@ -340,7 +340,7 @@ void ClothADMMHelper::solve_main_var(float rel_tol, float abs_tol,
 
   linear_solver_.abs_tol = abs_tol;
   linear_solver_.rel_tol = rel_tol;
-  Timer timer_mas_solve("MAS solve");
+  Timer timer_mas_solve("MAS solve", rt);
   auto status = linear_solver_.solve(dyn_A, rhs, state, rt);
   timer_mas_solve.end();
   // TODO: handle failure.

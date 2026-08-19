@@ -178,7 +178,7 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
     CudaRuntime rt) {
   int state_num = prev_state.size();
   if (state_num != cached_state_num_) {
-    Timer timer_alloc_cache("alloc device cache storage");
+    Timer timer_alloc_cache("alloc device cache storage", rt);
     lhs_diag_ = alloc<float>(rt, state_num, 0);
     rhs_ = alloc<float>(rt, state_num, 0);
     inertia_mod_ = alloc<float>(rt, state_num);
@@ -194,7 +194,7 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
     cached_state_num_ = state_num;
   }
 
-  Timer timer_compute_inertia_mod("compute intertia mod");
+  Timer timer_compute_inertia_mod("compute intertia mod", rt);
   int grid_num = div_round_up(state_num, 128);
   compute_inertia_mod<<<grid_num, 128, 0, rt.stream.get()>>>(
       dt, prev_state, prev_velocity, const_acceleration, *inertia_mod_);
@@ -202,7 +202,7 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
 
   pin_constraints.reset_lagrange_mul(rt);
 
-  Timer timer_inner_loop("inner loop");
+  Timer timer_inner_loop("inner loop", rt);
   float h_init_primal_norm = 0.0f;
   float h_init_dual_norm = 0.0f;
   float h_linear_tol_adaptive_ratio = 1.0f;
@@ -216,7 +216,7 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
 
     // Update main.
     if (inner_it != 0) {
-      Timer timer_update_main("update main");
+      Timer timer_update_main("update main", rt);
 
       cu::fill_bytes(rt.stream, *lhs_diag_, 0);
       cu::fill_bytes(rt.stream, *rhs_, 0);
@@ -238,7 +238,7 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
     }
 
     // Update aux and lagrange multipliers.
-    Timer timer_update_aux_and_mul("update aux var and multipliers");
+    Timer timer_update_aux_and_mul("update aux var and multipliers", rt);
     cu::fill_bytes(rt.stream, *scalar_primal_norm2_, 0);
     cu::fill_bytes(rt.stream, *scalar_primal_scale_x2_, 0);
     cu::fill_bytes(rt.stream, *scalar_primal_scale_aux2_, 0);
@@ -268,7 +268,7 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
       continue;
     }
 
-    Timer timer_convergence_check("convergence check");
+    Timer timer_convergence_check("convergence check", rt);
     auto [min, max] = min_max(inner_state, rt);
     if (!(std::isfinite(min) && std::isfinite(max))) {
       SPDLOG_ERROR("solver explodes");
@@ -331,7 +331,7 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
   timer_inner_loop.end();
 
   // Small violation of constraints will cause later zero toi.
-  Timer timer_enforce_constraints("enforce constraints");
+  Timer timer_enforce_constraints("enforce constraints", rt);
   pin_constraints.enforce(inner_state, rt);
   if (contact_constraints) {
     contact_constraints->project(inner_state, rt);
