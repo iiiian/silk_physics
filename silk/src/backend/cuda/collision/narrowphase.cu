@@ -82,9 +82,8 @@ float find_pt_min_toi(ctd::span<PTCCache> pt_ccache, const Vec3f& vf_err,
                       float time_start, float interval_time, float max_toi,
                       float minimum_separation, float tolerance, int max_iter,
                       CudaRuntime rt) {
-  std::vector<CCDQuery> unresolved =
-      make_pt_ccd_queries(pt_ccache, time_start, interval_time,
-                          minimum_separation, rt);
+  std::vector<CCDQuery> unresolved = make_pt_ccd_queries(
+      pt_ccache, time_start, interval_time, minimum_separation, rt);
   float local_max_toi = max_toi / interval_time;
   float local_tolerance = tolerance / interval_time;
   float local_toi = solve_min_toi<true>(unresolved, vf_err, local_max_toi,
@@ -96,9 +95,8 @@ float find_ee_min_toi(ctd::span<EECCache> ee_ccache, const Vec3f& ee_err,
                       float time_start, float interval_time, float max_toi,
                       float minimum_separation, float tolerance, int max_iter,
                       CudaRuntime rt) {
-  std::vector<CCDQuery> unresolved =
-      make_ee_ccd_queries(ee_ccache, time_start, interval_time,
-                          minimum_separation, rt);
+  std::vector<CCDQuery> unresolved = make_ee_ccd_queries(
+      ee_ccache, time_start, interval_time, minimum_separation, rt);
   float local_max_toi = max_toi / interval_time;
   float local_tolerance = tolerance / interval_time;
   float local_toi = solve_min_toi<false>(unresolved, ee_err, local_max_toi,

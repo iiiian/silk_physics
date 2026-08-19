@@ -15,8 +15,8 @@ constexpr int CUDA_THREADS = 128;
 
 __device__ void set_trajectory(const Vec3f& source_t0, const Vec3f& source_t1,
                                int state_offset, float time_start,
-                               float interval_time,
-                               Vec3f& position_t0, Vec3f& position_t1) {
+                               float interval_time, Vec3f& position_t0,
+                               Vec3f& position_t1) {
   Vec3f delta = vsub(source_t1, source_t0);
   if (state_offset == -1) {
     position_t0 = axpby(1.0f, source_t0, time_start, delta);
@@ -299,8 +299,7 @@ __global__ void reject_pt_queries(ctd::span<PTCCache> input, Vec3f err,
   auto [triangle, point] = input[query_index];
   CCDQuery query = make_pt_query(*point, *triangle, query_index, time_start,
                                  interval_time, minimum_separation);
-  bool leaf_may_collide =
-      fixed_depth_rejection<true>(query, err, 1.0f, lane);
+  bool leaf_may_collide = fixed_depth_rejection<true>(query, err, 1.0f, lane);
   bool query_may_collide = __any_sync(0xffffffff, leaf_may_collide);
 
   if (lane == 0 && query_may_collide) {
@@ -326,8 +325,7 @@ __global__ void reject_ee_queries(ctd::span<EECCache> input, Vec3f err,
   auto [edge_a, edge_b] = input[query_index];
   CCDQuery query = make_ee_query(*edge_a, *edge_b, query_index, time_start,
                                  interval_time, minimum_separation);
-  bool leaf_may_collide =
-      fixed_depth_rejection<false>(query, err, 1.0f, lane);
+  bool leaf_may_collide = fixed_depth_rejection<false>(query, err, 1.0f, lane);
   bool query_may_collide = __any_sync(0xffffffff, leaf_may_collide);
 
   if (lane == 0 && query_may_collide) {
@@ -370,9 +368,8 @@ __global__ void build_pt_queries(ctd::span<const PTCCache> candidates,
     return;
   }
   const auto& [triangle, point] = candidates[index];
-  queries[index] =
-      make_pt_query(*point, *triangle, index, time_start, interval_time,
-                    minimum_separation);
+  queries[index] = make_pt_query(*point, *triangle, index, time_start,
+                                 interval_time, minimum_separation);
 }
 
 __global__ void build_ee_queries(ctd::span<const EECCache> candidates,
@@ -384,9 +381,8 @@ __global__ void build_ee_queries(ctd::span<const EECCache> candidates,
     return;
   }
   const auto& [edge_a, edge_b] = candidates[index];
-  queries[index] =
-      make_ee_query(*edge_a, *edge_b, index, time_start, interval_time,
-                    minimum_separation);
+  queries[index] = make_ee_query(*edge_a, *edge_b, index, time_start,
+                                 interval_time, minimum_separation);
 }
 
 template <typename LaunchRejection>
@@ -424,8 +420,7 @@ std::vector<CCDQuery> run_ticcd_rejection(int query_num,
 }  // namespace
 
 std::vector<CCDQuery> make_pt_ccd_queries(ctd::span<PTCCache> pt_ccache,
-                                          float time_start,
-                                          float interval_time,
+                                          float time_start, float interval_time,
                                           float minimum_separation,
                                           CudaRuntime rt) {
   if (pt_ccache.empty()) {
@@ -439,8 +434,7 @@ std::vector<CCDQuery> make_pt_ccd_queries(ctd::span<PTCCache> pt_ccache,
 }
 
 std::vector<CCDQuery> make_ee_ccd_queries(ctd::span<EECCache> ee_ccache,
-                                          float time_start,
-                                          float interval_time,
+                                          float time_start, float interval_time,
                                           float minimum_separation,
                                           CudaRuntime rt) {
   if (ee_ccache.empty()) {

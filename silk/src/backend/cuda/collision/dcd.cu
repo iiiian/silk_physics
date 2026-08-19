@@ -87,11 +87,11 @@ __device__ ctd::optional<Collision> make_pt_collision(
         ax(coefficient(0), vsub(point.v0_t1, x0));
   }
   if (triangle.state_offset < 0) {
-    collision.prescribed_displacement = vadd(
-        collision.prescribed_displacement,
-        vadd(ax(coefficient(1), vsub(triangle.v0_t1, x1)),
-             vadd(ax(coefficient(2), vsub(triangle.v1_t1, x2)),
-                  ax(coefficient(3), vsub(triangle.v2_t1, x3)))));
+    collision.prescribed_displacement =
+        vadd(collision.prescribed_displacement,
+             vadd(ax(coefficient(1), vsub(triangle.v0_t1, x1)),
+                  vadd(ax(coefficient(2), vsub(triangle.v1_t1, x2)),
+                       ax(coefficient(3), vsub(triangle.v2_t1, x3)))));
   }
   collision.correction0 = ax(weight(0), correction);
   collision.correction1 = ax(weight(1), correction);
@@ -169,10 +169,10 @@ __device__ ctd::optional<Collision> make_ee_collision(
              ax(coefficient(1), vsub(edge_a.v1_t1, x1)));
   }
   if (edge_b.state_offset < 0) {
-    collision.prescribed_displacement = vadd(
-        collision.prescribed_displacement,
-        vadd(ax(coefficient(2), vsub(edge_b.v0_t1, x2)),
-             ax(coefficient(3), vsub(edge_b.v1_t1, x3))));
+    collision.prescribed_displacement =
+        vadd(collision.prescribed_displacement,
+             vadd(ax(coefficient(2), vsub(edge_b.v0_t1, x2)),
+                  ax(coefficient(3), vsub(edge_b.v1_t1, x3))));
   }
   collision.correction0 = ax(weight(0), correction);
   collision.correction1 = ax(weight(1), correction);

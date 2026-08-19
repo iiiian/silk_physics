@@ -20,15 +20,13 @@ struct CCDQuery {
 
 /// Build every point-triangle CCD query without applying GPU rejection.
 std::vector<CCDQuery> make_pt_ccd_queries(ctd::span<PTCCache> pt_ccache,
-                                          float time_start,
-                                          float interval_time,
+                                          float time_start, float interval_time,
                                           float minimum_separation,
                                           CudaRuntime rt);
 
 /// Build every edge-edge CCD query without applying GPU rejection.
 std::vector<CCDQuery> make_ee_ccd_queries(ctd::span<EECCache> ee_ccache,
-                                          float time_start,
-                                          float interval_time,
+                                          float time_start, float interval_time,
                                           float minimum_separation,
                                           CudaRuntime rt);
 
