@@ -12,6 +12,7 @@
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/ecs.hpp"
 #include "backend/cuda/simple_linalg.cuh"
+#include "backend/cuda/solver/admm_residual.cuh"
 
 namespace silk::cuda {
 
@@ -72,11 +73,9 @@ class ContactConstraints {
   void eval(ctd::span<float> lhs_diag, ctd::span<float> rhs,
             CudaRuntime rt) const;
 
-  void update_aux_var_and_lagrange_mul(
-      ctd::span<const float> state, ctd::span<float> primal_norm2,
-      ctd::span<float> primal_scale_x2, ctd::span<float> primal_scale_aux2,
-      ctd::span<float> dual_residual, ctd::span<float> dual_scale_curr,
-      ctd::span<float> dual_scale_prev, CudaRuntime rt);
+  void update_aux_var_and_lagrange_mul(ctd::span<const float> state,
+                                       ADMMResidualView residual,
+                                       CudaRuntime rt);
 
   /// Project vertices to feasible states.
   void project(ctd::span<float> state, CudaRuntime rt);

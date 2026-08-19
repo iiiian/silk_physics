@@ -89,12 +89,7 @@ __global__ void solve_and_update_elastic_aux(
     ctd::span<const float> area_sqrt,
     ctd::span<float> lagrange_mul,
     ctd::span<float> aux_var,
-    ctd::span<float> primal_norm2,
-    ctd::span<float> primal_scale_x2,
-    ctd::span<float> primal_scale_aux2,
-    ctd::span<float> dual_residual,
-    ctd::span<float> dual_scale_curr,
-    ctd::span<float> dual_scale_prev)
+    ADMMResidualView residual)
 // clang-format on
 {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -156,10 +151,11 @@ __global__ void solve_and_update_elastic_aux(
       int out_offset = 3 * faces[tid * 3 + i];
 #pragma unroll
       for (int j = 0; j < 3; ++j) {
-        atomicAdd(dual_residual.data() + out_offset + j, dual(3 * i + j));
-        atomicAdd(dual_scale_curr.data() + out_offset + j,
+        atomicAdd(residual.dual_residual.data() + out_offset + j,
+                  dual(3 * i + j));
+        atomicAdd(residual.dual_scale_curr.data() + out_offset + j,
                   dual_curr(3 * i + j));
-        atomicAdd(dual_scale_prev.data() + out_offset + j,
+        atomicAdd(residual.dual_scale_prev.data() + out_offset + j,
                   dual_prev(3 * i + j));
       }
     }
@@ -190,17 +186,17 @@ __global__ void solve_and_update_elastic_aux(
   __shared__ BlockReduce::TempStorage reduce_tmp;
   float reduced = BlockReduce(reduce_tmp).Sum(local_primal_norm2);
   if (threadIdx.x == 0) {
-    atomicAdd(primal_norm2.data(), reduced);
+    atomicAdd(residual.primal_norm2, reduced);
   }
   __syncthreads();
   reduced = BlockReduce(reduce_tmp).Sum(local_primal_scale_x2);
   if (threadIdx.x == 0) {
-    atomicAdd(primal_scale_x2.data(), reduced);
+    atomicAdd(residual.primal_scale_x2, reduced);
   }
   __syncthreads();
   reduced = BlockReduce(reduce_tmp).Sum(local_primal_scale_aux2);
   if (threadIdx.x == 0) {
-    atomicAdd(primal_scale_aux2.data(), reduced);
+    atomicAdd(residual.primal_scale_aux2, reduced);
   }
 }
 
@@ -289,10 +285,7 @@ void ClothADMMHelper::reset_aux_lagrange_mul(CudaRuntime rt) {
 
 void ClothADMMHelper::update_aux_var_and_lagrange_mul(
     float max_lagrange_mul, const ClothAssemblyL1Cache& l1_cache,
-    ctd::span<const float> state, ctd::span<float> primal_residual_norm2,
-    ctd::span<float> primal_scale_x2, ctd::span<float> primal_scale_aux2,
-    ctd::span<float> dual_residual, ctd::span<float> dual_scale_curr,
-    ctd::span<float> dual_scale_prev, CudaRuntime rt) {
+    ctd::span<const float> state, ADMMResidualView residual, CudaRuntime rt) {
   int grid_num = div_round_up(l1_cache.face_num, 128);
   // clang-format off
   solve_and_update_elastic_aux<<<grid_num, 128, 0, rt.stream.get()>>>(
@@ -306,12 +299,7 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
         *l1_cache.area_sqrt,
         *ue_,
         *ze_,
-        primal_residual_norm2,
-        primal_scale_x2,
-        primal_scale_aux2,
-        dual_residual,
-        dual_scale_curr,
-        dual_scale_prev);
+        residual);
   // clang-format on
 }
 

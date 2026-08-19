@@ -102,14 +102,13 @@ __global__ void build_contacts(ctd::span<const Collision> collisions,
     contact.state_offset(slot) = state_index;
     if (state_index < 0) {
       // Fold the obstacle reference position into the affine term k_c.
-      contact.affine_offset = vadd(
-          contact.affine_offset,
-          ax(coefficient, collision_position(collision, slot)));
+      contact.affine_offset =
+          vadd(contact.affine_offset,
+               ax(coefficient, collision_position(collision, slot)));
       continue;
     }
     if (collision.inv_mass(slot) > 0.0f) {
-      scatter_normalization +=
-          coefficient * coefficient / weight[state_index];
+      scatter_normalization += coefficient * coefficient / weight[state_index];
     }
   }
 
@@ -120,8 +119,7 @@ __global__ void build_contacts(ctd::span<const Collision> collisions,
       vadd(contact.affine_offset, collision.prescribed_displacement);
   float reference_normal = dot(reference_relative_position, contact.normal);
   Vec3f reference_tangent =
-      vsub(reference_relative_position,
-           ax(reference_normal, contact.normal));
+      vsub(reference_relative_position, ax(reference_normal, contact.normal));
   contact.affine_offset = vsub(contact.affine_offset, reference_tangent);
 
   assert(scatter_normalization > 0.0f);
@@ -218,8 +216,7 @@ __global__ void initialize_aux(ctd::span<const float> state,
 __global__ void apply_correction_group(
     ctd::span<const FrictionContact> contacts,
     ctd::span<const int> grouped_contact_indices,
-    ctd::span<const Vec3f> contact_correction,
-    ctd::span<float> aux_position) {
+    ctd::span<const Vec3f> contact_correction, ctd::span<float> aux_position) {
   int local_index = blockIdx.x * blockDim.x + threadIdx.x;
   if (local_index >= grouped_contact_indices.size()) {
     return;
@@ -248,8 +245,7 @@ __global__ void apply_correction_group(
 __global__ void solve_contact_group(
     ctd::span<const FrictionContact> contacts,
     ctd::span<const int> grouped_contact_indices,
-    ctd::span<Vec3f> contact_correction,
-    ctd::span<float> aux_position) {
+    ctd::span<Vec3f> contact_correction, ctd::span<float> aux_position) {
   int local_index = blockIdx.x * blockDim.x + threadIdx.x;
   if (local_index >= grouped_contact_indices.size()) {
     return;
@@ -276,8 +272,7 @@ __global__ void solve_contact_group(
 
   // Solve the isotropic one-contact problem so that the new u satisfies the
   // Signorini–Coulomb law.
-  Vec3f u_new =
-      solve_coulomb_contact(u_star, contact.normal, contact.friction);
+  Vec3f u_new = solve_coulomb_contact(u_star, contact.normal, contact.friction);
 
   // Update the saved contact-space correction:
   // Δu ← u_new − u,  r̄_c ← r̄_c + Δu.
@@ -322,9 +317,7 @@ __global__ void update_contact_multiplier(
     ctd::span<const float> state, ctd::span<const float> weight,
     ctd::span<const float> aux_position,
     ctd::span<const float> prev_aux_position, ctd::span<float> eta,
-    ctd::span<float> primal_norm2, ctd::span<float> primal_scale_x2,
-    ctd::span<float> primal_scale_aux2, ctd::span<float> dual_residual,
-    ctd::span<float> dual_scale_curr, ctd::span<float> dual_scale_prev) {
+    ADMMResidualView residual) {
   int index = blockIdx.x * blockDim.x + threadIdx.x;
   float local_primal_norm2 = 0.0f;
   float local_primal_scale_x2 = 0.0f;
@@ -337,18 +330,18 @@ __global__ void update_contact_multiplier(
     float w = weight[index];
 
     // Unscaled ADMM dual update: ηˡ ← ηˡ⁻¹ + W(pˡ − xˡ).
-    float residual = x - p;
+    float primal_residual = x - p;
     eta[index] += w * (p - x);
 
     // Accumulate the primal residual xˡ − pˡ and the dual residual
     // W(pˡ − pˡ⁻¹) used by the stopping criterion.
-    local_primal_norm2 = residual * residual;
-    dual_residual[index] += w * (p - p_prev);
+    local_primal_norm2 = primal_residual * primal_residual;
+    residual.dual_residual[index] += w * (p - p_prev);
 
     // The stored multiplier is already the unscaled dual ηˡ.
     float dual_scale = eta[index];
-    dual_scale_curr[index] += dual_scale;
-    dual_scale_prev[index] += dual_scale;
+    residual.dual_scale_curr[index] += dual_scale;
+    residual.dual_scale_prev[index] += dual_scale;
   }
 
   using BlockReduce = cub::BlockReduce<float, 128>;
@@ -357,17 +350,17 @@ __global__ void update_contact_multiplier(
   // Reduce the three primal stopping-criterion terms over the block.
   float reduced = BlockReduce(tmp).Sum(local_primal_norm2);
   if (threadIdx.x == 0) {
-    atomicAdd(primal_norm2.data(), reduced);
+    atomicAdd(residual.primal_norm2, reduced);
   }
   __syncthreads();
   reduced = BlockReduce(tmp).Sum(local_primal_scale_x2);
   if (threadIdx.x == 0) {
-    atomicAdd(primal_scale_x2.data(), reduced);
+    atomicAdd(residual.primal_scale_x2, reduced);
   }
   __syncthreads();
   reduced = BlockReduce(tmp).Sum(local_primal_scale_aux2);
   if (threadIdx.x == 0) {
-    atomicAdd(primal_scale_aux2.data(), reduced);
+    atomicAdd(residual.primal_scale_aux2, reduced);
   }
 }
 
@@ -466,11 +459,10 @@ int ContactConstraints::append_contacts(ctd::span<const Collision> collisions,
   int new_contact_num = new_collisions.size();
   resize_buffer(old_contact_num + new_contact_num, contacts_, rt);
   resize_buffer(old_contact_num + new_contact_num, contact_correction_, rt);
-  cu::fill_bytes(
-      rt.stream,
-      ctd::span<Vec3f>(contact_correction_.data() + old_contact_num,
-                       new_contact_num),
-      0);
+  cu::fill_bytes(rt.stream,
+                 ctd::span<Vec3f>(contact_correction_.data() + old_contact_num,
+                                  new_contact_num),
+                 0);
 
   auto device_collisions = vec_like_to_device<Collision>(new_collisions, rt);
   ctd::span<FrictionContact> new_contacts(contacts_.data() + old_contact_num,
@@ -581,17 +573,14 @@ void ContactConstraints::solve_contacts(CudaRuntime rt) {
 }
 
 void ContactConstraints::update_aux_var_and_lagrange_mul(
-    ctd::span<const float> state, ctd::span<float> primal_norm2,
-    ctd::span<float> primal_scale_x2, ctd::span<float> primal_scale_aux2,
-    ctd::span<float> dual_residual, ctd::span<float> dual_scale_curr,
-    ctd::span<float> dual_scale_prev, CudaRuntime rt) {
+    ctd::span<const float> state, ADMMResidualView residual, CudaRuntime rt) {
   // Preserve pˡ⁻¹ for the dual residual W(pˡ − pˡ⁻¹).
   cu::copy_bytes(rt.stream, aux_position_, prev_aux_position_);
   int grid_num = div_round_up(state.size(), 128);
 
   // Start the contact projection from q ← x − W⁻¹η, then p ← q.
-  initialize_aux<<<grid_num, 128, 0, rt.stream.get()>>>(
-      state, weight_, eta_, aux_position_);
+  initialize_aux<<<grid_num, 128, 0, rt.stream.get()>>>(state, weight_, eta_,
+                                                        aux_position_);
 
   // Warm start Algorithm 3 with r̄ from the preceding ADMM iteration, then
   // perform the colored Gauss–Seidel projection.
@@ -600,9 +589,7 @@ void ContactConstraints::update_aux_var_and_lagrange_mul(
 
   // Finish ADMM Step (iii) and accumulate convergence residuals.
   update_contact_multiplier<<<grid_num, 128, 0, rt.stream.get()>>>(
-      state, weight_, aux_position_, prev_aux_position_, eta_,
-      primal_norm2, primal_scale_x2, primal_scale_aux2, dual_residual,
-      dual_scale_curr, dual_scale_prev);
+      state, weight_, aux_position_, prev_aux_position_, eta_, residual);
 }
 
 void ContactConstraints::project(ctd::span<float> state, CudaRuntime rt) {

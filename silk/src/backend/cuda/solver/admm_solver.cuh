@@ -5,8 +5,9 @@
 #include "backend/cuda/cuda_utils.cuh"
 #include "backend/cuda/ecs.hpp"
 #include "backend/cuda/simple_linalg.cuh"
-#include "backend/cuda/solver/equality_constraints.cuh"
+#include "backend/cuda/solver/admm_residual.cuh"
 #include "backend/cuda/solver/contact_constraints.cuh"
+#include "backend/cuda/solver/equality_constraints.cuh"
 
 namespace silk::cuda {
 

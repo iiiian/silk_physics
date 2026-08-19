@@ -4,6 +4,7 @@
 #include <cuda/std/span>
 
 #include "backend/cuda/cuda_utils.cuh"
+#include "backend/cuda/solver/admm_residual.cuh"
 
 namespace silk::cuda {
 
@@ -34,10 +35,7 @@ class EqualityConstraints {
   void eval(ctd::span<float> lhs_diag, ctd::span<float> rhs,
             CudaRuntime rt) const;
   void accum_primal_residual(ctd::span<const float> state,
-                             ctd::span<float> primal_norm2,
-                             ctd::span<float> primal_scale_x2,
-                             ctd::span<float> primal_scale_target2,
-                             CudaRuntime rt) const;
+                             ADMMResidualView residual, CudaRuntime rt) const;
   void enforce(ctd::span<float> state, CudaRuntime rt);
 };
 

@@ -20,12 +20,10 @@ namespace silk::cuda {
 
 namespace {
 
-void update_aux_and_lagrange_mul(
-    ObjRegistry& registry, float max_lagrange_mul, ctd::span<const float> state,
-    ctd::span<float> primal_norm2, ctd::span<float> primal_scale_x2,
-    ctd::span<float> primal_scale_aux2, ctd::span<float> dual_residual,
-    ctd::span<float> dual_scale_curr, ctd::span<float> dual_scale_prev,
-    CudaRuntime rt) {
+void update_aux_and_lagrange_mul(ObjRegistry& registry, float max_lagrange_mul,
+                                 ctd::span<const float> state,
+                                 ADMMResidualView global_residual,
+                                 CudaRuntime rt) {
   auto clothes =
       registry.get_entity_with_components<PhysicalState, ClothAssemblyL1Cache,
                                           ClothADMMHelper>();
@@ -38,14 +36,21 @@ void update_aux_and_lagrange_mul(
     int off = phy_state->state_offset;
     int num = phy_state->state_num;
     auto sub_state = state.subspan(off, num);
-    auto sub_dual = dual_residual.subspan(off, num);
-    auto sub_dual_scale_curr = dual_scale_curr.subspan(off, num);
-    auto sub_dual_scale_prev = dual_scale_prev.subspan(off, num);
+    auto sub_dual = global_residual.dual_residual.subspan(off, num);
+    auto sub_dual_scale_curr =
+        global_residual.dual_scale_curr.subspan(off, num);
+    auto sub_dual_scale_prev =
+        global_residual.dual_scale_prev.subspan(off, num);
 
-    admm_helper->update_aux_var_and_lagrange_mul(
-        max_lagrange_mul, *l1_cache, sub_state, primal_norm2, primal_scale_x2,
-        primal_scale_aux2, sub_dual, sub_dual_scale_curr, sub_dual_scale_prev,
-        rt);
+    ADMMResidualView residual{global_residual.primal_norm2,
+                              global_residual.primal_scale_x2,
+                              global_residual.primal_scale_aux2,
+                              sub_dual,
+                              sub_dual_scale_curr,
+                              sub_dual_scale_prev};
+
+    admm_helper->update_aux_var_and_lagrange_mul(max_lagrange_mul, *l1_cache,
+                                                 sub_state, residual, rt);
   }
 }
 
@@ -240,19 +245,21 @@ std::optional<ADMMSolver::Error> ADMMSolver::solve(
     cu::fill_bytes(rt.stream, *dual_residual_, 0);
     cu::fill_bytes(rt.stream, *dual_scale_curr_, 0);
     cu::fill_bytes(rt.stream, *dual_scale_prev_, 0);
+    ADMMResidualView residual{
+        scalar_primal_norm2_->data(),
+        scalar_primal_scale_x2_->data(),
+        scalar_primal_scale_aux2_->data(),
+        *dual_residual_,
+        *dual_scale_curr_,
+        *dual_scale_prev_,
+    };
     update_aux_and_lagrange_mul(registry, max_lagrange_mul, inner_state,
-                                *scalar_primal_norm2_, *scalar_primal_scale_x2_,
-                                *scalar_primal_scale_aux2_, *dual_residual_,
-                                *dual_scale_curr_, *dual_scale_prev_, rt);
+                                residual, rt);
     pin_constraints.update_lagrange_mul(inner_state, rt);
-    pin_constraints.accum_primal_residual(inner_state, *scalar_primal_norm2_,
-                                          *scalar_primal_scale_x2_,
-                                          *scalar_primal_scale_aux2_, rt);
+    pin_constraints.accum_primal_residual(inner_state, residual, rt);
     if (contact_constraints) {
-      contact_constraints->update_aux_var_and_lagrange_mul(
-          inner_state, *scalar_primal_norm2_, *scalar_primal_scale_x2_,
-          *scalar_primal_scale_aux2_, *dual_residual_, *dual_scale_curr_,
-          *dual_scale_prev_, rt);
+      contact_constraints->update_aux_var_and_lagrange_mul(inner_state,
+                                                           residual, rt);
     }
     timer_update_aux_and_mul.end();
 

@@ -77,10 +77,10 @@ __global__ void eval_kernel(ctd::span<const bool> indicator,
   }
 }
 
-__global__ void accum_primal_residual_kernel(
-    ctd::span<const bool> indicator, ctd::span<const float> target,
-    ctd::span<const float> state, ctd::span<float> primal_norm2,
-    ctd::span<float> primal_scale_x2, ctd::span<float> primal_scale_target2) {
+__global__ void accum_primal_residual_kernel(ctd::span<const bool> indicator,
+                                             ctd::span<const float> target,
+                                             ctd::span<const float> state,
+                                             ADMMResidualView residual) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   float local_norm2 = 0.0f;
   float local_scale_x2 = 0.0f;
@@ -97,17 +97,17 @@ __global__ void accum_primal_residual_kernel(
   __shared__ BlockReduce::TempStorage tmp;
   float reduced = BlockReduce(tmp).Sum(local_norm2);
   if (threadIdx.x == 0) {
-    atomicAdd(primal_norm2.data(), reduced);
+    atomicAdd(residual.primal_norm2, reduced);
   }
   __syncthreads();
   reduced = BlockReduce(tmp).Sum(local_scale_x2);
   if (threadIdx.x == 0) {
-    atomicAdd(primal_scale_x2.data(), reduced);
+    atomicAdd(residual.primal_scale_x2, reduced);
   }
   __syncthreads();
   reduced = BlockReduce(tmp).Sum(local_scale_target2);
   if (threadIdx.x == 0) {
-    atomicAdd(primal_scale_target2.data(), reduced);
+    atomicAdd(residual.primal_scale_aux2, reduced);
   }
 }
 
@@ -189,14 +189,12 @@ void EqualityConstraints::eval(ctd::span<float> lhs_diag, ctd::span<float> rhs,
       indicator, target, penalty, lagrange_mul, lhs_diag, rhs);
 }
 
-void EqualityConstraints::accum_primal_residual(
-    ctd::span<const float> state, ctd::span<float> primal_norm2,
-    ctd::span<float> primal_scale_x2, ctd::span<float> primal_scale_target2,
-    CudaRuntime rt) const {
+void EqualityConstraints::accum_primal_residual(ctd::span<const float> state,
+                                                ADMMResidualView residual,
+                                                CudaRuntime rt) const {
   int grid_num = div_round_up(indicator.size(), 128);
   accum_primal_residual_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
-      indicator, target, state, primal_norm2, primal_scale_x2,
-      primal_scale_target2);
+      indicator, target, state, residual);
 }
 
 void EqualityConstraints::enforce(ctd::span<float> state, CudaRuntime rt) {

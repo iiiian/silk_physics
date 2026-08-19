@@ -4,6 +4,7 @@
 
 #include "backend/cuda/assembly/cloth_assembly_l1_cache.cuh"
 #include "backend/cuda/cuda_utils.cuh"
+#include "backend/cuda/solver/admm_residual.cuh"
 #include "backend/cuda/solver/mas_cg_solver.cuh"
 
 namespace silk::cuda {
@@ -27,21 +28,11 @@ class ClothADMMHelper {
   /// @param[in] max_lagrange_mul         Clamp lagrange multipliers to this value.
   /// @param[in] l1_cache                 Precomputed assembly data.
   /// @param[in] state                    Current position vector.
-  /// @param[out] primal_residual_norm2   ||W(Sx - z)||^2.
-  /// @param[out] primal_scale_x2         ||W * Sx||^2.
-  /// @param[out] primal_scale_aux2       ||W * z||^2.
-  /// @param[out] dual_residual           rho * S^T W^T W (z_curr - z_prev).
-  /// @param[out] dual_scale_curr         rho * S^T W^T W * z_curr.
-  /// @param[out] dual_scale_prev         rho * S^T W^T W * z_prev.
+  /// @param[out] residual                 ADMM primal and dual residuals.
   void update_aux_var_and_lagrange_mul(float max_lagrange_mul,
                                        const ClothAssemblyL1Cache& l1_cache,
                                        ctd::span<const float> state,
-                                       ctd::span<float> primal_residual_norm2,
-                                       ctd::span<float> primal_scale_x2,
-                                       ctd::span<float> primal_scale_aux2,
-                                       ctd::span<float> dual_residual,
-                                       ctd::span<float> dual_scale_curr,
-                                       ctd::span<float> dual_scale_prev,
+                                       ADMMResidualView residual,
                                        CudaRuntime rt);
   // clang-format on
 
