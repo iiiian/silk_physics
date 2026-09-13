@@ -8,6 +8,7 @@
 #include <cuda/algorithm>
 #include <cuda/std/array>
 #include <cuda/std/bit>
+#include <cuda/std/cmath>
 #include <cuda/std/utility>
 #include <cuda/warp>
 #include <stdexcept>
