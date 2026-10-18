@@ -21,12 +21,9 @@ namespace {
 
 constexpr float TOLERANCE = 1e-6f;
 
-cuda::Vec3f make_cuda_vector(const Eigen::Vector3f& value) {
-  return cuda::Vec3f::vec_like(value);
-}
+cuda::Vec3f make_cuda_vector(const Eigen::Vector3f& value) { return cuda::Vec3f::vec_like(value); }
 
-cuda::CCDQuery make_cuda_query(const Query& input, QueryKind kind,
-                               int source_index) {
+cuda::CCDQuery make_cuda_query(const Query& input, QueryKind kind, int source_index) {
   cuda::CCDQuery query{};
   query.source_index = source_index;
   query.minimal_separation = compute_minimum_separation(input, kind);
@@ -37,23 +34,20 @@ cuda::CCDQuery make_cuda_query(const Query& input, QueryKind kind,
   return query;
 }
 
-QueryOutput solve_query(const Query& input, QueryKind kind,
-                        const Eigen::Array3f& numerical_error,
+QueryOutput solve_query(const Query& input, QueryKind kind, const Eigen::Array3f& numerical_error,
                         int max_iterations) {
   std::optional<cpu::CCDResult> result;
   float minimum_separation = compute_minimum_separation(input, kind);
   if (kind == QueryKind::VF) {
-    result = cpu::vertex_face_ccd(
-        input.vertices[0], input.vertices[1], input.vertices[2],
-        input.vertices[3], input.vertices[4], input.vertices[5],
-        input.vertices[6], input.vertices[7], numerical_error,
-        minimum_separation, TOLERANCE, max_iterations, false);
+    result = cpu::vertex_face_ccd(input.vertices[0], input.vertices[1], input.vertices[2],
+                                  input.vertices[3], input.vertices[4], input.vertices[5],
+                                  input.vertices[6], input.vertices[7], numerical_error,
+                                  minimum_separation, TOLERANCE, max_iterations, false);
   } else {
-    result = cpu::edge_edge_ccd(
-        input.vertices[0], input.vertices[1], input.vertices[2],
-        input.vertices[3], input.vertices[4], input.vertices[5],
-        input.vertices[6], input.vertices[7], numerical_error,
-        minimum_separation, TOLERANCE, max_iterations, false);
+    result = cpu::edge_edge_ccd(input.vertices[0], input.vertices[1], input.vertices[2],
+                                input.vertices[3], input.vertices[4], input.vertices[5],
+                                input.vertices[6], input.vertices[7], numerical_error,
+                                minimum_separation, TOLERANCE, max_iterations, false);
   }
   return {.toi = result ? result->t(0) : 1.0f, .hit = result.has_value()};
 }
@@ -80,8 +74,7 @@ class SilkHybridTiccdAdapter final : public GpuAdapter {
     if (!queries.empty()) {
       Eigen::Vector3f error = queries.front().err.matrix();
       err_ = make_cuda_vector(error);
-      device_queries_ =
-          cuda::vec_like_to_device<cuda::CCDQuery>(device_input_, runtime());
+      device_queries_ = cuda::vec_like_to_device<cuda::CCDQuery>(device_input_, runtime());
     } else {
       device_queries_.reset();
     }
@@ -95,28 +88,24 @@ class SilkHybridTiccdAdapter final : public GpuAdapter {
     }
 
     std::vector<cuda::CCDQuery> unresolved = cuda::ticcd_rejection(
-        ::cuda::std::span<const cuda::CCDQuery>(device_queries_->data(),
-                                                device_queries_->size()),
+        ::cuda::std::span<const cuda::CCDQuery>(device_queries_->data(), device_queries_->size()),
         kind_ == QueryKind::VF, err_, runtime());
     Eigen::Array3f numerical_error{err_(0), err_(1), err_(2)};
     int unresolved_num = unresolved.size();
     tbb::parallel_for(0, unresolved_num, [&](int i) {
       int source_index = unresolved[i].source_index;
       if (source_index < 0 || source_index >= output_.size()) {
-        throw std::runtime_error(
-            "Silk hybrid TICCD returned an invalid source query");
+        throw std::runtime_error("Silk hybrid TICCD returned an invalid source query");
       }
-      output_[source_index] = solve_query(input_[source_index], kind_,
-                                          numerical_error, max_iterations_);
+      output_[source_index] =
+          solve_query(input_[source_index], kind_, numerical_error, max_iterations_);
     });
   }
 
   std::span<const QueryOutput> output() const override { return output_; }
 
  private:
-  cuda::CudaRuntime runtime() {
-    return {.stream = stream_, .mr = memory_pool_.as_ref()};
-  }
+  cuda::CudaRuntime runtime() { return {.stream = stream_, .mr = memory_pool_.as_ref()}; }
 
   QueryKind kind_;
   int max_iterations_;
@@ -132,8 +121,7 @@ class SilkHybridTiccdAdapter final : public GpuAdapter {
 
 }  // namespace
 
-std::unique_ptr<GpuAdapter> make_silk_hybrid_ticcd_adapter(QueryKind kind,
-                                                           int max_iterations) {
+std::unique_ptr<GpuAdapter> make_silk_hybrid_ticcd_adapter(QueryKind kind, int max_iterations) {
   return std::make_unique<SilkHybridTiccdAdapter>(kind, max_iterations);
 }
 

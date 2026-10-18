@@ -48,8 +48,7 @@ void batch_reset_cloth_simulation(Registry& registry) {
   }
 }
 
-bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt,
-                              int state_offset) {
+bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt, int state_offset) {
   uint32_t e = entity;
 
   auto cloth_config = registry.get<ClothConfig>(e);
@@ -83,8 +82,8 @@ bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt,
   if (context && context->dt == dt) {
     context->has_barrier_constrain = false;
   } else {
-    auto new_context = ClothSolverContext::make_cloth_solver_context(
-        *cloth_config, *topology, *pin, dt);
+    auto new_context =
+        ClothSolverContext::make_cloth_solver_context(*cloth_config, *topology, *pin, dt);
     if (!new_context) {
       return false;
     }
@@ -94,8 +93,8 @@ bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt,
 
   auto collider = registry.get<ObjectCollider>(e);
   if (!collider) {
-    auto new_collider = ObjectCollider(e, *collision_config, *mesh, *pin,
-                                       context->mass, state_offset);
+    auto new_collider =
+        ObjectCollider(e, *collision_config, *mesh, *pin, context->mass, state_offset);
     collider = registry.set(e, std::move(new_collider));
   } else {
     collider->state_offset = state_offset;
@@ -105,8 +104,7 @@ bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt,
   return true;
 }
 
-void compute_cloth_invariant_rhs(const ClothSolverContext& solver_context,
-                                 const Pin& pin,
+void compute_cloth_invariant_rhs(const ClothSolverContext& solver_context, const Pin& pin,
                                  Eigen::Ref<Eigen::VectorXf> rhs) {
   rhs.setZero();
 
@@ -120,8 +118,7 @@ void compute_cloth_invariant_rhs(const ClothSolverContext& solver_context,
   rhs += solver_context.C0;
 }
 
-void batch_compute_cloth_invariant_rhs(Registry& registry,
-                                       Eigen::VectorXf& rhs) {
+void batch_compute_cloth_invariant_rhs(Registry& registry, Eigen::VectorXf& rhs) {
   for (uint32_t e : registry.get_all_entities()) {
     auto state = registry.get<ObjectState>(e);
     auto context = registry.get<ClothSolverContext>(e);
@@ -141,13 +138,12 @@ void batch_compute_cloth_invariant_rhs(Registry& registry,
 ///  and then apply a CHOLMOD up/down update to the Cholesky factorization in
 ///  the permuted order expected by CHOLMOD (using `L.Perm`). This realizes
 ///  H' = H + C.
-bool compute_cloth_outer_loop(
-    Eigen::Ref<const Eigen::VectorXf> state,
-    Eigen::Ref<const Eigen::VectorXf> state_velocity,
-    Eigen::Ref<const Eigen::VectorXf> state_acceleration,
-    Eigen::Ref<const Eigen::VectorXf> barrier_lhs,
-    Eigen::Ref<const Eigen::VectorXf> barrier_rhs,
-    ClothSolverContext& solver_context, Eigen::Ref<Eigen::VectorXf> rhs) {
+bool compute_cloth_outer_loop(Eigen::Ref<const Eigen::VectorXf> state,
+                              Eigen::Ref<const Eigen::VectorXf> state_velocity,
+                              Eigen::Ref<const Eigen::VectorXf> state_acceleration,
+                              Eigen::Ref<const Eigen::VectorXf> barrier_lhs,
+                              Eigen::Ref<const Eigen::VectorXf> barrier_rhs,
+                              ClothSolverContext& solver_context, Eigen::Ref<Eigen::VectorXf> rhs) {
   auto& s = solver_context;
 
   // Momentum contribution to RHS.
@@ -183,8 +179,7 @@ bool compute_cloth_outer_loop(
   // Permute C according to L.Perm as suggested by CHOLMOD for up/down updates.
   int32_t* rset = static_cast<int32_t*>(s.L.raw()->Perm);
   int64_t rset_num = static_cast<int64_t>(s.L.raw()->n);
-  CholmodSparse C_perm =
-      cholmod_submatrix(&C_view, rset, rset_num, nullptr, -1, 1, 1, common);
+  CholmodSparse C_perm = cholmod_submatrix(&C_view, rset, rset_num, nullptr, -1, 1, 1, common);
   if (C_perm.is_empty()) {
     return false;
   }
@@ -197,21 +192,20 @@ bool compute_cloth_outer_loop(
   return true;
 }
 
-bool batch_compute_cloth_outer_loop(
-    Registry& registry, const Eigen::VectorXf& global_state,
-    const Eigen::VectorXf& global_state_velocity,
-    const Eigen::VectorXf& global_state_acceleration,
-    const BarrierConstrain& barrier_constrain, Eigen::VectorXf& rhs) {
+bool batch_compute_cloth_outer_loop(Registry& registry, const Eigen::VectorXf& global_state,
+                                    const Eigen::VectorXf& global_state_velocity,
+                                    const Eigen::VectorXf& global_state_acceleration,
+                                    const BarrierConstrain& barrier_constrain,
+                                    Eigen::VectorXf& rhs) {
   for (uint32_t e : registry.get_all_entities()) {
     auto obj_state = registry.get<ObjectState>(e);
     auto dynamic_data = registry.get<ClothSolverContext>(e);
 
     if (obj_state && dynamic_data) {
       auto seq = Eigen::seqN(obj_state->state_offset, obj_state->state_num);
-      if (!compute_cloth_outer_loop(
-              global_state(seq), global_state_velocity(seq),
-              global_state_acceleration(seq), barrier_constrain.lhs(seq),
-              barrier_constrain.rhs(seq), *dynamic_data, rhs(seq))) {
+      if (!compute_cloth_outer_loop(global_state(seq), global_state_velocity(seq),
+                                    global_state_acceleration(seq), barrier_constrain.lhs(seq),
+                                    barrier_constrain.rhs(seq), *dynamic_data, rhs(seq))) {
         return false;
       }
     }
@@ -235,8 +229,7 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
 
   // Project in‑plane elastic constraint (per‑face, threaded accumulation).
 
-  tbb::enumerable_thread_specific<Eigen::VectorXf> thread_rhs(
-      Eigen::VectorXf::Zero(state_num));
+  tbb::enumerable_thread_specific<Eigen::VectorXf> thread_rhs(Eigen::VectorXf::Zero(state_num));
   int ops_num = t.jacobian_ops.size();
   tbb::parallel_for(0, ops_num, [&](int i) {
     Eigen::Vector3i offset = 3 * F.row(i);
@@ -252,16 +245,14 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
     // SVD of deformation. Clamp singular values to form the projected
     // target T (rotation + limited stretch). Eigen does not return thin U/V
     // for 3x2, so compute full and slice.
-    Eigen::JacobiSVD<Eigen::Matrix<float, 3, 2>> svd(
-        D, Eigen::ComputeFullV | Eigen::ComputeFullU);
+    Eigen::JacobiSVD<Eigen::Matrix<float, 3, 2>> svd(D, Eigen::ComputeFullV | Eigen::ComputeFullU);
     Eigen::Vector2f sigma = svd.singularValues();
     sigma(0) = std::clamp(sigma(0), 0.9f, 1.1f);
     sigma(1) = std::clamp(sigma(1), 0.9f, 1.1f);
     // This is the projection: deformation F caused by pure rotation and
     // translation.
-    Eigen::Matrix<float, 3, 2> T = svd.matrixU().block<3, 2>(0, 0) *
-                                   sigma.asDiagonal() *
-                                   svd.matrixV().transpose();
+    Eigen::Matrix<float, 3, 2> T =
+        svd.matrixU().block<3, 2>(0, 0) * sigma.asDiagonal() * svd.matrixV().transpose();
 
     // Accumulate elastic RHS contribution, scatter back to global layout.
     float weight = config.elastic_stiffness * t.area(i);
@@ -282,8 +273,7 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
   cholmod_dense rhs_view = make_cholmod_dense_view(rhs);
   auto& L = (s.has_barrier_constrain) ? s.LB : s.L;
 
-  CholmodDense cholmod_solution =
-      cholmod_solve(CHOLMOD_A, L, &rhs_view, common);
+  CholmodDense cholmod_solution = cholmod_solve(CHOLMOD_A, L, &rhs_view, common);
   if (cholmod_solution.is_empty()) {
     return false;
   }
@@ -293,10 +283,8 @@ bool compute_cloth_inner_loop(const ClothConfig& config, const RMatrixX3i& F,
   return true;
 }
 
-bool batch_compute_cloth_inner_loop(Registry& registry,
-                                    const Eigen::VectorXf& global_state,
-                                    const Eigen::VectorXf& outer_rhs,
-                                    Eigen::VectorXf& solution) {
+bool batch_compute_cloth_inner_loop(Registry& registry, const Eigen::VectorXf& global_state,
+                                    const Eigen::VectorXf& outer_rhs, Eigen::VectorXf& solution) {
   for (uint32_t e : registry.get_all_entities()) {
     auto config = registry.get<ClothConfig>(e);
     auto mesh = registry.get<TriMesh>(e);
@@ -309,9 +297,8 @@ bool batch_compute_cloth_inner_loop(Registry& registry,
     }
 
     auto seq = Eigen::seqN(state->state_offset, state->state_num);
-    if (!compute_cloth_inner_loop(*config, mesh->F, *topology, *solver_context,
-                                  global_state(seq), outer_rhs(seq),
-                                  solution(seq))) {
+    if (!compute_cloth_inner_loop(*config, mesh->F, *topology, *solver_context, global_state(seq),
+                                  outer_rhs(seq), solution(seq))) {
       return false;
     }
   }

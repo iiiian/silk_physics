@@ -15,9 +15,8 @@ namespace eg = Eigen;
 
 std::string Query::to_string() const {
   std::stringstream ss;
-  std::string type_str = (type == QueryType::EdgeEdge)
-                             ? "Edge edge query: "
-                             : "Point triangle query: ";
+  std::string type_str =
+      (type == QueryType::EdgeEdge) ? "Edge edge query: " : "Point triangle query: ";
   std::string result_str = (result) ? "true" : "false";
   ss << type_str << "result = " << result_str << "\n";
   ss << "    line " << source_line << " from " << source << "\n";
@@ -65,14 +64,12 @@ double parse_rational(const std::string &num_str, const std::string &den_str) {
       throw std::runtime_error("zero denominator in CSV");
     }
   } catch (const std::exception &e) {
-    throw std::runtime_error("fail to parse rational: num = " + num_str +
-                             " den = " + den_str);
+    throw std::runtime_error("fail to parse rational: num = " + num_str + " den = " + den_str);
   }
   return num / den;
 }
 
-std::vector<Query> parse_queries_from_csv(const fs::path &path,
-                                          QueryType type) {
+std::vector<Query> parse_queries_from_csv(const fs::path &path, QueryType type) {
   std::ifstream in{path};
   if (!in) {
     throw std::runtime_error("cannot open " + path.string());
@@ -150,11 +147,9 @@ QueryCategory::QueryCategory(const fs::path &path) {
 
   fs::path edge_edge_dir = path / "edge-edge";
   fs::path point_triangle_dir = path / "vertex-face";
-  if (!(fs::is_directory(edge_edge_dir) &&
-        fs::is_directory(point_triangle_dir))) {
-    throw std::runtime_error(
-        "path " + path.string() +
-        " is missing edge-edge or vertex-face sub directory");
+  if (!(fs::is_directory(edge_edge_dir) && fs::is_directory(point_triangle_dir))) {
+    throw std::runtime_error("path " + path.string() +
+                             " is missing edge-edge or vertex-face sub directory");
   }
 
   this->name = path.filename();
@@ -162,17 +157,15 @@ QueryCategory::QueryCategory(const fs::path &path) {
   for (const auto &entry : fs::directory_iterator{edge_edge_dir}) {
     auto entry_path = entry.path();
     if (entry.is_regular_file() && entry_path.extension() == ".csv") {
-      vector_append(this->edge_edge,
-                    parse_queries_from_csv(entry_path, QueryType::EdgeEdge));
+      vector_append(this->edge_edge, parse_queries_from_csv(entry_path, QueryType::EdgeEdge));
     }
   }
   // point triangle queries
   for (const auto &entry : fs::directory_iterator{point_triangle_dir}) {
     auto entry_path = entry.path();
     if (entry.is_regular_file() && entry_path.extension() == ".csv") {
-      vector_append(
-          this->point_triangle,
-          parse_queries_from_csv(entry_path, QueryType::PointTriangle));
+      vector_append(this->point_triangle,
+                    parse_queries_from_csv(entry_path, QueryType::PointTriangle));
     }
   }
 }

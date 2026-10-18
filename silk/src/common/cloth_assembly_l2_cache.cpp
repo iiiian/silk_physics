@@ -24,9 +24,9 @@ namespace silk {
 ///  Preconditions: the triangle is non‑degenerate (non‑zero edge length and
 ///  area). Basis differences between dx and dX are ignored intentionally since
 ///  they cancel out in the quadratic form used later.
-Eigen::Matrix<float, 6, 9> triangle_jacobian_operator(
-    Eigen::Ref<const Eigen::Vector3f> v0, Eigen::Ref<const Eigen::Vector3f> v1,
-    Eigen::Ref<const Eigen::Vector3f> v2) {
+Eigen::Matrix<float, 6, 9> triangle_jacobian_operator(Eigen::Ref<const Eigen::Vector3f> v0,
+                                                      Eigen::Ref<const Eigen::Vector3f> v1,
+                                                      Eigen::Ref<const Eigen::Vector3f> v2) {
   // Convert triangle to 2D.
   // Use edge e1 = v1 -> v2 as x axis.
   // Use n x e1 as y axis.
@@ -35,8 +35,7 @@ Eigen::Matrix<float, 6, 9> triangle_jacobian_operator(
 
   Eigen::Vector3f e0xe1 = e0.cross(e1);
   // We assume no degenerate triangle exists.
-  float area2_eps =
-      std::pow(1e-6f * std::max(e0.squaredNorm(), e1.squaredNorm()), 2);
+  float area2_eps = std::pow(1e-6f * std::max(e0.squaredNorm(), e1.squaredNorm()), 2);
   if (e0xe1.squaredNorm() < area2_eps) {
     SPDLOG_DEBUG("degenerate triangle in cloth mesh");
   }
@@ -110,8 +109,8 @@ ClothAssemblyL2Cache::ClothAssemblyL2Cache(const TriMesh& mesh) {
   // In‑plane deformation energy JWJ and jacobian ops.
   std::vector<Eigen::Triplet<float>> JWJ_triplets;
   for (int f = 0; f < face_num; ++f) {
-    Eigen::Matrix<float, 6, 9> jop = triangle_jacobian_operator(
-        m.V.row(m.F(f, 0)), m.V.row(m.F(f, 1)), m.V.row(m.F(f, 2)));
+    Eigen::Matrix<float, 6, 9> jop =
+        triangle_jacobian_operator(m.V.row(m.F(f, 0)), m.V.row(m.F(f, 1)), m.V.row(m.F(f, 2)));
 
     float weight = area(f);
     Eigen::Matrix<float, 9, 9> local_AA = weight * jop.transpose() * jop;
@@ -123,8 +122,7 @@ ClothAssemblyL2Cache::ClothAssemblyL2Cache(const TriMesh& mesh) {
         for (int i = 0; i < 3; ++i) {
           for (int j = 0; j < 3; ++j) {
             float val = local_AA(3 * vi + i, 3 * vj + j);
-            JWJ_triplets.emplace_back(3 * m.F(f, vi) + i, 3 * m.F(f, vj) + j,
-                                      val);
+            JWJ_triplets.emplace_back(3 * m.F(f, vi) + i, 3 * m.F(f, vj) + j, val);
           }
         }
       }

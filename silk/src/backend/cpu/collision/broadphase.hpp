@@ -32,8 +32,8 @@ using CollisionFilter = std::function<bool(const C&, const C&)>;
 /// Compute mean and variance of collider centers for a proxy subset.
 /// Returns pair(mean, variance) across x/y/z.
 template <typename C>
-std::pair<Eigen::Vector3f, Eigen::Vector3f> proxy_mean_variance(
-    std::span<const C> colliders, const int* proxies, int proxy_num) {
+std::pair<Eigen::Vector3f, Eigen::Vector3f> proxy_mean_variance(std::span<const C> colliders,
+                                                                const int* proxies, int proxy_num) {
   assert((proxy_num > 0));
 
   Eigen::Vector3f mean = Eigen::Vector3f::Zero();
@@ -52,8 +52,7 @@ std::pair<Eigen::Vector3f, Eigen::Vector3f> proxy_mean_variance(
 
 /// Find SAP main axis for one collider group.
 template <typename C>
-int sap_optimal_axis(std::span<const C> colliders, const int* proxies,
-                     int proxy_num) {
+int sap_optimal_axis(std::span<const C> colliders, const int* proxies, int proxy_num) {
   assert((proxy_num > 0));
 
   auto [mean, var] = proxy_mean_variance(colliders, proxies, proxy_num);
@@ -64,30 +63,25 @@ int sap_optimal_axis(std::span<const C> colliders, const int* proxies,
 
 /// Find SAP main axis for two collider group.
 template <typename C>
-int sap_optimal_axis(std::span<const C> colliders_a, const int* proxies_a,
-                     int proxy_num_a, std::span<const C> colliders_b,
-                     const int* proxies_b, int proxy_num_b) {
+int sap_optimal_axis(std::span<const C> colliders_a, const int* proxies_a, int proxy_num_a,
+                     std::span<const C> colliders_b, const int* proxies_b, int proxy_num_b) {
   assert((proxy_num_a > 0));
   assert((proxy_num_b > 0));
 
-  auto [mean_a, var_a] =
-      proxy_mean_variance(colliders_a, proxies_a, proxy_num_a);
-  auto [mean_b, var_b] =
-      proxy_mean_variance(colliders_b, proxies_b, proxy_num_b);
-  Eigen::Vector3f mean = (proxy_num_a * mean_a + proxy_num_b * mean_b) /
-                         (proxy_num_a + proxy_num_b);
+  auto [mean_a, var_a] = proxy_mean_variance(colliders_a, proxies_a, proxy_num_a);
+  auto [mean_b, var_b] = proxy_mean_variance(colliders_b, proxies_b, proxy_num_b);
+  Eigen::Vector3f mean =
+      (proxy_num_a * mean_a + proxy_num_b * mean_b) / (proxy_num_a + proxy_num_b);
   Eigen::Vector3f tmp_a = (mean_a - mean).array().square();
   Eigen::Vector3f tmp_b = (mean_b - mean).array().square();
-  Eigen::Vector3f var =
-      proxy_num_a * (var_a + tmp_a) + proxy_num_b * (var_b + tmp_b);
+  Eigen::Vector3f var = proxy_num_a * (var_a + tmp_a) + proxy_num_b * (var_b + tmp_b);
   int axis;
   var.maxCoeff(&axis);
   return axis;
 }
 
 template <typename C>
-void sap_sort_proxies(std::span<const C> colliders, int* proxies, int proxy_num,
-                      int axis) {
+void sap_sort_proxies(std::span<const C> colliders, int* proxies, int proxy_num, int axis) {
   assert((proxy_num != 0));
 
   auto comp = [axis, &colliders](int a, int b) -> bool {
@@ -99,9 +93,8 @@ void sap_sort_proxies(std::span<const C> colliders, int* proxies, int proxy_num,
 /// SAP test collider a against sorted collider group b.
 /// If flip is true, return pair [b, a] instead of [a, b].
 template <typename C, bool flip = false, typename FilterT>
-void sap_sorted_collision(C& ca, std::span<C> colliders_b, const int* proxies_b,
-                          int proxy_num_b, int axis, const FilterT& filter,
-                          CollisionCache<C>& cache) {
+void sap_sorted_collision(C& ca, std::span<C> colliders_b, const int* proxies_b, int proxy_num_b,
+                          int axis, const FilterT& filter, CollisionCache<C>& cache) {
   assert((proxy_num_b != 0));
 
   int aux_axis_a = (axis + 1) % 3;
@@ -136,26 +129,22 @@ void sap_sorted_collision(C& ca, std::span<C> colliders_b, const int* proxies_b,
 }
 
 template <typename C, typename FilterT>
-void sap_sorted_group_self_collision(std::span<C> colliders, const int* proxies,
-                                     int proxy_num, int axis,
-                                     const FilterT& filter,
-                                     CollisionCache<C>& cache) {
+void sap_sorted_group_self_collision(std::span<C> colliders, const int* proxies, int proxy_num,
+                                     int axis, const FilterT& filter, CollisionCache<C>& cache) {
   assert((proxy_num > 0));
 
   for (int i = 0; i < proxy_num - 1; ++i) {
     int p = proxies[i];
-    sap_sorted_collision(colliders[p], colliders, proxies + i + 1,
-                         proxy_num - i - 1, axis, filter, cache);
+    sap_sorted_collision(colliders[p], colliders, proxies + i + 1, proxy_num - i - 1, axis, filter,
+                         cache);
   }
 }
 
 template <typename C, typename FilterT>
-void sap_sorted_group_group_collision(std::span<C> colliders_a,
-                                      const int* proxies_a, int proxy_num_a,
-                                      std::span<C> colliders_b,
-                                      const int* proxies_b, int proxy_num_b,
-                                      int axis, const FilterT& filter,
-                                      CollisionCache<C>& cache) {
+void sap_sorted_group_group_collision(std::span<C> colliders_a, const int* proxies_a,
+                                      int proxy_num_a, std::span<C> colliders_b,
+                                      const int* proxies_b, int proxy_num_b, int axis,
+                                      const FilterT& filter, CollisionCache<C>& cache) {
   assert((proxy_num_a > 0));
   assert((proxy_num_b > 0));
 
@@ -166,14 +155,13 @@ void sap_sorted_group_group_collision(std::span<C> colliders_a,
     int pb = proxies_b[b];
 
     if (colliders_a[pa].bbox.min(axis) < colliders_b[pb].bbox.min(axis)) {
-      sap_sorted_collision<C, false>(colliders_a[pa], colliders_b,
-                                     proxies_b + b, proxy_num_b - b, axis,
-                                     filter, cache);
+      sap_sorted_collision<C, false>(colliders_a[pa], colliders_b, proxies_b + b, proxy_num_b - b,
+                                     axis, filter, cache);
       ++a;
     } else {
       // Flip the output pairs to ensure consistant pair order.
-      sap_sorted_collision<C, true>(colliders_b[pb], colliders_a, proxies_a + a,
-                                    proxy_num_a - a, axis, filter, cache);
+      sap_sorted_collision<C, true>(colliders_b[pb], colliders_a, proxies_a + a, proxy_num_a - a,
+                                    axis, filter, cache);
       ++b;
     }
   }
@@ -181,14 +169,10 @@ void sap_sorted_group_group_collision(std::span<C> colliders_a,
 
 /// Test query collider (a) against cadidate collider group b.
 template <typename C, bool flip = false, typename FilterT>
-void sap_sorted_bbox_collision(C& collider_a, const BboxSOAView& bboxes_b,
-                               std::span<C> colliders_b,
-                               std::span<const int> proxies_b, int axis,
-                               const FilterT& filter,
-                               std::vector<int>& overlap_proxies,
-                               CollisionCache<C>& cache) {
-  int overlap_num = sap_bbox_overlaps(collider_a.bbox, bboxes_b, proxies_b,
-                                      axis, overlap_proxies);
+void sap_sorted_bbox_collision(C& collider_a, const BboxSOAView& bboxes_b, std::span<C> colliders_b,
+                               std::span<const int> proxies_b, int axis, const FilterT& filter,
+                               std::vector<int>& overlap_proxies, CollisionCache<C>& cache) {
+  int overlap_num = sap_bbox_overlaps(collider_a.bbox, bboxes_b, proxies_b, axis, overlap_proxies);
   for (int i = 0; i < overlap_num; ++i) {
     C& cb = colliders_b[overlap_proxies[i]];
     if constexpr (flip) {
@@ -204,30 +188,28 @@ void sap_sorted_bbox_collision(C& collider_a, const BboxSOAView& bboxes_b,
 }
 
 template <typename C, typename FilterT>
-void sap_sorted_bbox_group_self_collision(std::span<C> colliders,
-                                          std::span<const int> proxies,
+void sap_sorted_bbox_group_self_collision(std::span<C> colliders, std::span<const int> proxies,
                                           const BboxSOAView& bboxes, int axis,
-                                          const FilterT& filter,
-                                          std::vector<int>& overlap_proxies,
+                                          const FilterT& filter, std::vector<int>& overlap_proxies,
                                           CollisionCache<C>& cache) {
   assert((proxies.size() > 0));
 
   int proxy_num = proxies.size();
   for (int i = 0; i < proxy_num - 1; ++i) {
     int p = proxies[i];
-    sap_sorted_bbox_collision<C, false>(colliders[p], bboxes.subspan(i + 1),
-                                        colliders, proxies.subspan(i + 1), axis,
-                                        filter, overlap_proxies, cache);
+    sap_sorted_bbox_collision<C, false>(colliders[p], bboxes.subspan(i + 1), colliders,
+                                        proxies.subspan(i + 1), axis, filter, overlap_proxies,
+                                        cache);
   }
 }
 
 template <typename C, typename FilterT>
-void sap_sorted_bbox_group_group_collision(
-    std::span<C> colliders_a, std::span<const int> proxies_a,
-    const BboxSOAView& bboxes_a, std::span<C> colliders_b,
-    std::span<const int> proxies_b, const BboxSOAView& bboxes_b, int axis,
-    const FilterT& filter, std::vector<int>& overlap_proxies,
-    CollisionCache<C>& cache) {
+void sap_sorted_bbox_group_group_collision(std::span<C> colliders_a, std::span<const int> proxies_a,
+                                           const BboxSOAView& bboxes_a, std::span<C> colliders_b,
+                                           std::span<const int> proxies_b,
+                                           const BboxSOAView& bboxes_b, int axis,
+                                           const FilterT& filter, std::vector<int>& overlap_proxies,
+                                           CollisionCache<C>& cache) {
   assert((proxies_a.size() > 0));
   assert((proxies_b.size() > 0));
 
@@ -240,15 +222,15 @@ void sap_sorted_bbox_group_group_collision(
     int pb = proxies_b[b];
 
     if (bboxes_a.min[axis][a] < bboxes_b.min[axis][b]) {
-      sap_sorted_bbox_collision<C, false>(colliders_a[pa], bboxes_b.subspan(b),
-                                          colliders_b, proxies_b.subspan(b),
-                                          axis, filter, overlap_proxies, cache);
+      sap_sorted_bbox_collision<C, false>(colliders_a[pa], bboxes_b.subspan(b), colliders_b,
+                                          proxies_b.subspan(b), axis, filter, overlap_proxies,
+                                          cache);
       ++a;
     } else {
       // Flip the output pairs to ensure consistent pair order.
-      sap_sorted_bbox_collision<C, true>(colliders_b[pb], bboxes_a.subspan(a),
-                                         colliders_a, proxies_a.subspan(a),
-                                         axis, filter, overlap_proxies, cache);
+      sap_sorted_bbox_collision<C, true>(colliders_b[pb], bboxes_a.subspan(a), colliders_a,
+                                         proxies_a.subspan(a), axis, filter, overlap_proxies,
+                                         cache);
       ++b;
     }
   }
@@ -416,9 +398,8 @@ class KDTree {
     // Get BVTT component bbox. If is internal code and proxy only, test plane
     // bbox. Else test node bbox.
     auto bbox = [](const BVTTComponent& component) -> const Bbox& {
-      return component.proxies_only && !component.node->is_leaf()
-                 ? component.node->plane_bbox
-                 : component.node->query_bbox;
+      return component.proxies_only && !component.node->is_leaf() ? component.node->plane_bbox
+                                                                  : component.node->query_bbox;
     };
 
     // Traverse the tree and generate work (pair of nodes to test later).
@@ -449,8 +430,7 @@ class KDTree {
         if (!a.node->is_leaf()) {
           bvtt_stack.push_back({{a.node->left, false}, {a.node->left, false}});
           bvtt_stack.push_back({{a.node->left, false}, {a.node->right, false}});
-          bvtt_stack.push_back(
-              {{a.node->right, false}, {a.node->right, false}});
+          bvtt_stack.push_back({{a.node->right, false}, {a.node->right, false}});
         }
         continue;
       }
@@ -498,25 +478,22 @@ class KDTree {
       auto& local = thread_data_.local();
       for (int i = range.begin(); i != range.end(); ++i) {
         const BVTTWork& work = bvtt_works[i];
-        std::span<const int> proxies_a(proxies_.data() + work.a->proxy_start,
-                                       work.a->proxy_num());
+        std::span<const int> proxies_a(proxies_.data() + work.a->proxy_start, work.a->proxy_num());
         BboxSOAView bboxes_a = proxy_bboxes_.view(work.a->proxy_start);
         if (work.a == work.b) {
-          sap_sorted_bbox_group_self_collision(
-              collider_span, proxies_a, bboxes_a, axis, filter,
-              local.overlap_proxies, local.cache);
+          sap_sorted_bbox_group_self_collision(collider_span, proxies_a, bboxes_a, axis, filter,
+                                               local.overlap_proxies, local.cache);
         } else {
           std::span<const int> proxies_b(proxies_.data() + work.b->proxy_start,
                                          work.b->proxy_num());
           BboxSOAView bboxes_b = proxy_bboxes_.view(work.b->proxy_start);
-          sap_sorted_bbox_group_group_collision(
-              collider_span, proxies_a, bboxes_a, collider_span, proxies_b,
-              bboxes_b, axis, filter, local.overlap_proxies, local.cache);
+          sap_sorted_bbox_group_group_collision(collider_span, proxies_a, bboxes_a, collider_span,
+                                                proxies_b, bboxes_b, axis, filter,
+                                                local.overlap_proxies, local.cache);
         }
       }
     };
-    tbb::parallel_for(tbb::blocked_range<int>(0, bvtt_works.size()),
-                      process_range);
+    tbb::parallel_for(tbb::blocked_range<int>(0, bvtt_works.size()), process_range);
 
     for (auto& data : thread_data_) {
       cache.insert(cache.end(), data.cache.begin(), data.cache.end());
@@ -552,9 +529,8 @@ class KDTree {
     // Get BVTT component bbox. If is internal code and proxy only, test plane
     // bbox. Else test node bbox.
     auto bbox = [](const BVTTComponent& component) -> const Bbox& {
-      return component.proxies_only && !component.node->is_leaf()
-                 ? component.node->plane_bbox
-                 : component.node->query_bbox;
+      return component.proxies_only && !component.node->is_leaf() ? component.node->plane_bbox
+                                                                  : component.node->query_bbox;
     };
 
     // Traverse the tree and generate work (pair of nodes to test later).
@@ -613,13 +589,12 @@ class KDTree {
                                        work.b->proxy_num());
         BboxSOAView bboxes_a = ta.proxy_bboxes_.view(work.a->proxy_start);
         BboxSOAView bboxes_b = tb.proxy_bboxes_.view(work.b->proxy_start);
-        sap_sorted_bbox_group_group_collision<C>(
-            ta.colliders_, proxies_a, bboxes_a, tb.colliders_, proxies_b,
-            bboxes_b, axis, filter, local.overlap_proxies, local.cache);
+        sap_sorted_bbox_group_group_collision<C>(ta.colliders_, proxies_a, bboxes_a, tb.colliders_,
+                                                 proxies_b, bboxes_b, axis, filter,
+                                                 local.overlap_proxies, local.cache);
       }
     };
-    tbb::parallel_for(tbb::blocked_range<int>(0, bvtt_works.size()),
-                      process_range);
+    tbb::parallel_for(tbb::blocked_range<int>(0, bvtt_works.size()), process_range);
 
     for (auto& local : thread_data) {
       cache.insert(cache.end(), local.cache.begin(), local.cache.end());
@@ -665,8 +640,7 @@ class KDTree {
       for (int i = range.begin(); i != range.end(); ++i) {
         KDNode* node = nodes[i];
         if (node->proxy_num() > 1) {
-          sap_sort_proxies(colliders, proxies_.data() + node->proxy_start,
-                           node->proxy_num(), axis);
+          sap_sort_proxies(colliders, proxies_.data() + node->proxy_start, node->proxy_num(), axis);
         }
         /// Collect proxy to SOA layout.
         for (int j = node->proxy_start; j < node->proxy_end; ++j) {
@@ -712,8 +686,8 @@ class KDTree {
     assert((n->proxy_num() > 0));
 
     std::span<const C> colliders(colliders_.data(), colliders_.size());
-    auto [mean, var] = proxy_mean_variance(
-        colliders, proxies_.data() + n->proxy_start, n->proxy_num());
+    auto [mean, var] =
+        proxy_mean_variance(colliders, proxies_.data() + n->proxy_start, n->proxy_num());
     var.maxCoeff(&n->axis);
     n->position = mean(n->axis);
   }
@@ -735,9 +709,7 @@ class KDTree {
   // Partition so colliders inside `n->bbox` are moved to the left; returns the
   // count of outside proxies (now placed at the right).
   int partition_unfit_proxy_right(const KDNode* n) {
-    auto is_inside = [n, &c = colliders_](int p) -> bool {
-      return n->bbox.is_inside(c[p].bbox);
-    };
+    auto is_inside = [n, &c = colliders_](int p) -> bool { return n->bbox.is_inside(c[p].bbox); };
 
     int* start = proxies_.data() + n->proxy_start;
     int* end = proxies_.data() + n->proxy_end;
@@ -830,15 +802,13 @@ class KDTree {
       } else {
         if (n->is_left()) {
           int unfit_num = partition_unfit_proxy_right(n);
-          shift_proxy_right(n->proxy_end - unfit_num, unfit_num,
-                            n->right->population);
+          shift_proxy_right(n->proxy_end - unfit_num, unfit_num, n->right->population);
 
           n->proxy_end -= unfit_num;
           assert((n->proxy_end <= collider_num_));
           n->parent->proxy_start -= unfit_num;
           assert((n->parent->proxy_start >= 0));
-          n->population =
-              n->proxy_num() + n->left->population + n->right->population;
+          n->population = n->proxy_num() + n->left->population + n->right->population;
           n->right->delay_offset = -unfit_num;
         } else {
           int unfit_num = partition_unfit_proxy_left(n);
@@ -848,16 +818,14 @@ class KDTree {
           assert((n->proxy_start >= 0));
           n->parent->proxy_end += unfit_num;
           assert((n->parent->proxy_end <= collider_num_));
-          n->population =
-              n->proxy_num() + n->left->population + n->right->population;
+          n->population = n->proxy_num() + n->left->population + n->right->population;
           n->left->delay_offset = unfit_num;
         }
       }
     }
 
     if (!root_->is_leaf()) {
-      root_->population = root_->proxy_num() + root_->left->population +
-                          root_->right->population;
+      root_->population = root_->proxy_num() + root_->left->population + root_->right->population;
     }
   }
 

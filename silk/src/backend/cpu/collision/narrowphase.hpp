@@ -43,9 +43,9 @@ std::optional<float> find_min_toi(
 /// @param stiffness Penalty stiffness assigned to the active contact.
 /// @return Active contact or std::nullopt when the distance is outside the
 /// activation threshold.
-std::optional<Collision> find_active_collision(
-    const ObjectCollider& oa, const MeshCollider& ma, const ObjectCollider& ob,
-    const MeshCollider& mb, float time, float activation_distance,
-    float stiffness);
+std::optional<Collision> find_active_collision(const ObjectCollider& oa, const MeshCollider& ma,
+                                               const ObjectCollider& ob, const MeshCollider& mb,
+                                               float time, float activation_distance,
+                                               float stiffness);
 
 }  // namespace silk::cpu

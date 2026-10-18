@@ -15,8 +15,8 @@ namespace silk::cuda {
 
 ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
                                            const MeshPartition& partition,
-                                           const ClothAssemblyL2Cache& l2_cache,
-                                           float dt, CudaRuntime rt) {
+                                           const ClothAssemblyL2Cache& l2_cache, float dt,
+                                           CudaRuntime rt) {
   auto& c = config;
   auto& l2 = l2_cache;
   int state_num = 3 * l2.mass.size();
@@ -29,8 +29,7 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
   // Elastic term.
   append_triplets_from_sparse(l2.JWJ, 0, 0, c.elastic_stiffness, AA_triplets);
   // Bending term.
-  append_triplets_from_vectorized_sparse(l2.CWC, 0, 0, c.bending_stiffness,
-                                         AA_triplets);
+  append_triplets_from_vectorized_sparse(l2.CWC, 0, 0, c.bending_stiffness, AA_triplets);
   Eigen::SparseMatrix<float> h_AA{state_num, state_num};
   h_AA.setFromTriplets(AA_triplets.begin(), AA_triplets.end());
 
@@ -62,14 +61,12 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
     Eigen::Matrix3f diagonal_block;
     for (int row = 0; row < 3; ++row) {
       for (int col = 0; col < 3; ++col) {
-        diagonal_block(row, col) =
-            h_AA.coeff(3 * vertex + row, 3 * vertex + col);
+        diagonal_block(row, col) = h_AA.coeff(3 * vertex + row, 3 * vertex + col);
       }
       diagonal_block(row, row) += h_mass[3 * vertex] / (dt * dt);
     }
-    float eta = Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f>(diagonal_block)
-                    .eigenvalues()
-                    .minCoeff();
+    float eta =
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f>(diagonal_block).eigenvalues().minCoeff();
     float inertia = h_mass[3 * vertex] / (dt * dt);
     float weight = std::max(0.001f * eta, std::min(25.0f * inertia, eta));
     for (int axis = 0; axis < 3; ++axis) {
@@ -87,11 +84,10 @@ ClothAssemblyL1Cache::ClothAssemblyL1Cache(const ClothConfig& config,
   this->area_sqrt = host_eigen_to_device(h_area_sqrt, rt);
   this->mass = vec_like_to_device<float>(h_mass, rt);
   this->contact_weight = vec_like_to_device<float>(h_contact_weight, rt);
-  this->bending_rhs = host_eigen_to_device(
-      (c.bending_stiffness * l2.C0).reshaped<Eigen::RowMajor>(), rt);
+  this->bending_rhs =
+      host_eigen_to_device((c.bending_stiffness * l2.C0).reshaped<Eigen::RowMajor>(), rt);
   this->weighted_AA = BSRMatrix{h_AA, 3, {}, rt};
-  this->part_offsets =
-      vec_like_to_device<int>(partition.h_partition_offsets, rt);
+  this->part_offsets = vec_like_to_device<int>(partition.h_partition_offsets, rt);
 
   rt.stream.sync();
 }

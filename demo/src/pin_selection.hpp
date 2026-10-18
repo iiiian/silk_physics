@@ -8,8 +8,7 @@
 
 namespace pin_selection {
 
-inline std::vector<int> select_bbox_vertices(const Vert& verts,
-                                             const config::PinBBox& bbox) {
+inline std::vector<int> select_bbox_vertices(const Vert& verts, const config::PinBBox& bbox) {
   std::array<float, 3> bmin = bbox.min;
   std::array<float, 3> bmax = bbox.max;
   for (int axis = 0; axis < 3; ++axis) {

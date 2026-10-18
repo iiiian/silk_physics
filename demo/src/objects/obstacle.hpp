@@ -41,11 +41,10 @@ class Obstacle : public IObject {
   bool drag_position_changed_;
 
  public:
-  static std::optional<Obstacle> make_obstacle(silk::World* world,
-                                               std::string name, Vert V,
+  static std::optional<Obstacle> make_obstacle(silk::World* world, std::string name, Vert V,
                                                Face F);
-  static std::optional<Obstacle> make_obstacle(
-      silk::World* world, const config::ObstacleObject& obj);
+  static std::optional<Obstacle> make_obstacle(silk::World* world,
+                                               const config::ObstacleObject& obj);
 
   // default ctor is private, use factory function try_make_obstacle instead.
   Obstacle(const Obstacle&) = delete;

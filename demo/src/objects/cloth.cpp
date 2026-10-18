@@ -20,8 +20,7 @@
 
 namespace py = polyscope;
 
-std::optional<Cloth> Cloth::make_cloth(silk::World* world, std::string name,
-                                       Vert V, Face F) {
+std::optional<Cloth> Cloth::make_cloth(silk::World* world, std::string name, Vert V, Face F) {
   if (V.rows() == 0) {
     return std::nullopt;
   }
@@ -67,8 +66,7 @@ std::optional<Cloth> Cloth::make_cloth(silk::World* world, std::string name,
   return c;
 }
 
-std::optional<Cloth> Cloth::make_cloth(silk::World* world,
-                                       const config::ClothObject& obj) {
+std::optional<Cloth> Cloth::make_cloth(silk::World* world, const config::ClothObject& obj) {
   auto mesh = load_mesh_from_file(obj.mesh);
   if (!mesh) {
     return std::nullopt;
@@ -77,8 +75,7 @@ std::optional<Cloth> Cloth::make_cloth(silk::World* world,
   AffineTransformer transformer{obj.transform};
   transformer.apply(mesh->verts);
 
-  auto cloth = make_cloth(world, obj.name, std::move(mesh->verts),
-                          std::move(mesh->faces));
+  auto cloth = make_cloth(world, obj.name, std::move(mesh->verts), std::move(mesh->faces));
   if (!cloth) {
     return std::nullopt;
   }
@@ -96,11 +93,9 @@ std::optional<Cloth> Cloth::make_cloth(silk::World* world,
     std::vector<int> selected =
         pin_selection::select_bbox_vertices(cloth->V_, *obj.pin_selection->bbox);
     if (selected.empty()) {
-      spdlog::warn("Pin selection for cloth '{}' matched no vertices.",
-                   obj.name);
+      spdlog::warn("Pin selection for cloth '{}' matched no vertices.", obj.name);
     } else {
-      spdlog::info("Pin selection for cloth '{}' matched {} vertices.",
-                   obj.name, selected.size());
+      spdlog::info("Pin selection for cloth '{}' matched {} vertices.", obj.name, selected.size());
     }
     for (int idx : selected) {
       cloth->pin_group_.insert(idx);
@@ -210,14 +205,12 @@ bool Cloth::init_sim() {
   mesh_->resetTransform();
 
   // Setup cloth in silk
-  std::span<const float> vert_span =
-      make_const_span_from_position(mesh_->vertexPositions);
+  std::span<const float> vert_span = make_const_span_from_position(mesh_->vertexPositions);
 
   if (silk_handle_ != 0 && transform_changed_) {
     silk::Result r = world_->remove_cloth(silk_handle_);
     if (!r) {
-      spdlog::error("Fail to remove cloth {} during init sim. Error: {}", name_,
-                    r.to_string());
+      spdlog::error("Fail to remove cloth {} during init sim. Error: {}", name_, r.to_string());
       return false;
     }
     silk_handle_ = 0;
@@ -233,8 +226,8 @@ bool Cloth::init_sim() {
   mesh_config.verts = vert_span;
   mesh_config.faces = std::span<const int>(F_.data(), F_.size());
 
-  silk::Result r = world_->add_cloth(cloth_config_, collision_config_,
-                                     mesh_config, pin_index_, silk_handle_);
+  silk::Result r =
+      world_->add_cloth(cloth_config_, collision_config_, mesh_config, pin_index_, silk_handle_);
   if (!r) {
     spdlog::error("Fail to init cloth {}. Error: {}", name_, r.to_string());
     return false;
@@ -253,25 +246,21 @@ bool Cloth::sim_step_pre(float) {
     update_pin_index();
     silk::Result r = world_->set_cloth_pin_index(silk_handle_, pin_index_);
     if (!r) {
-      spdlog::error("Fail to update cloth {} pin index. Error: {}", name_,
-                    r.to_string());
+      spdlog::error("Fail to update cloth {} pin index. Error: {}", name_, r.to_string());
       return false;
     }
   }
   if (cloth_config_changed_) {
     silk::Result r = world_->set_cloth_config(silk_handle_, cloth_config_);
     if (!r) {
-      spdlog::error("Fail to update cloth {} config. Error: {}", name_,
-                    r.to_string());
+      spdlog::error("Fail to update cloth {} config. Error: {}", name_, r.to_string());
       return false;
     }
   }
   if (collision_config_changed_) {
-    silk::Result r =
-        world_->set_cloth_collision_config(silk_handle_, collision_config_);
+    silk::Result r = world_->set_cloth_collision_config(silk_handle_, collision_config_);
     if (!r) {
-      spdlog::error("Fail to update cloth {} collision config. Error: {}",
-                    name_, r.to_string());
+      spdlog::error("Fail to update cloth {} collision config. Error: {}", name_, r.to_string());
       return false;
     }
   }
@@ -287,8 +276,7 @@ bool Cloth::sim_step_pre(float) {
   auto pin_position = gather_pin_position();
   silk::Result r = world_->set_cloth_pin_position(silk_handle_, pin_position);
   if (!r) {
-    spdlog::error("Fail to update cloth {} pin position. Error: {}", name_,
-                  r.to_string());
+    spdlog::error("Fail to update cloth {} pin position. Error: {}", name_, r.to_string());
     return false;
   }
 
@@ -301,8 +289,7 @@ bool Cloth::sim_step_post(float current_time) {
   std::span<float> position = make_span_from_position(mesh_->vertexPositions);
   silk::Result r = world_->get_cloth_position(silk_handle_, position);
   if (!r) {
-    spdlog::error("Fail to update cloth {} position. Error: {}", name_,
-                  r.to_string());
+    spdlog::error("Fail to update cloth {} position. Error: {}", name_, r.to_string());
     return false;
   }
   mesh_->vertexPositions.markHostBufferUpdated();
@@ -324,8 +311,7 @@ bool Cloth::exit_sim() {
   return true;
 }
 
-void Cloth::handle_pick(const polyscope::PickResult& pick,
-                        bool add_to_selection, int pick_radius) {
+void Cloth::handle_pick(const polyscope::PickResult& pick, bool add_to_selection, int pick_radius) {
   py::SurfaceMeshPickResult result = mesh_->interpretPickResult(pick);
 
   // BFS traverse the adjacency list to find all vertices selected/removed

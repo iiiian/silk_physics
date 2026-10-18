@@ -54,8 +54,7 @@ class TimingRegistry {
     assert(stack_.back() == node);
 
     Clock::time_point finish = Clock::now();
-    node->duration_ms =
-        std::chrono::duration<double, std::milli>(finish - node->start).count();
+    node->duration_ms = std::chrono::duration<double, std::milli>(finish - node->start).count();
     stack_.pop_back();
   }
 
@@ -102,9 +101,8 @@ class TimingRegistry {
     for (const std::unique_ptr<TimingNode>& child : node.children) {
       children.push_back(to_json(*child));
     }
-    return {{"name", node.name},
-            {"duration_ms", node.duration_ms},
-            {"children", std::move(children)}};
+    return {
+        {"name", node.name}, {"duration_ms", node.duration_ms}, {"children", std::move(children)}};
   }
 
   void write_json() {

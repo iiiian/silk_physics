@@ -8,8 +8,8 @@
 
 namespace silk::cuda {
 
-EqualityConstraints gather_barrier_constraints(
-    int state_num, ctd::span<const ::silk::cuda::Collision> collisions,
-    CudaRuntime rt);
+EqualityConstraints gather_barrier_constraints(int state_num,
+                                               ctd::span<const ::silk::cuda::Collision> collisions,
+                                               CudaRuntime rt);
 
 }  // namespace silk::cuda

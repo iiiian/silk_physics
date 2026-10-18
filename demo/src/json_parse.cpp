@@ -18,9 +18,8 @@
 bool is_json_path(const std::string& path) {
   std::filesystem::path p{path};
   std::string ext = p.extension().string();
-  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
-    return static_cast<char>(std::tolower(c));
-  });
+  std::transform(ext.begin(), ext.end(), ext.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return (ext == ".json");
 }
 
@@ -288,8 +287,7 @@ bool skip_value(Cur& cur) {
   skip_ws(cur);
   char ch = cur.peek();
   if (ch == '{') {
-    return parse_object(cur,
-                        [&](const std::string&) { return skip_value(cur); });
+    return parse_object(cur, [&](const std::string&) { return skip_value(cur); });
   }
   if (ch == '[') {
     return parse_array(cur, [&]() { return skip_value(cur); });
@@ -354,8 +352,7 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
     if (k == "acceleration") {
       std::array<float, 3> a;
       if (!parse_number_array3(cur, a)) {
-        ui_error(
-            "Fail to parse global config. Incorrect json field 'acceleration'");
+        ui_error("Fail to parse global config. Incorrect json field 'acceleration'");
         return false;
       }
       g.acceleration = a;
@@ -364,8 +361,7 @@ bool parse_global_obj(jx::Cur& cur, config::Global& g) {
     if (k == "total_steps") {
       float v;
       if (!parse_number(cur, v)) {
-        ui_error(
-            "Fail to parse global config. Incorrect json field 'total_steps'");
+        ui_error("Fail to parse global config. Incorrect json field 'total_steps'");
         return false;
       }
       g.total_steps = static_cast<int>(v);
@@ -451,8 +447,7 @@ bool parse_collision_obj(jx::Cur& cur, config::Collision& c) {
     if (k == "enabled") {
       bool b;
       if (!parse_bool(cur, b)) {
-        ui_error(
-            "Fail to parse collision config. Incorrect json field 'enabled'");
+        ui_error("Fail to parse collision config. Incorrect json field 'enabled'");
         return false;
       }
       c.enabled = b;
@@ -472,8 +467,7 @@ bool parse_collision_obj(jx::Cur& cur, config::Collision& c) {
     if (k == "group") {
       float v;
       if (!parse_number(cur, v)) {
-        ui_error(
-            "Fail to parse collision config. Incorrect json field 'group'");
+        ui_error("Fail to parse collision config. Incorrect json field 'group'");
         return false;
       }
       c.group = (int)v;
@@ -493,8 +487,7 @@ bool parse_collision_obj(jx::Cur& cur, config::Collision& c) {
     if (k == "friction") {
       float v;
       if (!parse_number(cur, v)) {
-        ui_error(
-            "Fail to parse collision config. Incorrect json field 'friction'");
+        ui_error("Fail to parse collision config. Incorrect json field 'friction'");
         return false;
       }
       c.friction = v;
@@ -780,10 +773,9 @@ void console_test(const SimConfig& c) {
       "  linear_solver_abs_tol = {:.6e}, rel_tol_min = {:.6e}, "
       "rel_tol_max = {:.6e}, initial_linear_rel_tol = {:.6e}",
       c.global.linear_solver_abs_tol, c.global.linear_solver_rel_tol_min,
-      c.global.linear_solver_rel_tol_max,
-      c.global.initial_linear_rel_tol);
-  ui_info("  admm_abs_tol = {:.6e}, admm_rel_tol = {:.6e}",
-          c.global.admm_abs_tol, c.global.admm_rel_tol);
+      c.global.linear_solver_rel_tol_max, c.global.initial_linear_rel_tol);
+  ui_info("  admm_abs_tol = {:.6e}, admm_rel_tol = {:.6e}", c.global.admm_abs_tol,
+          c.global.admm_rel_tol);
 
   // Cloths
   ui_info("[Cloths] count = {}", c.cloths.size());
@@ -794,29 +786,26 @@ void console_test(const SimConfig& c) {
     ui_info(
         "      [collision] enabled={}, self_collision={}, group={}, "
         "restitution={:.6f}, friction={:.6f}",
-        o.collision.enabled ? "true" : "false",
-        o.collision.self_collision ? "true" : "false", o.collision.group,
-        o.collision.restitution, o.collision.friction);
+        o.collision.enabled ? "true" : "false", o.collision.self_collision ? "true" : "false",
+        o.collision.group, o.collision.restitution, o.collision.friction);
     ui_info(
         "      [transform] translation=[{:.6f},{:.6f},{:.6f}] "
         "rotation_euler_deg=[{:.6f},{:.6f},{:.6f}] "
         "scale=[{:.6f},{:.6f},{:.6f}]",
-        o.transform.translation[0], o.transform.translation[1],
-        o.transform.translation[2], o.transform.rotation_euler_deg[0],
-        o.transform.rotation_euler_deg[1], o.transform.rotation_euler_deg[2],
-        o.transform.scale[0], o.transform.scale[1], o.transform.scale[2]);
+        o.transform.translation[0], o.transform.translation[1], o.transform.translation[2],
+        o.transform.rotation_euler_deg[0], o.transform.rotation_euler_deg[1],
+        o.transform.rotation_euler_deg[2], o.transform.scale[0], o.transform.scale[1],
+        o.transform.scale[2]);
     ui_info(
         "      [cloth] elastic_stiffness={:.6f} bending_stiffness={:.6f} "
         "density={:.6f} damping={:.6f}",
-        o.cloth.elastic_stiffness, o.cloth.bending_stiffness, o.cloth.density,
-        o.cloth.damping);
+        o.cloth.elastic_stiffness, o.cloth.bending_stiffness, o.cloth.density, o.cloth.damping);
     if (o.pin_selection && o.pin_selection->bbox) {
       const auto& bbox = *o.pin_selection->bbox;
       ui_info(
           "      [pin_selection] bbox min=[{:.6f},{:.6f},{:.6f}] "
           "max=[{:.6f},{:.6f},{:.6f}]",
-          bbox.min[0], bbox.min[1], bbox.min[2], bbox.max[0], bbox.max[1],
-          bbox.max[2]);
+          bbox.min[0], bbox.min[1], bbox.min[2], bbox.max[0], bbox.max[1], bbox.max[2]);
     }
   }
 
@@ -829,17 +818,16 @@ void console_test(const SimConfig& c) {
     ui_info(
         "      [collision] enabled={}, self_collision={}, group={}, "
         "restitution={:.6f}, friction={:.6f}",
-        o.collision.enabled ? "true" : "false",
-        o.collision.self_collision ? "true" : "false", o.collision.group,
-        o.collision.restitution, o.collision.friction);
+        o.collision.enabled ? "true" : "false", o.collision.self_collision ? "true" : "false",
+        o.collision.group, o.collision.restitution, o.collision.friction);
     ui_info(
         "      [transform] translation=[{:.6f},{:.6f},{:.6f}] "
         "rotation_euler_deg=[{:.6f},{:.6f},{:.6f}] "
         "scale=[{:.6f},{:.6f},{:.6f}]",
-        o.transform.translation[0], o.transform.translation[1],
-        o.transform.translation[2], o.transform.rotation_euler_deg[0],
-        o.transform.rotation_euler_deg[1], o.transform.rotation_euler_deg[2],
-        o.transform.scale[0], o.transform.scale[1], o.transform.scale[2]);
+        o.transform.translation[0], o.transform.translation[1], o.transform.translation[2],
+        o.transform.rotation_euler_deg[0], o.transform.rotation_euler_deg[1],
+        o.transform.rotation_euler_deg[2], o.transform.scale[0], o.transform.scale[1],
+        o.transform.scale[2]);
   }
 }
 
@@ -848,8 +836,7 @@ std::optional<std::string> load_text(const std::string& path) {
   if (!ifs) {
     return std::nullopt;
   }
-  return std::string{std::istreambuf_iterator<char>(ifs),
-                     std::istreambuf_iterator<char>()};
+  return std::string{std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>()};
 }
 
 //***********************************************************************/

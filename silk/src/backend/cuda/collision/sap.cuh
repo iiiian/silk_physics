@@ -14,8 +14,7 @@ template <typename C>
 using SapCollisionCache = std::vector<std::pair<C*, C*>>;
 
 template <typename C>
-std::pair<Vec3f, Vec3f> sap_proxy_mean_variance(std::span<const C> colliders,
-                                                const int* proxies,
+std::pair<Vec3f, Vec3f> sap_proxy_mean_variance(std::span<const C> colliders, const int* proxies,
                                                 int proxy_num) {
   assert(proxy_num > 0);
 
@@ -34,8 +33,7 @@ std::pair<Vec3f, Vec3f> sap_proxy_mean_variance(std::span<const C> colliders,
 }
 
 template <typename C>
-int sap_optimal_axis(std::span<const C> colliders, const int* proxies,
-                     int proxy_num) {
+int sap_optimal_axis(std::span<const C> colliders, const int* proxies, int proxy_num) {
   auto [mean, var] = sap_proxy_mean_variance(colliders, proxies, proxy_num);
   (void)mean;
   if (var(0) > var(1) && var(0) > var(2)) {
@@ -48,8 +46,7 @@ int sap_optimal_axis(std::span<const C> colliders, const int* proxies,
 }
 
 template <typename C>
-void sap_sort_proxies(std::span<const C> colliders, int* proxies, int proxy_num,
-                      int axis) {
+void sap_sort_proxies(std::span<const C> colliders, int* proxies, int proxy_num, int axis) {
   assert(proxy_num > 0);
 
   auto comp = [axis, colliders](int a, int b) {
@@ -59,9 +56,8 @@ void sap_sort_proxies(std::span<const C> colliders, int* proxies, int proxy_num,
 }
 
 template <typename C, bool flip = false, typename Filter>
-void sap_sorted_collision(C& ca, std::span<C> colliders_b, const int* proxies_b,
-                          int proxy_num_b, int axis, const Filter& filter,
-                          SapCollisionCache<C>& cache) {
+void sap_sorted_collision(C& ca, std::span<C> colliders_b, const int* proxies_b, int proxy_num_b,
+                          int axis, const Filter& filter, SapCollisionCache<C>& cache) {
   assert(proxy_num_b > 0);
 
   for (int i = 0; i < proxy_num_b; ++i) {
@@ -85,16 +81,14 @@ void sap_sorted_collision(C& ca, std::span<C> colliders_b, const int* proxies_b,
 }
 
 template <typename C, typename FilterT>
-void sap_sorted_group_self_collision(std::span<C> colliders, const int* proxies,
-                                     int proxy_num, int axis,
-                                     const FilterT& filter,
-                                     SapCollisionCache<C>& cache) {
+void sap_sorted_group_self_collision(std::span<C> colliders, const int* proxies, int proxy_num,
+                                     int axis, const FilterT& filter, SapCollisionCache<C>& cache) {
   assert(proxy_num > 0);
 
   for (int i = 0; i < proxy_num - 1; ++i) {
     int p = proxies[i];
-    sap_sorted_collision(colliders[p], colliders, proxies + i + 1,
-                         proxy_num - i - 1, axis, filter, cache);
+    sap_sorted_collision(colliders[p], colliders, proxies + i + 1, proxy_num - i - 1, axis, filter,
+                         cache);
   }
 }
 

@@ -27,8 +27,7 @@ namespace silk::cuda {
 
 namespace {
 
-TriMesh build_permuted_mesh(const TriMesh& mesh, ctd::span<int> perm,
-                            ctd::span<int> inv_perm) {
+TriMesh build_permuted_mesh(const TriMesh& mesh, ctd::span<int> perm, ctd::span<int> inv_perm) {
   TriMesh perm_mesh = mesh;
   int vert_num = mesh.V.rows();
   for (int new_idx = 0; new_idx < vert_num; ++new_idx) {
@@ -61,8 +60,8 @@ PinIndex build_permuted_pin_index(const PinIndex& pin, ctd::span<int> perm) {
 
 }  // namespace
 
-void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
-                    int state_offset, CudaRuntime rt) {
+void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt, int state_offset,
+                    CudaRuntime rt) {
   auto& e = entity;
 
   auto cloth_config = registry.get<ClothConfig>(e);
@@ -77,8 +76,7 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
   // Prepare pin position.
   auto pin_pos = registry.get<PinPosition>(e);
   if (!pin_pos) {
-    std::span<const float> position(init_state->position.data(),
-                                    init_state->position.size());
+    std::span<const float> position(init_state->position.data(), init_state->position.size());
     pin_pos = registry.set(e, PinPosition::from_vertices(*pin_index, position));
   }
   assert(pin_pos != nullptr);
@@ -119,8 +117,8 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
   auto l2_cache = registry.get<ClothAssemblyL2Cache>(e);
   if (!l2_cache) {
     if (!perm_mesh) {
-      perm_mesh = std::make_unique<TriMesh>(
-          build_permuted_mesh(*mesh, part->h_perm, part->h_inv_perm));
+      perm_mesh =
+          std::make_unique<TriMesh>(build_permuted_mesh(*mesh, part->h_perm, part->h_inv_perm));
     }
     l2_cache = registry.set(e, ClothAssemblyL2Cache{*perm_mesh});
   }
@@ -129,8 +127,7 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
   // Prepare L1 assembly cache.
   auto l1_cache = registry.get<ClothAssemblyL1Cache>(e);
   if (!(l1_cache && l1_cache->dt == dt)) {
-    l1_cache = registry.set(
-        e, ClothAssemblyL1Cache{*cloth_config, *part, *l2_cache, dt, rt});
+    l1_cache = registry.set(e, ClothAssemblyL1Cache{*cloth_config, *part, *l2_cache, dt, rt});
   }
   assert(l1_cache != nullptr);
 
@@ -145,25 +142,23 @@ void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
   auto collider = registry.get<ObjectCollider>(e);
   if (!collider) {
     if (!perm_mesh) {
-      perm_mesh = std::make_unique<TriMesh>(
-          build_permuted_mesh(*mesh, part->h_perm, part->h_inv_perm));
+      perm_mesh =
+          std::make_unique<TriMesh>(build_permuted_mesh(*mesh, part->h_perm, part->h_inv_perm));
     }
     if (!perm_pin) {
-      perm_pin = std::make_unique<PinIndex>(
-          build_permuted_pin_index(*pin_index, part->h_perm));
+      perm_pin = std::make_unique<PinIndex>(build_permuted_pin_index(*pin_index, part->h_perm));
     }
 
     // Per-vertex mass in permuted indexing for collision.
     Eigen::VectorXf collider_mass = cloth_config->density * l2_cache->mass;
 
     std::vector<float> perm_init_pos(init_state->position.size());
-    ctd::span<const float> init_pos_span(init_state->position.data(),
-                                         init_state->position.size());
+    ctd::span<const float> init_pos_span(init_state->position.data(), init_state->position.size());
     part->permute(init_pos_span, perm_init_pos, rt);
 
-    auto new_collider = ObjectCollider::from_physical(
-        *collision_config, *perm_mesh, *perm_pin, perm_init_pos, collider_mass,
-        state_offset, entity, rt);
+    auto new_collider =
+        ObjectCollider::from_physical(*collision_config, *perm_mesh, *perm_pin, perm_init_pos,
+                                      collider_mass, state_offset, entity, rt);
     collider = registry.set(e, std::move(new_collider));
   } else {
     collider->update_state_offset(state_offset, rt);

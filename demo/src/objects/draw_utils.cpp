@@ -2,8 +2,7 @@
 
 #include <polyscope/polyscope.h>
 
-void draw_cloth_config(silk::ClothConfig& cloth_config,
-                       bool& cloth_config_changed) {
+void draw_cloth_config(silk::ClothConfig& cloth_config, bool& cloth_config_changed) {
   ImGui::SeparatorText("Cloth Setting");
 
   if (ImGui::InputFloat("Elastic Stiffness", &cloth_config.elastic_stiffness)) {
@@ -27,8 +26,7 @@ void draw_collision_config(silk::CollisionConfig& collision_config,
   if (ImGui::Checkbox("Is Collision On", &collision_config.is_collision_on)) {
     collision_config_changed = true;
   }
-  if (ImGui::Checkbox("Is Self Collision On",
-                      &collision_config.is_self_collision_on)) {
+  if (ImGui::Checkbox("Is Self Collision On", &collision_config.is_self_collision_on)) {
     collision_config_changed = true;
   }
   if (ImGui::InputInt("Collision Group", &collision_config.group)) {
@@ -42,18 +40,16 @@ void draw_collision_config(silk::CollisionConfig& collision_config,
   }
 }
 
-void draw_transform_widget(glm::vec3& position, glm::vec3& rotation,
-                           float& scale, bool& transform_changed) {
+void draw_transform_widget(glm::vec3& position, glm::vec3& rotation, float& scale,
+                           bool& transform_changed) {
   ImGui::SeparatorText("Transform");
 
-  if (ImGui::DragFloat3("Position", &position.x, 0.01f, -100.0f, 100.0f,
-                        "%.3f")) {
+  if (ImGui::DragFloat3("Position", &position.x, 0.01f, -100.0f, 100.0f, "%.3f")) {
     transform_changed = true;
   }
 
   glm::vec3 rotation_degrees = glm::degrees(rotation);
-  if (ImGui::DragFloat3("Rotation", &rotation_degrees.x, 1.0f, -180.0f, 180.0f,
-                        "%.1f°")) {
+  if (ImGui::DragFloat3("Rotation", &rotation_degrees.x, 1.0f, -180.0f, 180.0f, "%.1f°")) {
     rotation = glm::radians(rotation_degrees);
     transform_changed = true;
   }

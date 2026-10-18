@@ -71,8 +71,7 @@ class MASPreconditioner {
   /// partition.
   /// @param part_offsets Graph paritition offset. CSR row ptr style.
   /// @param rt Cuda runtime.
-  void factorize(DynamicBSRView A, ctd::span<const int> part_offsets,
-                 CudaRuntime rt);
+  void factorize(DynamicBSRView A, ctd::span<const int> part_offsets, CudaRuntime rt);
 
   /// @brief Apply MAS preconditioner.
   /// @param r Residual.

@@ -9,7 +9,6 @@
 
 namespace silk::cuda {
 
-EqualityConstraints gather_pin_constraints(ObjRegistry& registry, int state_num,
-                                           CudaRuntime rt);
+EqualityConstraints gather_pin_constraints(ObjRegistry& registry, int state_num, CudaRuntime rt);
 
 }  // namespace silk::cuda

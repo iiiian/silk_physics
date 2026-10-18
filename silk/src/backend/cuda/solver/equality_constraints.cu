@@ -27,10 +27,8 @@ __global__ void count_indicator(ctd::span<const bool> indicator, int* out) {
   }
 }
 
-__global__ void merge_kernel(int state_num, ctd::span<bool> indicator,
-                             ctd::span<float> target,
-                             ctd::span<float> lagrange_mul,
-                             ctd::span<const bool> indicator_other,
+__global__ void merge_kernel(int state_num, ctd::span<bool> indicator, ctd::span<float> target,
+                             ctd::span<float> lagrange_mul, ctd::span<const bool> indicator_other,
                              ctd::span<const float> target_other,
                              ctd::span<const float> lagrange_mul_other) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -47,10 +45,8 @@ __global__ void merge_kernel(int state_num, ctd::span<bool> indicator,
 
 __global__ void update_lagrange_mul_kernel(ctd::span<const bool> indicator,
                                            ctd::span<const float> target,
-                                           ctd::span<const float> state,
-                                           float penalty,
-                                           float max_lagrange_mul,
-                                           ctd::span<float> lagrange_mul) {
+                                           ctd::span<const float> state, float penalty,
+                                           float max_lagrange_mul, ctd::span<float> lagrange_mul) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= state.size()) {
     return;
@@ -62,9 +58,8 @@ __global__ void update_lagrange_mul_kernel(ctd::span<const bool> indicator,
   }
 }
 
-__global__ void eval_kernel(ctd::span<const bool> indicator,
-                            ctd::span<const float> target, float penalty,
-                            ctd::span<const float> lagrange_mul,
+__global__ void eval_kernel(ctd::span<const bool> indicator, ctd::span<const float> target,
+                            float penalty, ctd::span<const float> lagrange_mul,
                             ctd::span<float> lhs_diag, ctd::span<float> rhs) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= indicator.size()) {
@@ -111,8 +106,7 @@ __global__ void accum_primal_residual_kernel(ctd::span<const bool> indicator,
   }
 }
 
-__global__ void enforce_kernel(ctd::span<const bool> indicator,
-                               ctd::span<const float> target,
+__global__ void enforce_kernel(ctd::span<const bool> indicator, ctd::span<const float> target,
                                ctd::span<float> state) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= indicator.size()) {
@@ -126,12 +120,9 @@ __global__ void enforce_kernel(ctd::span<const bool> indicator,
 
 }  // namespace
 
-EqualityConstraints::EqualityConstraints(int state_num, float init_penalty,
-                                         float init_lagrange_mul,
-                                         float max_lagrange_mul,
-                                         cu::device_buffer<bool> indicator,
-                                         cu::device_buffer<float> target,
-                                         CudaRuntime rt)
+EqualityConstraints::EqualityConstraints(int state_num, float init_penalty, float init_lagrange_mul,
+                                         float max_lagrange_mul, cu::device_buffer<bool> indicator,
+                                         cu::device_buffer<float> target, CudaRuntime rt)
     : state_num(std::move(state_num)),
       active_dof(0),
       indicator(std::move(indicator)),
@@ -150,24 +141,21 @@ EqualityConstraints::EqualityConstraints(int state_num, float init_penalty,
 
   auto d_active_dof = alloc<int>(rt, 1, 0);
   int grid_num = div_round_up(this->indicator.size(), 128);
-  count_indicator<<<grid_num, 128, 0, rt.stream.get()>>>(this->indicator,
-                                                         d_active_dof.data());
+  count_indicator<<<grid_num, 128, 0, rt.stream.get()>>>(this->indicator, d_active_dof.data());
   active_dof = scalar_load(d_active_dof.data(), rt);
 }
 
-void EqualityConstraints::merge(const EqualityConstraints& other,
-                                CudaRuntime rt) {
+void EqualityConstraints::merge(const EqualityConstraints& other, CudaRuntime rt) {
   assert(state_num == other.state_num);
 
   int grid_num = div_round_up(state_num, 128);
-  merge_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
-      state_num, indicator, target, lagrange_mul, other.indicator, other.target,
-      other.lagrange_mul);
+  merge_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(state_num, indicator, target, lagrange_mul,
+                                                      other.indicator, other.target,
+                                                      other.lagrange_mul);
 
   auto d_active_dof = alloc<int>(rt, 1, 0);
   grid_num = div_round_up(this->indicator.size(), 128);
-  count_indicator<<<grid_num, 128, 0, rt.stream.get()>>>(this->indicator,
-                                                         d_active_dof.data());
+  count_indicator<<<grid_num, 128, 0, rt.stream.get()>>>(this->indicator, d_active_dof.data());
   active_dof = scalar_load(d_active_dof.data(), rt);
 }
 
@@ -175,8 +163,7 @@ void EqualityConstraints::reset_lagrange_mul(CudaRuntime rt) {
   fill_value<float>(lagrange_mul, init_lagrange_mul, rt);
 }
 
-void EqualityConstraints::update_lagrange_mul(ctd::span<const float> state,
-                                              CudaRuntime rt) {
+void EqualityConstraints::update_lagrange_mul(ctd::span<const float> state, CudaRuntime rt) {
   int grid_num = div_round_up(state.size(), 128);
   update_lagrange_mul_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
       indicator, target, state, penalty, max_lagrange_mul, lagrange_mul);
@@ -185,22 +172,20 @@ void EqualityConstraints::update_lagrange_mul(ctd::span<const float> state,
 void EqualityConstraints::eval(ctd::span<float> lhs_diag, ctd::span<float> rhs,
                                CudaRuntime rt) const {
   int grid_num = div_round_up(indicator.size(), 128);
-  eval_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
-      indicator, target, penalty, lagrange_mul, lhs_diag, rhs);
+  eval_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(indicator, target, penalty, lagrange_mul,
+                                                     lhs_diag, rhs);
 }
 
 void EqualityConstraints::accum_primal_residual(ctd::span<const float> state,
-                                                ADMMResidualView residual,
-                                                CudaRuntime rt) const {
+                                                ADMMResidualView residual, CudaRuntime rt) const {
   int grid_num = div_round_up(indicator.size(), 128);
-  accum_primal_residual_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
-      indicator, target, state, residual);
+  accum_primal_residual_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(indicator, target, state,
+                                                                      residual);
 }
 
 void EqualityConstraints::enforce(ctd::span<float> state, CudaRuntime rt) {
   int grid_num = div_round_up(indicator.size(), 128);
-  enforce_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(indicator, target,
-                                                        state);
+  enforce_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(indicator, target, state);
 }
 
 }  // namespace silk::cuda

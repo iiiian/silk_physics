@@ -66,10 +66,9 @@ TEST_CASE("Frictionless contact removes only penetration") {
 
 TEST_CASE("Coulomb contact satisfies complementarity and the friction cone") {
   Vec3f normal = {0.0f, 0.0f, 1.0f};
-  std::array<Vec3f, 6> free_displacements{
-      Vec3f{0.0f, 0.0f, 1.0f},   Vec3f{2.0f, -1.0f, 0.0f},
-      Vec3f{0.1f, 0.2f, -1.0f},  Vec3f{2.0f, 0.0f, -1.0f},
-      Vec3f{-3.0f, 4.0f, -0.5f}, Vec3f{0.0f, 0.0f, -2.0f}};
+  std::array<Vec3f, 6> free_displacements{Vec3f{0.0f, 0.0f, 1.0f},   Vec3f{2.0f, -1.0f, 0.0f},
+                                          Vec3f{0.1f, 0.2f, -1.0f},  Vec3f{2.0f, 0.0f, -1.0f},
+                                          Vec3f{-3.0f, 4.0f, -0.5f}, Vec3f{0.0f, 0.0f, -2.0f}};
   std::array<float, 4> frictions{0.0f, 0.1f, 0.5f, 2.0f};
   constexpr float TOLERANCE = 1e-5f;
 
@@ -81,8 +80,7 @@ TEST_CASE("Coulomb contact satisfies complementarity and the friction cone") {
       float reaction_normal = dot(reaction, normal);
       Vec3f reaction_tangent = vsub(reaction, ax(reaction_normal, normal));
 
-      CAPTURE(friction, free_displacement(0), free_displacement(1),
-              free_displacement(2));
+      CAPTURE(friction, free_displacement(0), free_displacement(1), free_displacement(2));
       REQUIRE(solved_normal >= -TOLERANCE);
       REQUIRE(reaction_normal >= -TOLERANCE);
       REQUIRE(ctd::abs(solved_normal * reaction_normal) <= TOLERANCE);

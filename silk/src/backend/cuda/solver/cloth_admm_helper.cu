@@ -16,8 +16,8 @@ namespace {
 
 using Vec6f = Mat<float, 6, 1>;
 
-__device__ Vec6f solve_elastic_aux(float penalty, float stiffness, float weight,
-                                   const Vec6f& Sx, const Vec6f& u) {
+__device__ Vec6f solve_elastic_aux(float penalty, float stiffness, float weight, const Vec6f& Sx,
+                                   const Vec6f& u) {
   auto y = axpby(1.0, Sx, 1.0f / (penalty * weight), u);
   // SVD decomposition D = U S V^T via svd32 (backed by the 3x3 ref SVD).
   Mat32f U;
@@ -151,12 +151,9 @@ __global__ void solve_and_update_elastic_aux(
       int out_offset = 3 * faces[tid * 3 + i];
 #pragma unroll
       for (int j = 0; j < 3; ++j) {
-        atomicAdd(residual.dual_residual.data() + out_offset + j,
-                  dual(3 * i + j));
-        atomicAdd(residual.dual_scale_curr.data() + out_offset + j,
-                  dual_curr(3 * i + j));
-        atomicAdd(residual.dual_scale_prev.data() + out_offset + j,
-                  dual_prev(3 * i + j));
+        atomicAdd(residual.dual_residual.data() + out_offset + j, dual(3 * i + j));
+        atomicAdd(residual.dual_scale_curr.data() + out_offset + j, dual_curr(3 * i + j));
+        atomicAdd(residual.dual_scale_prev.data() + out_offset + j, dual_prev(3 * i + j));
       }
     }
 
@@ -200,12 +197,10 @@ __global__ void solve_and_update_elastic_aux(
   }
 }
 
-__global__ void assemble_inertia_and_bending(float dt,
-                                             ctd::span<const float> mass,
+__global__ void assemble_inertia_and_bending(float dt, ctd::span<const float> mass,
                                              ctd::span<const float> inertia_mod,
                                              ctd::span<const float> bending_rhs,
-                                             ctd::span<float> lhs_diag,
-                                             ctd::span<float> rhs) {
+                                             ctd::span<float> lhs_diag, ctd::span<float> rhs) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= lhs_diag.size()) {
     return;
@@ -283,9 +278,10 @@ void ClothADMMHelper::reset_aux_lagrange_mul(CudaRuntime rt) {
   cu::fill_bytes(rt.stream, *ue_, 0);
 }
 
-void ClothADMMHelper::update_aux_var_and_lagrange_mul(
-    float max_lagrange_mul, const ClothAssemblyL1Cache& l1_cache,
-    ctd::span<const float> state, ADMMResidualView residual, CudaRuntime rt) {
+void ClothADMMHelper::update_aux_var_and_lagrange_mul(float max_lagrange_mul,
+                                                      const ClothAssemblyL1Cache& l1_cache,
+                                                      ctd::span<const float> state,
+                                                      ADMMResidualView residual, CudaRuntime rt) {
   int grid_num = div_round_up(l1_cache.face_num, 128);
   // clang-format off
   solve_and_update_elastic_aux<<<grid_num, 128, 0, rt.stream.get()>>>(
@@ -304,12 +300,11 @@ void ClothADMMHelper::update_aux_var_and_lagrange_mul(
 }
 
 void ClothADMMHelper::solve_main_var(float rel_tol, float abs_tol,
-                                     const ClothAssemblyL1Cache& l1_cache,
-                                     bool is_lhs_changed,
+                                     const ClothAssemblyL1Cache& l1_cache, bool is_lhs_changed,
                                      ctd::span<const float> extern_lhs,
                                      ctd::span<const float> extern_rhs,
-                                     ctd::span<const float> inertia_mod,
-                                     ctd::span<float> state, CudaRuntime rt) {
+                                     ctd::span<const float> inertia_mod, ctd::span<float> state,
+                                     CudaRuntime rt) {
   Timer timer_copy_cached("copy cached lhs and rhs", rt);
   auto lhs_diag = alloc<float>(rt, l1_cache.state_num);
   cu::copy_bytes(rt.stream, extern_lhs, lhs_diag);
@@ -320,15 +315,14 @@ void ClothADMMHelper::solve_main_var(float rel_tol, float abs_tol,
   Timer timer_assemble_inertia_bending("assemble inertia and bending", rt);
   int grid_num = div_round_up(l1_cache.state_num, 128);
   assemble_inertia_and_bending<<<grid_num, 128, 0, rt.stream.get()>>>(
-      l1_cache.dt, *l1_cache.mass, inertia_mod, *l1_cache.bending_rhs, lhs_diag,
-      rhs);
+      l1_cache.dt, *l1_cache.mass, inertia_mod, *l1_cache.bending_rhs, lhs_diag, rhs);
   timer_assemble_inertia_bending.end();
 
   Timer timer_assemble_elastic_rhs("assemble elastic rhs", rt);
   grid_num = div_round_up(l1_cache.face_num, 128);
   assemble_elastic_rhs<<<grid_num, 128, 0, rt.stream.get()>>>(
-      l1_cache.face_num, l1_cache.penalty, *l1_cache.faces,
-      *l1_cache.jacobian_ops, *l1_cache.area_sqrt, *ue_, *ze_, rhs);
+      l1_cache.face_num, l1_cache.penalty, *l1_cache.faces, *l1_cache.jacobian_ops,
+      *l1_cache.area_sqrt, *ue_, *ze_, rhs);
   timer_assemble_elastic_rhs.end();
 
   DynamicBSRView dyn_A{lhs_diag, l1_cache.weighted_AA.view()};

@@ -23,9 +23,8 @@ namespace silk::cuda {
 
 #define __both__ __host__ __device__
 
-inline void check_cuda(
-    cudaError_t result,
-    ctd::source_location location = ctd::source_location::current()) {
+inline void check_cuda(cudaError_t result,
+                       ctd::source_location location = ctd::source_location::current()) {
   if (result != cudaSuccess) {
     std::string msg;
     msg.reserve(128);  // optional
@@ -45,9 +44,8 @@ inline void check_cuda(
   }
 }
 
-inline void check_cusparse(
-    cusparseStatus_t result,
-    ctd::source_location location = ctd::source_location::current()) {
+inline void check_cusparse(cusparseStatus_t result,
+                           ctd::source_location location = ctd::source_location::current()) {
   if (result != CUSPARSE_STATUS_SUCCESS) {
     std::string msg;
     msg.reserve(128);  // optional
@@ -78,15 +76,12 @@ class CudaOOM : public std::runtime_error {
 };
 
 /// @brief ceil(num/denom)
-constexpr int div_round_up(int num, int denom) {
-  return (num + denom - 1) / denom;
-}
+constexpr int div_round_up(int num, int denom) { return (num + denom - 1) / denom; }
 
 /// Throw meaningful error if allocation fails.
 template <typename T, typename V = ::cuda::no_init_t>
-cu::device_buffer<T> alloc(
-    CudaRuntime rt, size_t n, V init_val = cu::no_init,
-    ctd::source_location location = ctd::source_location::current()) {
+cu::device_buffer<T> alloc(CudaRuntime rt, size_t n, V init_val = cu::no_init,
+                           ctd::source_location location = ctd::source_location::current()) {
   size_t requested_bytes = n * sizeof(T);
   // Only catch cu::cuda_error with status() = cudaErrorMemoryAllocation
   try {
@@ -105,10 +100,9 @@ cu::device_buffer<T> alloc(
   constexpr size_t MB = 1024ull * 1024ull;
   size_t requested_mb = div_round_up(requested_bytes, MB);
   size_t free_mb = div_round_up(free_bytes, MB);
-  throw CudaOOM(
-      std::format("Fail to alllocate {} MB at {}: line {} {}. Only {} MB left.",
-                  requested_mb, location.file_name(), location.line(),
-                  location.function_name(), free_mb));
+  throw CudaOOM(std::format("Fail to alllocate {} MB at {}: line {} {}. Only {} MB left.",
+                            requested_mb, location.file_name(), location.line(),
+                            location.function_name(), free_mb));
 }
 
 /// @brief Nullable device buffer.
@@ -133,8 +127,7 @@ void resize_buffer(size_t size, cu::device_buffer<T>& buf, CudaRuntime rt) {
 
 /// @brief Async host/device span upload.
 template <typename T>
-cu::device_buffer<T> vec_like_to_device(ctd::span<const T> vec,
-                                        CudaRuntime rt) {
+cu::device_buffer<T> vec_like_to_device(ctd::span<const T> vec, CudaRuntime rt) {
   auto buffer = alloc<T>(rt, vec.size());
   cu::copy_bytes(rt.stream, vec, buffer);
   return buffer;
@@ -151,8 +144,7 @@ std::vector<T> vec_like_to_host(ctd::span<const T> vec, CudaRuntime rt) {
 template <typename T>
 T scalar_load(const T* device_ptr, CudaRuntime rt) {
   T result;
-  cudaMemcpyAsync(&result, device_ptr, sizeof(T), cudaMemcpyDeviceToHost,
-                  rt.stream.get());
+  cudaMemcpyAsync(&result, device_ptr, sizeof(T), cudaMemcpyDeviceToHost, rt.stream.get());
   rt.stream.sync();
   return result;
 }

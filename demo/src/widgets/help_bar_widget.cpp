@@ -32,10 +32,8 @@ void HelpBarWidget::draw() {
 
   if (ImGui::Begin("Help Bar", nullptr,
                    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDecoration |
-                       ImGuiWindowFlags_AlwaysAutoResize |
-                       ImGuiWindowFlags_NoSavedSettings |
-                       ImGuiWindowFlags_NoFocusOnAppearing |
-                       ImGuiWindowFlags_NoNav)) {
+                       ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+                       ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav)) {
     ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 0.9f), "%s", help_text.c_str());
   }
   ImGui::End();

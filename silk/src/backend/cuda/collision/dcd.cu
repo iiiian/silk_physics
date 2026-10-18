@@ -15,14 +15,13 @@ namespace {
 constexpr int CUDA_THREADS = 128;
 constexpr float DCD_GEOMETRY_EPS = 1e-6f;
 
-__device__ Vec3f position_at_time(const Vec3f& position_t0,
-                                  const Vec3f& position_t1, float time) {
+__device__ Vec3f position_at_time(const Vec3f& position_t0, const Vec3f& position_t1, float time) {
   return axpby(1.0f - time, position_t0, time, position_t1);
 }
 
-__device__ ctd::optional<Collision> make_pt_collision(
-    const TriangleCollider& triangle, const PointCollider& point, float time,
-    float activation_distance) {
+__device__ ctd::optional<Collision> make_pt_collision(const TriangleCollider& triangle,
+                                                      const PointCollider& point, float time,
+                                                      float activation_distance) {
   Vec3f x0 = position_at_time(point.v0_t0, point.v0_t1, time);
   Vec3f x1 = position_at_time(triangle.v0_t0, triangle.v0_t1, time);
   Vec3f x2 = position_at_time(triangle.v1_t0, triangle.v1_t1, time);
@@ -70,8 +69,7 @@ __device__ ctd::optional<Collision> make_pt_collision(
   collision.object_id_b = triangle.object_id;
   collision.state_offset_a = point.state_offset;
   collision.state_offset_b = triangle.state_offset;
-  collision.index = {point.index, triangle.index(0), triangle.index(1),
-                     triangle.index(2)};
+  collision.index = {point.index, triangle.index(0), triangle.index(1), triangle.index(2)};
   collision.activation_distance = activation_distance;
   collision.friction = ctd::sqrt(point.friction * triangle.friction);
   collision.normal = normal;
@@ -83,8 +81,7 @@ __device__ ctd::optional<Collision> make_pt_collision(
   collision.x3 = x3;
   collision.prescribed_displacement = Vec3f::zeros();
   if (point.state_offset < 0) {
-    collision.prescribed_displacement =
-        ax(coefficient(0), vsub(point.v0_t1, x0));
+    collision.prescribed_displacement = ax(coefficient(0), vsub(point.v0_t1, x0));
   }
   if (triangle.state_offset < 0) {
     collision.prescribed_displacement =
@@ -100,9 +97,9 @@ __device__ ctd::optional<Collision> make_pt_collision(
   return collision;
 }
 
-__device__ ctd::optional<Collision> make_ee_collision(
-    const EdgeCollider& edge_a, const EdgeCollider& edge_b, float time,
-    float activation_distance) {
+__device__ ctd::optional<Collision> make_ee_collision(const EdgeCollider& edge_a,
+                                                      const EdgeCollider& edge_b, float time,
+                                                      float activation_distance) {
   Vec3f x0 = position_at_time(edge_a.v0_t0, edge_a.v0_t1, time);
   Vec3f x1 = position_at_time(edge_a.v1_t0, edge_a.v1_t1, time);
   Vec3f x2 = position_at_time(edge_b.v0_t0, edge_b.v0_t1, time);
@@ -128,10 +125,8 @@ __device__ ctd::optional<Collision> make_ee_collision(
   Vec3f normal = ax(-1.0f / distance, displacement);
 
   Vec4f parameter = {1.0f - u, u, 1.0f - v, v};
-  Vec4f coefficient = {parameter(0), parameter(1), -parameter(2),
-                       -parameter(3)};
-  Vec4f inv_mass = {edge_a.inv_mass(0), edge_a.inv_mass(1), edge_b.inv_mass(0),
-                    edge_b.inv_mass(1)};
+  Vec4f coefficient = {parameter(0), parameter(1), -parameter(2), -parameter(3)};
+  Vec4f inv_mass = {edge_a.inv_mass(0), edge_a.inv_mass(1), edge_b.inv_mass(0), edge_b.inv_mass(1)};
   float denominator = 0.0f;
 #pragma unroll
   for (int i = 0; i < 4; ++i) {
@@ -151,8 +146,7 @@ __device__ ctd::optional<Collision> make_ee_collision(
   collision.object_id_b = edge_b.object_id;
   collision.state_offset_a = edge_a.state_offset;
   collision.state_offset_b = edge_b.state_offset;
-  collision.index = {edge_a.index(0), edge_a.index(1), edge_b.index(0),
-                     edge_b.index(1)};
+  collision.index = {edge_a.index(0), edge_a.index(1), edge_b.index(0), edge_b.index(1)};
   collision.activation_distance = activation_distance;
   collision.friction = ctd::sqrt(edge_a.friction * edge_b.friction);
   collision.normal = normal;
@@ -164,15 +158,13 @@ __device__ ctd::optional<Collision> make_ee_collision(
   collision.x3 = x3;
   collision.prescribed_displacement = Vec3f::zeros();
   if (edge_a.state_offset < 0) {
-    collision.prescribed_displacement =
-        vadd(ax(coefficient(0), vsub(edge_a.v0_t1, x0)),
-             ax(coefficient(1), vsub(edge_a.v1_t1, x1)));
+    collision.prescribed_displacement = vadd(ax(coefficient(0), vsub(edge_a.v0_t1, x0)),
+                                             ax(coefficient(1), vsub(edge_a.v1_t1, x1)));
   }
   if (edge_b.state_offset < 0) {
     collision.prescribed_displacement =
-        vadd(collision.prescribed_displacement,
-             vadd(ax(coefficient(2), vsub(edge_b.v0_t1, x2)),
-                  ax(coefficient(3), vsub(edge_b.v1_t1, x3))));
+        vadd(collision.prescribed_displacement, vadd(ax(coefficient(2), vsub(edge_b.v0_t1, x2)),
+                                                     ax(coefficient(3), vsub(edge_b.v1_t1, x3))));
   }
   collision.correction0 = ax(weight(0), correction);
   collision.correction1 = ax(weight(1), correction);
@@ -182,16 +174,14 @@ __device__ ctd::optional<Collision> make_ee_collision(
 }
 
 __global__ void find_pt_collisions(ctd::span<PTCCache> candidates, float time,
-                                   float activation_distance,
-                                   DynSpan<Collision> output) {
+                                   float activation_distance, DynSpan<Collision> output) {
   int thread = blockIdx.x * blockDim.x + threadIdx.x;
   if (thread >= candidates.size()) {
     return;
   }
 
   auto [triangle, point] = candidates[thread];
-  auto collision =
-      make_pt_collision(*triangle, *point, time, activation_distance);
+  auto collision = make_pt_collision(*triangle, *point, time, activation_distance);
   if (!collision) {
     return;
   }
@@ -201,16 +191,14 @@ __global__ void find_pt_collisions(ctd::span<PTCCache> candidates, float time,
 }
 
 __global__ void find_ee_collisions(ctd::span<EECCache> candidates, float time,
-                                   float activation_distance,
-                                   DynSpan<Collision> output) {
+                                   float activation_distance, DynSpan<Collision> output) {
   int thread = blockIdx.x * blockDim.x + threadIdx.x;
   if (thread >= candidates.size()) {
     return;
   }
 
   auto [edge_a, edge_b] = candidates[thread];
-  auto collision =
-      make_ee_collision(*edge_a, *edge_b, time, activation_distance);
+  auto collision = make_ee_collision(*edge_a, *edge_b, time, activation_distance);
   if (!collision) {
     return;
   }
@@ -220,9 +208,8 @@ __global__ void find_ee_collisions(ctd::span<EECCache> candidates, float time,
 }
 
 template <typename Candidate, typename Launch>
-void append_dcd_collisions(ctd::span<Candidate> candidates,
-                           cu::device_buffer<Collision>& output, int& fill,
-                           Launch&& launch, CudaRuntime rt) {
+void append_dcd_collisions(ctd::span<Candidate> candidates, cu::device_buffer<Collision>& output,
+                           int& fill, Launch&& launch, CudaRuntime rt) {
   if (candidates.empty()) {
     return;
   }
@@ -239,10 +226,8 @@ void append_dcd_collisions(ctd::span<Candidate> candidates,
 
 }  // namespace
 
-__both__ ctd::optional<ctd::pair<float, float>> exact_pt_uv(const Vec3f& x0,
-                                                            const Vec3f& x1,
-                                                            const Vec3f& x2,
-                                                            const Vec3f& x3,
+__both__ ctd::optional<ctd::pair<float, float>> exact_pt_uv(const Vec3f& x0, const Vec3f& x1,
+                                                            const Vec3f& x2, const Vec3f& x3,
                                                             float eps) {
   Vec3f x21 = vsub(x2, x1);
   Vec3f x31 = vsub(x3, x1);
@@ -271,10 +256,8 @@ __both__ ctd::optional<ctd::pair<float, float>> exact_pt_uv(const Vec3f& x0,
   return ctd::make_pair(b1, b2);
 }
 
-__both__ ctd::optional<ctd::pair<float, float>> exact_ee_uv(const Vec3f& x0,
-                                                            const Vec3f& x1,
-                                                            const Vec3f& x2,
-                                                            const Vec3f& x3,
+__both__ ctd::optional<ctd::pair<float, float>> exact_ee_uv(const Vec3f& x0, const Vec3f& x1,
+                                                            const Vec3f& x2, const Vec3f& x3,
                                                             float eps) {
   // To handle near parallel edege better use double precision.
   double d1x = static_cast<double>(x1(0)) - x0(0);
@@ -300,9 +283,8 @@ __both__ ctd::optional<ctd::pair<float, float>> exact_ee_uv(const Vec3f& x0,
   }
 
   double denominator = a * e - b * b;
-  double u = denominator > eps2 * a * e
-                 ? ctd::clamp((b * f - c * e) / denominator, 0.0, 1.0)
-                 : 0.0;  // test end point for parallel edge.
+  double u = denominator > eps2 * a * e ? ctd::clamp((b * f - c * e) / denominator, 0.0, 1.0)
+                                        : 0.0;  // test end point for parallel edge.
   double v = (b * u + f) / e;
   if (v < 0.0) {
     v = 0.0;
@@ -314,10 +296,8 @@ __both__ ctd::optional<ctd::pair<float, float>> exact_ee_uv(const Vec3f& x0,
   return ctd::make_pair(static_cast<float>(u), static_cast<float>(v));
 }
 
-void append_pt_dcd_collisions(ctd::span<PTCCache> pt_ccache, float time,
-                              float activation_distance,
-                              cu::device_buffer<Collision>& output, int& fill,
-                              CudaRuntime rt) {
+void append_pt_dcd_collisions(ctd::span<PTCCache> pt_ccache, float time, float activation_distance,
+                              cu::device_buffer<Collision>& output, int& fill, CudaRuntime rt) {
   auto launch = [&](DynSpan<Collision> dynamic_output) {
     int grid_num = div_round_up(pt_ccache.size(), CUDA_THREADS);
     find_pt_collisions<<<grid_num, CUDA_THREADS, 0, rt.stream.get()>>>(
@@ -326,10 +306,8 @@ void append_pt_dcd_collisions(ctd::span<PTCCache> pt_ccache, float time,
   append_dcd_collisions(pt_ccache, output, fill, launch, rt);
 }
 
-void append_ee_dcd_collisions(ctd::span<EECCache> ee_ccache, float time,
-                              float activation_distance,
-                              cu::device_buffer<Collision>& output, int& fill,
-                              CudaRuntime rt) {
+void append_ee_dcd_collisions(ctd::span<EECCache> ee_ccache, float time, float activation_distance,
+                              cu::device_buffer<Collision>& output, int& fill, CudaRuntime rt) {
   auto launch = [&](DynSpan<Collision> dynamic_output) {
     int grid_num = div_round_up(ee_ccache.size(), CUDA_THREADS);
     find_ee_collisions<<<grid_num, CUDA_THREADS, 0, rt.stream.get()>>>(

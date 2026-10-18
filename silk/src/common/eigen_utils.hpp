@@ -19,8 +19,8 @@ namespace silk {
 /// @param triplets Output vector where triplets are appended
 /// @param symmetry Symmetry filter applied to source matrix indices
 template <typename Scalar>
-void append_triplets_from_sparse(const Eigen::SparseMatrix<Scalar>& m,
-                                 int row_offset, int col_offset, Scalar scaling,
+void append_triplets_from_sparse(const Eigen::SparseMatrix<Scalar>& m, int row_offset,
+                                 int col_offset, Scalar scaling,
                                  std::vector<Eigen::Triplet<Scalar>>& triplets,
                                  Symmetry symmetry = Symmetry::NotSymmetric) {
   assert((m.rows() == m.cols()));
@@ -39,8 +39,7 @@ void append_triplets_from_sparse(const Eigen::SparseMatrix<Scalar>& m,
         }
       }
 
-      triplets.emplace_back(row_offset + it.row(), col_offset + it.col(),
-                            scaling * it.value());
+      triplets.emplace_back(row_offset + it.row(), col_offset + it.col(), scaling * it.value());
     }
   }
 }
@@ -55,10 +54,10 @@ void append_triplets_from_sparse(const Eigen::SparseMatrix<Scalar>& m,
 /// @param triplets Output vector where expanded triplets are appended
 /// @param symmetry Symmetry filter applied to source matrix indices
 template <typename Scalar>
-void append_triplets_from_vectorized_sparse(
-    const Eigen::SparseMatrix<Scalar>& m, int row_offset, int col_offset,
-    Scalar scaling, std::vector<Eigen::Triplet<Scalar>>& triplets,
-    Symmetry symmetry = Symmetry::NotSymmetric) {
+void append_triplets_from_vectorized_sparse(const Eigen::SparseMatrix<Scalar>& m, int row_offset,
+                                            int col_offset, Scalar scaling,
+                                            std::vector<Eigen::Triplet<Scalar>>& triplets,
+                                            Symmetry symmetry = Symmetry::NotSymmetric) {
   using Iter = typename Eigen::SparseMatrix<Scalar>::InnerIterator;
   for (int i = 0; i < m.outerSize(); ++i) {
     for (Iter it(m, i); it; ++it) {

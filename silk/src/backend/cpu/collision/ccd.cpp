@@ -15,12 +15,9 @@ constexpr float CCD_MAX_TIME_TOL = std::numeric_limits<float>::infinity();
 constexpr float CCD_MAX_COORD_TOL = std::numeric_limits<float>::infinity();
 
 // Compute axis-aligned bounds for four points.
-std::array<Eigen::Vector3f, 2> bbd_4_pts(const Eigen::Vector3f &p0,
-                                         const Eigen::Vector3f &p1,
-                                         const Eigen::Vector3f &p2,
-                                         const Eigen::Vector3f &p3) {
-  return {{p0.cwiseMin(p1).cwiseMin(p2).cwiseMin(p3),
-           p0.cwiseMax(p1).cwiseMax(p2).cwiseMax(p3)}};
+std::array<Eigen::Vector3f, 2> bbd_4_pts(const Eigen::Vector3f &p0, const Eigen::Vector3f &p1,
+                                         const Eigen::Vector3f &p2, const Eigen::Vector3f &p3) {
+  return {{p0.cwiseMin(p1).cwiseMin(p2).cwiseMin(p3), p0.cwiseMax(p1).cwiseMax(p2).cwiseMax(p3)}};
 }
 
 // Calculate the maximum per-axis span across two AABBs and their separation.
@@ -34,14 +31,11 @@ float get_max_axis_diff(const std::array<Eigen::Vector3f, 2> &b1,
   });
 }
 
-float max_linf_4(const Eigen::Vector3f &p1, const Eigen::Vector3f &p2,
-                 const Eigen::Vector3f &p3, const Eigen::Vector3f &p4,
-                 const Eigen::Vector3f &p1e, const Eigen::Vector3f &p2e,
+float max_linf_4(const Eigen::Vector3f &p1, const Eigen::Vector3f &p2, const Eigen::Vector3f &p3,
+                 const Eigen::Vector3f &p4, const Eigen::Vector3f &p1e, const Eigen::Vector3f &p2e,
                  const Eigen::Vector3f &p3e, const Eigen::Vector3f &p4e) {
-  return std::max({(p1e - p1).lpNorm<Eigen::Infinity>(),
-                   (p2e - p2).lpNorm<Eigen::Infinity>(),
-                   (p3e - p3).lpNorm<Eigen::Infinity>(),
-                   (p4e - p4).lpNorm<Eigen::Infinity>()});
+  return std::max({(p1e - p1).lpNorm<Eigen::Infinity>(), (p2e - p2).lpNorm<Eigen::Infinity>(),
+                   (p3e - p3).lpNorm<Eigen::Infinity>(), (p4e - p4).lpNorm<Eigen::Infinity>()});
 }
 
 /// @brief Saturating division helper.
@@ -61,9 +55,8 @@ constexpr float DEFAULT_CCD_DISTANCE_TOL = 1e-6;
 
 /// @brief Map a distance tolerance to {t,u,v} tolerances for vertex–face CCD.
 Eigen::Array3f compute_vertex_face_tolerances(
-    const Eigen::Vector3f &v_t0, const Eigen::Vector3f &f0_t0,
-    const Eigen::Vector3f &f1_t0, const Eigen::Vector3f &f2_t0,
-    const Eigen::Vector3f &v_t1, const Eigen::Vector3f &f0_t1,
+    const Eigen::Vector3f &v_t0, const Eigen::Vector3f &f0_t0, const Eigen::Vector3f &f1_t0,
+    const Eigen::Vector3f &f2_t0, const Eigen::Vector3f &v_t1, const Eigen::Vector3f &f0_t1,
     const Eigen::Vector3f &f1_t1, const Eigen::Vector3f &f2_t1,
     float distance_tolerance = DEFAULT_CCD_DISTANCE_TOL) {
   const Eigen::Vector3f p000 = v_t0 - f0_t0;
@@ -76,22 +69,18 @@ Eigen::Array3f compute_vertex_face_tolerances(
   const Eigen::Vector3f p110 = v_t1 - f1_t1;
 
   float dl = 3 * max_linf_4(p000, p001, p011, p010, p100, p101, p111, p110);
-  float edge0_length =
-      3 * max_linf_4(p000, p100, p101, p001, p010, p110, p111, p011);
-  float edge1_length =
-      3 * max_linf_4(p000, p100, p110, p010, p001, p101, p111, p011);
+  float edge0_length = 3 * max_linf_4(p000, p100, p101, p001, p010, p110, p111, p011);
+  float edge1_length = 3 * max_linf_4(p000, p100, p110, p010, p001, p101, p111, p011);
 
-  return Eigen::Array3f(
-      clamp_div(distance_tolerance, dl, CCD_MAX_TIME_TOL),
-      clamp_div(distance_tolerance, edge0_length, CCD_MAX_COORD_TOL),
-      clamp_div(distance_tolerance, edge1_length, CCD_MAX_COORD_TOL));
+  return Eigen::Array3f(clamp_div(distance_tolerance, dl, CCD_MAX_TIME_TOL),
+                        clamp_div(distance_tolerance, edge0_length, CCD_MAX_COORD_TOL),
+                        clamp_div(distance_tolerance, edge1_length, CCD_MAX_COORD_TOL));
 }
 
 /// @brief Map a distance tolerance to {t,u,v} tolerances for edge–edge CCD.
 Eigen::Array3f compute_edge_edge_tolerances(
-    const Eigen::Vector3f &ea0_t0, const Eigen::Vector3f &ea1_t0,
-    const Eigen::Vector3f &eb0_t0, const Eigen::Vector3f &eb1_t0,
-    const Eigen::Vector3f &ea0_t1, const Eigen::Vector3f &ea1_t1,
+    const Eigen::Vector3f &ea0_t0, const Eigen::Vector3f &ea1_t0, const Eigen::Vector3f &eb0_t0,
+    const Eigen::Vector3f &eb1_t0, const Eigen::Vector3f &ea0_t1, const Eigen::Vector3f &ea1_t1,
     const Eigen::Vector3f &eb0_t1, const Eigen::Vector3f &eb1_t1,
     float distance_tolerance = DEFAULT_CCD_DISTANCE_TOL) {
   Eigen::Vector3f p000 = ea0_t0 - eb0_t0;
@@ -104,35 +93,29 @@ Eigen::Array3f compute_edge_edge_tolerances(
   Eigen::Vector3f p111 = ea1_t1 - eb1_t1;
 
   float dl = 3 * max_linf_4(p000, p001, p011, p010, p100, p101, p111, p110);
-  float edge0_length =
-      3 * max_linf_4(p000, p100, p101, p001, p010, p110, p111, p011);
-  float edge1_length =
-      3 * max_linf_4(p000, p100, p110, p010, p001, p101, p111, p011);
+  float edge0_length = 3 * max_linf_4(p000, p100, p101, p001, p010, p110, p111, p011);
+  float edge1_length = 3 * max_linf_4(p000, p100, p110, p010, p001, p101, p111, p011);
 
-  return Eigen::Array3f(
-      clamp_div(distance_tolerance, dl, CCD_MAX_TIME_TOL),
-      clamp_div(distance_tolerance, edge0_length, CCD_MAX_COORD_TOL),
-      clamp_div(distance_tolerance, edge1_length, CCD_MAX_COORD_TOL));
+  return Eigen::Array3f(clamp_div(distance_tolerance, dl, CCD_MAX_TIME_TOL),
+                        clamp_div(distance_tolerance, edge0_length, CCD_MAX_COORD_TOL),
+                        clamp_div(distance_tolerance, edge1_length, CCD_MAX_COORD_TOL));
 }
 
 template <bool is_vertex_face>
-std::optional<CCDResult> CCD(
-    const Eigen::Vector3f &a_t0, const Eigen::Vector3f &b_t0,
-    const Eigen::Vector3f &c_t0, const Eigen::Vector3f &d_t0,
-    const Eigen::Vector3f &a_t1, const Eigen::Vector3f &b_t1,
-    const Eigen::Vector3f &c_t1, const Eigen::Vector3f &d_t1,
-    const Eigen::Array3f &err, float ms, float tolerance, long max_iter,
-    bool no_zero_toi, float max_time) {
+std::optional<CCDResult> CCD(const Eigen::Vector3f &a_t0, const Eigen::Vector3f &b_t0,
+                             const Eigen::Vector3f &c_t0, const Eigen::Vector3f &d_t0,
+                             const Eigen::Vector3f &a_t1, const Eigen::Vector3f &b_t1,
+                             const Eigen::Vector3f &c_t1, const Eigen::Vector3f &d_t1,
+                             const Eigen::Array3f &err, float ms, float tolerance, long max_iter,
+                             bool no_zero_toi, float max_time) {
   assert(max_time >= 0.0f && max_time <= 1.0f);
 
   // Compute co-domain tolerance.
   Eigen::Array3f tol;
   if constexpr (is_vertex_face) {
-    tol = compute_vertex_face_tolerances(a_t0, b_t0, c_t0, d_t0, a_t1, b_t1,
-                                         c_t1, d_t1, tolerance);
+    tol = compute_vertex_face_tolerances(a_t0, b_t0, c_t0, d_t0, a_t1, b_t1, c_t1, d_t1, tolerance);
   } else {
-    tol = compute_edge_edge_tolerances(a_t0, b_t0, c_t0, d_t0, a_t1, b_t1, c_t1,
-                                       d_t1, tolerance);
+    tol = compute_edge_edge_tolerances(a_t0, b_t0, c_t0, d_t0, a_t1, b_t1, c_t1, d_t1, tolerance);
   }
 
   // Initialize the domain [0, max_time] x [0, 1] x [0, 1].
@@ -144,8 +127,8 @@ std::optional<CCDResult> CCD(
   }};
 
   auto result = interval_root_finder_bucket_DFS<is_vertex_face>(
-      a_t0, b_t0, c_t0, d_t0, a_t1, b_t1, c_t1, d_t1, iset, tol, tolerance, err,
-      ms, max_iter, max_time == 1.0f);
+      a_t0, b_t0, c_t0, d_t0, a_t1, b_t1, c_t1, d_t1, iset, tol, tolerance, err, ms, max_iter,
+      max_time == 1.0f);
 
   if (!no_zero_toi) {
     return result;
@@ -160,8 +143,8 @@ std::optional<CCDResult> CCD(
   for (int i = 0; i < MS_REFINE_ITER; ++i) {
     ms *= 0.5f;
     auto refine_result = interval_root_finder_bucket_DFS<is_vertex_face>(
-        a_t0, b_t0, c_t0, d_t0, a_t1, b_t1, c_t1, d_t1, iset, tol, tolerance,
-        err, ms, max_iter, max_time == 1.0f);
+        a_t0, b_t0, c_t0, d_t0, a_t1, b_t1, c_t1, d_t1, iset, tol, tolerance, err, ms, max_iter,
+        max_time == 1.0f);
 
     if (!refine_result) {
       result->use_small_ms = true;
@@ -179,28 +162,24 @@ std::optional<CCDResult> CCD(
   return result;
 }
 
-std::optional<CCDResult> edge_edge_ccd(
-    const Eigen::Vector3f &ea0_t0, const Eigen::Vector3f &ea1_t0,
-    const Eigen::Vector3f &eb0_t0, const Eigen::Vector3f &eb1_t0,
-    const Eigen::Vector3f &ea0_t1, const Eigen::Vector3f &ea1_t1,
-    const Eigen::Vector3f &eb0_t1, const Eigen::Vector3f &eb1_t1,
-    const Eigen::Array3f &err, float ms, float tolerance, long max_iter,
-    bool no_zero_toi, float max_time) {
-  return CCD</*is_vertex_face=*/false>(
-      ea0_t0, ea1_t0, eb0_t0, eb1_t0, ea0_t1, ea1_t1, eb0_t1, eb1_t1, err, ms,
-      tolerance, max_iter, no_zero_toi, max_time);
+std::optional<CCDResult> edge_edge_ccd(const Eigen::Vector3f &ea0_t0, const Eigen::Vector3f &ea1_t0,
+                                       const Eigen::Vector3f &eb0_t0, const Eigen::Vector3f &eb1_t0,
+                                       const Eigen::Vector3f &ea0_t1, const Eigen::Vector3f &ea1_t1,
+                                       const Eigen::Vector3f &eb0_t1, const Eigen::Vector3f &eb1_t1,
+                                       const Eigen::Array3f &err, float ms, float tolerance,
+                                       long max_iter, bool no_zero_toi, float max_time) {
+  return CCD</*is_vertex_face=*/false>(ea0_t0, ea1_t0, eb0_t0, eb1_t0, ea0_t1, ea1_t1, eb0_t1,
+                                       eb1_t1, err, ms, tolerance, max_iter, no_zero_toi, max_time);
 }
 
-std::optional<CCDResult> vertex_face_ccd(
-    const Eigen::Vector3f &v_t0, const Eigen::Vector3f &f0_t0,
-    const Eigen::Vector3f &f1_t0, const Eigen::Vector3f &f2_t0,
-    const Eigen::Vector3f &v_t1, const Eigen::Vector3f &f0_t1,
-    const Eigen::Vector3f &f1_t1, const Eigen::Vector3f &f2_t1,
-    const Eigen::Array3f &err, float ms, float tolerance, long max_iter,
-    bool no_zero_toi, float max_time) {
-  return CCD</*is_vertex_face=*/true>(v_t0, f0_t0, f1_t0, f2_t0, v_t1, f0_t1,
-                                      f1_t1, f2_t1, err, ms, tolerance,
-                                      max_iter, no_zero_toi, max_time);
+std::optional<CCDResult> vertex_face_ccd(const Eigen::Vector3f &v_t0, const Eigen::Vector3f &f0_t0,
+                                         const Eigen::Vector3f &f1_t0, const Eigen::Vector3f &f2_t0,
+                                         const Eigen::Vector3f &v_t1, const Eigen::Vector3f &f0_t1,
+                                         const Eigen::Vector3f &f1_t1, const Eigen::Vector3f &f2_t1,
+                                         const Eigen::Array3f &err, float ms, float tolerance,
+                                         long max_iter, bool no_zero_toi, float max_time) {
+  return CCD</*is_vertex_face=*/true>(v_t0, f0_t0, f1_t0, f2_t0, v_t1, f0_t1, f1_t1, f2_t1, err, ms,
+                                      tolerance, max_iter, no_zero_toi, max_time);
 }
 
 }  // namespace silk::cpu

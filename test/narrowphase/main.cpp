@@ -74,29 +74,22 @@ struct GpuRun {
 Options parse_options(int argc, char** argv) {
   Options options;
   argparse::ArgumentParser program("narrowphase_benchmark");
-  program.add_description(
-      "Verify and benchmark narrowphase CCD on Scalable CCD data");
+  program.add_description("Verify and benchmark narrowphase CCD on Scalable CCD data");
   program.add_argument("--verify")
       .help("Compare against original_ticcd and analytical dataset labels")
       .store_into(options.verify);
   program.add_argument("--repetitions")
       .help("Number of complete query sweeps")
       .store_into(options.repetitions);
-  program.add_argument("--threads")
-      .help("Maximum CPU thread count")
-      .store_into(options.thread_num);
+  program.add_argument("--threads").help("Maximum CPU thread count").store_into(options.thread_num);
   program.add_argument("--timesteps")
       .help("Maximum number of timesteps per scene")
       .store_into(options.timestep_num);
   program.add_argument("--max-iterations")
       .help("Maximum root-finder iterations per query; -1 means unlimited")
       .store_into(options.max_iterations);
-  program.add_argument("--data")
-      .help("Scalable CCD dataset root")
-      .store_into(options.data_root);
-  program.add_argument("--out")
-      .help("Benchmark CSV output path")
-      .store_into(options.output_path);
+  program.add_argument("--data").help("Scalable CCD dataset root").store_into(options.data_root);
+  program.add_argument("--out").help("Benchmark CSV output path").store_into(options.output_path);
   program.add_argument("--scene")
       .help(
           "Run only one scene: armadillo-rollers, cloth-ball, cloth-funnel, "
@@ -116,21 +109,19 @@ Options parse_options(int argc, char** argv) {
     options.max_iterations = VERIFY_MAX_ITERATIONS;
   }
 
-  if (options.repetitions <= 0 || options.thread_num <= 0 ||
-      options.timestep_num == 0 || options.timestep_num < -1) {
+  if (options.repetitions <= 0 || options.thread_num <= 0 || options.timestep_num == 0 ||
+      options.timestep_num < -1) {
     throw std::runtime_error(
         "Repetitions and thread count must be positive; timesteps must be -1 "
         "or positive");
   }
   if (options.max_iterations == 0 || options.max_iterations < -1) {
-    throw std::runtime_error(
-        "Maximum iterations must be -1 or a positive integer");
+    throw std::runtime_error("Maximum iterations must be -1 or a positive integer");
   }
   if (!options.verify && options.output_path.empty()) {
     throw std::runtime_error("--out is required in benchmark mode");
   }
-  if (!options.query.empty() && options.query != "ee" &&
-      options.query != "vf") {
+  if (!options.query.empty() && options.query != "ee" && options.query != "vf") {
     throw std::runtime_error("Unknown query kind: " + options.query);
   }
   return options;
@@ -168,11 +159,9 @@ void for_each_timestep(const QueryBatch& batch, Function&& function) {
   }
 }
 
-OutputSummary verify_output(const QueryBatch& batch,
-                            std::span<const QueryOutput> output) {
+OutputSummary verify_output(const QueryBatch& batch, std::span<const QueryOutput> output) {
   if (output.size() != batch.queries.size()) {
-    throw std::runtime_error(
-        "CCD implementation returned an invalid output size");
+    throw std::runtime_error("CCD implementation returned an invalid output size");
   }
 
   OutputSummary summary;
@@ -191,12 +180,10 @@ OutputSummary verify_output(const QueryBatch& batch,
   return summary;
 }
 
-uint64_t verify_analytical_output(const QueryBatch& batch,
-                                  std::span<const QueryOutput> output,
+uint64_t verify_analytical_output(const QueryBatch& batch, std::span<const QueryOutput> output,
                                   const std::string& implementation) {
   if (output.size() != batch.queries.size()) {
-    throw std::runtime_error(
-        "CCD implementation returned an invalid output size");
+    throw std::runtime_error("CCD implementation returned an invalid output size");
   }
 
   uint64_t analytical_query_count = 0;
@@ -208,11 +195,9 @@ uint64_t verify_analytical_output(const QueryBatch& batch,
     ++analytical_query_count;
     if (query.expected && !output[i].hit) {
       throw std::runtime_error(
-          implementation +
-          " returned a false negative against the analytical dataset in " +
+          implementation + " returned a false negative against the analytical dataset in " +
           batch.scene + "/" + query_name(batch.kind) + " at timestep " +
-          std::to_string(query.timestep) + ", query " +
-          std::to_string(query.timestep_query));
+          std::to_string(query.timestep) + ", query " + std::to_string(query.timestep_query));
     }
   }
   return analytical_query_count;
@@ -228,13 +213,10 @@ void accumulate_summary(OutputSummary& total, const OutputSummary& value) {
   total.max_toi_error = std::max(total.max_toi_error, value.max_toi_error);
 }
 
-OutputSummary compare_to_reference(
-    const QueryBatch& batch, std::span<const QueryOutput> output,
-    std::span<const QueryOutput> reference_output) {
-  if (output.size() != batch.queries.size() ||
-      reference_output.size() != batch.queries.size()) {
-    throw std::runtime_error(
-        "CCD implementation returned an invalid output size");
+OutputSummary compare_to_reference(const QueryBatch& batch, std::span<const QueryOutput> output,
+                                   std::span<const QueryOutput> reference_output) {
+  if (output.size() != batch.queries.size() || reference_output.size() != batch.queries.size()) {
+    throw std::runtime_error("CCD implementation returned an invalid output size");
   }
 
   OutputSummary summary;
@@ -254,9 +236,8 @@ OutputSummary compare_to_reference(
   return summary;
 }
 
-std::vector<QueryOutput> run_cpu(CpuAdapter& adapter, const QueryBatch& batch,
-                                 bool verify, int repetitions,
-                                 std::vector<double>& times) {
+std::vector<QueryOutput> run_cpu(CpuAdapter& adapter, const QueryBatch& batch, bool verify,
+                                 int repetitions, std::vector<double>& times) {
   std::vector<QueryOutput> output(batch.queries.size());
   int run_num = verify ? 1 : repetitions;
   if (times.empty()) {
@@ -270,11 +251,9 @@ std::vector<QueryOutput> run_cpu(CpuAdapter& adapter, const QueryBatch& batch,
       std::atomic<float> earliest_toi{1.0f};
       time_ms += measure_wall_time([&]() {
         tbb::parallel_for(begin, end, [&](int i) {
-          float max_time =
-              verify ? 1.0f : earliest_toi.load(std::memory_order_relaxed);
+          float max_time = verify ? 1.0f : earliest_toi.load(std::memory_order_relaxed);
           if (max_time <= 0.0f) {
-            output[i] = {
-                .toi = 1.0f, .hit = false, .searched_full_interval = false};
+            output[i] = {.toi = 1.0f, .hit = false, .searched_full_interval = false};
             return;
           }
 
@@ -284,9 +263,8 @@ std::vector<QueryOutput> run_cpu(CpuAdapter& adapter, const QueryBatch& batch,
 
           if (!verify && result.hit) {
             float previous = earliest_toi.load(std::memory_order_relaxed);
-            while (result.toi < previous &&
-                   !earliest_toi.compare_exchange_weak(
-                       previous, result.toi, std::memory_order_relaxed)) {
+            while (result.toi < previous && !earliest_toi.compare_exchange_weak(
+                                                previous, result.toi, std::memory_order_relaxed)) {
             }
           }
         });
@@ -301,9 +279,8 @@ std::vector<QueryOutput> run_cpu(CpuAdapter& adapter, const QueryBatch& batch,
 }
 
 #ifdef SILK_NARROWPHASE_HAS_CUDA
-std::vector<QueryOutput> run_gpu(GpuAdapter& adapter, const QueryBatch& batch,
-                                 bool verify, int repetitions,
-                                 std::vector<double>& times) {
+std::vector<QueryOutput> run_gpu(GpuAdapter& adapter, const QueryBatch& batch, bool verify,
+                                 int repetitions, std::vector<double>& times) {
   std::vector<QueryOutput> output(batch.queries.size());
   int run_num = verify ? 1 : repetitions;
   if (times.empty()) {
@@ -335,21 +312,18 @@ void print_header(std::ostream& output) {
          << std::flush;
 }
 
-void print_result(const std::string& scene, QueryKind kind, int timestep_num,
-                  uint64_t query_count, const std::string& algorithm,
-                  const std::string& device, int thread_num,
-                  const OutputSummary& summary,
-                  const std::vector<double>& times, std::ostream& output) {
+void print_result(const std::string& scene, QueryKind kind, int timestep_num, uint64_t query_count,
+                  const std::string& algorithm, const std::string& device, int thread_num,
+                  const OutputSummary& summary, const std::vector<double>& times,
+                  std::ostream& output) {
   double query_ms = median(times);
   double ns_per_query = query_ms * 1e6 / std::max<uint64_t>(query_count, 1);
   int reported_thread_num = device == "gpu" ? 0 : thread_num;
-  output << algorithm << ',' << device << ',' << scene << ','
-         << query_name(kind) << ',' << reported_thread_num << ','
-         << timestep_num << ',' << query_count << ','
-         << summary.pruned_query_num << ',' << summary.expected_collision_num
-         << ',' << summary.reported_collision_num << ','
-         << summary.false_positive_num << ',' << summary.false_negative_num
-         << ',' << query_ms << ',' << ns_per_query << '\n'
+  output << algorithm << ',' << device << ',' << scene << ',' << query_name(kind) << ','
+         << reported_thread_num << ',' << timestep_num << ',' << query_count << ','
+         << summary.pruned_query_num << ',' << summary.expected_collision_num << ','
+         << summary.reported_collision_num << ',' << summary.false_positive_num << ','
+         << summary.false_negative_num << ',' << query_ms << ',' << ns_per_query << '\n'
          << std::flush;
   if (!output) {
     throw std::runtime_error("Unable to write benchmark CSV output");
@@ -363,8 +337,8 @@ int main(int argc, char** argv) {
   using namespace silk::narrowphase_benchmark;
   try {
     Options options = parse_options(argc, argv);
-    tbb::global_control thread_limit(
-        tbb::global_control::max_allowed_parallelism, options.thread_num);
+    tbb::global_control thread_limit(tbb::global_control::max_allowed_parallelism,
+                                     options.thread_num);
     std::vector<SceneFiles> scenes = resolve_scene_files(options.data_root);
 
     std::ofstream output;
@@ -392,8 +366,7 @@ int main(int argc, char** argv) {
           continue;
         }
         std::vector<CpuRun> cpu_runs;
-        for (auto factory :
-             {make_silk_ticcd_adapter, make_original_ticcd_adapter}) {
+        for (auto factory : {make_silk_ticcd_adapter, make_original_ticcd_adapter}) {
           std::unique_ptr<CpuAdapter> adapter = factory(kind, max_iterations);
           if (!is_selected(adapter->name(), options.ccd)) {
             continue;
@@ -409,8 +382,7 @@ int main(int argc, char** argv) {
 
 #ifdef SILK_NARROWPHASE_HAS_CUDA
         std::vector<GpuRun> gpu_runs;
-        for (auto factory :
-             {make_scalable_gpu_adapter, make_silk_hybrid_ticcd_adapter}) {
+        for (auto factory : {make_scalable_gpu_adapter, make_silk_hybrid_ticcd_adapter}) {
           std::unique_ptr<GpuAdapter> adapter = factory(kind, max_iterations);
           if (!is_selected(adapter->name(), options.ccd)) {
             continue;
@@ -437,37 +409,31 @@ int main(int argc, char** argv) {
         if (options.timestep_num > 0) {
           timestep_num = std::min(timestep_num, options.timestep_num);
         }
-        for (int timestep_index = 0; timestep_index < timestep_num;
-             ++timestep_index) {
+        for (int timestep_index = 0; timestep_index < timestep_num; ++timestep_index) {
           int timestep = scene.first_timestep + timestep_index;
           // The published n-body archive omits these ground-truth queries.
           if (scene.name == "n-body-simulation" &&
               ((kind == QueryKind::VF && timestep == 53) || (timestep == 56))) {
             continue;
           }
-          QueryBatch batch = load_batch(scene, kind, scene_bounds,
-                                        timestep_index, broadphase.get());
+          QueryBatch batch =
+              load_batch(scene, kind, scene_bounds, timestep_index, broadphase.get());
           generated_query_num += batch.queries.size();
           std::vector<QueryOutput> reference_output;
           if (reference_adapter) {
-            reference_output =
-                run_cpu(*reference_adapter, batch, true, 1, reference_times);
-            verify_analytical_output(batch, reference_output,
-                                     reference_adapter->name());
+            reference_output = run_cpu(*reference_adapter, batch, true, 1, reference_times);
+            verify_analytical_output(batch, reference_output, reference_adapter->name());
           }
           for (CpuRun& run : cpu_runs) {
             std::vector<QueryOutput> query_output =
-                run_cpu(*run.adapter, batch, options.verify,
-                        options.repetitions, run.times);
+                run_cpu(*run.adapter, batch, options.verify, options.repetitions, run.times);
             if (options.verify) {
-              run.analytical_query_count += verify_analytical_output(
-                  batch, query_output, run.adapter->name());
-              accumulate_summary(
-                  run.summary,
-                  compare_to_reference(batch, query_output, reference_output));
-            } else {
+              run.analytical_query_count +=
+                  verify_analytical_output(batch, query_output, run.adapter->name());
               accumulate_summary(run.summary,
-                                 verify_output(batch, query_output));
+                                 compare_to_reference(batch, query_output, reference_output));
+            } else {
+              accumulate_summary(run.summary, verify_output(batch, query_output));
             }
             run.query_count += batch.queries.size();
           }
@@ -475,17 +441,14 @@ int main(int argc, char** argv) {
 #ifdef SILK_NARROWPHASE_HAS_CUDA
           for (GpuRun& run : gpu_runs) {
             std::vector<QueryOutput> query_output =
-                run_gpu(*run.adapter, batch, options.verify,
-                        options.repetitions, run.times);
+                run_gpu(*run.adapter, batch, options.verify, options.repetitions, run.times);
             if (options.verify) {
-              run.analytical_query_count += verify_analytical_output(
-                  batch, query_output, run.adapter->name());
-              accumulate_summary(
-                  run.summary,
-                  compare_to_reference(batch, query_output, reference_output));
-            } else {
+              run.analytical_query_count +=
+                  verify_analytical_output(batch, query_output, run.adapter->name());
               accumulate_summary(run.summary,
-                                 verify_output(batch, query_output));
+                                 compare_to_reference(batch, query_output, reference_output));
+            } else {
+              accumulate_summary(run.summary, verify_output(batch, query_output));
             }
             run.query_count += batch.queries.size();
           }
@@ -495,45 +458,40 @@ int main(int argc, char** argv) {
               spdlog::info(
                   "[dataset] Loaded {} {} queries through timestep {}/{} for "
                   "{}.",
-                  generated_query_num, query_name(kind), timestep_index + 1,
-                  timestep_num, scene.name);
+                  generated_query_num, query_name(kind), timestep_index + 1, timestep_num,
+                  scene.name);
             } else {
               spdlog::info(
                   "[embree] Generated {} {} queries through timestep {}/{} "
                   "for {}.",
-                  generated_query_num, query_name(kind), timestep_index + 1,
-                  timestep_num, scene.name);
+                  generated_query_num, query_name(kind), timestep_index + 1, timestep_num,
+                  scene.name);
             }
           }
         }
 
         for (CpuRun& run : cpu_runs) {
-          spdlog::info("[{}] Processed {} {} queries for {}.",
-                       run.adapter->name(), run.query_count, query_name(kind),
-                       scene.name);
+          spdlog::info("[{}] Processed {} {} queries for {}.", run.adapter->name(), run.query_count,
+                       query_name(kind), scene.name);
           bool output_mismatch = run.summary.false_negative_num != 0 ||
                                  run.summary.false_positive_num != 0 ||
                                  run.summary.toi_mismatch_num != 0;
           if (options.verify && output_mismatch) {
             throw std::runtime_error(
-                run.adapter->name() + " differs from original_ticcd: " +
-                std::to_string(run.summary.false_negative_num) +
-                " false negatives, " +
-                std::to_string(run.summary.false_positive_num) +
-                " false positives, " +
-                std::to_string(run.summary.toi_mismatch_num) +
-                " TOI mismatches, maximum TOI error " +
-                std::to_string(run.summary.max_toi_error));
+                run.adapter->name() +
+                " differs from original_ticcd: " + std::to_string(run.summary.false_negative_num) +
+                " false negatives, " + std::to_string(run.summary.false_positive_num) +
+                " false positives, " + std::to_string(run.summary.toi_mismatch_num) +
+                " TOI mismatches, maximum TOI error " + std::to_string(run.summary.max_toi_error));
           }
           if (!options.verify && run.summary.false_negative_num != 0) {
-            throw std::runtime_error(
-                run.adapter->name() + " returned " +
-                std::to_string(run.summary.false_negative_num) +
-                " false negatives in " + scene.name + "/" + query_name(kind));
+            throw std::runtime_error(run.adapter->name() + " returned " +
+                                     std::to_string(run.summary.false_negative_num) +
+                                     " false negatives in " + scene.name + "/" + query_name(kind));
           }
           if (options.verify) {
-            spdlog::info("[{}] Checked {} analytical dataset labels.",
-                         run.adapter->name(), run.analytical_query_count);
+            spdlog::info("[{}] Checked {} analytical dataset labels.", run.adapter->name(),
+                         run.analytical_query_count);
             spdlog::info(
                 "[{}] Compared against original_ticcd: {} hit mismatches, "
                 "{} TOI mismatches, maximum TOI error {}.",
@@ -542,41 +500,35 @@ int main(int argc, char** argv) {
                 run.summary.toi_mismatch_num, run.summary.max_toi_error);
           }
           if (!options.verify) {
-            print_result(scene.name, kind, timestep_num, run.query_count,
-                         run.adapter->name(), "cpu", options.thread_num,
-                         run.summary, run.times, output);
+            print_result(scene.name, kind, timestep_num, run.query_count, run.adapter->name(),
+                         "cpu", options.thread_num, run.summary, run.times, output);
           }
           verified_query_num += run.query_count;
         }
 
 #ifdef SILK_NARROWPHASE_HAS_CUDA
         for (GpuRun& run : gpu_runs) {
-          spdlog::info("[{}] Processed {} {} queries for {}.",
-                       run.adapter->name(), run.query_count, query_name(kind),
-                       scene.name);
+          spdlog::info("[{}] Processed {} {} queries for {}.", run.adapter->name(), run.query_count,
+                       query_name(kind), scene.name);
           bool output_mismatch = run.summary.false_negative_num != 0 ||
                                  run.summary.false_positive_num != 0 ||
                                  run.summary.toi_mismatch_num != 0;
           if (options.verify && output_mismatch) {
             throw std::runtime_error(
-                run.adapter->name() + " differs from original_ticcd: " +
-                std::to_string(run.summary.false_negative_num) +
-                " false negatives, " +
-                std::to_string(run.summary.false_positive_num) +
-                " false positives, " +
-                std::to_string(run.summary.toi_mismatch_num) +
-                " TOI mismatches, maximum TOI error " +
-                std::to_string(run.summary.max_toi_error));
+                run.adapter->name() +
+                " differs from original_ticcd: " + std::to_string(run.summary.false_negative_num) +
+                " false negatives, " + std::to_string(run.summary.false_positive_num) +
+                " false positives, " + std::to_string(run.summary.toi_mismatch_num) +
+                " TOI mismatches, maximum TOI error " + std::to_string(run.summary.max_toi_error));
           }
           if (!options.verify && run.summary.false_negative_num != 0) {
-            throw std::runtime_error(
-                run.adapter->name() + " returned " +
-                std::to_string(run.summary.false_negative_num) +
-                " false negatives in " + scene.name + "/" + query_name(kind));
+            throw std::runtime_error(run.adapter->name() + " returned " +
+                                     std::to_string(run.summary.false_negative_num) +
+                                     " false negatives in " + scene.name + "/" + query_name(kind));
           }
           if (options.verify) {
-            spdlog::info("[{}] Checked {} analytical dataset labels.",
-                         run.adapter->name(), run.analytical_query_count);
+            spdlog::info("[{}] Checked {} analytical dataset labels.", run.adapter->name(),
+                         run.analytical_query_count);
             spdlog::info(
                 "[{}] Compared against original_ticcd: {} hit mismatches, "
                 "{} TOI mismatches, maximum TOI error {}.",
@@ -585,11 +537,9 @@ int main(int argc, char** argv) {
                 run.summary.toi_mismatch_num, run.summary.max_toi_error);
           }
           if (!options.verify) {
-            std::string device =
-                run.adapter->name() == "silk_hybrid_ticcd" ? "hybrid" : "gpu";
-            print_result(scene.name, kind, timestep_num, run.query_count,
-                         run.adapter->name(), device, options.thread_num,
-                         run.summary, run.times, output);
+            std::string device = run.adapter->name() == "silk_hybrid_ticcd" ? "hybrid" : "gpu";
+            print_result(scene.name, kind, timestep_num, run.query_count, run.adapter->name(),
+                         device, options.thread_num, run.summary, run.times, output);
           }
           verified_query_num += run.query_count;
         }

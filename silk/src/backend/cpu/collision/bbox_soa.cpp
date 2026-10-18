@@ -14,8 +14,7 @@ namespace silk::cpu::HWY_NAMESPACE {
 namespace hn = hwy::HWY_NAMESPACE;
 
 template <int axis0>
-int sap_bbox_overlaps_target_axis(const Bbox& query_bbox,
-                                  const BboxSOAView& candidate_bboxes,
+int sap_bbox_overlaps_target_axis(const Bbox& query_bbox, const BboxSOAView& candidate_bboxes,
                                   std::span<const int> candidate_proxies,
                                   std::vector<int>& overlap_proxies) {
   hn::ScalableTag<float> d;
@@ -98,20 +97,19 @@ int sap_bbox_overlaps_target_axis(const Bbox& query_bbox,
   return overlap_num;
 }
 
-int sap_bbox_overlaps_target(const Bbox& query_bbox,
-                             const BboxSOAView& candidate_bboxes,
+int sap_bbox_overlaps_target(const Bbox& query_bbox, const BboxSOAView& candidate_bboxes,
                              std::span<const int> candidate_proxies, int axis,
                              std::vector<int>& overlap_proxies) {
   switch (axis) {
     case 0:
-      return sap_bbox_overlaps_target_axis<0>(
-          query_bbox, candidate_bboxes, candidate_proxies, overlap_proxies);
+      return sap_bbox_overlaps_target_axis<0>(query_bbox, candidate_bboxes, candidate_proxies,
+                                              overlap_proxies);
     case 1:
-      return sap_bbox_overlaps_target_axis<1>(
-          query_bbox, candidate_bboxes, candidate_proxies, overlap_proxies);
+      return sap_bbox_overlaps_target_axis<1>(query_bbox, candidate_bboxes, candidate_proxies,
+                                              overlap_proxies);
     default:
-      return sap_bbox_overlaps_target_axis<2>(
-          query_bbox, candidate_bboxes, candidate_proxies, overlap_proxies);
+      return sap_bbox_overlaps_target_axis<2>(query_bbox, candidate_bboxes, candidate_proxies,
+                                              overlap_proxies);
   }
 }
 
@@ -123,12 +121,11 @@ namespace silk::cpu {
 
 HWY_EXPORT(sap_bbox_overlaps_target);
 
-int sap_bbox_overlaps(const Bbox& query_bbox,
-                      const BboxSOAView& candidate_bboxes,
+int sap_bbox_overlaps(const Bbox& query_bbox, const BboxSOAView& candidate_bboxes,
                       std::span<const int> candidate_proxies, int axis,
                       std::vector<int>& overlap_proxies) {
-  return HWY_DYNAMIC_DISPATCH(sap_bbox_overlaps_target)(
-      query_bbox, candidate_bboxes, candidate_proxies, axis, overlap_proxies);
+  return HWY_DYNAMIC_DISPATCH(sap_bbox_overlaps_target)(query_bbox, candidate_bboxes,
+                                                        candidate_proxies, axis, overlap_proxies);
 }
 
 }  // namespace silk::cpu

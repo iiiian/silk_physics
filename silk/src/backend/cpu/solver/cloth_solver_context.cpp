@@ -19,8 +19,7 @@ constexpr float CPU_PIN_PENALTY = 1e4f;
 }  // namespace
 
 std::optional<ClothSolverContext> ClothSolverContext::make_cloth_solver_context(
-    const ClothConfig& config, const ClothAssemblyL2Cache& topology,
-    const Pin& pin, float dt) {
+    const ClothConfig& config, const ClothAssemblyL2Cache& topology, const Pin& pin, float dt) {
   auto& c = config;
   auto& t = topology;
   int state_num = 3 * t.mass.size();
@@ -31,10 +30,9 @@ std::optional<ClothSolverContext> ClothSolverContext::make_cloth_solver_context(
     H_triplets.emplace_back(3 * i + 1, 3 * i + 1, M(i));
     H_triplets.emplace_back(3 * i + 2, 3 * i + 2, M(i));
   }
-  append_triplets_from_sparse(t.JWJ, 0, 0, c.elastic_stiffness, H_triplets,
-                              Symmetry::Upper);
-  append_triplets_from_vectorized_sparse(t.CWC, 0, 0, c.bending_stiffness,
-                                         H_triplets, Symmetry::Upper);
+  append_triplets_from_sparse(t.JWJ, 0, 0, c.elastic_stiffness, H_triplets, Symmetry::Upper);
+  append_triplets_from_vectorized_sparse(t.CWC, 0, 0, c.bending_stiffness, H_triplets,
+                                         Symmetry::Upper);
   for (int i = 0; i < pin.index.size(); ++i) {
     int offset = 3 * pin.index(i);
     float stiffness = CPU_PIN_PENALTY;

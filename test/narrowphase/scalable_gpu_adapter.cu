@@ -101,28 +101,24 @@ class ScalableGpuAdapterImpl final : public GpuAdapter {
 
         ccd::CCDData* device_data = nullptr;
         check_cuda(cudaMalloc(&device_data, sizeof(ccd::CCDData) * query_num));
-        check_cuda(cudaMemcpy(device_data, input_.data() + start,
-                              sizeof(ccd::CCDData) * query_num,
+        check_cuda(cudaMemcpy(device_data, input_.data() + start, sizeof(ccd::CCDData) * query_num,
                               cudaMemcpyHostToDevice));
 
         int overflow = 0;
         ccd::Scalar earliest_toi = 1;
         std::vector<int> unused_results;
         record.Clear();
-        ccd::run_memory_pool_ccd(device_data, &memory_handler, query_num,
-                                 kind_ == QueryKind::EE, unused_results,
-                                 CUDA_THREADS, max_iterations_, TOLERANCE, true,
+        ccd::run_memory_pool_ccd(device_data, &memory_handler, query_num, kind_ == QueryKind::EE,
+                                 unused_results, CUDA_THREADS, max_iterations_, TOLERANCE, true,
                                  true, earliest_toi, overflow, record);
         overflowed = overflow != 0;
       } while (overflowed);
 
       if (record.j_object.contains("toi_per_query")) {
-        for (const nlohmann::json& collision :
-             record.j_object.at("toi_per_query")) {
+        for (const nlohmann::json& collision : record.j_object.at("toi_per_query")) {
           int query_index = std::stoi(collision.at(0).get<std::string>());
           if (query_index < start || query_index >= start + query_num) {
-            throw std::runtime_error(
-                "Scalable CCD returned an invalid query ID");
+            throw std::runtime_error("Scalable CCD returned an invalid query ID");
           }
           outputs_[query_index] = {.toi = parse_toi(collision), .hit = true};
         }
@@ -142,8 +138,7 @@ class ScalableGpuAdapterImpl final : public GpuAdapter {
 
 }  // namespace
 
-std::unique_ptr<GpuAdapter> make_scalable_gpu_adapter(QueryKind kind,
-                                                      int max_iterations) {
+std::unique_ptr<GpuAdapter> make_scalable_gpu_adapter(QueryKind kind, int max_iterations) {
   return std::make_unique<ScalableGpuAdapterImpl>(kind, max_iterations);
 }
 

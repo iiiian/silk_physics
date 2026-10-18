@@ -11,8 +11,8 @@ namespace silk::cuda {
 
 namespace {
 
-__global__ void inner_product_kernel(ctd::span<const float> a,
-                                     ctd::span<const float> b, float *out) {
+__global__ void inner_product_kernel(ctd::span<const float> a, ctd::span<const float> b,
+                                     float *out) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
 
   float c = (tid < a.size()) ? a[tid] * b[tid] : 0.0f;
@@ -28,8 +28,7 @@ __global__ void inner_product_kernel(ctd::span<const float> a,
   }
 }
 
-__global__ void inner_product_and_norm_kernel(ctd::span<const float> a,
-                                              ctd::span<const float> b,
+__global__ void inner_product_and_norm_kernel(ctd::span<const float> a, ctd::span<const float> b,
                                               float *dot_out, float *norm_out) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -53,8 +52,8 @@ __global__ void inner_product_and_norm_kernel(ctd::span<const float> a,
 
 }  // namespace
 
-void inner_product(ctd::span<const float> a, ctd::span<const float> b,
-                   ctd::span<float> out, CudaRuntime rt) {
+void inner_product(ctd::span<const float> a, ctd::span<const float> b, ctd::span<float> out,
+                   CudaRuntime rt) {
   assert(a.size() == b.size());
   assert(out.size() == 1);
 
@@ -64,8 +63,7 @@ void inner_product(ctd::span<const float> a, ctd::span<const float> b,
 }
 
 void inner_product_and_norm(ctd::span<const float> a, ctd::span<const float> b,
-                            ctd::span<float> dot_out, ctd::span<float> norm_out,
-                            CudaRuntime rt) {
+                            ctd::span<float> dot_out, ctd::span<float> norm_out, CudaRuntime rt) {
   assert(a.size() == b.size());
   assert(dot_out.size() == 1);
   assert(norm_out.size() == 1);
@@ -73,8 +71,8 @@ void inner_product_and_norm(ctd::span<const float> a, ctd::span<const float> b,
   cu::fill_bytes(rt.stream, dot_out, 0);
   cu::fill_bytes(rt.stream, norm_out, 0);
   int grid_num = div_round_up(a.size(), 128);
-  inner_product_and_norm_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
-      a, b, dot_out.data(), norm_out.data());
+  inner_product_and_norm_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(a, b, dot_out.data(),
+                                                                       norm_out.data());
 }
 
 }  // namespace silk::cuda

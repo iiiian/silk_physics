@@ -54,8 +54,7 @@ void ui_console_draw_window(const char* title) {
   ImGui::Checkbox("Auto-scroll", &g_auto_scroll);
   ImGui::SameLine();
   ImGui::SetNextItemWidth(220.f);
-  ImGui::InputTextWithHint("##filter", "filter (substring)", g_filter,
-                           IM_ARRAYSIZE(g_filter));
+  ImGui::InputTextWithHint("##filter", "filter (substring)", g_filter, IM_ARRAYSIZE(g_filter));
   ImGui::Separator();
 
   ImGui::BeginChild("console_region_window", ImVec2(0, 0), false,

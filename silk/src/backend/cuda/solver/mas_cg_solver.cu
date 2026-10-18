@@ -27,8 +27,7 @@ using clock = std::chrono::steady_clock;
   return std::chrono::duration<float>(clock::now() - begin).count();
 }
 
-__global__ void compute_residual_kernel(ctd::span<const float> b,
-                                        ctd::span<float> r) {
+__global__ void compute_residual_kernel(ctd::span<const float> b, ctd::span<float> r) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
   if (tid >= r.size()) {
     return;
@@ -36,9 +35,8 @@ __global__ void compute_residual_kernel(ctd::span<const float> b,
   r[tid] = b[tid] - r[tid];
 }
 
-__global__ void update_x_r_kernel(ctd::span<const float> p,
-                                  ctd::span<const float> Ap, const float *rz,
-                                  const float *pAp, ctd::span<float> x,
+__global__ void update_x_r_kernel(ctd::span<const float> p, ctd::span<const float> Ap,
+                                  const float *rz, const float *pAp, ctd::span<float> x,
                                   ctd::span<float> r) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
   if (tid >= x.size()) {
@@ -52,10 +50,8 @@ __global__ void update_x_r_kernel(ctd::span<const float> p,
 /// Device scalar devision num / denom.
 /// Defaults to zero when denom is small because beta should be zero after
 /// arriving at the solution.
-__global__ void update_p_from_scalars_kernel(ctd::span<const float> z,
-                                             const float *rz,
-                                             const float *rz_old,
-                                             ctd::span<float> p) {
+__global__ void update_p_from_scalars_kernel(ctd::span<const float> z, const float *rz,
+                                             const float *rz_old, ctd::span<float> p) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
   if (tid >= p.size()) {
     return;
@@ -64,8 +60,8 @@ __global__ void update_p_from_scalars_kernel(ctd::span<const float> z,
   p[tid] = z[tid] + beta * p[tid];
 }
 
-__global__ void add_diag_kernel(ctd::span<const float> diag,
-                                ctd::span<const float> x, ctd::span<float> y) {
+__global__ void add_diag_kernel(ctd::span<const float> diag, ctd::span<const float> x,
+                                ctd::span<float> y) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= diag.size()) {
     return;
@@ -73,9 +69,8 @@ __global__ void add_diag_kernel(ctd::span<const float> diag,
   y[idx] += diag[idx] * x[idx];
 }
 
-__global__ void check_convergence(cudaGraphConditionalHandle cond_handle,
-                                  const float *rr, int *iter, int *status,
-                                  float rr0, float rel_tol, float abs_tol,
+__global__ void check_convergence(cudaGraphConditionalHandle cond_handle, const float *rr,
+                                  int *iter, int *status, float rr0, float rel_tol, float abs_tol,
                                   int max_iter) {
   *iter += 1;
   if (*iter >= max_iter) {
@@ -124,8 +119,7 @@ void MASCGSolver::setup_cusparse(BSRView A, CudaRuntime rt) {
   spmv_workspace_ = alloc<char>(rt, workspace_size);
 }
 
-void MASCGSolver::spmv(ctd::span<const float> x, ctd::span<float> y,
-                       CudaRuntime rt) {
+void MASCGSolver::spmv(ctd::span<const float> x, ctd::span<float> y, CudaRuntime rt) {
   float alpha = 1.0;
   float beta = 0.0;
   CuSparseConstVec x_desc(x);
@@ -149,8 +143,7 @@ void MASCGSolver::spmv(ctd::span<const float> x, ctd::span<float> y,
   add_diag_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(diag_, x, y);
 }
 
-void MASCGSolver::factorize(DynamicBSRView A, ctd::span<const int> part_offset,
-                            CudaRuntime rt) {
+void MASCGSolver::factorize(DynamicBSRView A, ctd::span<const int> part_offset, CudaRuntime rt) {
   assert(A.mat.dim != 0);
   assert(A.diag.size() == A.mat.dim * A.mat.block_dim);
 
@@ -190,8 +183,7 @@ void MASCGSolver::factorize(DynamicBSRView A, ctd::span<const int> part_offset,
 }
 
 /// https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
-MASCGSolver::Status MASCGSolver::solve(DynamicBSRView A,
-                                       ctd::span<const float> b,
+MASCGSolver::Status MASCGSolver::solve(DynamicBSRView A, ctd::span<const float> b,
                                        ctd::span<float> x, CudaRuntime rt) {
   static const nvtx3::registered_string name{"MASCGSolver::solve"};
   nvtx3::scoped_range range{name};
@@ -228,9 +220,8 @@ MASCGSolver::Status MASCGSolver::solve(DynamicBSRView A,
   CudaGraph updated_graph;
   // Setup while node.
   cudaGraphConditionalHandle cond_handle;
-  check_cuda(cudaGraphConditionalHandleCreate_v2(
-      &cond_handle, updated_graph.raw(), nullptr, 1,
-      cudaGraphCondAssignDefault));
+  check_cuda(cudaGraphConditionalHandleCreate_v2(&cond_handle, updated_graph.raw(), nullptr, 1,
+                                                 cudaGraphCondAssignDefault));
   cudaGraphNode_t while_node;
   cudaGraphNodeParams node_params{};
   node_params.type = cudaGraphNodeTypeConditional;
@@ -239,12 +230,10 @@ MASCGSolver::Status MASCGSolver::solve(DynamicBSRView A,
                              .size = 1,
                              .phGraph_out = nullptr,
                              .ctx = nullptr};
-  check_cuda(cudaGraphAddNode(&while_node, updated_graph.raw(), nullptr,
-                              nullptr, 0, &node_params));
+  check_cuda(cudaGraphAddNode(&while_node, updated_graph.raw(), nullptr, nullptr, 0, &node_params));
 
   cudaGraph_t body_graph = node_params.conditional.phGraph_out[0];
-  check_cuda(cudaStreamBeginCaptureToGraph(rt.stream.get(), body_graph, nullptr,
-                                           nullptr, 0,
+  check_cuda(cudaStreamBeginCaptureToGraph(rt.stream.get(), body_graph, nullptr, nullptr, 0,
                                            cudaStreamCaptureModeThreadLocal));
 
   // -------------------------------------------
@@ -259,27 +248,26 @@ MASCGSolver::Status MASCGSolver::solve(DynamicBSRView A,
   // Compute x = x + alpha p.
   // Compute residual update using r' = r - alpha A p.
   grid_num = div_round_up(x.size(), 128);
-  update_x_r_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
-      *p_, *Ap_, scalar_rz_->data(), scalar_pAp_->data(), x, *r_);
+  update_x_r_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(*p_, *Ap_, scalar_rz_->data(),
+                                                           scalar_pAp_->data(), x, *r_);
 
   // Compute z = M^-1 r.
   mas_precond_.apply(*r_, *z_, rt);
   // Compute rz = r M^-1 r.
-  check_cuda(cudaMemcpyAsync(scalar_rz_old_->data(), scalar_rz_->data(),
-                             sizeof(float), cudaMemcpyDeviceToDevice,
-                             rt.stream.get()));
+  check_cuda(cudaMemcpyAsync(scalar_rz_old_->data(), scalar_rz_->data(), sizeof(float),
+                             cudaMemcpyDeviceToDevice, rt.stream.get()));
   inner_product_and_norm(*r_, *z_, *scalar_rz_, *scalar_rr_, rt);
 
   // Check convergence.
-  check_convergence<<<1, 1, 0, rt.stream.get()>>>(
-      cond_handle, scalar_rr_->data(), scalar_iter_->data(),
-      scalar_status_->data(), rr0, rel_tol, abs_tol, max_iter);
+  check_convergence<<<1, 1, 0, rt.stream.get()>>>(cond_handle, scalar_rr_->data(),
+                                                  scalar_iter_->data(), scalar_status_->data(), rr0,
+                                                  rel_tol, abs_tol, max_iter);
 
   // Compute beta = rz / rz_old.
   // Compute direction update p' = M^-1 r + beta p.
   grid_num = div_round_up(p_->size(), 128);
-  update_p_from_scalars_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(
-      *z_, scalar_rz_->data(), scalar_rz_old_->data(), *p_);
+  update_p_from_scalars_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(*z_, scalar_rz_->data(),
+                                                                      scalar_rz_old_->data(), *p_);
 
   // -------------------------------------------
   // Stop capture PCG logic
@@ -295,17 +283,16 @@ MASCGSolver::Status MASCGSolver::solve(DynamicBSRView A,
   // Transfer solver status to host.
   float rr;
   int status;
-  cudaMemcpyAsync(&iterations_, scalar_iter_->data(), sizeof(iterations_),
-                  cudaMemcpyDeviceToHost, rt.stream.get());
-  cudaMemcpyAsync(&rr, scalar_rr_->data(), sizeof(rr), cudaMemcpyDeviceToHost,
+  cudaMemcpyAsync(&iterations_, scalar_iter_->data(), sizeof(iterations_), cudaMemcpyDeviceToHost,
                   rt.stream.get());
-  cudaMemcpyAsync(&status, scalar_status_->data(), sizeof(status),
-                  cudaMemcpyDeviceToHost, rt.stream.get());
+  cudaMemcpyAsync(&rr, scalar_rr_->data(), sizeof(rr), cudaMemcpyDeviceToHost, rt.stream.get());
+  cudaMemcpyAsync(&status, scalar_status_->data(), sizeof(status), cudaMemcpyDeviceToHost,
+                  rt.stream.get());
   rt.stream.sync();
   residual_norm_ = std::sqrt(rr);
 
-  SPDLOG_DEBUG("[pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]",
-               elapsed(solve_begin), iterations_, residual_norm_);
+  SPDLOG_DEBUG("[pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]", elapsed(solve_begin), iterations_,
+               residual_norm_);
 
   return static_cast<Status>(status);
 }

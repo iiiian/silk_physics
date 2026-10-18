@@ -18,9 +18,7 @@ cu::device_buffer<typename Derived::Scalar> host_eigen_to_device(
   const auto tmp = expr.derived().eval();
   size_t num = static_cast<size_t>(expr.size());
   auto buffer = alloc<typename Derived::Scalar>(rt, num);
-  cu::copy_bytes(rt.stream,
-                 ctd::span<const typename Derived::Scalar>{tmp.data(), num},
-                 buffer);
+  cu::copy_bytes(rt.stream, ctd::span<const typename Derived::Scalar>{tmp.data(), num}, buffer);
 
   rt.stream.sync();
   return buffer;

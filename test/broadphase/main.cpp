@@ -58,23 +58,16 @@ struct BenchmarkKey {
 Options parse_options(int argc, char** argv) {
   Options options;
   argparse::ArgumentParser program("broadphase_benchmark");
-  program.add_description(
-      "Verify and benchmark broadphase implementations on Scalable CCD data");
+  program.add_description("Verify and benchmark broadphase implementations on Scalable CCD data");
   program.add_argument("--verify")
       .help("Check broadphase output against dataset ground truth")
       .store_into(options.verify);
   program.add_argument("--repetitions")
       .help("Number of complete scene sweeps")
       .store_into(options.repetitions);
-  program.add_argument("--threads")
-      .help("Maximum CPU thread count")
-      .store_into(options.thread_num);
-  program.add_argument("--data")
-      .help("Scalable CCD dataset root")
-      .store_into(options.data_root);
-  program.add_argument("--out")
-      .help("Benchmark CSV output path")
-      .store_into(options.output_path);
+  program.add_argument("--threads").help("Maximum CPU thread count").store_into(options.thread_num);
+  program.add_argument("--data").help("Scalable CCD dataset root").store_into(options.data_root);
+  program.add_argument("--out").help("Benchmark CSV output path").store_into(options.output_path);
   program.add_argument("--scene")
       .help(
           "Run only one scene: armadillo-rollers, cloth-ball, cloth-funnel, "
@@ -96,24 +89,18 @@ Options parse_options(int argc, char** argv) {
   return options;
 }
 
-std::string query_name(QueryKind kind) {
-  return kind == QueryKind::EE ? "ee" : "vf";
-}
+std::string query_name(QueryKind kind) { return kind == QueryKind::EE ? "ee" : "vf"; }
 
-std::vector<Pair> canonical_output(const QueryInput& input,
-                                   std::span<const Pair> raw_output,
-                                   const std::string& algorithm,
-                                   const TestCase& test_case) {
+std::vector<Pair> canonical_output(const QueryInput& input, std::span<const Pair> raw_output,
+                                   const std::string& algorithm, const TestCase& test_case) {
   std::vector<Pair> output;
   output.reserve(raw_output.size());
   for (Pair pair : raw_output) {
     pair = normalized_pair(pair, input.kind);
-    if (pair.first < 0 || pair.first >= input.group_a.size() ||
-        pair.second < 0 ||
-        pair.second >= (input.kind == QueryKind::EE ? input.group_a.size()
-                                                    : input.group_b.size())) {
-      throw std::runtime_error(algorithm + " returned an invalid pair in " +
-                               test_case.scene + "/" +
+    if (pair.first < 0 || pair.first >= input.group_a.size() || pair.second < 0 ||
+        pair.second >=
+            (input.kind == QueryKind::EE ? input.group_a.size() : input.group_b.size())) {
+      throw std::runtime_error(algorithm + " returned an invalid pair in " + test_case.scene + "/" +
                                std::to_string(test_case.timestep));
     }
     output.push_back(pair);
@@ -126,20 +113,17 @@ std::vector<Pair> canonical_output(const QueryInput& input,
 
 void verify_output(const QueryInput& input, std::span<const Pair> raw_output,
                    const std::string& algorithm, const TestCase& test_case) {
-  std::vector<Pair> output =
-      canonical_output(input, raw_output, algorithm, test_case);
+  std::vector<Pair> output = canonical_output(input, raw_output, algorithm, test_case);
 
   if (!std::includes(output.begin(), output.end(), input.required_pairs.begin(),
                      input.required_pairs.end())) {
     std::vector<Pair> missing;
-    std::set_difference(input.required_pairs.begin(),
-                        input.required_pairs.end(), output.begin(),
+    std::set_difference(input.required_pairs.begin(), input.required_pairs.end(), output.begin(),
                         output.end(), std::back_inserter(missing));
     Pair first = missing.front();
-    throw std::runtime_error(
-        algorithm + " missed required pair (" + std::to_string(first.first) +
-        ", " + std::to_string(first.second) + ") in " + test_case.scene + "/" +
-        std::to_string(test_case.timestep));
+    throw std::runtime_error(algorithm + " missed required pair (" + std::to_string(first.first) +
+                             ", " + std::to_string(first.second) + ") in " + test_case.scene + "/" +
+                             std::to_string(test_case.timestep));
   }
 }
 
@@ -166,14 +150,12 @@ double measure_wall_time(Function&& function) {
 }
 
 void record_measurement(const QueryInput& input, const TestCase& test_case,
-                        const std::string& algorithm, const std::string& device,
-                        int repetition, bool initial_build, double build_ms,
-                        double query_ms, std::size_t candidate_num,
+                        const std::string& algorithm, const std::string& device, int repetition,
+                        bool initial_build, double build_ms, double query_ms,
+                        std::size_t candidate_num,
                         std::map<BenchmarkKey, BenchmarkResult>& results) {
-  BenchmarkKey key{.scene = test_case.scene,
-                   .query_kind = input.kind,
-                   .algorithm = algorithm,
-                   .device = device};
+  BenchmarkKey key{
+      .scene = test_case.scene, .query_kind = input.kind, .algorithm = algorithm, .device = device};
   BenchmarkResult& result = results[key];
   prepare_repetition(result, repetition);
   if (initial_build) {
@@ -189,8 +171,8 @@ void record_measurement(const QueryInput& input, const TestCase& test_case,
   }
 }
 
-void run_cpu_step(CpuAdapter& adapter, const QueryInput& input,
-                  const TestCase& test_case, bool initial_build, int repetition,
+void run_cpu_step(CpuAdapter& adapter, const QueryInput& input, const TestCase& test_case,
+                  bool initial_build, int repetition,
                   std::map<BenchmarkKey, BenchmarkResult>& results) {
   adapter.prepare(input);
   double build_ms = measure_wall_time([&adapter]() { adapter.build(); });
@@ -200,9 +182,8 @@ void run_cpu_step(CpuAdapter& adapter, const QueryInput& input,
   double query_ms = measure_wall_time([&adapter]() { adapter.query(); });
   perf_region.disable();
   adapter.materialize_output();
-  record_measurement(input, test_case, adapter.name(), "cpu", repetition,
-                     initial_build, build_ms, query_ms, adapter.output().size(),
-                     results);
+  record_measurement(input, test_case, adapter.name(), "cpu", repetition, initial_build, build_ms,
+                     query_ms, adapter.output().size(), results);
 }
 
 #ifdef SILK_BROADPHASE_HAS_CUDA
@@ -217,8 +198,8 @@ double run_gpu_query(GpuAdapter& adapter) {
   return query_ms;
 }
 
-void run_gpu_step(GpuAdapter& adapter, const QueryInput& input,
-                  const TestCase& test_case, bool initial_build, int repetition,
+void run_gpu_step(GpuAdapter& adapter, const QueryInput& input, const TestCase& test_case,
+                  bool initial_build, int repetition,
                   std::map<BenchmarkKey, BenchmarkResult>& results) {
   adapter.prepare(input);
   adapter.synchronize();
@@ -227,9 +208,8 @@ void run_gpu_step(GpuAdapter& adapter, const QueryInput& input,
     adapter.synchronize();
   });
   double query_ms = run_gpu_query(adapter);
-  record_measurement(input, test_case, adapter.name(), "gpu", repetition,
-                     initial_build, build_ms, query_ms, adapter.output().size(),
-                     results);
+  record_measurement(input, test_case, adapter.name(), "gpu", repetition, initial_build, build_ms,
+                     query_ms, adapter.output().size(), results);
 }
 #endif
 
@@ -253,17 +233,16 @@ bool is_selected(const std::string& name, const std::string& selection) {
   return selection.empty() || name == selection;
 }
 
-void benchmark_cpu_adapter(const SceneFiles& scene_files,
-                           CpuAdapterFactory factory, int repetitions,
-                           std::map<BenchmarkKey, BenchmarkResult>& results) {
+void benchmark_cpu_adapter(const SceneFiles& scene_files, CpuAdapterFactory factory,
+                           int repetitions, std::map<BenchmarkKey, BenchmarkResult>& results) {
   for (QueryKind kind : {QueryKind::EE, QueryKind::VF}) {
     for (int repetition = 0; repetition < repetitions; ++repetition) {
       auto adapter = factory();
       for (int t = 0; t < scene_files.boxes_ee.size(); ++t) {
         TestCase test_case = load_case(scene_files, t);
         QueryInput input = make_query(test_case, kind);
-        spdlog::info("[{}] Testing {} time step {} ({}).", adapter->name(),
-                     test_case.scene, test_case.timestep, query_name(kind));
+        spdlog::info("[{}] Testing {} time step {} ({}).", adapter->name(), test_case.scene,
+                     test_case.timestep, query_name(kind));
         run_cpu_step(*adapter, input, test_case, t == 0, repetition, results);
       }
     }
@@ -271,17 +250,16 @@ void benchmark_cpu_adapter(const SceneFiles& scene_files,
 }
 
 #ifdef SILK_BROADPHASE_HAS_CUDA
-void benchmark_gpu_adapter(const SceneFiles& scene_files,
-                           GpuAdapterFactory factory, int repetitions,
-                           std::map<BenchmarkKey, BenchmarkResult>& results) {
+void benchmark_gpu_adapter(const SceneFiles& scene_files, GpuAdapterFactory factory,
+                           int repetitions, std::map<BenchmarkKey, BenchmarkResult>& results) {
   for (QueryKind kind : {QueryKind::EE, QueryKind::VF}) {
     for (int repetition = 0; repetition < repetitions; ++repetition) {
       auto adapter = factory();
       for (int t = 0; t < scene_files.boxes_ee.size(); ++t) {
         TestCase test_case = load_case(scene_files, t);
         QueryInput input = make_query(test_case, kind);
-        spdlog::info("[{}] Testing {} time step {} ({}).", adapter->name(),
-                     test_case.scene, test_case.timestep, query_name(kind));
+        spdlog::info("[{}] Testing {} time step {} ({}).", adapter->name(), test_case.scene,
+                     test_case.timestep, query_name(kind));
         run_gpu_step(*adapter, input, test_case, t == 0, repetition, results);
       }
     }
@@ -289,39 +267,35 @@ void benchmark_gpu_adapter(const SceneFiles& scene_files,
 }
 #endif
 
-void verify_cpu_adapter(const SceneFiles& scene_files,
-                        CpuAdapterFactory factory) {
+void verify_cpu_adapter(const SceneFiles& scene_files, CpuAdapterFactory factory) {
   for (QueryKind kind : {QueryKind::EE, QueryKind::VF}) {
     auto adapter = factory();
-    for (int timestep_index = 0; timestep_index < scene_files.boxes_ee.size();
-         ++timestep_index) {
+    for (int timestep_index = 0; timestep_index < scene_files.boxes_ee.size(); ++timestep_index) {
       TestCase test_case = load_case(scene_files, timestep_index);
       QueryInput input = make_query(test_case, kind);
-      spdlog::info("[{}] Testing {} time step {} ({}).", adapter->name(),
-                   test_case.scene, test_case.timestep, query_name(kind));
+      spdlog::info("[{}] Testing {} time step {} ({}).", adapter->name(), test_case.scene,
+                   test_case.timestep, query_name(kind));
       adapter->prepare(input);
       adapter->build();
       adapter->clear_output();
       adapter->query();
       adapter->materialize_output();
-      spdlog::info("[{}] Verifying {} time step {} ({}).", adapter->name(),
-                   test_case.scene, test_case.timestep, query_name(kind));
+      spdlog::info("[{}] Verifying {} time step {} ({}).", adapter->name(), test_case.scene,
+                   test_case.timestep, query_name(kind));
       verify_output(input, adapter->output(), adapter->name(), test_case);
     }
   }
 }
 
 #ifdef SILK_BROADPHASE_HAS_CUDA
-void verify_gpu_adapter(const SceneFiles& scene_files,
-                        GpuAdapterFactory factory) {
+void verify_gpu_adapter(const SceneFiles& scene_files, GpuAdapterFactory factory) {
   for (QueryKind kind : {QueryKind::EE, QueryKind::VF}) {
     auto adapter = factory();
-    for (int timestep_index = 0; timestep_index < scene_files.boxes_ee.size();
-         ++timestep_index) {
+    for (int timestep_index = 0; timestep_index < scene_files.boxes_ee.size(); ++timestep_index) {
       TestCase test_case = load_case(scene_files, timestep_index);
       QueryInput input = make_query(test_case, kind);
-      spdlog::info("[{}] Testing {} time step {} ({}).", adapter->name(),
-                   test_case.scene, test_case.timestep, query_name(kind));
+      spdlog::info("[{}] Testing {} time step {} ({}).", adapter->name(), test_case.scene,
+                   test_case.timestep, query_name(kind));
       adapter->prepare(input);
       adapter->synchronize();
       adapter->build();
@@ -331,8 +305,8 @@ void verify_gpu_adapter(const SceneFiles& scene_files,
       adapter->query();
       adapter->synchronize();
       adapter->materialize_output();
-      spdlog::info("[{}] Verifying {} time step {} ({}).", adapter->name(),
-                   test_case.scene, test_case.timestep, query_name(kind));
+      spdlog::info("[{}] Verifying {} time step {} ({}).", adapter->name(), test_case.scene,
+                   test_case.timestep, query_name(kind));
       verify_output(input, adapter->output(), adapter->name(), test_case);
     }
   }
@@ -374,8 +348,7 @@ void verify_touching_boxes_are_candidates() {
   std::vector<Pair> cubql_output =
       canonical_output(input, cubql->output(), cubql->name(), test_case);
   if (oibvh_output != expected || cubql_output != expected) {
-    throw std::runtime_error(
-        "Touching boxes were not emitted by both OIBVH and cuBQL");
+    throw std::runtime_error("Touching boxes were not emitted by both OIBVH and cuBQL");
   }
 }
 
@@ -383,8 +356,7 @@ void verify_cubql_matches_oibvh(const SceneFiles& scene_files) {
   for (QueryKind kind : {QueryKind::EE, QueryKind::VF}) {
     auto oibvh = make_silk_oibvh_adapter();
     auto cubql = make_cubql_adapter();
-    for (int timestep_index = 0; timestep_index < scene_files.boxes_ee.size();
-         ++timestep_index) {
+    for (int timestep_index = 0; timestep_index < scene_files.boxes_ee.size(); ++timestep_index) {
       TestCase test_case = load_case(scene_files, timestep_index);
       QueryInput input = make_query(test_case, kind);
       run_gpu_verification_step(*oibvh, input);
@@ -397,30 +369,26 @@ void verify_cubql_matches_oibvh(const SceneFiles& scene_files) {
       if (oibvh_output != cubql_output) {
         std::vector<Pair> missing;
         std::vector<Pair> extra;
-        std::set_difference(oibvh_output.begin(), oibvh_output.end(),
-                            cubql_output.begin(), cubql_output.end(),
-                            std::back_inserter(missing));
-        std::set_difference(cubql_output.begin(), cubql_output.end(),
-                            oibvh_output.begin(), oibvh_output.end(),
-                            std::back_inserter(extra));
+        std::set_difference(oibvh_output.begin(), oibvh_output.end(), cubql_output.begin(),
+                            cubql_output.end(), std::back_inserter(missing));
+        std::set_difference(cubql_output.begin(), cubql_output.end(), oibvh_output.begin(),
+                            oibvh_output.end(), std::back_inserter(extra));
         std::string difference;
         if (!missing.empty()) {
-          difference += " missing (" + std::to_string(missing.front().first) +
-                        ", " + std::to_string(missing.front().second) + ")";
+          difference += " missing (" + std::to_string(missing.front().first) + ", " +
+                        std::to_string(missing.front().second) + ")";
         }
         if (!extra.empty()) {
-          difference += " extra (" + std::to_string(extra.front().first) +
-                        ", " + std::to_string(extra.front().second) + ")";
+          difference += " extra (" + std::to_string(extra.front().first) + ", " +
+                        std::to_string(extra.front().second) + ")";
         }
-        throw std::runtime_error("cuBQL candidate set differs from OIBVH in " +
-                                 test_case.scene + "/" +
-                                 std::to_string(test_case.timestep) + " (" +
+        throw std::runtime_error("cuBQL candidate set differs from OIBVH in " + test_case.scene +
+                                 "/" + std::to_string(test_case.timestep) + " (" +
                                  query_name(kind) + "):" + difference);
       }
     }
   }
-  spdlog::info("[cubql] Exact candidate sets match OIBVH for {}.",
-               scene_files.name);
+  spdlog::info("[cubql] Exact candidate sets match OIBVH for {}.", scene_files.name);
 }
 #endif
 
@@ -431,25 +399,20 @@ void print_result_header(std::ostream& output) {
          << std::flush;
 }
 
-void print_completed_results(
-    const std::map<BenchmarkKey, BenchmarkResult>& results,
-    const std::string& scene, const std::string& algorithm,
-    const std::string& device, int thread_num, std::ostream& output) {
+void print_completed_results(const std::map<BenchmarkKey, BenchmarkResult>& results,
+                             const std::string& scene, const std::string& algorithm,
+                             const std::string& device, int thread_num, std::ostream& output) {
   for (QueryKind kind : {QueryKind::EE, QueryKind::VF}) {
-    const BenchmarkKey key{.scene = scene,
-                           .query_kind = kind,
-                           .algorithm = algorithm,
-                           .device = device};
+    const BenchmarkKey key{
+        .scene = scene, .query_kind = kind, .algorithm = algorithm, .device = device};
     const BenchmarkResult& result = results.at(key);
     double initial_build_ms = median(result.initial_build_ms);
     double rebuild_ms = median(result.rebuild_ms);
     double query_ms = median(result.query_ms);
     output << key.algorithm << ',' << key.device << ',' << key.scene << ','
-           << query_name(key.query_kind) << ','
-           << (key.device == "cpu" ? thread_num : 0) << ','
-           << result.timestep_num << ',' << result.box_num << ','
-           << result.candidate_num << ',' << initial_build_ms << ','
-           << rebuild_ms << ',' << query_ms << '\n';
+           << query_name(key.query_kind) << ',' << (key.device == "cpu" ? thread_num : 0) << ','
+           << result.timestep_num << ',' << result.box_num << ',' << result.candidate_num << ','
+           << initial_build_ms << ',' << rebuild_ms << ',' << query_ms << '\n';
   }
   output << std::flush;
   if (!output) {
@@ -464,8 +427,8 @@ int main(int argc, char** argv) {
   using namespace silk::broadphase_benchmark;
   try {
     Options options = parse_options(argc, argv);
-    tbb::global_control thread_limit(
-        tbb::global_control::max_allowed_parallelism, options.thread_num);
+    tbb::global_control thread_limit(tbb::global_control::max_allowed_parallelism,
+                                     options.thread_num);
     std::vector<SceneFiles> scenes = resolve_scene_files(options.data_root);
     if (scenes.empty()) {
       throw std::runtime_error("No complete dataset cases found");
@@ -484,9 +447,8 @@ int main(int argc, char** argv) {
       print_result_header(output);
     }
 #ifdef SILK_BROADPHASE_HAS_CUDA
-    if (options.verify &&
-        (options.broadphase.empty() || options.broadphase == "cubql" ||
-         options.broadphase == "silk_oibvh")) {
+    if (options.verify && (options.broadphase.empty() || options.broadphase == "cubql" ||
+                           options.broadphase == "silk_oibvh")) {
       verify_touching_boxes_are_candidates();
     }
 #endif
@@ -507,10 +469,9 @@ int main(int argc, char** argv) {
           verify_cpu_adapter(scene_files, factory);
         } else {
           std::map<BenchmarkKey, BenchmarkResult> results;
-          benchmark_cpu_adapter(scene_files, factory, options.repetitions,
-                                results);
-          print_completed_results(results, scene_files.name, adapter->name(),
-                                  "cpu", options.thread_num, output);
+          benchmark_cpu_adapter(scene_files, factory, options.repetitions, results);
+          print_completed_results(results, scene_files.name, adapter->name(), "cpu",
+                                  options.thread_num, output);
         }
       }
 #ifdef SILK_BROADPHASE_HAS_CUDA
@@ -524,15 +485,13 @@ int main(int argc, char** argv) {
           verify_gpu_adapter(scene_files, factory);
         } else {
           std::map<BenchmarkKey, BenchmarkResult> results;
-          benchmark_gpu_adapter(scene_files, factory, options.repetitions,
-                                results);
-          print_completed_results(results, scene_files.name, adapter->name(),
-                                  "gpu", options.thread_num, output);
+          benchmark_gpu_adapter(scene_files, factory, options.repetitions, results);
+          print_completed_results(results, scene_files.name, adapter->name(), "gpu",
+                                  options.thread_num, output);
         }
       }
-      if (options.verify &&
-          (options.broadphase.empty() || options.broadphase == "cubql" ||
-           options.broadphase == "silk_oibvh")) {
+      if (options.verify && (options.broadphase.empty() || options.broadphase == "cubql" ||
+                             options.broadphase == "silk_oibvh")) {
         verify_cubql_matches_oibvh(scene_files);
       }
 #endif

@@ -19,8 +19,8 @@ void ObjectSettingWidget::enter_paint_mode() {
   py::state::doDefaultMouseInteraction = false;
 
   if (!selector_sphere_) {
-    selector_sphere_ = py::registerPointCloud(
-        "selector_sphere", std::vector<glm::vec3>{selector_center_});
+    selector_sphere_ =
+        py::registerPointCloud("selector_sphere", std::vector<glm::vec3>{selector_center_});
     selector_sphere_->setPointRadius(selector_radius_, false);
     selector_sphere_->setPointColor({1.0f, 0.5f, 0.0f});
     selector_sphere_->setTransparency(0.5f);
@@ -71,9 +71,7 @@ void ObjectSettingWidget::handle_paint_input() {
     return;
   }
 
-  auto pred = [mesh](const pIObject& obj) -> bool {
-    return (obj->get_mesh() == mesh);
-  };
+  auto pred = [mesh](const pIObject& obj) -> bool { return (obj->get_mesh() == mesh); };
   auto it = std::find_if(ctx_.objects.begin(), ctx_.objects.end(), pred);
   if (it == ctx_.objects.end()) {
     return;
@@ -97,8 +95,7 @@ ObjectSettingWidget::ObjectSettingWidget(Context& context) : ctx_(context) {}
 void ObjectSettingWidget::draw() {
   ImGui::BeginDisabled((ctx_.selection == -1));
 
-  if (ImGui::CollapsingHeader("Object Settings",
-                              ImGuiTreeNodeFlags_DefaultOpen)) {
+  if (ImGui::CollapsingHeader("Object Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
     if (ctx_.selection != -1) {
       auto& obj = ctx_.objects[ctx_.selection];
 
@@ -110,8 +107,7 @@ void ObjectSettingWidget::draw() {
       ImGui::SeparatorText("Paint");
 
       // Paint mode controls.
-      ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal &&
-                           ctx_.ui_mode != UIMode::Paint);
+      ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal && ctx_.ui_mode != UIMode::Paint);
       bool is_painting = (ctx_.ui_mode == UIMode::Paint);
       // painting mode button
       if (ImGui::Button(is_painting ? "Stop Painting" : "Start Painting")) {
@@ -126,8 +122,7 @@ void ObjectSettingWidget::draw() {
       // painting mode pick radius
       ImGui::SliderInt("Paint Radius", &pick_radius_, 0, 30);
       if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip(
-            "Breadth-first depth in mesh adjacency. 0 = single vertex.");
+        ImGui::SetTooltip("Breadth-first depth in mesh adjacency. 0 = single vertex.");
       }
       ImGui::EndDisabled();
 

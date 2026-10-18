@@ -44,8 +44,7 @@ class ClothSolverContext {
   ///
   ///  Returns std::nullopt if analysis/factorization fails.
   static std::optional<ClothSolverContext> make_cloth_solver_context(
-      const ClothConfig& config, const ClothAssemblyL2Cache& topology,
-      const Pin& pin, float dt);
+      const ClothConfig& config, const ClothAssemblyL2Cache& topology, const Pin& pin, float dt);
 
  private:
   ClothSolverContext() = default;

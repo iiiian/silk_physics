@@ -33,10 +33,8 @@ class ClothAssemblyL1Cache {
 
  public:
   ClothAssemblyL1Cache() = default;
-  ClothAssemblyL1Cache(const ClothConfig& config,
-                       const MeshPartition& partition,
-                       const ClothAssemblyL2Cache& l2_cache, float dt,
-                       CudaRuntime rt);
+  ClothAssemblyL1Cache(const ClothConfig& config, const MeshPartition& partition,
+                       const ClothAssemblyL2Cache& l2_cache, float dt, CudaRuntime rt);
 };
 
 }  // namespace silk::cuda

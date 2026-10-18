@@ -16,8 +16,7 @@ void Demo::draw() {
   ImGui::SetNextWindowPos(ImVec2(0.f, 0.f));
   ImGui::SetNextWindowSize(ImVec2(panel_width, display_size.y));
   ImGui::Begin("Left Panel", nullptr,
-               ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-                   ImGuiWindowFlags_NoCollapse);
+               ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
   statistic_widget_.draw();
   scene_widget_.draw();
   object_setting_widget_.draw();
@@ -27,8 +26,7 @@ void Demo::draw() {
   ImGui::SetNextWindowPos(ImVec2(display_size.x - panel_width, 0.f));
   ImGui::SetNextWindowSize(ImVec2(panel_width, display_size.y));
   ImGui::Begin("Right Panel", nullptr,
-               ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-                   ImGuiWindowFlags_NoCollapse);
+               ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
   sim_setting_widget_.draw();
   simulator_widget_.draw();
   config_widget_.draw();
@@ -40,9 +38,7 @@ void Demo::draw() {
 
 void Demo::run() { py::show(); }
 
-void Demo::apply_config(const SimConfig& config) {
-  config_widget_.apply_config_to_gui(config);
-}
+void Demo::apply_config(const SimConfig& config) { config_widget_.apply_config_to_gui(config); }
 
 bool Demo::init(silk::Backend backend) {
   silk::Result r = ctx_.silk_world.init(backend);

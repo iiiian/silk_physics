@@ -12,8 +12,7 @@ namespace silk::cpu {
 /// @param x1 Triangle vertex 1.
 /// @param x2 Triangle vertex 2.
 /// @param x3 Triangle vertex 3.
-inline Eigen::Vector3f eval_triangle_parameter(float u, float v,
-                                               const Eigen::Vector3f& x1,
+inline Eigen::Vector3f eval_triangle_parameter(float u, float v, const Eigen::Vector3f& x1,
                                                const Eigen::Vector3f& x2,
                                                const Eigen::Vector3f& x3) {
   return (1.0f - u - v) * x1 + u * x2 + v * x3;
@@ -39,8 +38,7 @@ inline Eigen::Vector3f eval_edge_parameter(float u, const Eigen::Vector3f& x1,
 std::optional<std::pair<float, float>> exact_pt_uv(const Eigen::Vector3f& x0,
                                                    const Eigen::Vector3f& x1,
                                                    const Eigen::Vector3f& x2,
-                                                   const Eigen::Vector3f& x3,
-                                                   float eps);
+                                                   const Eigen::Vector3f& x3, float eps);
 
 /// @brief Compute parameters of the closest points on two edges.
 ///
@@ -55,7 +53,6 @@ std::optional<std::pair<float, float>> exact_pt_uv(const Eigen::Vector3f& x0,
 std::optional<std::pair<float, float>> exact_ee_uv(const Eigen::Vector3f& x0,
                                                    const Eigen::Vector3f& x1,
                                                    const Eigen::Vector3f& x2,
-                                                   const Eigen::Vector3f& x3,
-                                                   float eps);
+                                                   const Eigen::Vector3f& x3, float eps);
 
 }  // namespace silk::cpu

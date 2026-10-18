@@ -48,13 +48,11 @@ bool check_schema(const MeshConfig& mc, int min_vnum, int min_fnum) {
   int vnum = mc.verts.size() / 3;
   int fnum = mc.faces.size() / 3;
   if (vnum < min_vnum) {
-    SPDLOG_WARN("Invalid mesh: need at least {} vertices, got {}.", min_vnum,
-                vnum);
+    SPDLOG_WARN("Invalid mesh: need at least {} vertices, got {}.", min_vnum, vnum);
     return false;
   }
   if (fnum < min_fnum) {
-    SPDLOG_WARN("Invalid mesh: need at least {} faces, got {}.", min_fnum,
-                fnum);
+    SPDLOG_WARN("Invalid mesh: need at least {} faces, got {}.", min_fnum, fnum);
     return false;
   }
 
@@ -86,9 +84,8 @@ bool check_indexing(const RMatrixX3i& F, int vnum) {
   int min_idx = F.minCoeff();
   int max_idx = F.maxCoeff();
   if (min_idx < 0 || max_idx >= vnum) {
-    SPDLOG_WARN(
-        "Invalid mesh: face indices out of range [0, {}). min={}, max={}", vnum,
-        min_idx, max_idx);
+    SPDLOG_WARN("Invalid mesh: face indices out of range [0, {}). min={}, max={}", vnum, min_idx,
+                max_idx);
     return false;
   }
 
@@ -98,9 +95,8 @@ bool check_indexing(const RMatrixX3i& F, int vnum) {
     int b = F(f, 1);
     int c = F(f, 2);
     if (a == b || b == c || c == a) {
-      SPDLOG_WARN(
-          "Invalid mesh: triangle {} has repeated vertex indices ({}, {}, {}).",
-          f, a, b, c);
+      SPDLOG_WARN("Invalid mesh: triangle {} has repeated vertex indices ({}, {}, {}).", f, a, b,
+                  c);
       return false;
     }
   }
@@ -117,8 +113,7 @@ bool check_indexing(const RMatrixX3i& F, int vnum) {
 /// @param F Face index matrix (#faces × 3)
 /// @param min_degree Minimum allowed angle in degrees (default: 0.5°)
 /// @return true if all angles are within acceptable bounds, false otherwise
-bool check_triangle_angles_min(const RMatrixX3f& V, const RMatrixX3i& F,
-                               float min_degree = 0.5f) {
+bool check_triangle_angles_min(const RMatrixX3f& V, const RMatrixX3i& F, float min_degree = 0.5f) {
   static constexpr float PI = 3.14159265358979323846f;
 
   Eigen::MatrixXf K;  // #faces × 3 matrix of internal angles in radians
@@ -176,8 +171,7 @@ bool check_single_component(const RMatrixX3i& F) {
   Eigen::VectorXi C;  // Per-face component labels
   int num = igl::facet_components(F, C);
   if (num != 1) {
-    SPDLOG_WARN(
-        "Invalid mesh: expected a single connected component, found {}.", num);
+    SPDLOG_WARN("Invalid mesh: expected a single connected component, found {}.", num);
     return false;
   }
   return true;
@@ -190,10 +184,8 @@ std::optional<TriMesh> make_cloth_mesh(MeshConfig mesh_config) {
   int vnum = mesh_config.verts.size() / 3;
   int fnum = mesh_config.faces.size() / 3;
 
-  RMatrixX3f V =
-      Eigen::Map<const RMatrixX3f>(mesh_config.verts.data(), vnum, 3);
-  RMatrixX3i F =
-      Eigen::Map<const RMatrixX3i>(mesh_config.faces.data(), fnum, 3);
+  RMatrixX3f V = Eigen::Map<const RMatrixX3f>(mesh_config.verts.data(), vnum, 3);
+  RMatrixX3i F = Eigen::Map<const RMatrixX3i>(mesh_config.faces.data(), fnum, 3);
 
   if (!check_finite_positions(V)) {
     return std::nullopt;
@@ -237,10 +229,8 @@ std::optional<TriMesh> make_obstacle_mesh(MeshConfig mesh_config) {
   int vnum = mesh_config.verts.size() / 3;
   int fnum = mesh_config.faces.size() / 3;
 
-  RMatrixX3f V =
-      Eigen::Map<const RMatrixX3f>(mesh_config.verts.data(), vnum, 3);
-  RMatrixX3i F =
-      Eigen::Map<const RMatrixX3i>(mesh_config.faces.data(), fnum, 3);
+  RMatrixX3f V = Eigen::Map<const RMatrixX3f>(mesh_config.verts.data(), vnum, 3);
+  RMatrixX3i F = Eigen::Map<const RMatrixX3i>(mesh_config.faces.data(), fnum, 3);
 
   if (!check_finite_positions(V)) {
     return std::nullopt;

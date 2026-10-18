@@ -39,8 +39,8 @@ class IObject {
   virtual bool exit_sim() = 0;
 
   // picking/selection hook: widget forwards raw pick + add/remove intent
-  virtual void handle_pick(const polyscope::PickResult& pick,
-                           bool add_to_selection, int pick_radius) = 0;
+  virtual void handle_pick(const polyscope::PickResult& pick, bool add_to_selection,
+                           int pick_radius) = 0;
   // position shift for dragging during simulation
   virtual void handle_drag(const glm::vec3& shift) = 0;
 };

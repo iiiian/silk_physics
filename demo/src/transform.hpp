@@ -13,8 +13,7 @@
 /// and Eigen.
 class AffineTransformer {
  public:
-  using EigenAffine =
-      Eigen::Transform<float, 3, Eigen::TransformTraits::Affine>;
+  using EigenAffine = Eigen::Transform<float, 3, Eigen::TransformTraits::Affine>;
 
  private:
   glm::mat4 glm_affine_;
@@ -25,36 +24,31 @@ class AffineTransformer {
   /// @param position The translation vector.
   /// @param rotation The Euler angle rotation vector (XYZ order).
   /// @param scale The scaling vector.
-  AffineTransformer(const glm::vec3& position, const glm::vec3& rotation,
-                    const glm::vec3& scale);
+  AffineTransformer(const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& scale);
   /// @brief Constructs an AffineTransformer from GLM vectors with uniform
   /// scaling.
   /// @param position The translation vector.
   /// @param rotation The Euler angle rotation vector (XYZ order).
   /// @param scale The uniform scaling factor.
-  AffineTransformer(const glm::vec3& position, const glm::vec3& rotation,
-                    float scale);
+  AffineTransformer(const glm::vec3& position, const glm::vec3& rotation, float scale);
   /// @brief Constructs an AffineTransformer from Eigen vectors.
   /// @param position The translation vector.
   /// @param rotation The Euler angle rotation vector (XYZ order).
   /// @param scale The scaling vector.
-  AffineTransformer(const Eigen::Vector3f& position,
-                    const Eigen::Vector3f& rotation,
+  AffineTransformer(const Eigen::Vector3f& position, const Eigen::Vector3f& rotation,
                     const Eigen::Vector3f& scale);
   /// @brief Constructs an AffineTransformer from Eigen vectors with uniform
   /// scaling.
   /// @param position The translation vector.
   /// @param rotation The Euler angle rotation vector (XYZ order).
   /// @param scale The uniform scaling factor.
-  AffineTransformer(const Eigen::Vector3f& position,
-                    const Eigen::Vector3f& rotation, float scale);
+  AffineTransformer(const Eigen::Vector3f& position, const Eigen::Vector3f& rotation, float scale);
   /// @brief Constructs an AffineTransformer from std::array.
   /// @param position The translation vector as a 3-element array.
   /// @param rotation The Euler angle rotation vector (XYZ order) as a
   /// 3-element array.
   /// @param scale The scaling vector as a 3-element array.
-  AffineTransformer(const std::array<float, 3>& position,
-                    const std::array<float, 3>& rotation,
+  AffineTransformer(const std::array<float, 3>& position, const std::array<float, 3>& rotation,
                     const std::array<float, 3>& scale);
   /// @brief Constructs an AffineTransformer from std::array with uniform
   /// scaling.
@@ -62,8 +56,8 @@ class AffineTransformer {
   /// @param rotation The Euler angle rotation vector (XYZ order) as a
   /// 3-element array.
   /// @param scale The uniform scaling factor.
-  AffineTransformer(const std::array<float, 3>& position,
-                    const std::array<float, 3>& rotation, float scale);
+  AffineTransformer(const std::array<float, 3>& position, const std::array<float, 3>& rotation,
+                    float scale);
   /// @brief Constructs an AffineTransformer from a configuration struct.
   /// @param config The transform configuration.
   AffineTransformer(const config::Transform& config);

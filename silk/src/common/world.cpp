@@ -34,8 +34,7 @@ Result World::init(Backend backend) {
     }
     case Backend::GPU: {
       if (!check_cuda_support()) {
-        return Result::error(ErrorCode::NoCudaSupport,
-                             "CUDA runtime/device not available");
+        return Result::error(ErrorCode::NoCudaSupport, "CUDA runtime/device not available");
       }
 #ifdef SILK_WITH_CUDA
       impl_->backend = std::make_unique<cuda::CudaBackend>();
@@ -69,15 +68,12 @@ Result World::solver_reset() {
   return impl_->backend->solver_reset();
 }
 
-Result World::add_cloth(ClothConfig cloth_config,
-                        CollisionConfig collision_config,
-                        MeshConfig mesh_config, std::span<const int> pin_index,
-                        uint32_t& handle) {
+Result World::add_cloth(ClothConfig cloth_config, CollisionConfig collision_config,
+                        MeshConfig mesh_config, std::span<const int> pin_index, uint32_t& handle) {
   if (!impl_->backend) {
     return Result::error(ErrorCode::NotInitialized);
   }
-  return impl_->backend->add_cloth(cloth_config, collision_config, mesh_config,
-                                   pin_index, handle);
+  return impl_->backend->add_cloth(cloth_config, collision_config, mesh_config, pin_index, handle);
 }
 
 Result World::remove_cloth(uint32_t handle) {
@@ -87,8 +83,7 @@ Result World::remove_cloth(uint32_t handle) {
   return impl_->backend->remove_cloth(handle);
 }
 
-Result World::get_cloth_position(uint32_t handle,
-                                 std::span<float> position) const {
+Result World::get_cloth_position(uint32_t handle, std::span<float> position) const {
   if (!impl_->backend) {
     return Result::error(ErrorCode::NotInitialized);
   }
@@ -102,32 +97,29 @@ Result World::set_cloth_config(uint32_t handle, ClothConfig config) {
   return impl_->backend->set_cloth_config(handle, config);
 }
 
-Result World::set_cloth_collision_config(uint32_t handle,
-                                         CollisionConfig config) {
+Result World::set_cloth_collision_config(uint32_t handle, CollisionConfig config) {
   if (!impl_->backend) {
     return Result::error(ErrorCode::NotInitialized);
   }
   return impl_->backend->set_cloth_collision_config(handle, config);
 }
 
-Result World::set_cloth_pin_index(uint32_t handle,
-                                  std::span<const int> pin_index) {
+Result World::set_cloth_pin_index(uint32_t handle, std::span<const int> pin_index) {
   if (!impl_->backend) {
     return Result::error(ErrorCode::NotInitialized);
   }
   return impl_->backend->set_cloth_pin_index(handle, pin_index);
 }
 
-Result World::set_cloth_pin_position(uint32_t handle,
-                                     std::span<const float> position) {
+Result World::set_cloth_pin_position(uint32_t handle, std::span<const float> position) {
   if (!impl_->backend) {
     return Result::error(ErrorCode::NotInitialized);
   }
   return impl_->backend->set_cloth_pin_position(handle, position);
 }
 
-Result World::add_obstacle(CollisionConfig collision_config,
-                           MeshConfig mesh_config, uint32_t& handle) {
+Result World::add_obstacle(CollisionConfig collision_config, MeshConfig mesh_config,
+                           uint32_t& handle) {
   if (!impl_->backend) {
     return Result::error(ErrorCode::NotInitialized);
   }
@@ -141,16 +133,14 @@ Result World::remove_obstacle(uint32_t handle) {
   return impl_->backend->remove_obstacle(handle);
 }
 
-Result World::set_obstacle_collision_config(uint32_t handle,
-                                            CollisionConfig config) {
+Result World::set_obstacle_collision_config(uint32_t handle, CollisionConfig config) {
   if (!impl_->backend) {
     return Result::error(ErrorCode::NotInitialized);
   }
   return impl_->backend->set_obstacle_collision_config(handle, config);
 }
 
-Result World::set_obstacle_position(uint32_t handle,
-                                    std::span<const float> position) {
+Result World::set_obstacle_position(uint32_t handle, std::span<const float> position) {
   if (!impl_->backend) {
     return Result::error(ErrorCode::NotInitialized);
   }

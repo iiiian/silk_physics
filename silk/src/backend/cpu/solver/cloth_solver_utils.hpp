@@ -23,8 +23,7 @@ void batch_reset_cloth_simulation(Registry& registry);
 ///  @param state_offset Object state offset.
 ///  @return false on factorization failure (e.g., non‑SPD system), true
 ///          otherwise.
-bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt,
-                              int state_offset);
+bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt, int state_offset);
 
 /// Assemble step-invariant initial RHS for all cloth entities.
 ///
@@ -36,8 +35,7 @@ bool prepare_cloth_simulation(Registry& registry, uint32_t entity, float dt,
 ///  entities.
 ///  @pre rhs is sized to the sum of state_num across entities.
 ///  @post Overwrites corresponding segments of rhs.
-void batch_compute_cloth_invariant_rhs(Registry& registry,
-                                       Eigen::VectorXf& rhs);
+void batch_compute_cloth_invariant_rhs(Registry& registry, Eigen::VectorXf& rhs);
 
 /// Prepare all cloths for current solver outer loop.
 ///  Adds momentum and (optionally) barrier‑constraint terms into `rhs` and
@@ -50,11 +48,11 @@ void batch_compute_cloth_invariant_rhs(Registry& registry,
 ///  @param barrier_constrain Diagonal LHS weights and additive RHS.
 ///  @param rhs In/out right‑hand side to be accumulated into.
 ///  @return false if a per‑cloth update fails, true otherwise.
-bool batch_compute_cloth_outer_loop(
-    Registry& registry, const Eigen::VectorXf& global_state,
-    const Eigen::VectorXf& global_state_velocity,
-    const Eigen::VectorXf& global_state_acceleration,
-    const BarrierConstrain& barrier_constrain, Eigen::VectorXf& rhs);
+bool batch_compute_cloth_outer_loop(Registry& registry, const Eigen::VectorXf& global_state,
+                                    const Eigen::VectorXf& global_state_velocity,
+                                    const Eigen::VectorXf& global_state_acceleration,
+                                    const BarrierConstrain& barrier_constrain,
+                                    Eigen::VectorXf& rhs);
 
 /// Solve all cloths' projective dynamics equation to produce a position update.
 ///  Projects in‑plane elastic constraints locally, then performs a global
@@ -66,9 +64,7 @@ bool batch_compute_cloth_outer_loop(
 ///  @param outer_rhs Right‑hand side assembled by the outer loop.
 ///  @param solution Output solution vector; same layout/size as `global_state`.
 ///  @return false if the linear solve fails, true otherwise.
-bool batch_compute_cloth_inner_loop(Registry& registry,
-                                    const Eigen::VectorXf& global_state,
-                                    const Eigen::VectorXf& outer_rhs,
-                                    Eigen::VectorXf& solution);
+bool batch_compute_cloth_inner_loop(Registry& registry, const Eigen::VectorXf& global_state,
+                                    const Eigen::VectorXf& outer_rhs, Eigen::VectorXf& solution);
 
 }  // namespace silk::cpu

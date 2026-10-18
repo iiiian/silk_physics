@@ -54,13 +54,11 @@ class MASCGSolver {
   /// @brief Init solver. Must be called before solve.
   /// @param A Input matrix and scalar diagonal update.
   /// @param part_offset CSR mesh partition offset.
-  void factorize(DynamicBSRView A, ctd::span<const int> part_offset,
-                 CudaRuntime rt);
+  void factorize(DynamicBSRView A, ctd::span<const int> part_offset, CudaRuntime rt);
 
   /// @brief Solve linear system Ax=b.
   /// https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
-  Status solve(DynamicBSRView A, ctd::span<const float> b, ctd::span<float> x,
-               CudaRuntime rt);
+  Status solve(DynamicBSRView A, ctd::span<const float> b, ctd::span<float> x, CudaRuntime rt);
 
  private:
   void setup_cusparse(BSRView A, CudaRuntime rt);

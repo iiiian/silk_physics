@@ -73,8 +73,7 @@ struct ComponentDependents<cuda::ObjRegistry, cuda::PinIndex> {
 template <>
 struct ComponentDependents<cuda::ObjRegistry, cuda::MeshPartition> {
   using Type = ComponentList<ClothAssemblyL2Cache, cuda::ClothADMMHelper,
-                             cuda::ClothAssemblyL1Cache, cuda::ObjectCollider,
-                             cuda::PhysicalState>;
+                             cuda::ClothAssemblyL1Cache, cuda::ObjectCollider, cuda::PhysicalState>;
 };
 
 }  // namespace silk

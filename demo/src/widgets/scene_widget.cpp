@@ -44,8 +44,7 @@ std::string SceneWidget::generate_unique_name(const std::string& base_name) {
 }
 
 // Read mesh from path into V,F; returns true on success
-bool SceneWidget::load_object_from_path(const std::string& path,
-                                        SilkObjectType type) {
+bool SceneWidget::load_object_from_path(const std::string& path, SilkObjectType type) {
   spdlog::info("Loading model from: {}", path);
 
   auto mesh = load_mesh_from_file(path);
@@ -56,14 +55,12 @@ bool SceneWidget::load_object_from_path(const std::string& path,
 
   auto& V = mesh->verts;
   auto& F = mesh->faces;
-  spdlog::info("Loaded model with {} vertices and {} faces", V.rows(),
-               F.rows());
+  spdlog::info("Loaded model with {} vertices and {} faces", V.rows(), F.rows());
 
   // Auto-center the mesh by computing vertex mean and shifting to origin
   Eigen::Vector3f center = V.colwise().mean();
   V.rowwise() -= center.transpose();
-  spdlog::info("Mesh centered by shifting ({}, {}, {})", center.x(), center.y(),
-               center.z());
+  spdlog::info("Mesh centered by shifting ({}, {}, {})", center.x(), center.y(), center.z());
 
   // Generate unique name for the object
   std::filesystem::path pa{path};
@@ -82,11 +79,9 @@ bool SceneWidget::load_object_from_path(const std::string& path,
       break;
     }
     case SilkObjectType::Obstacle: {
-      auto obstacle =
-          Obstacle::make_obstacle(&ctx_.silk_world, unique_name, V, F);
+      auto obstacle = Obstacle::make_obstacle(&ctx_.silk_world, unique_name, V, F);
       if (obstacle) {
-        ctx_.objects.push_back(
-            std::make_unique<Obstacle>(std::move(*obstacle)));
+        ctx_.objects.push_back(std::make_unique<Obstacle>(std::move(*obstacle)));
         created = true;
       } else {
         spdlog::error("Failed to create Obstacle form {}", path);
@@ -118,8 +113,7 @@ bool SceneWidget::load_object(SilkObjectType type) {
                                       "*"};
 
   std::vector<std::string> paths =
-      pfd::open_file("Select Cloth Mesh", ".", filters, pfd::opt::none)
-          .result();
+      pfd::open_file("Select Cloth Mesh", ".", filters, pfd::opt::none).result();
 
   if (paths.empty()) {
     return false;
@@ -164,8 +158,8 @@ void SceneWidget::draw() {
     };
 
     ImGui::SetNextItemWidth(-1);
-    ImGui::ListBox("##Objects", &ctx_.selection, get_name, &names,
-                   static_cast<int>(names.size()), 5);
+    ImGui::ListBox("##Objects", &ctx_.selection, get_name, &names, static_cast<int>(names.size()),
+                   5);
   }
 
   ImGui::EndDisabled();

@@ -24,8 +24,7 @@ struct Query {
   std::string to_string() const;
 };
 
-std::vector<Query> parse_queries_from_csv(const std::filesystem::path &path,
-                                          QueryType type);
+std::vector<Query> parse_queries_from_csv(const std::filesystem::path &path, QueryType type);
 
 struct QueryCategory {
   std::string name;

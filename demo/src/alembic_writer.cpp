@@ -16,8 +16,7 @@
 // The Alembic library itself has little documentation. This blender page might
 // be helpful: https://developer.blender.org/docs/features/objects/io/alembic
 
-bool write_scene(const std::filesystem::path& path,
-                 const std::vector<pIObject>& objects) {
+bool write_scene(const std::filesystem::path& path, const std::vector<pIObject>& objects) {
   namespace Abc = Alembic::Abc;
   namespace AbcGeom = Alembic::AbcGeom;
   namespace AbcA = Alembic::AbcCoreAbstract;
@@ -31,8 +30,8 @@ bool write_scene(const std::filesystem::path& path,
     std::error_code ec;
     fs::create_directories(parent, ec);
     if (ec) {
-      spdlog::error("Failed to create Alembic export directory '{}': {}",
-                    parent.string(), ec.message());
+      spdlog::error("Failed to create Alembic export directory '{}': {}", parent.string(),
+                    ec.message());
       return false;
     }
   }
@@ -47,9 +46,8 @@ bool write_scene(const std::filesystem::path& path,
       // Time sample.
       auto& cache = obj->get_cache();
       if (cache.empty()) {
-        spdlog::info(
-            "Object {} has no simulation cache, skip writing to .abc file.",
-            obj->get_name());
+        spdlog::info("Object {} has no simulation cache, skip writing to .abc file.",
+                     obj->get_name());
         continue;
       }
 
@@ -59,9 +57,8 @@ bool write_scene(const std::filesystem::path& path,
       }
       assert(std::is_sorted(sample_times.begin(), sample_times.end()));
 
-      AbcA::TimeSampling sampling(
-          AbcA::TimeSamplingType(AbcA::TimeSamplingType::kAcyclic),
-          sample_times);
+      AbcA::TimeSampling sampling(AbcA::TimeSamplingType(AbcA::TimeSamplingType::kAcyclic),
+                                  sample_times);
       uint32_t sampling_index = archive.addTimeSampling(sampling);
 
       // Face topology.
@@ -92,16 +89,14 @@ bool write_scene(const std::filesystem::path& path,
       };
 
       // Pass both vertex positions and face topology in the first sample.
-      AbcGeom::OPolyMeshSchema::Sample base_sample{
-          make_p3f_array_sample(cache.front().second),
-          Abc::Int32ArraySample(face_indices),
-          Abc::Int32ArraySample(face_counts)};
+      AbcGeom::OPolyMeshSchema::Sample base_sample{make_p3f_array_sample(cache.front().second),
+                                                   Abc::Int32ArraySample(face_indices),
+                                                   Abc::Int32ArraySample(face_counts)};
       schema.set(base_sample);
 
       // Pass vertex position only for subseqent samples.
       for (size_t i = 1; i < cache.size(); ++i) {
-        AbcGeom::OPolyMeshSchema::Sample pos_sample{
-            make_p3f_array_sample(cache[i].second)};
+        AbcGeom::OPolyMeshSchema::Sample pos_sample{make_p3f_array_sample(cache[i].second)};
         schema.set(pos_sample);
       }
     }

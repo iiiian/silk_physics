@@ -29,18 +29,15 @@ namespace silk::cpu {
 /// @return CCDResult if a root is found; std::nullopt otherwise.
 template <bool is_vertex_face>
 std::optional<CCDResult> interval_root_finder_bucket_DFS(
-    const Eigen::Vector3f &a_t0, const Eigen::Vector3f &b_t0,
-    const Eigen::Vector3f &c_t0, const Eigen::Vector3f &d_t0,
-    const Eigen::Vector3f &a_t1, const Eigen::Vector3f &b_t1,
-    const Eigen::Vector3f &c_t1, const Eigen::Vector3f &d_t1,
-    const std::array<Interval, 3> &iset, const Eigen::Array3f &tol,
-    float co_domain_tolerance, const Eigen::Array3f &err, float ms,
+    const Eigen::Vector3f &a_t0, const Eigen::Vector3f &b_t0, const Eigen::Vector3f &c_t0,
+    const Eigen::Vector3f &d_t0, const Eigen::Vector3f &a_t1, const Eigen::Vector3f &b_t1,
+    const Eigen::Vector3f &c_t1, const Eigen::Vector3f &d_t1, const std::array<Interval, 3> &iset,
+    const Eigen::Array3f &tol, float co_domain_tolerance, const Eigen::Array3f &err, float ms,
     long max_iter, bool is_unit_interval);
 
 /// @brief Compute numeric filter for CCD from scene magnitude.
 /// @param abs_max Per-axis absolute coordinate maxima used for scaling.
 /// @param is_vertex_face True for VF queries; false for EE.
-Eigen::Array3f get_numerical_error(const Eigen::Vector3f &abs_max,
-                                   bool is_vertex_face);
+Eigen::Array3f get_numerical_error(const Eigen::Vector3f &abs_max, bool is_vertex_face);
 
 }  // namespace silk::cpu

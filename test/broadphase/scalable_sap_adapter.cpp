@@ -10,8 +10,7 @@ namespace {
 // Give unused slots a negative ID derived from the first real vertex so
 // unrelated primitives do not appear to share the common value -1.
 std::array<long, 3> pad_vertex_ids(const Box& box) {
-  std::array<long, 3> result = {box.vertex_ids[0], box.vertex_ids[1],
-                                box.vertex_ids[2]};
+  std::array<long, 3> result = {box.vertex_ids[0], box.vertex_ids[1], box.vertex_ids[2]};
   const long padding_id = -box.vertex_ids[0] - 1;
   for (long& vertex_id : result) {
     if (vertex_id < 0) {

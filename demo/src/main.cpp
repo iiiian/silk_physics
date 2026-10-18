@@ -32,9 +32,7 @@ int main(int argc, char** argv) {
       .store_into(is_headless);
 
   std::string out_path = "out.abc";
-  program.add_argument("-o", "--output")
-      .help("Output path for headless mode")
-      .store_into(out_path);
+  program.add_argument("-o", "--output").help("Output path for headless mode").store_into(out_path);
 
   std::string backend_opt = "cpu";
   program.add_argument("--backend")
@@ -79,8 +77,7 @@ int main(int argc, char** argv) {
 
   if (is_headless) {
     if (!sim_config) {
-      spdlog::error(
-          "Please provide a config json through -c flag in headless mode.");
+      spdlog::error("Please provide a config json through -c flag in headless mode.");
       return 1;
     }
     spdlog::info("Headless mode.");

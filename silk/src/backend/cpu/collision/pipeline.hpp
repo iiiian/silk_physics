@@ -35,13 +35,12 @@ class CollisionPipeline {
   /// @param time_start Absolute normalized time already consumed.
   /// @param max_time Maximum remaining normalized time to search.
   /// @return Earliest conservative TOI, or max_time if no CCD hit exists.
-  float find_earliest_toi(Registry& registry, const Bbox& scene_bbox,
-                          float time_start, float max_time);
+  float find_earliest_toi(Registry& registry, const Bbox& scene_bbox, float time_start,
+                          float max_time);
 
   /// @brief Build the active contact set using DCD at one fixed state.
   /// @param frame_time Absolute normalized frame time in [0,1].
-  std::vector<Collision> find_active_collisions(Registry& registry,
-                                                float frame_time);
+  std::vector<Collision> find_active_collisions(Registry& registry, float frame_time);
 
  private:
   CollisionCache<MeshCollider> mesh_ccache_;

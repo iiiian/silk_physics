@@ -57,8 +57,7 @@ struct SceneFiles {
 };
 
 /// Resolve dataset files.
-std::vector<SceneFiles> resolve_scene_files(
-    const std::filesystem::path& data_root);
+std::vector<SceneFiles> resolve_scene_files(const std::filesystem::path& data_root);
 
 /// Load test data for a single time step.
 TestCase load_case(const SceneFiles& scene, int timestep_index);
@@ -67,8 +66,7 @@ TestCase load_case(const SceneFiles& scene, int timestep_index);
 QueryInput make_query(const TestCase& test_case, QueryKind kind);
 
 inline bool is_boxes_overlaping(const Box& a, const Box& b) {
-  return (a.min.array() <= b.max.array()).all() &&
-         (b.min.array() <= a.max.array()).all();
+  return (a.min.array() <= b.max.array()).all() && (b.min.array() <= a.max.array()).all();
 }
 
 inline bool is_sharing_vertex(const Box& a, const Box& b) {

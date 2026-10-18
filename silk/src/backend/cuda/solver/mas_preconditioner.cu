@@ -41,17 +41,14 @@ struct CoarseMatricesRef {
     int scalar_offset = 0;
     for (int i = 0; i < MAS_LEVEL_NUM; ++i) {
       int level_size = mats.matrix_nums[i] * mats.mat_storage_size;
-      matrix_per_level[i] =
-          ctd::span<float>(mats.data->data() + scalar_offset, level_size);
+      matrix_per_level[i] = ctd::span<float>(mats.data->data() + scalar_offset, level_size);
       scalar_offset += level_size;
     }
   }
 };
 
-__global__ void build_padded_maps(ctd::span<const int> part_offsets,
-                                  ctd::span<const int> bsr_rows,
-                                  ctd::span<int> real_to_padded,
-                                  ctd::span<int> padded_to_real,
+__global__ void build_padded_maps(ctd::span<const int> part_offsets, ctd::span<const int> bsr_rows,
+                                  ctd::span<int> real_to_padded, ctd::span<int> padded_to_real,
                                   ctd::span<int> real_num_per_row) {
   int padded_id = blockDim.x * blockIdx.x + threadIdx.x;
   if (padded_id >= real_num_per_row.size()) {
@@ -78,11 +75,9 @@ __global__ void build_padded_maps(ctd::span<const int> part_offsets,
   }
 }
 
-__global__ void fill_padded_cols(ctd::span<const int> bsr_rows,
-                                 ctd::span<const int> bsr_cols,
+__global__ void fill_padded_cols(ctd::span<const int> bsr_rows, ctd::span<const int> bsr_cols,
                                  ctd::span<const int> real_to_padded,
-                                 ctd::span<const int> padded_rows,
-                                 ctd::span<int> padded_cols) {
+                                 ctd::span<const int> padded_rows, ctd::span<int> padded_cols) {
   int real_id = blockDim.x * blockIdx.x + threadIdx.x;
   int node_num = bsr_rows.size() - 1;
   if (real_id >= node_num) {
@@ -97,9 +92,7 @@ __global__ void fill_padded_cols(ctd::span<const int> bsr_rows,
   }
 }
 
-PaddedTopology build_padded_topology(BSRView A,
-                                     ctd::span<const int> part_offsets,
-                                     CudaRuntime rt) {
+PaddedTopology build_padded_topology(BSRView A, ctd::span<const int> part_offsets, CudaRuntime rt) {
   int node_num = A.dim;
   int part_num = part_offsets.size() - 1;
   int padded_node_num = part_num * BANK_SIZE;
@@ -115,8 +108,7 @@ PaddedTopology build_padded_topology(BSRView A,
   auto real_num_per_row = alloc<int>(rt, padded_node_num, 0);
   int grid_num = div_round_up(padded_node_num, 128);
   build_padded_maps<<<grid_num, 128, 0, rt.stream.get()>>>(
-      part_offsets, A.rows, *(topo.real_to_padded), *(topo.padded_to_real),
-      real_num_per_row);
+      part_offsets, A.rows, *(topo.real_to_padded), *(topo.padded_to_real), real_num_per_row);
 
   // Build padded space row_ptr.
   size_t cub_tmp_size = 0;
@@ -138,8 +130,8 @@ PaddedTopology build_padded_topology(BSRView A,
 
   scalar_write(topo.rows->data() + padded_node_num, A.non_zeros, rt);
   grid_num = div_round_up(node_num, 128);
-  fill_padded_cols<<<grid_num, 128, 0, rt.stream.get()>>>(
-      A.rows, A.cols, *(topo.real_to_padded), *(topo.rows), *(topo.cols));
+  fill_padded_cols<<<grid_num, 128, 0, rt.stream.get()>>>(A.rows, A.cols, *(topo.real_to_padded),
+                                                          *(topo.rows), *(topo.cols));
 
   return topo;
 }
@@ -160,11 +152,9 @@ __both__ int get_coarse_space_id(ctd::span<const int> map, int vid, int level) {
 /// @param padded_to_real Padded id -> real id. -1 denotes padding.
 /// @param cco_num_per_bank CCO number per bank.
 /// @param local_cco_ids Bank local CCO id at coarse space lv 0.
-__global__ void build_local_cco_lv0(ctd::span<const int> row_ptr,
-                                    ctd::span<int> cols,
+__global__ void build_local_cco_lv0(ctd::span<const int> row_ptr, ctd::span<int> cols,
                                     ctd::span<const int> padded_to_real,
-                                    ctd::span<int> cco_num_per_bank,
-                                    ctd::span<int> local_cco_ids) {
+                                    ctd::span<int> cco_num_per_bank, ctd::span<int> local_cco_ids) {
   // Bank local neighbor masks.
   __shared__ uint32_t neighbors[128];
 
@@ -227,8 +217,7 @@ __global__ void build_local_cco_lv0(ctd::span<const int> row_ptr,
   uint32_t cco_lead_lid = ctd::countr_zero(connection);
   bool is_lead = (cco_lead_lid == lid);
   uint32_t lead_lanes = __ballot_sync(0xFFFFFFFFu, is_lead);
-  uint32_t before_cco_lead_mask =
-      static_cast<uint32_t>((1ull << cco_lead_lid) - 1ull);
+  uint32_t before_cco_lead_mask = static_cast<uint32_t>((1ull << cco_lead_lid) - 1ull);
 
   // Write cco info back.
   local_cco_ids[tid] = ctd::popcount(lead_lanes & before_cco_lead_mask);
@@ -244,10 +233,8 @@ __global__ void build_local_cco_lv0(ctd::span<const int> row_ptr,
 /// @param cols CSR graph topology (may include self).
 /// @param padded_to_real Padded id -> real id. -1 denotes padding.
 /// @param neighbors Bank local neighbor mask.
-__global__ void build_neighbor_masks_lvx(int level,
-                                         ctd::span<const int> coarse_space_map,
-                                         ctd::span<const int> row_ptr,
-                                         ctd::span<int> cols,
+__global__ void build_neighbor_masks_lvx(int level, ctd::span<const int> coarse_space_map,
+                                         ctd::span<const int> row_ptr, ctd::span<int> cols,
                                          ctd::span<const int> padded_to_real,
                                          ctd::span<uint32_t> neighbors) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;  // global thread id
@@ -274,8 +261,7 @@ __global__ void build_neighbor_masks_lvx(int level,
     }
 
     int neighbor_real_id = padded_to_real[neighbor_vid];
-    int neighbor_cco_id =
-        get_coarse_space_id(coarse_space_map, neighbor_real_id, level - 1);
+    int neighbor_cco_id = get_coarse_space_id(coarse_space_map, neighbor_real_id, level - 1);
     if (cco_id / BANK_SIZE == neighbor_cco_id / BANK_SIZE) {
       neighbor |= (1u << (neighbor_cco_id % BANK_SIZE));
     } else {
@@ -296,10 +282,8 @@ __global__ void build_neighbor_masks_lvx(int level,
 /// @param cco_num_per_bank Independent CCO number per bank at coarse space lv
 /// x.
 /// @param local_cco_ids Bank local CCO id at coarse space lv x.
-__global__ void build_local_cco_lvx(int cco_num,
-                                    ctd::span<const uint32_t> neighbors,
-                                    ctd::span<int> cco_num_per_bank,
-                                    ctd::span<int> local_cco_ids) {
+__global__ void build_local_cco_lvx(int cco_num, ctd::span<const uint32_t> neighbors,
+                                    ctd::span<int> cco_num_per_bank, ctd::span<int> local_cco_ids) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;  // global thread id
   int bid = tid / BANK_SIZE;                        // bank id
   int lid = tid % BANK_SIZE;                        // lane id
@@ -322,8 +306,7 @@ __global__ void build_local_cco_lvx(int cco_num,
   uint32_t cco_lead_lid = ctd::countr_zero(connection);
   bool is_lead = (cco_lead_lid == lid);
   uint32_t lead_lanes = __ballot_sync(0xFFFFFFFFu, is_lead);
-  uint32_t before_cco_lead_mask =
-      static_cast<uint32_t>((1ull << cco_lead_lid) - 1ull);
+  uint32_t before_cco_lead_mask = static_cast<uint32_t>((1ull << cco_lead_lid) - 1ull);
 
   // Write cco info back.
   local_cco_ids[tid] = ctd::popcount(lead_lanes & before_cco_lead_mask);
@@ -336,10 +319,11 @@ __global__ void build_local_cco_lvx(int cco_num,
 ///
 /// Compute global CCO id offset from prefix sum, then write result to
 /// coarse_space_map.
-__global__ void aggregate_coarse_space_map_lv0(
-    ctd::span<const int> local_cco_ids, ctd::span<const int> cco_num_per_bank,
-    ctd::span<const int> cco_num_per_bank_summed,
-    ctd::span<const int> real_to_padded, ctd::span<int> coarse_space_map) {
+__global__ void aggregate_coarse_space_map_lv0(ctd::span<const int> local_cco_ids,
+                                               ctd::span<const int> cco_num_per_bank,
+                                               ctd::span<const int> cco_num_per_bank_summed,
+                                               ctd::span<const int> real_to_padded,
+                                               ctd::span<int> coarse_space_map) {
   int real_id = blockDim.x * blockIdx.x + threadIdx.x;
   if (real_id >= real_to_padded.size()) {
     return;
@@ -347,8 +331,7 @@ __global__ void aggregate_coarse_space_map_lv0(
 
   int padded_id = real_to_padded[real_id];
   int bid = padded_id / BANK_SIZE;
-  int cco_id = local_cco_ids[padded_id] + cco_num_per_bank_summed[bid] -
-               cco_num_per_bank[bid];
+  int cco_id = local_cco_ids[padded_id] + cco_num_per_bank_summed[bid] - cco_num_per_bank[bid];
   coarse_space_map[real_id * MAS_MAX_COARSE_LEVEL] = cco_id;
 }
 
@@ -356,11 +339,10 @@ __global__ void aggregate_coarse_space_map_lv0(
 ///
 /// Compute global CCO id offset from prefix sum, then write result to
 /// coarse_space_map.
-__global__ void aggregate_coarse_space_map_lvx(
-    int level, ctd::span<const int> local_cco_ids,
-    ctd::span<const int> cco_num_per_bank,
-    ctd::span<const int> cco_num_per_bank_summed,
-    ctd::span<int> coarse_space_map) {
+__global__ void aggregate_coarse_space_map_lvx(int level, ctd::span<const int> local_cco_ids,
+                                               ctd::span<const int> cco_num_per_bank,
+                                               ctd::span<const int> cco_num_per_bank_summed,
+                                               ctd::span<int> coarse_space_map) {
   int real_id = blockDim.x * blockIdx.x + threadIdx.x;
   int node_num = coarse_space_map.size() / MAS_MAX_COARSE_LEVEL;
   if (real_id >= node_num) {
@@ -369,8 +351,7 @@ __global__ void aggregate_coarse_space_map_lvx(
 
   int prev_cco_id = get_coarse_space_id(coarse_space_map, real_id, level - 1);
   int bid = prev_cco_id / BANK_SIZE;
-  int cco_id = local_cco_ids[prev_cco_id] + cco_num_per_bank_summed[bid] -
-               cco_num_per_bank[bid];
+  int cco_id = local_cco_ids[prev_cco_id] + cco_num_per_bank_summed[bid] - cco_num_per_bank[bid];
   coarse_space_map[real_id * MAS_MAX_COARSE_LEVEL + level] = cco_id;
 }
 
@@ -385,11 +366,9 @@ __global__ void aggregate_coarse_space_map_lvx(
 /// @param padded_to_real Padded id -> real id. -1 denotes virtual padding.
 /// @rt Cuda runtime config.
 /// @warning Will modify cols as side effect!
-CoarseSpace build_coarse_space(ctd::span<const int> row_ptr,
-                               ctd::span<int> cols,
+CoarseSpace build_coarse_space(ctd::span<const int> row_ptr, ctd::span<int> cols,
                                ctd::span<const int> real_to_padded,
-                               ctd::span<const int> padded_to_real,
-                               CudaRuntime rt) {
+                               ctd::span<const int> padded_to_real, CudaRuntime rt) {
   ctd::array<int, MAS_MAX_COARSE_LEVEL> cco_nums{};
 
   int padded_node_num = row_ptr.size() - 1;
@@ -404,26 +383,24 @@ CoarseSpace build_coarse_space(ctd::span<const int> row_ptr,
 
   // Build coarse map level 0.
   int grid_num = div_round_up(padded_node_num, 128);
-  build_local_cco_lv0<<<grid_num, 128, 0, rt.stream.get()>>>(
-      row_ptr, cols, padded_to_real, cco_num_per_bank, local_cco_ids);
+  build_local_cco_lv0<<<grid_num, 128, 0, rt.stream.get()>>>(row_ptr, cols, padded_to_real,
+                                                             cco_num_per_bank, local_cco_ids);
 
   // Prefix sum to compute global CCO id offset.
   size_t cub_tmp_size = 0;
   cub::DeviceScan::InclusiveSum(nullptr, cub_tmp_size, cco_num_per_bank.data(),
-                                cco_num_per_bank_summed.data(),
-                                max_bank_per_level, rt.stream.get());
+                                cco_num_per_bank_summed.data(), max_bank_per_level,
+                                rt.stream.get());
   auto cub_tmp = alloc<char>(rt, cub_tmp_size);
-  cub::DeviceScan::InclusiveSum(
-      cub_tmp.data(), cub_tmp_size, cco_num_per_bank.data(),
-      cco_num_per_bank_summed.data(), max_bank_per_level, rt.stream.get());
+  cub::DeviceScan::InclusiveSum(cub_tmp.data(), cub_tmp_size, cco_num_per_bank.data(),
+                                cco_num_per_bank_summed.data(), max_bank_per_level,
+                                rt.stream.get());
 
   grid_num = div_round_up(real_node_num, 128);
   aggregate_coarse_space_map_lv0<<<grid_num, 128, 0, rt.stream.get()>>>(
-      local_cco_ids, cco_num_per_bank, cco_num_per_bank_summed, real_to_padded,
-      coarse_space_map);
+      local_cco_ids, cco_num_per_bank, cco_num_per_bank_summed, real_to_padded, coarse_space_map);
 
-  int cco_num =
-      scalar_load(cco_num_per_bank_summed.data() + max_bank_per_level - 1, rt);
+  int cco_num = scalar_load(cco_num_per_bank_summed.data() + max_bank_per_level - 1, rt);
   cco_nums[0] = cco_num;
   int level_num = 1;
 
@@ -434,8 +411,7 @@ CoarseSpace build_coarse_space(ctd::span<const int> row_ptr,
   //  3. Compute global CCO id and write to coarse space map.
   auto neighbors = alloc<uint32_t>(rt, padded_node_num);
   for (int lv = 1; lv < MAS_MAX_COARSE_LEVEL; ++lv) {
-    cudaMemsetAsync(neighbors.data(), 0, cco_num * sizeof(uint32_t),
-                    rt.stream.get());
+    cudaMemsetAsync(neighbors.data(), 0, cco_num * sizeof(uint32_t), rt.stream.get());
 
     grid_num = div_round_up(padded_node_num, 128);
     build_neighbor_masks_lvx<<<grid_num, 128, 0, rt.stream.get()>>>(
@@ -449,19 +425,16 @@ CoarseSpace build_coarse_space(ctd::span<const int> row_ptr,
         ctd::span<int>(cco_num_per_bank.data(), bank_num),
         ctd::span<int>(local_cco_ids.data(), cco_num));
 
-    cub::DeviceScan::InclusiveSum(
-        cub_tmp.data(), cub_tmp_size, cco_num_per_bank.data(),
-        cco_num_per_bank_summed.data(), bank_num, rt.stream.get());
+    cub::DeviceScan::InclusiveSum(cub_tmp.data(), cub_tmp_size, cco_num_per_bank.data(),
+                                  cco_num_per_bank_summed.data(), bank_num, rt.stream.get());
     grid_num = div_round_up(real_node_num, 128);
     aggregate_coarse_space_map_lvx<<<grid_num, 128, 0, rt.stream.get()>>>(
         lv, ctd::span<const int>(local_cco_ids.data(), cco_num),
         ctd::span<const int>(cco_num_per_bank.data(), bank_num),
-        ctd::span<const int>(cco_num_per_bank_summed.data(), bank_num),
-        coarse_space_map);
+        ctd::span<const int>(cco_num_per_bank_summed.data(), bank_num), coarse_space_map);
 
     // No more CCO to merge.
-    int next_cco_num =
-        scalar_load(cco_num_per_bank_summed.data() + bank_num - 1, rt);
+    int next_cco_num = scalar_load(cco_num_per_bank_summed.data() + bank_num - 1, rt);
     if (next_cco_num == cco_num) {
       break;
     }
@@ -487,11 +460,9 @@ __both__ int index_upper_mat(int dim, int i, int j) {
 }
 
 /// @brief Build coarse space matrices by accumulating padded space hessian.
-__global__ void fill_coarse_matrices(DynamicBSRView mat_in,
-                                     CoarseMatricesRef mat_out,
+__global__ void fill_coarse_matrices(DynamicBSRView mat_in, CoarseMatricesRef mat_out,
                                      ctd::span<const int> coarse_space_map,
-                                     ctd::span<const int> real_to_padded,
-                                     int coarse_level_num) {
+                                     ctd::span<const int> real_to_padded, int coarse_level_num) {
   BSRView mat = mat_in.mat;
   int tid = blockDim.x * blockIdx.x + threadIdx.x;  // global thread id
   if (tid >= mat.dim) {
@@ -515,8 +486,7 @@ __global__ void fill_coarse_matrices(DynamicBSRView mat_in,
       int mat_id = padded_i / BANK_SIZE;
       int scalar_i_root = (padded_i % BANK_SIZE) * mat.block_dim;
       int scalar_j_root = (padded_j % BANK_SIZE) * mat.block_dim;
-      float *out_mat = mat_out.matrix_per_level[0].data() +
-                       mat_id * mat_out.mat_storage_size;
+      float *out_mat = mat_out.matrix_per_level[0].data() + mat_id * mat_out.mat_storage_size;
       for (int bi = 0; bi < mat.block_dim; ++bi) {
         for (int bj = 0; bj < mat.block_dim; ++bj) {
           int row = scalar_i_root + bi;
@@ -546,8 +516,7 @@ __global__ void fill_coarse_matrices(DynamicBSRView mat_in,
       int mat_id = cco_i / BANK_SIZE;
       int scalar_i_root = (cco_i % BANK_SIZE) * mat.block_dim;
       int scalar_j_root = (cco_j % BANK_SIZE) * mat.block_dim;
-      float *out_mat = mat_out.matrix_per_level[lv + 1].data() +
-                       mat_id * mat_out.mat_storage_size;
+      float *out_mat = mat_out.matrix_per_level[lv + 1].data() + mat_id * mat_out.mat_storage_size;
       for (int bi = 0; bi < mat.block_dim; ++bi) {
         for (int bj = 0; bj < mat.block_dim; ++bj) {
           int row = scalar_i_root + bi;
@@ -583,31 +552,31 @@ __global__ void fill_coarse_matrices(DynamicBSRView mat_in,
     float val = mat_in.diag[scalar_id];
     int mat_id = padded_i / BANK_SIZE;
     int row = (padded_i % BANK_SIZE) * mat.block_dim + bi;
-    float *padded_mat =
-        mat_out.matrix_per_level[0].data() + mat_id * mat_out.mat_storage_size;
+    float *padded_mat = mat_out.matrix_per_level[0].data() + mat_id * mat_out.mat_storage_size;
     atomicAdd(padded_mat + index_upper_mat(mat_out.mat_dim, row, row), val);
 
     for (int lv = 0; lv < coarse_level_num; ++lv) {
       int cco_id = coarse_space_map[tid * MAS_MAX_COARSE_LEVEL + lv];
       mat_id = cco_id / BANK_SIZE;
       row = (cco_id % BANK_SIZE) * mat.block_dim + bi;
-      float *coarse_mat = mat_out.matrix_per_level[lv + 1].data() +
-                          mat_id * mat_out.mat_storage_size;
+      float *coarse_mat =
+          mat_out.matrix_per_level[lv + 1].data() + mat_id * mat_out.mat_storage_size;
       atomicAdd(coarse_mat + index_upper_mat(mat_out.mat_dim, row, row), val);
     }
   }
 }
 
 template <int BLOCK_DIM>
-__global__ void gather_multi_level_r(
-    ctd::span<const float> r, ctd::span<float> multi_level_r,
-    ctd::span<const int> padded_to_real, ctd::span<const int> coarse_space_map,
-    ctd::array<int, MAS_LEVEL_NUM> level_offsets, int coarse_level_num) {
+__global__ void gather_multi_level_r(ctd::span<const float> r, ctd::span<float> multi_level_r,
+                                     ctd::span<const int> padded_to_real,
+                                     ctd::span<const int> coarse_space_map,
+                                     ctd::array<int, MAS_LEVEL_NUM> level_offsets,
+                                     int coarse_level_num) {
   using WarpReduce = cub::WarpReduce<float, BANK_SIZE>;
   constexpr int WARPS_PER_BLOCK = 128 / BANK_SIZE;
 
-  __shared__ typename WarpReduce::TempStorage
-      reduce_storage[WARPS_PER_BLOCK][MAS_MAX_COARSE_LEVEL][BLOCK_DIM];
+  __shared__ typename WarpReduce::TempStorage reduce_storage[WARPS_PER_BLOCK][MAS_MAX_COARSE_LEVEL]
+                                                            [BLOCK_DIM];
 
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
   if (tid >= padded_to_real.size()) {
@@ -640,8 +609,7 @@ __global__ void gather_multi_level_r(
     int dst_root = (level_offsets[lv + 1] + cco_id) * BLOCK_DIM;
 #pragma unroll
     for (int i = 0; i < BLOCK_DIM; ++i) {
-      float segment_sum = WarpReduce(reduce_storage[wid][lv][i])
-                              .HeadSegmentedSum(r_value[i], head);
+      float segment_sum = WarpReduce(reduce_storage[wid][lv][i]).HeadSegmentedSum(r_value[i], head);
       if (head) {
         atomicAdd(multi_level_r.data() + dst_root + i, segment_sum);
       }
@@ -655,8 +623,7 @@ __global__ void gather_multi_level_r(
 /// bandwidth bound, there's nothing I could do. The compute / memory ratio is
 /// just too low.
 template <int N, int BLOCK>
-__global__ void symv_upper_packed(const float *A_upper, const float *x,
-                                  float *y) {
+__global__ void symv_upper_packed(const float *A_upper, const float *x, float *y) {
   int mat_id = blockIdx.x;
   int row = threadIdx.x;
   constexpr int L = N * (N + 1) / 2;
@@ -690,23 +657,23 @@ __global__ void symv_upper_packed(const float *A_upper, const float *x,
   y[mat_id * N + row] = sum;
 }
 
-void apply_inverse(const CoarseMatrices &mats, ctd::span<const float> x,
-                   ctd::span<float> y, int block_dim, CudaRuntime rt) {
+void apply_inverse(const CoarseMatrices &mats, ctd::span<const float> x, ctd::span<float> y,
+                   int block_dim, CudaRuntime rt) {
   int mat_num = mats.total_matrix_num;
   // if (mat_num == 0) {
   //   return;
   // }
 
   assert(block_dim == 3);
-  symv_upper_packed<96, 96><<<mat_num, 96, 0, rt.stream.get()>>>(
-      mats.data->data(), x.data(), y.data());
+  symv_upper_packed<96, 96>
+      <<<mat_num, 96, 0, rt.stream.get()>>>(mats.data->data(), x.data(), y.data());
 }
 
-__global__ void gather_multi_level_z(
-    ctd::span<const float> multi_level_z, ctd::span<float> z,
-    ctd::span<const int> real_to_padded, ctd::span<const int> coarse_space_map,
-    ctd::array<int, MAS_LEVEL_NUM> level_offsets, int block_dim,
-    int coarse_level_num) {
+__global__ void gather_multi_level_z(ctd::span<const float> multi_level_z, ctd::span<float> z,
+                                     ctd::span<const int> real_to_padded,
+                                     ctd::span<const int> coarse_space_map,
+                                     ctd::array<int, MAS_LEVEL_NUM> level_offsets, int block_dim,
+                                     int coarse_level_num) {
   int real_id = blockDim.x * blockIdx.x + threadIdx.x;
   if (real_id >= real_to_padded.size()) {
     return;
@@ -728,8 +695,7 @@ __global__ void gather_multi_level_z(
   }
 }
 
-__global__ void pad_zero_diagonal(float *mats, int mat_num, int mat_dim,
-                                  int mat_storage_size) {
+__global__ void pad_zero_diagonal(float *mats, int mat_num, int mat_dim, int mat_storage_size) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
   int total_diag = mat_num * mat_dim;
   if (tid >= total_diag) {
@@ -831,8 +797,7 @@ __global__ void batched_invert_upper(float *d_matrices, bool *success) {
   }
 }
 
-void invert_packed_matrices(float *mats, int mat_num, int block_dim,
-                            CudaRuntime rt) {
+void invert_packed_matrices(float *mats, int mat_num, int block_dim, CudaRuntime rt) {
   if (mat_num == 0) {
     return;
   }
@@ -840,14 +805,11 @@ void invert_packed_matrices(float *mats, int mat_num, int block_dim,
   auto success = alloc<bool>(rt, 1, true);
 
   if (block_dim == 1) {
-    batched_invert_upper<32>
-        <<<mat_num, 32, 0, rt.stream.get()>>>(mats, success.data());
+    batched_invert_upper<32><<<mat_num, 32, 0, rt.stream.get()>>>(mats, success.data());
   } else if (block_dim == 2) {
-    batched_invert_upper<64>
-        <<<mat_num, 64, 0, rt.stream.get()>>>(mats, success.data());
+    batched_invert_upper<64><<<mat_num, 64, 0, rt.stream.get()>>>(mats, success.data());
   } else if (block_dim == 3) {
-    batched_invert_upper<96>
-        <<<mat_num, 96, 0, rt.stream.get()>>>(mats, success.data());
+    batched_invert_upper<96><<<mat_num, 96, 0, rt.stream.get()>>>(mats, success.data());
   } else {
     SILK_UNREACHABLE();
   }
@@ -860,10 +822,9 @@ void invert_packed_matrices(float *mats, int mat_num, int block_dim,
 }
 
 /// @brief Build symmetric upper triangular coarse space matrices.
-CoarseMatrices build_sym_coarse_matrices(const CoarseSpace &cs,
-                                         DynamicBSRView mat_in,
-                                         ctd::span<const int> real_to_padded,
-                                         int padded_node_num, CudaRuntime rt) {
+CoarseMatrices build_sym_coarse_matrices(const CoarseSpace &cs, DynamicBSRView mat_in,
+                                         ctd::span<const int> real_to_padded, int padded_node_num,
+                                         CudaRuntime rt) {
   BSRView mat = mat_in.mat;
   CoarseMatrices out;
   out.mat_dim = BANK_SIZE * mat.block_dim;
@@ -878,37 +839,32 @@ CoarseMatrices build_sym_coarse_matrices(const CoarseSpace &cs,
     out.total_matrix_num += out.matrix_nums[i + 1];
   }
 
-  out.data =
-      alloc<float>(rt, out.total_matrix_num * out.mat_storage_size, 0.0f);
+  out.data = alloc<float>(rt, out.total_matrix_num * out.mat_storage_size, 0.0f);
   CoarseMatricesRef view{out};
 
   // Gather.
   int grid_num = div_round_up(mat.dim, 128);
-  fill_coarse_matrices<<<grid_num, 128, 0, rt.stream.get()>>>(
-      mat_in, view, *cs.map, real_to_padded, cs.level_num);
+  fill_coarse_matrices<<<grid_num, 128, 0, rt.stream.get()>>>(mat_in, view, *cs.map, real_to_padded,
+                                                              cs.level_num);
 
   // Pad diagonal.
   int total_diag = out.total_matrix_num * out.mat_dim;
   grid_num = div_round_up(total_diag, 128);
-  pad_zero_diagonal<<<grid_num, 128, 0, rt.stream.get()>>>(
-      out.data->data(), out.total_matrix_num, out.mat_dim,
-      out.mat_storage_size);
+  pad_zero_diagonal<<<grid_num, 128, 0, rt.stream.get()>>>(out.data->data(), out.total_matrix_num,
+                                                           out.mat_dim, out.mat_storage_size);
 
   // Compute inverse.
-  invert_packed_matrices(out.data->data(), out.total_matrix_num, mat.block_dim,
-                         rt);
+  invert_packed_matrices(out.data->data(), out.total_matrix_num, mat.block_dim, rt);
   return out;
 }
 }  // namespace
 
-void MASPreconditioner::factorize(DynamicBSRView A,
-                                  ctd::span<const int> part_offsets,
+void MASPreconditioner::factorize(DynamicBSRView A, ctd::span<const int> part_offsets,
                                   CudaRuntime rt) {
   assert(part_offsets.size() >= 2);
   assert(A.mat.block_dim >= 1 && A.mat.block_dim <= 3);
 #ifndef NDEBUG
-  int last_part_offset =
-      scalar_load(part_offsets.data() + part_offsets.size() - 1, rt);
+  int last_part_offset = scalar_load(part_offsets.data() + part_offsets.size() - 1, rt);
   assert(last_part_offset == A.mat.dim);
 #endif
   assert(A.diag.size() == A.mat.dim * A.mat.block_dim);
@@ -921,27 +877,23 @@ void MASPreconditioner::factorize(DynamicBSRView A,
   // Build padded topology.
   padded_topology_ = build_padded_topology(A.mat, part_offsets, rt);
   rt.stream.sync();
-  SPDLOG_TRACE("[factorize_build_padded_topology] [{:.6f}]",
-               elapsed(phase_begin));
+  SPDLOG_TRACE("[factorize_build_padded_topology] [{:.6f}]", elapsed(phase_begin));
 
   // Build coarse space hierarchy.
   phase_begin = clock::now();
-  coarse_space_ =
-      build_coarse_space(*(padded_topology_.rows), *(padded_topology_.cols),
-                         *(padded_topology_.real_to_padded),
-                         *(padded_topology_.padded_to_real), rt);
+  coarse_space_ = build_coarse_space(*(padded_topology_.rows), *(padded_topology_.cols),
+                                     *(padded_topology_.real_to_padded),
+                                     *(padded_topology_.padded_to_real), rt);
   rt.stream.sync();
   SPDLOG_TRACE("[factorize_build_coarse_space] [{:.6f}]", elapsed(phase_begin));
 
   // Build coarse space matrices by 1. gather coarse space hessian from fine
   // nodes 2. invert
   phase_begin = clock::now();
-  coarse_matrices_ = build_sym_coarse_matrices(
-      coarse_space_, A, *(padded_topology_.real_to_padded),
-      padded_topology_.padded_node_num, rt);
+  coarse_matrices_ = build_sym_coarse_matrices(coarse_space_, A, *(padded_topology_.real_to_padded),
+                                               padded_topology_.padded_node_num, rt);
   rt.stream.sync();
-  SPDLOG_TRACE("[factorize_build_coarse_matrices] [{:.6f}]",
-               elapsed(phase_begin));
+  SPDLOG_TRACE("[factorize_build_coarse_matrices] [{:.6f}]", elapsed(phase_begin));
 
   // Allocate memory for coarse space residual (r) and preconditioned residual
   // (z).
@@ -951,8 +903,7 @@ void MASPreconditioner::factorize(DynamicBSRView A,
   coarse_vectors_.total_level_nodes = padded_topology_.padded_node_num;
   for (int i = 0; i < coarse_space_.level_num; ++i) {
     coarse_vectors_.level_offsets[i + 1] = coarse_vectors_.total_level_nodes;
-    coarse_vectors_.level_nums[i + 1] =
-        coarse_matrices_.matrix_nums[i + 1] * BANK_SIZE;
+    coarse_vectors_.level_nums[i + 1] = coarse_matrices_.matrix_nums[i + 1] * BANK_SIZE;
     coarse_vectors_.total_level_nodes += coarse_vectors_.level_nums[i + 1];
   }
   int total_level_scalars = coarse_vectors_.total_level_nodes * block_dim_;
@@ -960,13 +911,11 @@ void MASPreconditioner::factorize(DynamicBSRView A,
   coarse_vectors_.multi_level_z = alloc<float>(rt, total_level_scalars, 0.0f);
   rt.stream.sync();
 
-  SPDLOG_TRACE("[factorize_allocate_coarse_vectors] [{:.6f}]",
-               elapsed(phase_begin));
+  SPDLOG_TRACE("[factorize_allocate_coarse_vectors] [{:.6f}]", elapsed(phase_begin));
   SPDLOG_TRACE("[factorize_total] [{:.6f}]", elapsed(total_begin));
 }
 
-void MASPreconditioner::apply(ctd::span<const float> r, ctd::span<float> z,
-                              CudaRuntime rt) {
+void MASPreconditioner::apply(ctd::span<const float> r, ctd::span<float> z, CudaRuntime rt) {
   assert(r.size() == z.size());
 
   cu::fill_bytes(rt.stream, *(coarse_vectors_.multi_level_r), 0);
@@ -975,18 +924,16 @@ void MASPreconditioner::apply(ctd::span<const float> r, ctd::span<float> z,
   int gather_r_grid_num = div_round_up(padded_topology_.padded_node_num, 128);
   assert(block_dim_ == 3);
   gather_multi_level_r<3><<<gather_r_grid_num, 128, 0, rt.stream.get()>>>(
-      r, *(coarse_vectors_.multi_level_r), *(padded_topology_.padded_to_real),
-      *(coarse_space_.map), coarse_vectors_.level_offsets,
-      coarse_space_.level_num);
+      r, *(coarse_vectors_.multi_level_r), *(padded_topology_.padded_to_real), *(coarse_space_.map),
+      coarse_vectors_.level_offsets, coarse_space_.level_num);
 
   apply_inverse(coarse_matrices_, *(coarse_vectors_.multi_level_r),
                 *(coarse_vectors_.multi_level_z), block_dim_, rt);
 
   int gather_z_grid_num = div_round_up(padded_topology_.node_num, 128);
   gather_multi_level_z<<<gather_z_grid_num, 128, 0, rt.stream.get()>>>(
-      *(coarse_vectors_.multi_level_z), z, *(padded_topology_.real_to_padded),
-      *(coarse_space_.map), coarse_vectors_.level_offsets, block_dim_,
-      coarse_space_.level_num);
+      *(coarse_vectors_.multi_level_z), z, *(padded_topology_.real_to_padded), *(coarse_space_.map),
+      coarse_vectors_.level_offsets, block_dim_, coarse_space_.level_num);
 }
 
 }  // namespace silk::cuda

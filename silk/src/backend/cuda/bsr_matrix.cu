@@ -28,9 +28,7 @@ __device__ int key_to_row(uint64_t key) {
   return static_cast<int>(static_cast<uint32_t>(key >> 32));
 }
 
-__device__ int key_to_col(uint64_t key) {
-  return static_cast<int>(static_cast<uint32_t>(key));
-}
+__device__ int key_to_col(uint64_t key) { return static_cast<int>(static_cast<uint32_t>(key)); }
 
 // Payload bit layout:
 // | is padding (1) | block local offset (31) | nnz index (32) |
@@ -39,8 +37,7 @@ __device__ int key_to_col(uint64_t key) {
 /// @param is_padding If true, this is the diagonal padding of trailing block.
 /// @param nnz_index Index of input CSC vals array.
 /// @param local_offset Block local offset. Assumes Row major block.
-__device__ uint64_t pack_payload(bool is_padding, int nnz_index,
-                                 int local_offset) {
+__device__ uint64_t pack_payload(bool is_padding, int nnz_index, int local_offset) {
   uint64_t payload = 0;
   payload |= static_cast<uint32_t>(nnz_index);
   payload |= (static_cast<uint64_t>(static_cast<uint32_t>(local_offset)) << 32);
@@ -50,9 +47,7 @@ __device__ uint64_t pack_payload(bool is_padding, int nnz_index,
   return payload;
 }
 
-__device__ bool payload_to_is_padding(uint64_t payload) {
-  return (payload >> 63) != 0;
-}
+__device__ bool payload_to_is_padding(uint64_t payload) { return (payload >> 63) != 0; }
 
 __device__ int payload_to_local_offset(uint64_t payload) {
   return static_cast<int>(static_cast<uint32_t>(payload >> 32) & 0x7FFFFFFF);
@@ -76,13 +71,10 @@ __global__ void build_col_of_nnz(int col_num, ctd::span<const int> col_ptr,
   }
 }
 
-__global__ void build_keys_payloads(int nnz, int padded, int block_dim,
-                                    int dim_blocks,
+__global__ void build_keys_payloads(int nnz, int padded, int block_dim, int dim_blocks,
                                     const int *perm,  // nullable
-                                    ctd::span<const int> col_of_nnz,
-                                    ctd::span<const int> row_idx,
-                                    ctd::span<uint64_t> keys,
-                                    ctd::span<uint64_t> payloads) {
+                                    ctd::span<const int> col_of_nnz, ctd::span<const int> row_idx,
+                                    ctd::span<uint64_t> keys, ctd::span<uint64_t> payloads) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
   int nnz_total = nnz + padded;
   if (tid >= nnz_total) {
@@ -99,8 +91,7 @@ __global__ void build_keys_payloads(int nnz, int padded, int block_dim,
     int br = (perm == nullptr) ? br_old : perm[br_old];
     int bc = (perm == nullptr) ? bc_old : perm[bc_old];
 
-    int offset = (old_row - br_old * block_dim) * block_dim +
-                 (old_col - bc_old * block_dim);
+    int offset = (old_row - br_old * block_dim) * block_dim + (old_col - bc_old * block_dim);
     keys[tid] = pack_key(br, bc);
     payloads[tid] = pack_payload(false, tid, offset);
   }
@@ -128,8 +119,7 @@ __global__ void extract_block_rows(ctd::span<const uint64_t> unique_keys,
   block_rows[tid] = key_to_row(unique_keys[tid]);
 }
 
-__global__ void histogram(ctd::span<const int> samples, ctd::span<int> hist,
-                          int num_bins
+__global__ void histogram(ctd::span<const int> samples, ctd::span<int> hist, int num_bins
 
 ) {
   for (int i = blockDim.x * blockIdx.x + threadIdx.x; i < samples.size();
@@ -140,12 +130,10 @@ __global__ void histogram(ctd::span<const int> samples, ctd::span<int> hist,
   }
 }
 
-__global__ void fill_bsr_cols_vals(int block_dim,
-                                   ctd::span<const uint64_t> unique_keys,
+__global__ void fill_bsr_cols_vals(int block_dim, ctd::span<const uint64_t> unique_keys,
                                    ctd::span<const int> payload_offsets,
                                    ctd::span<const uint64_t> payloads,
-                                   ctd::span<const float> csc_vals,
-                                   ctd::span<int> bsr_cols,
+                                   ctd::span<const float> csc_vals, ctd::span<int> bsr_cols,
                                    ctd::span<float> bsr_vals) {
   int bid = blockDim.x * blockIdx.x + threadIdx.x;
   if (bid >= unique_keys.size()) {
@@ -162,17 +150,14 @@ __global__ void fill_bsr_cols_vals(int block_dim,
     uint64_t payload = payloads[i];
     int offset = payload_to_local_offset(payload);
     // We pad diagonal entry to 1.0 for trailing blocks.
-    float val = payload_to_is_padding(payload)
-                    ? 1.0
-                    : csc_vals[payload_to_nnz_index(payload)];
+    float val = payload_to_is_padding(payload) ? 1.0 : csc_vals[payload_to_nnz_index(payload)];
     bsr_vals[base + offset] = val;
   }
 }
 
 int build_bsr_from_csc(const Eigen::SparseMatrix<float> &A_csc, int block_dim,
-                       ctd::span<const int> permutation, Buf<int> &out_rows,
-                       Buf<int> &out_cols, Buf<float> &out_vals,
-                       CudaRuntime rt) {
+                       ctd::span<const int> permutation, Buf<int> &out_rows, Buf<int> &out_cols,
+                       Buf<float> &out_vals, CudaRuntime rt) {
   const int rows_num = A_csc.rows();
   const int cols_num = A_csc.cols();
   const int nnz = A_csc.nonZeros();
@@ -185,13 +170,11 @@ int build_bsr_from_csc(const Eigen::SparseMatrix<float> &A_csc, int block_dim,
   Buf<int> d_row_idx = alloc<int>(rt, nnz);
   Buf<float> d_vals = alloc<float>(rt, nnz);
   cudaMemcpyAsync(d_col_ptr->data(), A_csc.outerIndexPtr(),
-                  static_cast<size_t>(cols_num + 1) * sizeof(int),
+                  static_cast<size_t>(cols_num + 1) * sizeof(int), cudaMemcpyHostToDevice,
+                  rt.stream.get());
+  cudaMemcpyAsync(d_row_idx->data(), A_csc.innerIndexPtr(), static_cast<size_t>(nnz) * sizeof(int),
                   cudaMemcpyHostToDevice, rt.stream.get());
-  cudaMemcpyAsync(d_row_idx->data(), A_csc.innerIndexPtr(),
-                  static_cast<size_t>(nnz) * sizeof(int),
-                  cudaMemcpyHostToDevice, rt.stream.get());
-  cudaMemcpyAsync(d_vals->data(), A_csc.valuePtr(),
-                  static_cast<size_t>(nnz) * sizeof(float),
+  cudaMemcpyAsync(d_vals->data(), A_csc.valuePtr(), static_cast<size_t>(nnz) * sizeof(float),
                   cudaMemcpyHostToDevice, rt.stream.get());
 
   const int *d_perm_ptr = nullptr;
@@ -207,8 +190,8 @@ int build_bsr_from_csc(const Eigen::SparseMatrix<float> &A_csc, int block_dim,
   // ---------------------------------------------------------------------------
 
   Buf<int> col_of_nnz = alloc<int>(rt, nnz);
-  build_col_of_nnz<<<div_round_up(cols_num, 128), 128, 0, rt.stream.get()>>>(
-      cols_num, *d_col_ptr, *col_of_nnz);
+  build_col_of_nnz<<<div_round_up(cols_num, 128), 128, 0, rt.stream.get()>>>(cols_num, *d_col_ptr,
+                                                                             *col_of_nnz);
   d_col_ptr->destroy();
 
   // ---------------------------------------------------------------------------
@@ -217,10 +200,8 @@ int build_bsr_from_csc(const Eigen::SparseMatrix<float> &A_csc, int block_dim,
 
   Buf<uint64_t> keys_in = alloc<uint64_t>(rt, nnz_total);
   Buf<uint64_t> payloads_in = alloc<uint64_t>(rt, nnz_total);
-  build_keys_payloads<<<div_round_up(nnz_total, 128), 128, 0,
-                        rt.stream.get()>>>(nnz, padded, block_dim, bsr_dim,
-                                           d_perm_ptr, *col_of_nnz, *d_row_idx,
-                                           *keys_in, *payloads_in);
+  build_keys_payloads<<<div_round_up(nnz_total, 128), 128, 0, rt.stream.get()>>>(
+      nnz, padded, block_dim, bsr_dim, d_perm_ptr, *col_of_nnz, *d_row_idx, *keys_in, *payloads_in);
   col_of_nnz->destroy();
   d_row_idx->destroy();
   if (d_perm) {
@@ -234,8 +215,7 @@ int build_bsr_from_csc(const Eigen::SparseMatrix<float> &A_csc, int block_dim,
   Buf<uint64_t> keys_alt = alloc<uint64_t>(rt, nnz_total);
   Buf<uint64_t> payloads_alt = alloc<uint64_t>(rt, nnz_total);
   cub::DoubleBuffer<uint64_t> d_keys(keys_in->data(), keys_alt->data());
-  cub::DoubleBuffer<uint64_t> d_payloads(payloads_in->data(),
-                                         payloads_alt->data());
+  cub::DoubleBuffer<uint64_t> d_payloads(payloads_in->data(), payloads_alt->data());
   Buf<char> cub_tmp;
   auto make_cub_tmp = [&cub_tmp, rt](size_t required_size) {
     if (!cub_tmp || cub_tmp->size() < required_size) {
@@ -245,22 +225,17 @@ int build_bsr_from_csc(const Eigen::SparseMatrix<float> &A_csc, int block_dim,
   };
 
   size_t sort_tmp_size = 0;
-  cub::DeviceRadixSort::SortPairs(nullptr, sort_tmp_size, d_keys, d_payloads,
-                                  nnz_total, 0, 64, rt.stream.get());
-  cub::DeviceRadixSort::SortPairs(make_cub_tmp(sort_tmp_size), sort_tmp_size,
-                                  d_keys, d_payloads, nnz_total, 0, 64,
+  cub::DeviceRadixSort::SortPairs(nullptr, sort_tmp_size, d_keys, d_payloads, nnz_total, 0, 64,
                                   rt.stream.get());
+  cub::DeviceRadixSort::SortPairs(make_cub_tmp(sort_tmp_size), sort_tmp_size, d_keys, d_payloads,
+                                  nnz_total, 0, 64, rt.stream.get());
 
-  Buf<uint64_t> &sorted_keys_buf =
-      (d_keys.Current() == keys_in->data()) ? keys_in : keys_alt;
+  Buf<uint64_t> &sorted_keys_buf = (d_keys.Current() == keys_in->data()) ? keys_in : keys_alt;
   Buf<uint64_t> &sorted_payloads_buf =
-      (d_payloads.Current() == payloads_in->data()) ? payloads_in
-                                                    : payloads_alt;
-  Buf<uint64_t> &stale_keys_buf =
-      (d_keys.Current() == keys_in->data()) ? keys_alt : keys_in;
+      (d_payloads.Current() == payloads_in->data()) ? payloads_in : payloads_alt;
+  Buf<uint64_t> &stale_keys_buf = (d_keys.Current() == keys_in->data()) ? keys_alt : keys_in;
   Buf<uint64_t> &stale_payloads_buf =
-      (d_payloads.Current() == payloads_in->data()) ? payloads_alt
-                                                    : payloads_in;
+      (d_payloads.Current() == payloads_in->data()) ? payloads_alt : payloads_in;
   stale_keys_buf->destroy();
   stale_payloads_buf->destroy();
 
@@ -277,12 +252,10 @@ int build_bsr_from_csc(const Eigen::SparseMatrix<float> &A_csc, int block_dim,
   Buf<int> num_runs = alloc<int>(rt, 1);
 
   size_t rle_tmp_size = 0;
-  cub::DeviceRunLengthEncode::Encode(
-      nullptr, rle_tmp_size, d_keys.Current(), unique_keys->data(),
-      counts->data(), num_runs->data(), nnz_total, rt.stream.get());
-  cub::DeviceRunLengthEncode::Encode(make_cub_tmp(rle_tmp_size), rle_tmp_size,
-                                     d_keys.Current(), unique_keys->data(),
-                                     counts->data(), num_runs->data(),
+  cub::DeviceRunLengthEncode::Encode(nullptr, rle_tmp_size, d_keys.Current(), unique_keys->data(),
+                                     counts->data(), num_runs->data(), nnz_total, rt.stream.get());
+  cub::DeviceRunLengthEncode::Encode(make_cub_tmp(rle_tmp_size), rle_tmp_size, d_keys.Current(),
+                                     unique_keys->data(), counts->data(), num_runs->data(),
                                      nnz_total, rt.stream.get());
   sorted_keys_buf->destroy();
 
@@ -295,24 +268,22 @@ int build_bsr_from_csc(const Eigen::SparseMatrix<float> &A_csc, int block_dim,
   num_runs->destroy();
   Buf<int> block_rows = alloc<int>(rt, nnz_blocks);
   // Extract row index from packed key.
-  extract_block_rows<<<div_round_up(nnz_blocks, 128), 128, 0,
-                       rt.stream.get()>>>(
+  extract_block_rows<<<div_round_up(nnz_blocks, 128), 128, 0, rt.stream.get()>>>(
       ctd::span<const uint64_t>(unique_keys->data(), nnz_blocks), *block_rows);
   // Histogram count nnz block per row.
   Buf<int> hist = alloc<int>(rt, bsr_dim + 1, 0);
   // As of 20260507, CCCL v3.0.0 histogram has a out-of-bound memory write bug.
   // If in the bug is fixed in the future you shall replace the homebrew
   // histogram.
-  histogram<<<div_round_up(nnz_blocks, 128), 128, 0, rt.stream.get()>>>(
-      *block_rows, *hist, bsr_dim);
+  histogram<<<div_round_up(nnz_blocks, 128), 128, 0, rt.stream.get()>>>(*block_rows, *hist,
+                                                                        bsr_dim);
   // Exclusive scan compute CSR row ptr.
   out_rows = alloc<int>(rt, bsr_dim + 1);
   size_t scan_tmp_size = 0;
-  cub::DeviceScan::ExclusiveSum(nullptr, scan_tmp_size, hist->data(),
-                                out_rows->data(), bsr_dim + 1, rt.stream.get());
-  cub::DeviceScan::ExclusiveSum(make_cub_tmp(scan_tmp_size), scan_tmp_size,
-                                hist->data(), out_rows->data(), bsr_dim + 1,
+  cub::DeviceScan::ExclusiveSum(nullptr, scan_tmp_size, hist->data(), out_rows->data(), bsr_dim + 1,
                                 rt.stream.get());
+  cub::DeviceScan::ExclusiveSum(make_cub_tmp(scan_tmp_size), scan_tmp_size, hist->data(),
+                                out_rows->data(), bsr_dim + 1, rt.stream.get());
   block_rows->destroy();
   hist->destroy();
 
@@ -324,24 +295,19 @@ int build_bsr_from_csc(const Eigen::SparseMatrix<float> &A_csc, int block_dim,
   Buf<int> payload_offsets = alloc<int>(rt, nnz_blocks + 1);
   cudaMemsetAsync(counts->data() + nnz_blocks, 0, sizeof(int), rt.stream.get());
   size_t off_tmp_size = 0;
-  cub::DeviceScan::ExclusiveSum(nullptr, off_tmp_size, counts->data(),
-                                payload_offsets->data(), nnz_blocks + 1,
-                                rt.stream.get());
-  cub::DeviceScan::ExclusiveSum(make_cub_tmp(off_tmp_size), off_tmp_size,
-                                counts->data(), payload_offsets->data(),
+  cub::DeviceScan::ExclusiveSum(nullptr, off_tmp_size, counts->data(), payload_offsets->data(),
                                 nnz_blocks + 1, rt.stream.get());
+  cub::DeviceScan::ExclusiveSum(make_cub_tmp(off_tmp_size), off_tmp_size, counts->data(),
+                                payload_offsets->data(), nnz_blocks + 1, rt.stream.get());
   counts->destroy();
   cub_tmp->destroy();
 
   // Fill cols and vals.
   out_cols = alloc<int>(rt, nnz_blocks);
   out_vals = alloc<float>(rt, nnz_blocks * block_dim * block_dim, 0.0);
-  fill_bsr_cols_vals<<<div_round_up(nnz_blocks, 128), 128, 0,
-                       rt.stream.get()>>>(
-      block_dim, ctd::span<const uint64_t>(unique_keys->data(), nnz_blocks),
-      *payload_offsets,
-      ctd::span<const uint64_t>(d_payloads.Current(), nnz_total), *d_vals,
-      *out_cols, *out_vals);
+  fill_bsr_cols_vals<<<div_round_up(nnz_blocks, 128), 128, 0, rt.stream.get()>>>(
+      block_dim, ctd::span<const uint64_t>(unique_keys->data(), nnz_blocks), *payload_offsets,
+      ctd::span<const uint64_t>(d_payloads.Current(), nnz_total), *d_vals, *out_cols, *out_vals);
   unique_keys->destroy();
   payload_offsets->destroy();
   sorted_payloads_buf->destroy();
@@ -356,8 +322,7 @@ BSRMatrix::BSRMatrix(const Eigen::SparseMatrix<float> &A, int block_dim,
   static_assert(std::is_same_v<Eigen::SparseMatrix<float>::StorageIndex, int>,
                 "MAS only support int32 index type.");
   if (A.nonZeros() > std::numeric_limits<int>::max()) {
-    throw std::runtime_error(
-        "[MAS] A is too large. Non-zero number exceeding int32 max.");
+    throw std::runtime_error("[MAS] A is too large. Non-zero number exceeding int32 max.");
   }
 
   // if A is not compressed. Copy and compress.
@@ -378,8 +343,7 @@ BSRMatrix::BSRMatrix(const Eigen::SparseMatrix<float> &A, int block_dim,
     padded_block_ = permutation.empty() ? tail : permutation[tail];
   }
 
-  non_zeros_ = build_bsr_from_csc(*A_csc, block_dim_, permutation, rows_, cols_,
-                                  vals_, rt);
+  non_zeros_ = build_bsr_from_csc(*A_csc, block_dim_, permutation, rows_, cols_, vals_, rt);
 
   rt.stream.sync();
 }

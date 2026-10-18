@@ -95,16 +95,14 @@ class CuSparseBSR {
 
   CuSparseBSR(BSRView mat) {
     if (mat.block_dim == 1) {
-      cusparseCreateConstCsr(&raw, mat.dim, mat.dim, mat.non_zeros,
-                             mat.rows.data(), mat.cols.data(), mat.vals.data(),
-                             CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
-                             CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F);
+      cusparseCreateConstCsr(&raw, mat.dim, mat.dim, mat.non_zeros, mat.rows.data(),
+                             mat.cols.data(), mat.vals.data(), CUSPARSE_INDEX_32I,
+                             CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F);
     } else {
-      cusparseCreateConstBsr(
-          &raw, mat.dim, mat.dim, mat.non_zeros, mat.block_dim, mat.block_dim,
-          mat.rows.data(), mat.cols.data(), mat.vals.data(), CUSPARSE_INDEX_32I,
-          CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F,
-          CUSPARSE_ORDER_ROW);
+      cusparseCreateConstBsr(&raw, mat.dim, mat.dim, mat.non_zeros, mat.block_dim, mat.block_dim,
+                             mat.rows.data(), mat.cols.data(), mat.vals.data(), CUSPARSE_INDEX_32I,
+                             CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F,
+                             CUSPARSE_ORDER_ROW);
     }
   }
 

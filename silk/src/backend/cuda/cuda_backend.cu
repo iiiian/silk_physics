@@ -49,15 +49,12 @@ class CudaBackend::Impl {
     mr.emplace(*device);
   }
 
-  CudaRuntime get_runtime() const {
-    return CudaRuntime{.stream = *stream, .mr = mr->as_ref()};
-  }
+  CudaRuntime get_runtime() const { return CudaRuntime{.stream = *stream, .mr = mr->as_ref()}; }
 
   void sync() const { stream->sync(); }
 
   bool is_obstacle(uint32_t entity) {
-    return !registry_.has_component<ClothConfig>(entity) &&
-           registry_.has_entity(entity);
+    return !registry_.has_component<ClothConfig>(entity) && registry_.has_entity(entity);
   }
 };
 
@@ -67,18 +64,14 @@ CudaBackend::~CudaBackend() = default;
 
 Result CudaBackend::set_global_config(GlobalConfig config) {
   auto& c = config;
-  impl_->main_loop_.const_acceleration = {c.acceleration_x, c.acceleration_y,
-                                          c.acceleration_z};
+  impl_->main_loop_.const_acceleration = {c.acceleration_x, c.acceleration_y, c.acceleration_z};
   impl_->main_loop_.dt = c.dt;
   impl_->main_loop_.max_outer_iteration = c.max_outer_iteration;
   impl_->main_loop_.admm_solver.max_inner_iteration = c.max_inner_iteration;
   impl_->main_loop_.admm_solver.linear_abs_tol = c.linear_solver_abs_tol;
-  impl_->main_loop_.admm_solver.linear_rel_tol_min =
-      c.linear_solver_rel_tol_min;
-  impl_->main_loop_.admm_solver.linear_rel_tol_max =
-      c.linear_solver_rel_tol_max;
-  impl_->main_loop_.admm_solver.initial_linear_rel_tol =
-      c.initial_linear_rel_tol;
+  impl_->main_loop_.admm_solver.linear_rel_tol_min = c.linear_solver_rel_tol_min;
+  impl_->main_loop_.admm_solver.linear_rel_tol_max = c.linear_solver_rel_tol_max;
+  impl_->main_loop_.admm_solver.initial_linear_rel_tol = c.initial_linear_rel_tol;
   impl_->main_loop_.admm_solver.non_linear_abs_tol = c.admm_abs_tol;
   impl_->main_loop_.admm_solver.non_linear_rel_tol = c.admm_rel_tol;
   return Result::ok();
@@ -107,10 +100,8 @@ Result CudaBackend::solver_reset() {
   return Result::ok();
 }
 
-Result CudaBackend::add_cloth(ClothConfig cloth_config,
-                              CollisionConfig collision_config,
-                              MeshConfig mesh_config,
-                              std::span<const int> pin_index,
+Result CudaBackend::add_cloth(ClothConfig cloth_config, CollisionConfig collision_config,
+                              MeshConfig mesh_config, std::span<const int> pin_index,
                               uint32_t& handle) {
   auto tri_mesh = make_cloth_mesh(mesh_config);
   if (!tri_mesh) {
@@ -159,8 +150,7 @@ Result CudaBackend::remove_cloth(uint32_t handle) {
   return Result::ok();
 }
 
-Result CudaBackend::get_cloth_position(uint32_t handle,
-                                       std::span<float> position) const {
+Result CudaBackend::get_cloth_position(uint32_t handle, std::span<float> position) const {
   if (!impl_->registry_.has_component<ClothConfig>(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -203,8 +193,7 @@ Result CudaBackend::set_cloth_config(uint32_t handle, ClothConfig config) {
   return Result::ok();
 }
 
-Result CudaBackend::set_cloth_collision_config(uint32_t handle,
-                                               CollisionConfig config) {
+Result CudaBackend::set_cloth_collision_config(uint32_t handle, CollisionConfig config) {
   if (!impl_->registry_.has_component<ClothConfig>(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -221,8 +210,7 @@ Result CudaBackend::set_cloth_collision_config(uint32_t handle,
   return Result::ok();
 }
 
-Result CudaBackend::set_cloth_pin_index(uint32_t handle,
-                                        std::span<const int> pin_index) {
+Result CudaBackend::set_cloth_pin_index(uint32_t handle, std::span<const int> pin_index) {
   if (!impl_->registry_.has_component<ClothConfig>(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -240,8 +228,7 @@ Result CudaBackend::set_cloth_pin_index(uint32_t handle,
   return Result::ok();
 }
 
-Result CudaBackend::set_cloth_pin_position(uint32_t handle,
-                                           std::span<const float> position) {
+Result CudaBackend::set_cloth_pin_position(uint32_t handle, std::span<const float> position) {
   if (!impl_->registry_.has_component<ClothConfig>(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -259,15 +246,14 @@ Result CudaBackend::set_cloth_pin_position(uint32_t handle,
     pin_pos->is_static = false;
     pin_pos->is_static_twice = false;
   } else {
-    impl_->registry_.remove_deps_then_set(handle,
-                                          PinPosition::from_position(position));
+    impl_->registry_.remove_deps_then_set(handle, PinPosition::from_position(position));
   }
   impl_->sync();
   return Result::ok();
 }
 
-Result CudaBackend::add_obstacle(CollisionConfig collision_config,
-                                 MeshConfig mesh_config, uint32_t& handle) {
+Result CudaBackend::add_obstacle(CollisionConfig collision_config, MeshConfig mesh_config,
+                                 uint32_t& handle) {
   auto tri_mesh = make_obstacle_mesh(mesh_config);
   if (!tri_mesh) {
     handle = 0;
@@ -306,8 +292,7 @@ Result CudaBackend::remove_obstacle(uint32_t handle) {
   return Result::ok();
 }
 
-Result CudaBackend::set_obstacle_collision_config(uint32_t handle,
-                                                  CollisionConfig config) {
+Result CudaBackend::set_obstacle_collision_config(uint32_t handle, CollisionConfig config) {
   if (!impl_->is_obstacle(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -324,8 +309,7 @@ Result CudaBackend::set_obstacle_collision_config(uint32_t handle,
   return Result::ok();
 }
 
-Result CudaBackend::set_obstacle_position(uint32_t handle,
-                                          std::span<const float> position) {
+Result CudaBackend::set_obstacle_position(uint32_t handle, std::span<const float> position) {
   if (!impl_->is_obstacle(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -344,8 +328,7 @@ Result CudaBackend::set_obstacle_position(uint32_t handle,
     std::swap(pos->curr_position, pos->prev_position);
     pos->curr_position.assign(position.begin(), position.end());
   } else {
-    impl_->registry_.remove_deps_then_set(handle,
-                                          PinPosition::from_position(position));
+    impl_->registry_.remove_deps_then_set(handle, PinPosition::from_position(position));
   }
   impl_->sync();
   return Result::ok();

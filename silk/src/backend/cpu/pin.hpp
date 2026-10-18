@@ -9,10 +9,10 @@ namespace silk::cpu {
 
 class Pin {
  public:
-  bool is_static = true;        //< True if remain static for >=1 frame.
-  bool is_static_twice = true;  //< True if remain static for >=2 frame.
-  bool is_all_pinned = false;   //< True if all vertices are pinned.
-  Eigen::VectorXi index;        //< Pinned indices. Useful if not is_all_pinned.
+  bool is_static = true;          //< True if remain static for >=1 frame.
+  bool is_static_twice = true;    //< True if remain static for >=2 frame.
+  bool is_all_pinned = false;     //< True if all vertices are pinned.
+  Eigen::VectorXi index;          //< Pinned indices. Useful if not is_all_pinned.
   Eigen::VectorXf curr_position;  //< Current vertex position.
   Eigen::VectorXf prev_position;  //< Previous vertex position.
 

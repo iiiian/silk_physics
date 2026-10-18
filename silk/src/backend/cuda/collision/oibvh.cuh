@@ -65,8 +65,7 @@ class OIBVHTree {
   OIBVHTree() = default;
 
   /// @brief Build the BVH tree. Assumes all bboxes are not empty.
-  OIBVHTree(const Bbox& root_bbox, cu::device_buffer<X> colliders,
-            CudaRuntime rt);
+  OIBVHTree(const Bbox& root_bbox, cu::device_buffer<X> colliders, CudaRuntime rt);
 
   /// @brief Get non-owning read only view.
   OIBVHTreeView<X> view() const {
@@ -91,20 +90,19 @@ class OIBVHTree {
   /// @param out Output buffer. collision will be appended.
   /// @param fill The actual size of out cache. 0 -> empty, out.size() -> full.
   template <typename Filter>
-  void test_self_collision(Filter filter, CollisionCache<X, X>& out, int& fill,
-                           CudaRuntime rt);
+  void test_self_collision(Filter filter, CollisionCache<X, X>& out, int& fill, CudaRuntime rt);
 
   /// @brief Test tree-tree collision.
   /// @param filter Collision filter callback. True if ignore.
   /// @param out Output buffer. collision will be appended.
   /// @param fill The actual size of out cache. 0 -> empty, out.size() -> full.
   template <typename Y, typename Filter>
-  void test_ext_collision(ctd::span<const Y> colliders, Filter filter,
-                          CollisionCache<X, Y>& out, int& fill, CudaRuntime rt);
+  void test_ext_collision(ctd::span<const Y> colliders, Filter filter, CollisionCache<X, Y>& out,
+                          int& fill, CudaRuntime rt);
 
   template <typename Y, typename Filter>
-  void test_ext_collision(const OIBVHTree<Y>& colliders, Filter filter,
-                          CollisionCache<X, Y>& out, int& fill, CudaRuntime rt);
+  void test_ext_collision(const OIBVHTree<Y>& colliders, Filter filter, CollisionCache<X, Y>& out,
+                          int& fill, CudaRuntime rt);
 };
 
 namespace detail {
@@ -139,9 +137,7 @@ __both__ inline uint64_t magic_split(uint32_t x) {
 }
 
 /// @brief Compute morton code of a bbox.
-__device__ inline uint64_t morton_code_magic_bits(Vec3f origin,
-                                                  Vec3f inv_cell_length,
-                                                  Bbox bbox) {
+__device__ inline uint64_t morton_code_magic_bits(Vec3f origin, Vec3f inv_cell_length, Bbox bbox) {
   Vec3f pos = bbox.center();
   Vec3u cell;
 #pragma unroll
@@ -153,16 +149,13 @@ __device__ inline uint64_t morton_code_magic_bits(Vec3f origin,
     cell(i) = static_cast<uint32_t>(ctd::floor(float_cell));
   }
 
-  return magic_split(cell(0)) | (magic_split(cell(1)) << 1u) |
-         (magic_split(cell(2)) << 2u);
+  return magic_split(cell(0)) | (magic_split(cell(1)) << 1u) | (magic_split(cell(2)) << 2u);
 }
 
 /// @brief Compute morton code for all colliders.
 template <typename C>
-void update_collider_morton_codes(const Bbox& root_bbox,
-                                  ctd::span<const C> colliders,
-                                  ctd::span<uint64_t> morton_out,
-                                  CudaRuntime rt) {
+void update_collider_morton_codes(const Bbox& root_bbox, ctd::span<const C> colliders,
+                                  ctd::span<uint64_t> morton_out, CudaRuntime rt) {
   assert(colliders.size() != 0);
   assert(colliders.size() == morton_out.size());
   assert(!root_bbox.is_empty());
@@ -187,8 +180,7 @@ void update_collider_morton_codes(const Bbox& root_bbox,
 }
 
 /// @brief Compute the number of real node of certain tree level.
-__both__ inline uint32_t compute_level_rnode_num(uint32_t depth,
-                                                 uint32_t max_depth,
+__both__ inline uint32_t compute_level_rnode_num(uint32_t depth, uint32_t max_depth,
                                                  uint32_t vleaf_num) {
   assert(depth <= max_depth);
 
@@ -203,8 +195,7 @@ __both__ inline uint32_t compute_node_id(uint32_t lv_node_id, uint32_t depth) {
 }
 
 /// @brief Compute node memory offset from node index.
-__both__ inline uint32_t compute_mem_offset(uint32_t node_id, uint32_t depth,
-                                            uint32_t max_depth,
+__both__ inline uint32_t compute_mem_offset(uint32_t node_id, uint32_t depth, uint32_t max_depth,
                                             uint32_t vleaf_num) {
   // virtual leaf num one level shallower than node.
   uint32_t lv_vleaf_num = vleaf_num >> (max_depth - depth);
@@ -216,18 +207,16 @@ __both__ inline uint32_t compute_mem_offset(uint32_t node_id, uint32_t depth,
 
 /// @brief Compute bbox for true leaves after accounting for skipped levels.
 template <typename C>
-__global__ void init_leaf_bbox(uint32_t node_depth, uint32_t max_depth,
-                               uint32_t vleaf_num, ctd::span<const C> colliders,
-                               ctd::span<const int> collider_ids,
+__global__ void init_leaf_bbox(uint32_t node_depth, uint32_t max_depth, uint32_t vleaf_num,
+                               ctd::span<const C> colliders, ctd::span<const int> collider_ids,
                                ctd::span<BVHNode> nodes) {
   uint32_t tid = blockDim.x * blockIdx.x + threadIdx.x;
 
-  uint32_t lv_rnode_num =
-      compute_level_rnode_num(node_depth, max_depth, vleaf_num);
+  uint32_t lv_rnode_num = compute_level_rnode_num(node_depth, max_depth, vleaf_num);
 
   if (tid < lv_rnode_num) {
-    uint32_t node_mem_offset = compute_mem_offset(
-        compute_node_id(tid, node_depth), node_depth, max_depth, vleaf_num);
+    uint32_t node_mem_offset =
+        compute_mem_offset(compute_node_id(tid, node_depth), node_depth, max_depth, vleaf_num);
     BVHNode& node = nodes[node_mem_offset];
 
     // Compute index range.
@@ -248,8 +237,7 @@ __global__ void init_leaf_bbox(uint32_t node_depth, uint32_t max_depth,
 ///
 /// Designed for block size of 128. Propagate 8 levels upward.
 template <typename C>
-__global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
-                                   uint32_t vleaf_num,
+__global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth, uint32_t vleaf_num,
                                    ctd::span<BVHNode> nodes) {
   assert(blockDim.x == 128);
 
@@ -267,34 +255,30 @@ __global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
 
   // First iteration. Load child bbox from global memory.
   {
-    uint32_t lv_rnode_num =
-        compute_level_rnode_num(node_depth, max_depth, vleaf_num);
+    uint32_t lv_rnode_num = compute_level_rnode_num(node_depth, max_depth, vleaf_num);
     uint32_t lv_node_id = tid;
     if (lv_node_id < lv_rnode_num) {
       uint32_t left_lv_node_id = lv_node_id << 1u;
-      uint32_t child_lv_rnode_num =
-          compute_level_rnode_num(node_depth + 1u, max_depth, vleaf_num);
+      uint32_t child_lv_rnode_num = compute_level_rnode_num(node_depth + 1u, max_depth, vleaf_num);
 
       bool is_left_real = (left_lv_node_id < child_lv_rnode_num);
       bool is_right_real = (left_lv_node_id + 1u < child_lv_rnode_num);
       assert(is_left_real || is_right_real);
 
       uint32_t left_node_id = compute_node_id(left_lv_node_id, node_depth + 1u);
-      uint32_t left_mem_offset = compute_mem_offset(
-          left_node_id, node_depth + 1u, max_depth, vleaf_num);
+      uint32_t left_mem_offset =
+          compute_mem_offset(left_node_id, node_depth + 1u, max_depth, vleaf_num);
 
       if (is_left_real && is_right_real) {
-        bbox = Bbox::merge(nodes[left_mem_offset].bbox,
-                           nodes[left_mem_offset + 1u].bbox);
+        bbox = Bbox::merge(nodes[left_mem_offset].bbox, nodes[left_mem_offset + 1u].bbox);
       } else if (is_left_real) {
         bbox = nodes[left_mem_offset].bbox;
       } else {
         bbox = nodes[left_mem_offset + 1u].bbox;
       }
 
-      uint32_t node_mem_offset =
-          compute_mem_offset(compute_node_id(lv_node_id, node_depth),
-                             node_depth, max_depth, vleaf_num);
+      uint32_t node_mem_offset = compute_mem_offset(compute_node_id(lv_node_id, node_depth),
+                                                    node_depth, max_depth, vleaf_num);
       nodes[node_mem_offset].bbox = bbox;
     }
   }
@@ -306,8 +290,7 @@ __global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
     uint32_t delta = 1u << (i - 1);
     Bbox shuffled_bbox = cu::device::warp_shuffle_down(bbox, delta);
 
-    uint32_t lv_rnode_num =
-        compute_level_rnode_num(node_depth, max_depth, vleaf_num);
+    uint32_t lv_rnode_num = compute_level_rnode_num(node_depth, max_depth, vleaf_num);
 
     // Test if lane id % 2^i == 0.
     if ((lid & ((1u << i) - 1u)) == 0u) {
@@ -329,9 +312,8 @@ __global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
         }
         // If only is_left_real, bbox remain unchanged.
 
-        uint32_t node_mem_offset =
-            compute_mem_offset(compute_node_id(lv_node_id, node_depth),
-                               node_depth, max_depth, vleaf_num);
+        uint32_t node_mem_offset = compute_mem_offset(compute_node_id(lv_node_id, node_depth),
+                                                      node_depth, max_depth, vleaf_num);
         nodes[node_mem_offset].bbox = bbox;
       }
     }
@@ -353,8 +335,7 @@ __global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
   for (int i = 0; i < max_block_up; ++i) {
     uint32_t wid_mod = wid & ((1u << (i + 1)) - 1u);
     if (lid == 0u && (wid_mod == 0u)) {
-      uint32_t lv_rnode_num =
-          compute_level_rnode_num(node_depth, max_depth, vleaf_num);
+      uint32_t lv_rnode_num = compute_level_rnode_num(node_depth, max_depth, vleaf_num);
 
       uint32_t lv_node_id = tid >> (max_warp_up + i + 1u);
 
@@ -371,17 +352,15 @@ __global__ void propagate_bbox_128(uint32_t starting_depth, uint32_t max_depth,
         uint32_t right_bbox_id = wid + (1u << i);
 
         if (is_left_real && is_right_real) {
-          bbox_temp[wid] =
-              Bbox::merge(bbox_temp[left_bbox_id], bbox_temp[right_bbox_id]);
+          bbox_temp[wid] = Bbox::merge(bbox_temp[left_bbox_id], bbox_temp[right_bbox_id]);
         } else if (is_left_real) {
           bbox_temp[wid] = bbox_temp[left_bbox_id];
         } else {
           bbox_temp[wid] = bbox_temp[right_bbox_id];
         }
 
-        uint32_t node_mem_offset =
-            compute_mem_offset(compute_node_id(lv_node_id, node_depth),
-                               node_depth, max_depth, vleaf_num);
+        uint32_t node_mem_offset = compute_mem_offset(compute_node_id(lv_node_id, node_depth),
+                                                      node_depth, max_depth, vleaf_num);
         nodes[node_mem_offset].bbox = bbox_temp[wid];
       }
     }
@@ -416,9 +395,8 @@ class SimpleStack {
 
 /// @brief Traverse collider through the tree.
 template <typename X, typename Y, typename Filter, bool dedup_self>
-__device__ void traverse(const Y& collider, int dedup_id,
-                         OIBVHTreeView<X> oibvh_tree, Filter filter,
-                         DynSpan<CollisionPair<X, Y>> out) {
+__device__ void traverse(const Y& collider, int dedup_id, OIBVHTreeView<X> oibvh_tree,
+                         Filter filter, DynSpan<CollisionPair<X, Y>> out) {
   const Bbox& bbox = collider.bbox;
   assert(!bbox.is_empty());
 
@@ -431,16 +409,14 @@ __device__ void traverse(const Y& collider, int dedup_id,
     uint32_t node_id = stack.pop();
     uint32_t depth = 31u - ctd::countl_zero(node_id + 1u);
     uint32_t lv_node_id = node_id - ((1u << depth) - 1u);
-    uint32_t lv_rnode_num =
-        compute_level_rnode_num(depth, t.max_depth, t.vleaf_num);
+    uint32_t lv_rnode_num = compute_level_rnode_num(depth, t.max_depth, t.vleaf_num);
 
     // Skip virtual node.
     if (lv_node_id >= lv_rnode_num) {
       continue;
     }
 
-    uint32_t node_mem_offset =
-        compute_mem_offset(node_id, depth, t.max_depth, t.vleaf_num);
+    uint32_t node_mem_offset = compute_mem_offset(node_id, depth, t.max_depth, t.vleaf_num);
     auto& node_bbox = t.nodes[node_mem_offset].bbox;
 
     if (!Bbox::is_colliding(bbox, node_bbox)) {
@@ -499,14 +475,12 @@ __global__ void self_batch_traversal(OIBVHTreeView<X> tree, Filter filter,
     return;
   }
 
-  traverse<X, X, Filter, true>(tree.colliders[tree.collider_ids[tid]], tid,
-                               tree, filter, out);
+  traverse<X, X, Filter, true>(tree.colliders[tree.collider_ids[tid]], tid, tree, filter, out);
 }
 
 template <typename X, typename Y, typename Filter>
-__global__ void ext_batch_traversal(ctd::span<const Y> colliders,
-                                    OIBVHTreeView<X> tree, Filter filter,
-                                    DynSpan<CollisionPair<X, Y>> out) {
+__global__ void ext_batch_traversal(ctd::span<const Y> colliders, OIBVHTreeView<X> tree,
+                                    Filter filter, DynSpan<CollisionPair<X, Y>> out) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= colliders.size()) {
     return;
@@ -518,8 +492,7 @@ __global__ void ext_batch_traversal(ctd::span<const Y> colliders,
 }  // namespace detail
 
 template <typename C>
-OIBVHTree<C>::OIBVHTree(const Bbox& root_bbox, cu::device_buffer<C> colliders,
-                        CudaRuntime rt) {
+OIBVHTree<C>::OIBVHTree(const Bbox& root_bbox, cu::device_buffer<C> colliders, CudaRuntime rt) {
   assert(colliders.size() != 0);
   assert(!root_bbox.is_empty());
 
@@ -527,29 +500,28 @@ OIBVHTree<C>::OIBVHTree(const Bbox& root_bbox, cu::device_buffer<C> colliders,
 
   // Make unsorted collider ids.
   auto unsorted_collider_ids = alloc<int>(rt, collider_num);
-  detail::fill_sequence_ids<<<div_round_up(collider_num, 128), 128, 0,
-                              rt.stream.get()>>>(unsorted_collider_ids);
+  detail::fill_sequence_ids<<<div_round_up(collider_num, 128), 128, 0, rt.stream.get()>>>(
+      unsorted_collider_ids);
 
   // Make unsorted morton codes.
   auto unsorted_mortons = alloc<uint64_t>(rt, collider_num);
-  detail::update_collider_morton_codes<C>(root_bbox, colliders,
-                                          unsorted_mortons, rt);
+  detail::update_collider_morton_codes<C>(root_bbox, colliders, unsorted_mortons, rt);
 
   // Radix sort id based on morton code.
   auto sorted_mortons = alloc<uint64_t>(rt, collider_num);
   auto collider_ids = alloc<int>(rt, collider_num);
   // Allocate radix sort temp.
   size_t radix_sort_temp_size;
-  cub::DeviceRadixSort::SortPairs(
-      nullptr, radix_sort_temp_size, unsorted_mortons.data(),
-      sorted_mortons.data(), unsorted_collider_ids.data(), collider_ids.data(),
-      collider_num, 0, sizeof(uint64_t) * 8, rt.stream.get());
+  cub::DeviceRadixSort::SortPairs(nullptr, radix_sort_temp_size, unsorted_mortons.data(),
+                                  sorted_mortons.data(), unsorted_collider_ids.data(),
+                                  collider_ids.data(), collider_num, 0, sizeof(uint64_t) * 8,
+                                  rt.stream.get());
   auto radix_temp = alloc<char>(rt, radix_sort_temp_size);
 
-  cub::DeviceRadixSort::SortPairs(
-      radix_temp.data(), radix_sort_temp_size, unsorted_mortons.data(),
-      sorted_mortons.data(), unsorted_collider_ids.data(), collider_ids.data(),
-      collider_num, 0, sizeof(uint64_t) * 8, rt.stream.get());
+  cub::DeviceRadixSort::SortPairs(radix_temp.data(), radix_sort_temp_size, unsorted_mortons.data(),
+                                  sorted_mortons.data(), unsorted_collider_ids.data(),
+                                  collider_ids.data(), collider_num, 0, sizeof(uint64_t) * 8,
+                                  rt.stream.get());
 
   // Compute tree statistics. Use unsigned int because we use bitwise
   // operation to compute index.
@@ -559,12 +531,10 @@ OIBVHTree<C>::OIBVHTree(const Bbox& root_bbox, cu::device_buffer<C> colliders,
   uint32_t max_depth = ctd::countr_zero(leaf_num);
   uint32_t vleaf_num = leaf_num - rleaf_num;
 
-  uint32_t skipped_depth =
-      (max_depth > MAX_SKIP_LEVEL) ? max_depth - MAX_SKIP_LEVEL : 0;
+  uint32_t skipped_depth = (max_depth > MAX_SKIP_LEVEL) ? max_depth - MAX_SKIP_LEVEL : 0;
   uint32_t skipped_vleaf_num = vleaf_num >> (max_depth - skipped_depth);
   uint32_t skipped_rleaf_num = (1u << skipped_depth) - skipped_vleaf_num;
-  uint32_t skipped_rnode_num =
-      2u * skipped_rleaf_num - 1u + ctd::popcount(skipped_vleaf_num);
+  uint32_t skipped_rnode_num = 2u * skipped_rleaf_num - 1u + ctd::popcount(skipped_vleaf_num);
 
   // Allocate and fill the nodes.
   BVHNode empty_node = {.bbox = {}};
@@ -577,13 +547,12 @@ OIBVHTree<C>::OIBVHTree(const Bbox& root_bbox, cu::device_buffer<C> colliders,
 
   for (int i = skipped_depth; i > 0; i -= 8) {
     uint32_t depth = i - 1;
-    uint32_t lv_rnode_num =
-        detail::compute_level_rnode_num(depth, max_depth, vleaf_num);
+    uint32_t lv_rnode_num = detail::compute_level_rnode_num(depth, max_depth, vleaf_num);
     assert(lv_rnode_num > 0);
 
     int grid_num = div_round_up(lv_rnode_num, 128);
-    detail::propagate_bbox_128<C><<<grid_num, 128, 0, rt.stream.get()>>>(
-        depth, max_depth, vleaf_num, nodes);
+    detail::propagate_bbox_128<C>
+        <<<grid_num, 128, 0, rt.stream.get()>>>(depth, max_depth, vleaf_num, nodes);
   }
 
   this->unsorted_collider_ids_ = std::move(unsorted_collider_ids);
@@ -606,36 +575,32 @@ void OIBVHTree<C>::update(const Bbox& root_bbox, CudaRuntime rt) {
     return;
   }
 
-  detail::update_collider_morton_codes<C>(root_bbox, *colliders_,
-                                          *unsorted_mortons_, rt);
+  detail::update_collider_morton_codes<C>(root_bbox, *colliders_, *unsorted_mortons_, rt);
   size_t radix_temp_size = radix_temp_->size();
-  cub::DeviceRadixSort::SortPairs(
-      radix_temp_->data(), radix_temp_size, unsorted_mortons_->data(),
-      sorted_mortons_->data(), unsorted_collider_ids_->data(),
-      collider_ids_->data(), collider_num, 0, sizeof(uint64_t) * 8,
-      rt.stream.get());
+  cub::DeviceRadixSort::SortPairs(radix_temp_->data(), radix_temp_size, unsorted_mortons_->data(),
+                                  sorted_mortons_->data(), unsorted_collider_ids_->data(),
+                                  collider_ids_->data(), collider_num, 0, sizeof(uint64_t) * 8,
+                                  rt.stream.get());
 
   int grid_num = div_round_up(skipped_rleaf_num_, 128);
   detail::init_leaf_bbox<C><<<grid_num, 128, 0, rt.stream.get()>>>(
-      skipped_depth_, max_depth_, vleaf_num_, *colliders_, *collider_ids_,
-      *nodes_);
+      skipped_depth_, max_depth_, vleaf_num_, *colliders_, *collider_ids_, *nodes_);
 
   for (int i = skipped_depth_; i > 0; i -= 8) {
     uint32_t depth = i - 1;
-    uint32_t lv_rnode_num =
-        detail::compute_level_rnode_num(depth, max_depth_, vleaf_num_);
+    uint32_t lv_rnode_num = detail::compute_level_rnode_num(depth, max_depth_, vleaf_num_);
     assert(lv_rnode_num > 0);
 
     int grid_num = div_round_up(lv_rnode_num, 128);
-    detail::propagate_bbox_128<C><<<grid_num, 128, 0, rt.stream.get()>>>(
-        depth, max_depth_, vleaf_num_, *nodes_);
+    detail::propagate_bbox_128<C>
+        <<<grid_num, 128, 0, rt.stream.get()>>>(depth, max_depth_, vleaf_num_, *nodes_);
   }
 };
 
 template <typename X>
 template <typename Filter>
-void OIBVHTree<X>::test_self_collision(Filter filter, CollisionCache<X, X>& out,
-                                       int& fill, CudaRuntime rt) {
+void OIBVHTree<X>::test_self_collision(Filter filter, CollisionCache<X, X>& out, int& fill,
+                                       CudaRuntime rt) {
   if (colliders_->empty()) {
     return;
   }
@@ -660,9 +625,8 @@ void OIBVHTree<X>::test_self_collision(Filter filter, CollisionCache<X, X>& out,
 
 template <typename X>
 template <typename Y, typename Filter>
-void OIBVHTree<X>::test_ext_collision(ctd::span<const Y> colliders,
-                                      Filter filter, CollisionCache<X, Y>& out,
-                                      int& fill, CudaRuntime rt) {
+void OIBVHTree<X>::test_ext_collision(ctd::span<const Y> colliders, Filter filter,
+                                      CollisionCache<X, Y>& out, int& fill, CudaRuntime rt) {
   if (colliders_->empty() || colliders.empty()) {
     return;
   }
@@ -682,16 +646,14 @@ void OIBVHTree<X>::test_ext_collision(ctd::span<const Y> colliders,
     dyn_out.data = out;
     scalar_write(d_fill.data(), old_fill, rt);
     detail::ext_batch_traversal<X, Y, Filter>
-        <<<grid_num, 128, 0, rt.stream.get()>>>(colliders, tree, filter,
-                                                dyn_out);
+        <<<grid_num, 128, 0, rt.stream.get()>>>(colliders, tree, filter, dyn_out);
   }
 }
 
 template <typename X>
 template <typename Y, typename Filter>
-void OIBVHTree<X>::test_ext_collision(const OIBVHTree<Y>& colliders,
-                                      Filter filter, CollisionCache<X, Y>& out,
-                                      int& fill, CudaRuntime rt) {
+void OIBVHTree<X>::test_ext_collision(const OIBVHTree<Y>& colliders, Filter filter,
+                                      CollisionCache<X, Y>& out, int& fill, CudaRuntime rt) {
   test_ext_collision(colliders.get_colliders(), filter, out, fill, rt);
 }
 

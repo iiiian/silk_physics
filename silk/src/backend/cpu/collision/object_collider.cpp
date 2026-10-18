@@ -26,9 +26,8 @@ namespace silk::cpu {
 /// - Point colliders for vertex-vertex and vertex-face interactions
 /// - Edge colliders for edge-edge interactions
 /// - Triangle colliders for continuous collision detection against faces
-static std::vector<MeshCollider> make_mesh_colliders(
-    const TriMesh& mesh, float bbox_padding,
-    std::function<float(int)> get_inv_mass) {
+static std::vector<MeshCollider> make_mesh_colliders(const TriMesh& mesh, float bbox_padding,
+                                                     std::function<float(int)> get_inv_mass) {
   auto& m = mesh;
   int vert_num = m.V.rows();
   int edge_num = m.E.rows();
@@ -60,10 +59,8 @@ static std::vector<MeshCollider> make_mesh_colliders(
     p0.col(1) = m.V.row(mc.index(1));
     p1.col(0) = m.V.row(mc.index(0));
     p1.col(1) = m.V.row(mc.index(1));
-    mc.bbox.min =
-        p0.col(0).cwiseMin(p0.col(1)).cwiseMin(p1.col(0)).cwiseMin(p1.col(1));
-    mc.bbox.max =
-        p0.col(0).cwiseMax(p0.col(1)).cwiseMax(p1.col(0)).cwiseMax(p1.col(1));
+    mc.bbox.min = p0.col(0).cwiseMin(p0.col(1)).cwiseMin(p1.col(0)).cwiseMin(p1.col(1));
+    mc.bbox.max = p0.col(0).cwiseMax(p0.col(1)).cwiseMax(p1.col(0)).cwiseMax(p1.col(1));
     mc.bbox.pad_inplace(bbox_padding);
     mesh_colliders.emplace_back(std::move(mc));
   }
@@ -91,9 +88,8 @@ static std::vector<MeshCollider> make_mesh_colliders(
   return mesh_colliders;
 }
 
-ObjectCollider::ObjectCollider(uint32_t entity, const CollisionConfig& config,
-                               const TriMesh& mesh, const Pin& pin,
-                               const Eigen::VectorXf& mass, int state_offset) {
+ObjectCollider::ObjectCollider(uint32_t entity, const CollisionConfig& config, const TriMesh& mesh,
+                               const Pin& pin, const Eigen::VectorXf& mass, int state_offset) {
   auto& c = config;
   this->entity = entity;
   this->state_offset = state_offset;
@@ -117,8 +113,7 @@ ObjectCollider::ObjectCollider(uint32_t entity, const CollisionConfig& config,
     }
     return 1.0f / mass(index);
   };
-  mesh_collider_tree.init(
-      make_mesh_colliders(mesh, bbox_padding, get_inv_mass));
+  mesh_collider_tree.init(make_mesh_colliders(mesh, bbox_padding, get_inv_mass));
 }
 
 ObjectCollider::ObjectCollider(uint32_t entity, const CollisionConfig& config,
@@ -140,12 +135,10 @@ ObjectCollider::ObjectCollider(uint32_t entity, const CollisionConfig& config,
   friction = config.friction;
   // Obstacles have infinite mass (zero inverse mass).
   auto get_inv_mass = [](int) { return 0.0f; };
-  mesh_collider_tree.init(
-      make_mesh_colliders(mesh, bbox_padding, get_inv_mass));
+  mesh_collider_tree.init(make_mesh_colliders(mesh, bbox_padding, get_inv_mass));
 }
 
-void ObjectCollider::update(const CollisionConfig& config,
-                            const ObjectState& object_state,
+void ObjectCollider::update(const CollisionConfig& config, const ObjectState& object_state,
                             const Eigen::VectorXf global_curr_state,
                             const Eigen::VectorXf global_prev_state) {
   auto& c = config;
@@ -154,8 +147,7 @@ void ObjectCollider::update(const CollisionConfig& config,
   restitution = config.restitution;
   friction = config.friction;
   // Extract vertex positions from state vector.
-  auto get_vertex = [](Eigen::Ref<const Eigen::VectorXf> vec,
-                       int index) -> Eigen::Vector3f {
+  auto get_vertex = [](Eigen::Ref<const Eigen::VectorXf> vec, int index) -> Eigen::Vector3f {
     return vec(Eigen::seqN(3 * index, 3));
   };
   auto seq = Eigen::seqN(object_state.state_offset, object_state.state_num);
@@ -187,12 +179,8 @@ void ObjectCollider::update(const CollisionConfig& config,
         p1.col(0) = get_vertex(curr_state, mc.index(0));
         p1.col(1) = get_vertex(curr_state, mc.index(1));
         // Bounding box contains swept volume of edge between timesteps.
-        mc.bbox.min =
-            p0.col(0).cwiseMin(p0.col(1)).cwiseMin(p1.col(0)).cwiseMin(
-                p1.col(1));
-        mc.bbox.max =
-            p0.col(0).cwiseMax(p0.col(1)).cwiseMax(p1.col(0)).cwiseMax(
-                p1.col(1));
+        mc.bbox.min = p0.col(0).cwiseMin(p0.col(1)).cwiseMin(p1.col(0)).cwiseMin(p1.col(1));
+        mc.bbox.max = p0.col(0).cwiseMax(p0.col(1)).cwiseMax(p1.col(0)).cwiseMax(p1.col(1));
         mc.bbox.pad_inplace(bbox_padding);
         bbox.merge_inplace(mc.bbox);
         break;
@@ -237,12 +225,10 @@ void ObjectCollider::update(const CollisionConfig& config,
   auto& position_t0 = (p.is_static) ? p.curr_position : p.prev_position;
   auto& position_t1 = p.curr_position;
   // Extract vertex positions from state vector.
-  auto get_vertex = [](Eigen::Ref<const Eigen::VectorXf> vec,
-                       int index) -> Eigen::Vector3f {
+  auto get_vertex = [](Eigen::Ref<const Eigen::VectorXf> vec, int index) -> Eigen::Vector3f {
     return vec(Eigen::seqN(3 * index, 3));
   };
-  bbox = Bbox{p.curr_position(Eigen::seqN(0, 3)),
-              p.curr_position(Eigen::seqN(0, 3))};
+  bbox = Bbox{p.curr_position(Eigen::seqN(0, 3)), p.curr_position(Eigen::seqN(0, 3))};
   auto& colliders = mesh_collider_tree.get_colliders();
   int collider_num = colliders.size();
   tbb::enumerable_thread_specific<Bbox> thread_bboxes(bbox);
@@ -268,12 +254,8 @@ void ObjectCollider::update(const CollisionConfig& config,
         p1.col(0) = get_vertex(position_t1, mc.index(0));
         p1.col(1) = get_vertex(position_t1, mc.index(1));
         // Bounding box contains swept volume of edge between timesteps.
-        mc.bbox.min =
-            p0.col(0).cwiseMin(p0.col(1)).cwiseMin(p1.col(0)).cwiseMin(
-                p1.col(1));
-        mc.bbox.max =
-            p0.col(0).cwiseMax(p0.col(1)).cwiseMax(p1.col(0)).cwiseMax(
-                p1.col(1));
+        mc.bbox.min = p0.col(0).cwiseMin(p0.col(1)).cwiseMin(p1.col(0)).cwiseMin(p1.col(1));
+        mc.bbox.max = p0.col(0).cwiseMax(p0.col(1)).cwiseMax(p1.col(0)).cwiseMax(p1.col(1));
         mc.bbox.pad_inplace(bbox_padding);
         bbox.merge_inplace(mc.bbox);
         break;

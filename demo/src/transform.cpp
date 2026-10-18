@@ -9,11 +9,9 @@ AffineTransformer::EigenAffine make_eigen_affine(
     const Eigen::Vector3f& position, const Eigen::Vector3f& rotation,
     const Eigen::Vector3f& scale) {
   AffineTransformer::EigenAffine t =
-      Eigen::Translation3f(position) *
-      Eigen::AngleAxisf(rotation.z(), Eigen::Vector3f::UnitZ()) *
+      Eigen::Translation3f(position) * Eigen::AngleAxisf(rotation.z(), Eigen::Vector3f::UnitZ()) *
       Eigen::AngleAxisf(rotation.y(), Eigen::Vector3f::UnitY()) *
-      Eigen::AngleAxisf(rotation.x(), Eigen::Vector3f::UnitX()) *
-      Eigen::Scaling(scale);
+      Eigen::AngleAxisf(rotation.x(), Eigen::Vector3f::UnitX()) * Eigen::Scaling(scale);
   return t;
 }
 
@@ -26,64 +24,53 @@ glm::mat4 make_glm_affine(const glm::vec3& position, const glm::vec3& rotation,
   return T * R * S;
 }
 
-AffineTransformer::AffineTransformer(const glm::vec3& position,
-                                     const glm::vec3& rotation,
+AffineTransformer::AffineTransformer(const glm::vec3& position, const glm::vec3& rotation,
                                      const glm::vec3& scale) {
   glm_affine_ = make_glm_affine(position, rotation, scale);
-  eigen_affine_ =
-      make_eigen_affine(Eigen::Vector3f(position.x, position.y, position.z),
-                        Eigen::Vector3f(rotation.x, rotation.y, rotation.z),
-                        Eigen::Vector3f(scale.x, scale.y, scale.z));
+  eigen_affine_ = make_eigen_affine(Eigen::Vector3f(position.x, position.y, position.z),
+                                    Eigen::Vector3f(rotation.x, rotation.y, rotation.z),
+                                    Eigen::Vector3f(scale.x, scale.y, scale.z));
 }
 
-AffineTransformer::AffineTransformer(const glm::vec3& position,
-                                     const glm::vec3& rotation, float scale) {
+AffineTransformer::AffineTransformer(const glm::vec3& position, const glm::vec3& rotation,
+                                     float scale) {
   *this = AffineTransformer(position, rotation, glm::vec3(scale));
 }
 
 AffineTransformer::AffineTransformer(const Eigen::Vector3f& position,
                                      const Eigen::Vector3f& rotation,
                                      const Eigen::Vector3f& scale) {
-  glm_affine_ =
-      make_glm_affine(glm::vec3(position.x(), position.y(), position.z()),
-                      glm::vec3(rotation.x(), rotation.y(), rotation.z()),
-                      glm::vec3(scale.x(), scale.y(), scale.z()));
+  glm_affine_ = make_glm_affine(glm::vec3(position.x(), position.y(), position.z()),
+                                glm::vec3(rotation.x(), rotation.y(), rotation.z()),
+                                glm::vec3(scale.x(), scale.y(), scale.z()));
   eigen_affine_ = make_eigen_affine(position, rotation, scale);
 }
 
 AffineTransformer::AffineTransformer(const Eigen::Vector3f& position,
-                                     const Eigen::Vector3f& rotation,
-                                     float scale) {
-  *this = AffineTransformer(position, rotation,
-                            Eigen::Vector3f(scale, scale, scale));
+                                     const Eigen::Vector3f& rotation, float scale) {
+  *this = AffineTransformer(position, rotation, Eigen::Vector3f(scale, scale, scale));
 }
 
 AffineTransformer::AffineTransformer(const std::array<float, 3>& position,
                                      const std::array<float, 3>& rotation,
                                      const std::array<float, 3>& scale) {
-  *this = AffineTransformer(Eigen::Vector3f(position.data()),
-                            Eigen::Vector3f(rotation.data()),
+  *this = AffineTransformer(Eigen::Vector3f(position.data()), Eigen::Vector3f(rotation.data()),
                             Eigen::Vector3f(scale.data()));
 }
 
 AffineTransformer::AffineTransformer(const std::array<float, 3>& position,
-                                     const std::array<float, 3>& rotation,
-                                     float scale) {
-  *this = AffineTransformer(Eigen::Vector3f(position.data()),
-                            Eigen::Vector3f(rotation.data()), scale);
+                                     const std::array<float, 3>& rotation, float scale) {
+  *this =
+      AffineTransformer(Eigen::Vector3f(position.data()), Eigen::Vector3f(rotation.data()), scale);
 }
 
 AffineTransformer::AffineTransformer(const config::Transform& config) {
-  *this = AffineTransformer(config.translation, config.rotation_euler_deg,
-                            config.scale);
+  *this = AffineTransformer(config.translation, config.rotation_euler_deg, config.scale);
 }
 
-const glm::mat4& AffineTransformer::get_glm_affine() const {
-  return glm_affine_;
-}
+const glm::mat4& AffineTransformer::get_glm_affine() const { return glm_affine_; }
 
-const AffineTransformer::EigenAffine& AffineTransformer::get_eigen_affine()
-    const {
+const AffineTransformer::EigenAffine& AffineTransformer::get_eigen_affine() const {
   return eigen_affine_;
 }
 

@@ -33,9 +33,8 @@ template <bool is_vertex_face>
 bool eval_unit_bbox_1d(const Eigen::Vector3f &a_t0, const Eigen::Vector3f &b_t0,
                        const Eigen::Vector3f &c_t0, const Eigen::Vector3f &d_t0,
                        const Eigen::Vector3f &a_t1, const Eigen::Vector3f &b_t1,
-                       const Eigen::Vector3f &c_t1, const Eigen::Vector3f &d_t1,
-                       float eps, float ms, int dim, bool &bbox_in_eps,
-                       float &tol) {
+                       const Eigen::Vector3f &c_t1, const Eigen::Vector3f &d_t1, float eps,
+                       float ms, int dim, bool &bbox_in_eps, float &tol) {
   float minv;
   float maxv;
   if constexpr (is_vertex_face) {
@@ -99,9 +98,8 @@ bool eval_unit_bbox_1d(const Eigen::Vector3f &a_t0, const Eigen::Vector3f &b_t0,
   return true;
 }
 
-bool eval_vf_bbox_1d(const std::array<Interval, 3> &tuv,
-                     const VFFuncCoefficients &coeff, float eps_and_ms, int dim,
-                     bool &bbox_in_eps, float &tol) {
+bool eval_vf_bbox_1d(const std::array<Interval, 3> &tuv, const VFFuncCoefficients &coeff,
+                     float eps_and_ms, int dim, bool &bbox_in_eps, float &tol) {
   // clang-format off
   // Let vertex v at time t0 be v_t0 and face vertices be f0_t0, f1_t0, f2_t0.
   // Let vertex v at time t be v and face vertices be f0, f1, f2.
@@ -211,9 +209,8 @@ bool eval_vf_bbox_1d(const std::array<Interval, 3> &tuv,
   return true;
 }
 
-bool eval_ee_bbox_1d(const std::array<Interval, 3> &tuv,
-                     const EEFuncCoefficients &coeff, float eps_and_ms, int dim,
-                     bool &bbox_in_eps, float &tol) {
+bool eval_ee_bbox_1d(const std::array<Interval, 3> &tuv, const EEFuncCoefficients &coeff,
+                     float eps_and_ms, int dim, bool &bbox_in_eps, float &tol) {
   // clang-format off
   // Let edge a vertex 0 at time t0 be ea0_t0, vertex 1 be ea1_t1.
   // Let edge a vertex 0 at time t be ea0, vertex 1 be ea1.
@@ -278,37 +275,36 @@ bool eval_ee_bbox_1d(const std::array<Interval, 3> &tuv,
 // Check if the hex in (t,u,v) maps near the origin; compute per-axis widths.
 // Uses 8-corner evaluation; when fully inside, further bisection can stop.
 template <bool is_vertex_face, bool is_unit_tuv>
-bool origin_in_bbox_eval(
-    const std::array<Interval, 3> &tuv, const Eigen::Vector3f &a_t0,
-    const Eigen::Vector3f &b_t0, const Eigen::Vector3f &c_t0,
-    const Eigen::Vector3f &d_t0, const Eigen::Vector3f &a_t1,
-    const Eigen::Vector3f &b_t1, const Eigen::Vector3f &c_t1,
-    const Eigen::Vector3f &d_t1, const Eigen::Array3f &eps, float ms,
-    bool &bbox_in_eps, Eigen::Array3f &tolerance,
-    const VFFuncCoefficients &vf_coefficients,
-    const EEFuncCoefficients &ee_coefficients) {
+bool origin_in_bbox_eval(const std::array<Interval, 3> &tuv, const Eigen::Vector3f &a_t0,
+                         const Eigen::Vector3f &b_t0, const Eigen::Vector3f &c_t0,
+                         const Eigen::Vector3f &d_t0, const Eigen::Vector3f &a_t1,
+                         const Eigen::Vector3f &b_t1, const Eigen::Vector3f &c_t1,
+                         const Eigen::Vector3f &d_t1, const Eigen::Array3f &eps, float ms,
+                         bool &bbox_in_eps, Eigen::Array3f &tolerance,
+                         const VFFuncCoefficients &vf_coefficients,
+                         const EEFuncCoefficients &ee_coefficients) {
   bool xyz_bbox_in_eps[3];
   bbox_in_eps = false;
   if constexpr (is_unit_tuv) {
     for (int dim = 0; dim < 3; dim++) {
-      if (!eval_unit_bbox_1d<is_vertex_face>(
-              a_t0, b_t0, c_t0, d_t0, a_t1, b_t1, c_t1, d_t1, eps(dim), ms, dim,
-              xyz_bbox_in_eps[dim], tolerance(dim))) {
+      if (!eval_unit_bbox_1d<is_vertex_face>(a_t0, b_t0, c_t0, d_t0, a_t1, b_t1, c_t1, d_t1,
+                                             eps(dim), ms, dim, xyz_bbox_in_eps[dim],
+                                             tolerance(dim))) {
         return false;
       }
     }
   } else {
     if constexpr (is_vertex_face) {
       for (int dim = 0; dim < 3; dim++) {
-        if (!eval_vf_bbox_1d(tuv, vf_coefficients, eps(dim) + ms, dim,
-                             xyz_bbox_in_eps[dim], tolerance(dim))) {
+        if (!eval_vf_bbox_1d(tuv, vf_coefficients, eps(dim) + ms, dim, xyz_bbox_in_eps[dim],
+                             tolerance(dim))) {
           return false;
         }
       }
     } else {
       for (int dim = 0; dim < 3; dim++) {
-        if (!eval_ee_bbox_1d(tuv, ee_coefficients, eps(dim) + ms, dim,
-                             xyz_bbox_in_eps[dim], tolerance(dim))) {
+        if (!eval_ee_bbox_1d(tuv, ee_coefficients, eps(dim) + ms, dim, xyz_bbox_in_eps[dim],
+                             tolerance(dim))) {
           return false;
         }
       }
@@ -322,8 +318,7 @@ bool origin_in_bbox_eval(
 // Pick the dimension with the largest relative width above its tolerance.
 int find_next_split(const Eigen::Array3f &widths, const Eigen::Array3f &tols) {
   Eigen::Array3f tmp =
-      (widths > tols)
-          .select(widths / tols, -std::numeric_limits<float>::infinity());
+      (widths > tols).select(widths / tols, -std::numeric_limits<float>::infinity());
   int max_index;
   tmp.maxCoeff(&max_index);
   return max_index;
@@ -376,8 +371,7 @@ CCDResult make_ccd_result(const std::array<Interval, 3> &tuv, float tolerance) {
 }
 
 Eigen::Array3f width(const std::array<Interval, 3> &x) {
-  return Eigen::Array3f(x[0].upper - x[0].lower, x[1].upper - x[1].lower,
-                        x[2].upper - x[2].lower);
+  return Eigen::Array3f(x[0].upper - x[0].lower, x[1].upper - x[1].lower, x[2].upper - x[2].lower);
 }
 
 // Bucket DFS over (t,u,v) with box tests and targeted splitting.
@@ -389,12 +383,10 @@ Eigen::Array3f width(const std::array<Interval, 3> &x) {
 // traversal chronological. The resulting speedup is 3-7x.
 template <bool is_vertex_face>
 std::optional<CCDResult> interval_root_finder_bucket_DFS(
-    const Eigen::Vector3f &a_t0, const Eigen::Vector3f &b_t0,
-    const Eigen::Vector3f &c_t0, const Eigen::Vector3f &d_t0,
-    const Eigen::Vector3f &a_t1, const Eigen::Vector3f &b_t1,
-    const Eigen::Vector3f &c_t1, const Eigen::Vector3f &d_t1,
-    const std::array<Interval, 3> &iset, const Eigen::Array3f &tol,
-    float co_domain_tolerance, const Eigen::Array3f &err, float ms,
+    const Eigen::Vector3f &a_t0, const Eigen::Vector3f &b_t0, const Eigen::Vector3f &c_t0,
+    const Eigen::Vector3f &d_t0, const Eigen::Vector3f &a_t1, const Eigen::Vector3f &b_t1,
+    const Eigen::Vector3f &c_t1, const Eigen::Vector3f &d_t1, const std::array<Interval, 3> &iset,
+    const Eigen::Array3f &tol, float co_domain_tolerance, const Eigen::Array3f &err, float ms,
     long max_iter, bool is_unit_interval) {
   // DFS traversal stack bucket. Keyed by t lower bound.
   std::map<float, std::vector<std::pair<IntervalBox, int>>> t_stacks;
@@ -450,13 +442,13 @@ std::optional<CCDResult> interval_root_finder_bucket_DFS(
     Eigen::Array3f bbox_eval_tolerance;
     if (is_unit_interval) {
       bbox_in_zero = origin_in_bbox_eval<is_vertex_face, true>(
-          current, a_t0, b_t0, c_t0, d_t0, a_t1, b_t1, c_t1, d_t1, err, ms,
-          bbox_in_eps, bbox_eval_tolerance, vf_coefficients, ee_coefficients);
+          current, a_t0, b_t0, c_t0, d_t0, a_t1, b_t1, c_t1, d_t1, err, ms, bbox_in_eps,
+          bbox_eval_tolerance, vf_coefficients, ee_coefficients);
       is_unit_interval = false;
     } else {
       bbox_in_zero = origin_in_bbox_eval<is_vertex_face, false>(
-          current, a_t0, b_t0, c_t0, d_t0, a_t1, b_t1, c_t1, d_t1, err, ms,
-          bbox_in_eps, bbox_eval_tolerance, vf_coefficients, ee_coefficients);
+          current, a_t0, b_t0, c_t0, d_t0, a_t1, b_t1, c_t1, d_t1, err, ms, bbox_in_eps,
+          bbox_eval_tolerance, vf_coefficients, ee_coefficients);
     }
 
     // current interval does not contain function root. skip.
@@ -468,10 +460,8 @@ std::optional<CCDResult> interval_root_finder_bucket_DFS(
     }
 
     // The box might contain a root; check if it is small enough to accept.
-    bool is_co_domain_tol_small_enough =
-        (bbox_eval_tolerance <= co_domain_tolerance).all();
-    bool is_interval_small_enough =
-        is_co_domain_tol_small_enough || bbox_in_eps;
+    bool is_co_domain_tol_small_enough = (bbox_eval_tolerance <= co_domain_tolerance).all();
+    bool is_interval_small_enough = is_co_domain_tol_small_enough || bbox_in_eps;
 
     // The bucket is the smallest pending t.lower, so this is chronological.
     if (is_interval_small_enough) {
@@ -481,8 +471,7 @@ std::optional<CCDResult> interval_root_finder_bucket_DFS(
     // All boxes with a smaller t.lower are exhausted, so current is the
     // earliest conservative fallback when the iteration limit is reached.
     if (max_iter > 0 && iter_count > max_iter) {
-      float true_tolerance =
-          std::max(co_domain_tolerance, bbox_eval_tolerance.maxCoeff());
+      float true_tolerance = std::max(co_domain_tolerance, bbox_eval_tolerance.maxCoeff());
       return make_ccd_result(current, true_tolerance);
     }
 
@@ -492,11 +481,9 @@ std::optional<CCDResult> interval_root_finder_bucket_DFS(
     auto push = [&t_stacks, tree_level](const IntervalBox &box) {
       t_stacks[box[0].lower].emplace_back(box, tree_level + 1);
     };
-    bool overflow =
-        split_and_push(current, split_dimension, push, is_vertex_face);
+    bool overflow = split_and_push(current, split_dimension, push, is_vertex_face);
     if (overflow) {
-      float true_tolerance =
-          std::max(co_domain_tolerance, bbox_eval_tolerance.maxCoeff());
+      float true_tolerance = std::max(co_domain_tolerance, bbox_eval_tolerance.maxCoeff());
       return make_ccd_result(current, true_tolerance);
     }
     // Keep an emptied bucket alive through evaluation and splitting so
@@ -509,8 +496,7 @@ std::optional<CCDResult> interval_root_finder_bucket_DFS(
   return std::nullopt;
 }
 
-Eigen::Array3f get_numerical_error(const Eigen::Vector3f &abs_max,
-                                   const bool is_vertex_face) {
+Eigen::Array3f get_numerical_error(const Eigen::Vector3f &abs_max, const bool is_vertex_face) {
   // Single-precision minimum-separation filters for the cached affine
   // evaluation graph. See test/narrowphase/derive_numerical_filter.py.
   constexpr float EE_FILTER = 3.814698e-06;
@@ -526,21 +512,17 @@ Eigen::Array3f get_numerical_error(const Eigen::Vector3f &abs_max,
 // ------------------------------------------------------------------------
 
 template std::optional<CCDResult> interval_root_finder_bucket_DFS<true>(
-    const Eigen::Vector3f &a_t0, const Eigen::Vector3f &b_t0,
-    const Eigen::Vector3f &c_t0, const Eigen::Vector3f &d_t0,
-    const Eigen::Vector3f &a_t1, const Eigen::Vector3f &b_t1,
-    const Eigen::Vector3f &c_t1, const Eigen::Vector3f &d_t1,
-    const std::array<Interval, 3> &iset, const Eigen::Array3f &tol,
-    float co_domain_tolerance, const Eigen::Array3f &err, float ms,
+    const Eigen::Vector3f &a_t0, const Eigen::Vector3f &b_t0, const Eigen::Vector3f &c_t0,
+    const Eigen::Vector3f &d_t0, const Eigen::Vector3f &a_t1, const Eigen::Vector3f &b_t1,
+    const Eigen::Vector3f &c_t1, const Eigen::Vector3f &d_t1, const std::array<Interval, 3> &iset,
+    const Eigen::Array3f &tol, float co_domain_tolerance, const Eigen::Array3f &err, float ms,
     long max_iter, bool is_unit_interval);
 
 template std::optional<CCDResult> interval_root_finder_bucket_DFS<false>(
-    const Eigen::Vector3f &a_t0, const Eigen::Vector3f &b_t0,
-    const Eigen::Vector3f &c_t0, const Eigen::Vector3f &d_t0,
-    const Eigen::Vector3f &a_t1, const Eigen::Vector3f &b_t1,
-    const Eigen::Vector3f &c_t1, const Eigen::Vector3f &d_t1,
-    const std::array<Interval, 3> &iset, const Eigen::Array3f &tol,
-    float co_domain_tolerance, const Eigen::Array3f &err, float ms,
+    const Eigen::Vector3f &a_t0, const Eigen::Vector3f &b_t0, const Eigen::Vector3f &c_t0,
+    const Eigen::Vector3f &d_t0, const Eigen::Vector3f &a_t1, const Eigen::Vector3f &b_t1,
+    const Eigen::Vector3f &c_t1, const Eigen::Vector3f &d_t1, const std::array<Interval, 3> &iset,
+    const Eigen::Array3f &tol, float co_domain_tolerance, const Eigen::Array3f &err, float ms,
     long max_iter, bool is_unit_interval);
 
 }  // namespace silk::cpu

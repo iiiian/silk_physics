@@ -33,8 +33,7 @@ class MatView {
   __both__ constexpr MatView(Mdspan mdspan) : mdspan(mdspan){};
 
   __both__ constexpr MatView(T* ptr, int row_stride, int col_stride)
-      : mdspan(ptr,
-               Mapping{Extent{}, ctd::array<int, 2>{row_stride, col_stride}}) {
+      : mdspan(ptr, Mapping{Extent{}, ctd::array<int, 2>{row_stride, col_stride}}) {
     assert(ptr);
   };
 
@@ -52,8 +51,7 @@ class MatView {
     if constexpr (ctd::is_same_v<T, ConstScalar>) {
       return *this;
     } else {
-      return MatView<ConstScalar, m, n>(mdspan.data_handle(), mdspan.stride(0),
-                                        mdspan.stride(1));
+      return MatView<ConstScalar, m, n>(mdspan.data_handle(), mdspan.stride(0), mdspan.stride(1));
     }
   }
 
@@ -75,18 +73,15 @@ class MatView {
   }
 
   template <int row_num, int col_num>
-  __both__ constexpr MatView<T, row_num, col_num> block(int row_start,
-                                                        int col_start) const {
+  __both__ constexpr MatView<T, row_num, col_num> block(int row_start, int col_start) const {
     static_assert(row_num > 0 && col_num > 0, "Invalid row_num or col_num.");
-    assert(row_start >= 0 && col_start >= 0 &&
-           "Invalid row_start or col_start");
+    assert(row_start >= 0 && col_start >= 0 && "Invalid row_start or col_start");
     assert((row_start + row_num) <= m && "Row index out of range.");
     assert((col_start + col_num) <= n && "Col index out of range.");
 
     int row_stride = mdspan.stride(0);
     int col_stride = mdspan.stride(1);
-    T* data =
-        mdspan.data_handle() + row_start * row_stride + col_start * col_stride;
+    T* data = mdspan.data_handle() + row_start * row_stride + col_start * col_stride;
     return MatView<T, row_num, col_num>{data, row_stride, col_stride};
   }
 
@@ -102,8 +97,7 @@ class MatView {
 
   __both__ constexpr MatView<T, n, m> transpose() const {
     // Swap row and col stride.
-    return MatView<T, n, m>{mdspan.data_handle(), mdspan.stride(1),
-                            mdspan.stride(0)};
+    return MatView<T, n, m>{mdspan.data_handle(), mdspan.stride(1), mdspan.stride(0)};
   }
 };
 
@@ -212,9 +206,7 @@ class Mat {
 #pragma nv_diag_default 20014
 #pragma nv_diag_default 20011
 
-  __both__ constexpr MatView<T, m, n> view() {
-    return MatView<T, m, n>::row_major(data.data());
-  }
+  __both__ constexpr MatView<T, m, n> view() { return MatView<T, m, n>::row_major(data.data()); }
 
   __both__ constexpr MatView<const T, m, n> const_view() const {
     return MatView<const T, m, n>::row_major(data.data());
@@ -222,15 +214,11 @@ class Mat {
 
   __both__ constexpr T& operator()(int i, int j) { return view()(i, j); }
 
-  __both__ constexpr const T& operator()(int i, int j) const {
-    return const_view()(i, j);
-  }
+  __both__ constexpr const T& operator()(int i, int j) const { return const_view()(i, j); }
 
   __both__ constexpr T& operator()(int i) { return view()(i); }
 
-  __both__ constexpr const T& operator()(int i) const {
-    return const_view()(i);
-  }
+  __both__ constexpr const T& operator()(int i) const { return const_view()(i); }
 };
 
 using Vec2f = Mat<float, 2, 1>;
@@ -327,10 +315,9 @@ __both__ constexpr void assign(Dst& dst, const Src& src) {
 }
 
 template <typename X, typename Y>
-__both__ constexpr Mat<typename X::Scalar, X::M, X::N> axpby(
-    typename X::Scalar a, const X& x, typename X::Scalar b, const Y& y) {
-  static_assert(ctd::is_same_v<typename X::Scalar, typename Y::Scalar>,
-                "Matric type mismatch.");
+__both__ constexpr Mat<typename X::Scalar, X::M, X::N> axpby(typename X::Scalar a, const X& x,
+                                                             typename X::Scalar b, const Y& y) {
+  static_assert(ctd::is_same_v<typename X::Scalar, typename Y::Scalar>, "Matric type mismatch.");
   static_assert(X::M == Y::M && X::N == Y::N, "Matrix dim mismatch.");
 
   Mat<typename X::Scalar, X::M, X::N> result;
@@ -345,8 +332,8 @@ __both__ constexpr Mat<typename X::Scalar, X::M, X::N> axpby(
 }
 
 template <typename X>
-__both__ constexpr Mat<typename X::Scalar, X::M, X::N> axpb(
-    typename X::Scalar a, const X& x, typename X::Scalar b) {
+__both__ constexpr Mat<typename X::Scalar, X::M, X::N> axpb(typename X::Scalar a, const X& x,
+                                                            typename X::Scalar b) {
   Mat<typename X::Scalar, X::M, X::N> result;
 #pragma unroll
   for (int i = 0; i < X::M; ++i) {
@@ -359,8 +346,7 @@ __both__ constexpr Mat<typename X::Scalar, X::M, X::N> axpb(
 }
 
 template <typename X>
-__both__ constexpr Mat<typename X::Scalar, X::M, X::N> ax(typename X::Scalar a,
-                                                          const X& x) {
+__both__ constexpr Mat<typename X::Scalar, X::M, X::N> ax(typename X::Scalar a, const X& x) {
   Mat<typename X::Scalar, X::M, X::N> result;
 #pragma unroll
   for (int i = 0; i < X::M; ++i) {
@@ -374,8 +360,7 @@ __both__ constexpr Mat<typename X::Scalar, X::M, X::N> ax(typename X::Scalar a,
 
 template <typename X, typename Y>
 __both__ constexpr X::Scalar dot(const X& x, const Y& y) {
-  static_assert(ctd::is_same_v<typename X::Scalar, typename Y::Scalar>,
-                "Matric type mismatch.");
+  static_assert(ctd::is_same_v<typename X::Scalar, typename Y::Scalar>, "Matric type mismatch.");
   static_assert(X::M == Y::M && X::N == Y::N, "Matrix dim mismatch.");
 
   float result = 0.0f;
@@ -416,10 +401,8 @@ __both__ constexpr X::Scalar norm(const X& x) {
 }
 
 template <typename X, typename Y>
-__both__ constexpr auto mat_mul(const X& x, const Y& y)
-    -> Mat<typename X::Scalar, X::M, Y::N> {
-  static_assert(ctd::is_same_v<typename X::Scalar, typename Y::Scalar>,
-                "Matric type mismatch.");
+__both__ constexpr auto mat_mul(const X& x, const Y& y) -> Mat<typename X::Scalar, X::M, Y::N> {
+  static_assert(ctd::is_same_v<typename X::Scalar, typename Y::Scalar>, "Matric type mismatch.");
   static_assert(X::N == Y::M, "Matrix dim mismatch.");
 
   auto result = Mat<typename X::Scalar, X::M, Y::N>::zeros();
@@ -440,8 +423,7 @@ __both__ constexpr auto mat_mul(const X& x, const Y& y)
 template <typename X, typename Y, typename BinaryOp>
 __both__ constexpr auto binary(const X& x, const Y& y, BinaryOp op)
     -> Mat<typename X::Scalar, X::M, X::N> {
-  static_assert(ctd::is_same_v<typename X::Scalar, typename Y::Scalar>,
-                "Matric type mismatch.");
+  static_assert(ctd::is_same_v<typename X::Scalar, typename Y::Scalar>, "Matric type mismatch.");
   static_assert(X::M == Y::M && X::N == Y::N, "Matrix dim mismatch.");
 
   Mat<typename X::Scalar, X::M, X::N> result;
@@ -457,45 +439,38 @@ __both__ constexpr auto binary(const X& x, const Y& y, BinaryOp op)
 }
 
 template <typename X, typename Y>
-__both__ constexpr auto vmin(const X& x, const Y& y)
-    -> Mat<typename X::Scalar, X::M, X::N> {
+__both__ constexpr auto vmin(const X& x, const Y& y) -> Mat<typename X::Scalar, X::M, X::N> {
   return binary(x, y, [] __both__(float a, float b) { return a > b ? b : a; });
 }
 
 template <typename X, typename Y>
-__both__ constexpr auto vmax(const X& x, const Y& y)
-    -> Mat<typename X::Scalar, X::M, X::N> {
+__both__ constexpr auto vmax(const X& x, const Y& y) -> Mat<typename X::Scalar, X::M, X::N> {
   return binary(x, y, [] __both__(float a, float b) { return a > b ? a : b; });
 }
 
 template <typename X, typename Y>
-__both__ constexpr auto vadd(const X& x, const Y& y)
-    -> Mat<typename X::Scalar, X::M, X::N> {
+__both__ constexpr auto vadd(const X& x, const Y& y) -> Mat<typename X::Scalar, X::M, X::N> {
   return binary(x, y, [] __both__(float a, float b) { return a + b; });
 }
 
 template <typename X, typename Y>
-__both__ constexpr auto vsub(const X& x, const Y& y)
-    -> Mat<typename X::Scalar, X::M, X::N> {
+__both__ constexpr auto vsub(const X& x, const Y& y) -> Mat<typename X::Scalar, X::M, X::N> {
   return binary(x, y, [] __both__(float a, float b) { return a - b; });
 }
 
 template <typename X, typename Y>
-__both__ constexpr auto vmul(const X& x, const Y& y)
-    -> Mat<typename X::Scalar, X::M, X::N> {
+__both__ constexpr auto vmul(const X& x, const Y& y) -> Mat<typename X::Scalar, X::M, X::N> {
   return binary(x, y, [] __both__(float a, float b) { return a * b; });
 }
 
 template <typename X, typename Y>
-__both__ constexpr auto vdiv(const X& x, const Y& y)
-    -> Mat<typename X::Scalar, X::M, X::N> {
+__both__ constexpr auto vdiv(const X& x, const Y& y) -> Mat<typename X::Scalar, X::M, X::N> {
   return binary(x, y, [] __both__(float a, float b) { return a / b; });
 }
 
 template <typename X, typename Y, typename Pred>
 __both__ constexpr bool any(const X& x, const Y& y, Pred pred) {
-  static_assert(ctd::is_same_v<typename X::Scalar, typename Y::Scalar>,
-                "Matric type mismatch.");
+  static_assert(ctd::is_same_v<typename X::Scalar, typename Y::Scalar>, "Matric type mismatch.");
   static_assert(X::M == Y::M && X::N == Y::N, "Matrix dim mismatch.");
 
   bool result = false;
@@ -531,8 +506,7 @@ __both__ constexpr bool any_leq(const X& x, const Y& y) {
 
 template <typename X, typename Y, typename Pred>
 __both__ constexpr bool all(const X& x, const Y& y, Pred pred) {
-  static_assert(ctd::is_same_v<typename X::Scalar, typename Y::Scalar>,
-                "Matric type mismatch.");
+  static_assert(ctd::is_same_v<typename X::Scalar, typename Y::Scalar>, "Matric type mismatch.");
   static_assert(X::M == Y::M && X::N == Y::N, "Matrix dim mismatch.");
 
   bool result = true;

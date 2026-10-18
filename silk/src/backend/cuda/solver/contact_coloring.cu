@@ -69,8 +69,8 @@ template <int N>
 __global__ void greedy_color(ctd::span<const FrictionContact> contacts,
                              ctd::span<const int> vertex_offsets,
                              ctd::span<const int> incident_contacts,
-                             ctd::span<const int> active_contacts,
-                             ctd::span<uint16_t> colors, bool* out_of_color) {
+                             ctd::span<const int> active_contacts, ctd::span<uint16_t> colors,
+                             bool* out_of_color) {
   if (*out_of_color) {
     return;
   }
@@ -121,11 +121,9 @@ __global__ void greedy_color(ctd::span<const FrictionContact> contacts,
 __global__ void resolve_conflicts(ctd::span<const FrictionContact> contacts,
                                   ctd::span<const int> vertex_offsets,
                                   ctd::span<const int> incident_contacts,
-                                  ctd::span<uint16_t> colors,
-                                  ctd::span<const int> active_contacts,
+                                  ctd::span<uint16_t> colors, ctd::span<const int> active_contacts,
                                   ctd::span<int> active_contacts_next,
-                                  int* active_contacts_counter_next,
-                                  const bool* out_of_color) {
+                                  int* active_contacts_counter_next, const bool* out_of_color) {
   using WReduce = cub::WarpReduce<int>;
   using WScan = cub::WarpScan<int>;
 
@@ -188,8 +186,7 @@ __global__ void resolve_conflicts(ctd::span<const FrictionContact> contacts,
   int lid = threadIdx.x % 32;  // lane id
   int wid = threadIdx.x / 32;  // warp id
 
-  int warp_recoloring_num =
-      WReduce(warp_temp.reduce[wid]).Sum(local_recoloring_num);
+  int warp_recoloring_num = WReduce(warp_temp.reduce[wid]).Sum(local_recoloring_num);
   if (warp_recoloring_num == 0) {
     return;
   }
@@ -200,15 +197,13 @@ __global__ void resolve_conflicts(ctd::span<const FrictionContact> contacts,
     cu::atomic_ref<int> a{*active_contacts_counter_next};
     active_contacts_offset = a.fetch_add(warp_recoloring_num);
   }
-  active_contacts_offset =
-      cu::device::warp_shuffle_idx(active_contacts_offset, 0);
+  active_contacts_offset = cu::device::warp_shuffle_idx(active_contacts_offset, 0);
 
   int offset = 0;
   WScan(warp_temp.scan[wid]).ExclusiveSum(local_recoloring_num, offset);
 
   for (int i = 0; i < local_recoloring_num; ++i) {
-    active_contacts_next[active_contacts_offset + offset + i] =
-        recolor_contact_ids[i];
+    active_contacts_next[active_contacts_offset + offset + i] = recolor_contact_ids[i];
   }
 }
 
@@ -219,10 +214,9 @@ __global__ void zero_int(int* value) {
   }
 }
 
-bool color_graph(ctd::span<const FrictionContact> contacts,
-                 ctd::span<const int> vertex_offsets,
-                 ctd::span<const int> incident_contacts,
-                 ctd::span<uint16_t> colors, CudaRuntime rt) {
+bool color_graph(ctd::span<const FrictionContact> contacts, ctd::span<const int> vertex_offsets,
+                 ctd::span<const int> incident_contacts, ctd::span<uint16_t> colors,
+                 CudaRuntime rt) {
   assert(contacts.size() > 0);
 
   // init.
@@ -233,8 +227,7 @@ bool color_graph(ctd::span<const FrictionContact> contacts,
   auto active_contacts = alloc<int>(rt, num);
   auto active_contacts_next = alloc<int>(rt, num);
   auto init_buffers = [contacts = active_contacts.data(),
-                       contacts_next = active_contacts_next.data(),
-                       colors] __device__(int i) {
+                       contacts_next = active_contacts_next.data(), colors] __device__(int i) {
     contacts[i] = i;
     contacts_next[i] = i;
     colors[i] = 0;
@@ -247,43 +240,40 @@ bool color_graph(ctd::span<const FrictionContact> contacts,
   int color_n = 1;
   while (scalar_load(active_contacts_counter.data(), rt) != 0) {
     for (int i = 0; i < 10; ++i) {
-      int host_active_contacts_counter =
-          scalar_load(active_contacts_counter.data(), rt);
+      int host_active_contacts_counter = scalar_load(active_contacts_counter.data(), rt);
       if (host_active_contacts_counter == 0) {
         break;
       }
 
       ctd::span<const int> active_contacts_span(active_contacts.data(),
                                                 host_active_contacts_counter);
-      int active_thread_num = div_round_up(host_active_contacts_counter,
-                                           ACTIVE_CONTACTS_PER_THREAD);
+      int active_thread_num =
+          div_round_up(host_active_contacts_counter, ACTIVE_CONTACTS_PER_THREAD);
       int grid_num = div_round_up(active_thread_num, BLOCK_DIM);
 
       if (color_n == 1) {
         greedy_color<1><<<grid_num, BLOCK_DIM, 0, rt.stream.get()>>>(
-            contacts, vertex_offsets, incident_contacts, active_contacts_span,
-            colors, out_of_color.data());
+            contacts, vertex_offsets, incident_contacts, active_contacts_span, colors,
+            out_of_color.data());
       } else if (color_n == 4) {
         greedy_color<4><<<grid_num, BLOCK_DIM, 0, rt.stream.get()>>>(
-            contacts, vertex_offsets, incident_contacts, active_contacts_span,
-            colors, out_of_color.data());
+            contacts, vertex_offsets, incident_contacts, active_contacts_span, colors,
+            out_of_color.data());
       } else if (color_n == 16) {
         greedy_color<16><<<grid_num, BLOCK_DIM, 0, rt.stream.get()>>>(
-            contacts, vertex_offsets, incident_contacts, active_contacts_span,
-            colors, out_of_color.data());
+            contacts, vertex_offsets, incident_contacts, active_contacts_span, colors,
+            out_of_color.data());
       } else {
         greedy_color<64><<<grid_num, BLOCK_DIM, 0, rt.stream.get()>>>(
-            contacts, vertex_offsets, incident_contacts, active_contacts_span,
-            colors, out_of_color.data());
+            contacts, vertex_offsets, incident_contacts, active_contacts_span, colors,
+            out_of_color.data());
       }
 
-      zero_int<<<1, 1, 0, rt.stream.get()>>>(
-          active_contacts_counter_next.data());
+      zero_int<<<1, 1, 0, rt.stream.get()>>>(active_contacts_counter_next.data());
       grid_num = div_round_up(active_thread_num, BLOCK_DIM);
       resolve_conflicts<<<grid_num, BLOCK_DIM, 0, rt.stream.get()>>>(
-          contacts, vertex_offsets, incident_contacts, colors,
-          active_contacts_span, active_contacts_next,
-          active_contacts_counter_next.data(), out_of_color.data());
+          contacts, vertex_offsets, incident_contacts, colors, active_contacts_span,
+          active_contacts_next, active_contacts_counter_next.data(), out_of_color.data());
 
       ctd::swap(active_contacts, active_contacts_next);
       ctd::swap(active_contacts_counter, active_contacts_counter_next);
@@ -313,14 +303,12 @@ bool color_graph(ctd::span<const FrictionContact> contacts,
 }  // namespace
 
 std::pair<cu::device_buffer<int>, std::vector<int>> color_contacts(
-    ctd::span<const FrictionContact> contacts,
-    ctd::span<const int> vertex_offsets, ctd::span<const int> incident_contacts,
-    CudaRuntime rt) {
+    ctd::span<const FrictionContact> contacts, ctd::span<const int> vertex_offsets,
+    ctd::span<const int> incident_contacts, CudaRuntime rt) {
   // color contacts.
   int num = contacts.size();
   auto unsorted_colors = alloc<uint16_t>(rt, num);
-  bool success = color_graph(contacts, vertex_offsets, incident_contacts,
-                             unsorted_colors, rt);
+  bool success = color_graph(contacts, vertex_offsets, incident_contacts, unsorted_colors, rt);
   if (!success) {
     throw std::runtime_error("Too many colors");
   }
@@ -331,40 +319,38 @@ std::pair<cu::device_buffer<int>, std::vector<int>> color_contacts(
   auto sorted_contact_ids = alloc<int>(rt, num);
 
   cub::DeviceFor::Bulk(
-      num,
-      [data = unsorted_contact_ids.data()] __device__(int i) { data[i] = i; },
+      num, [data = unsorted_contact_ids.data()] __device__(int i) { data[i] = i; },
       rt.stream.get());
 
   size_t radix_temp_size;
-  cub::DeviceRadixSort::SortPairs(
-      nullptr, radix_temp_size, unsorted_colors.data(), sorted_colors.data(),
-      unsorted_contact_ids.data(), sorted_contact_ids.data(), num, 0,
-      8 * sizeof(uint16_t), rt.stream.get());
+  cub::DeviceRadixSort::SortPairs(nullptr, radix_temp_size, unsorted_colors.data(),
+                                  sorted_colors.data(), unsorted_contact_ids.data(),
+                                  sorted_contact_ids.data(), num, 0, 8 * sizeof(uint16_t),
+                                  rt.stream.get());
   auto radix_temp = alloc<char>(rt, radix_temp_size);
 
-  cub::DeviceRadixSort::SortPairs(
-      radix_temp.data(), radix_temp_size, unsorted_colors.data(),
-      sorted_colors.data(), unsorted_contact_ids.data(),
-      sorted_contact_ids.data(), num, 0, 8 * sizeof(uint16_t), rt.stream.get());
+  cub::DeviceRadixSort::SortPairs(radix_temp.data(), radix_temp_size, unsorted_colors.data(),
+                                  sorted_colors.data(), unsorted_contact_ids.data(),
+                                  sorted_contact_ids.data(), num, 0, 8 * sizeof(uint16_t),
+                                  rt.stream.get());
 
   // Fill contact ranges.
   uint16_t max_color = scalar_load(sorted_colors.data() + num - 1, rt);
   auto group_ranges = alloc<int>(rt, max_color + 1);
 
-  auto fill_ranges =
-      [ranges = ctd::span<int>{group_ranges},
-       colors = ctd::span<uint16_t>{sorted_colors}] __device__(int i) {
-        uint16_t color = colors[i];
-        assert(color != 0);
+  auto fill_ranges = [ranges = ctd::span<int>{group_ranges},
+                      colors = ctd::span<uint16_t>{sorted_colors}] __device__(int i) {
+    uint16_t color = colors[i];
+    assert(color != 0);
 
-        if (i == 0 || color != colors[i - 1]) {
-          ranges[color - 1] = i;
-        }
+    if (i == 0 || color != colors[i - 1]) {
+      ranges[color - 1] = i;
+    }
 
-        if (i == colors.size() - 1) {
-          ranges.back() = colors.size();
-        }
-      };
+    if (i == colors.size() - 1) {
+      ranges.back() = colors.size();
+    }
+  };
   cub::DeviceFor::Bulk(num, fill_ranges, rt.stream.get());
   rt.stream.sync();
 

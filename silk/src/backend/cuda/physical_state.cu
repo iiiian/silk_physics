@@ -14,10 +14,8 @@
 
 namespace silk::cuda {
 
-PhysicalState::PhysicalState(int state_offset,
-                             ctd::span<const float> curr_state,
-                             ctd::span<const float> state_velocity,
-                             CudaRuntime rt) {
+PhysicalState::PhysicalState(int state_offset, ctd::span<const float> curr_state,
+                             ctd::span<const float> state_velocity, CudaRuntime rt) {
   assert(curr_state.size() == state_velocity.size());
   assert(state_offset >= 0);
 

@@ -32,24 +32,18 @@ class CpuBackend : public IBackend {
                    MeshConfig mesh_config, std::span<const int> pin_index,
                    uint32_t& handle) override;
   Result remove_cloth(uint32_t handle) override;
-  Result get_cloth_position(uint32_t handle,
-                            std::span<float> position) const override;
+  Result get_cloth_position(uint32_t handle, std::span<float> position) const override;
   Result set_cloth_config(uint32_t handle, ClothConfig config) override;
-  Result set_cloth_collision_config(uint32_t handle,
-                                    CollisionConfig config) override;
-  Result set_cloth_pin_index(uint32_t handle,
-                             std::span<const int> pin_index) override;
-  Result set_cloth_pin_position(uint32_t handle,
-                                std::span<const float> position) override;
+  Result set_cloth_collision_config(uint32_t handle, CollisionConfig config) override;
+  Result set_cloth_pin_index(uint32_t handle, std::span<const int> pin_index) override;
+  Result set_cloth_pin_position(uint32_t handle, std::span<const float> position) override;
 
   // Obstacle API
   Result add_obstacle(CollisionConfig collision_config, MeshConfig mesh_config,
                       uint32_t& handle) override;
   Result remove_obstacle(uint32_t handle) override;
-  Result set_obstacle_collision_config(uint32_t handle,
-                                       CollisionConfig config) override;
-  Result set_obstacle_position(uint32_t handle,
-                               std::span<const float> position) override;
+  Result set_obstacle_collision_config(uint32_t handle, CollisionConfig config) override;
+  Result set_obstacle_position(uint32_t handle, std::span<const float> position) override;
 };
 
 }  // namespace silk::cpu

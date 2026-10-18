@@ -18,9 +18,7 @@ struct GpuContext {
   cu::stream stream{device};
   cu::device_memory_pool memory_pool{device};
 
-  silk::cuda::CudaRuntime runtime() {
-    return {.stream = stream, .mr = memory_pool.as_ref()};
-  }
+  silk::cuda::CudaRuntime runtime() { return {.stream = stream, .mr = memory_pool.as_ref()}; }
 };
 
 }  // namespace silk::broadphase_benchmark

@@ -23,8 +23,7 @@ class PinPosition {
 
   PinPosition() = default;
   static PinPosition from_position(std::span<const float> position);
-  static PinPosition from_vertices(const PinIndex& index,
-                                   std::span<const float> V);
+  static PinPosition from_vertices(const PinIndex& index, std::span<const float> V);
 };
 
 }  // namespace silk::cuda

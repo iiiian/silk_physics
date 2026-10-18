@@ -36,8 +36,7 @@ void h_perm_then_assign(ctd::span<const float> in, ctd::span<const int> perm,
   }
 }
 
-__global__ void d_perm_then_assign(ctd::span<const float> in,
-                                   ctd::span<const int> perm,
+__global__ void d_perm_then_assign(ctd::span<const float> in, ctd::span<const int> perm,
                                    ctd::span<float> out) {
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
   if (tid >= perm.size()) {
@@ -104,8 +103,7 @@ MeshPartition::MeshPartition(const TriMesh& mesh, CudaRuntime rt) {
   rt.stream.sync();
 }
 
-void MeshPartition::permute(ctd::span<const float> in, ctd::span<float> out,
-                            CudaRuntime rt) {
+void MeshPartition::permute(ctd::span<const float> in, ctd::span<float> out, CudaRuntime rt) {
   assert(in.size() == 3 * h_perm.size());
   assert(out.size() == 3 * h_perm.size());
   assert(is_device_mem(in.data()) == is_device_mem(out.data()));
@@ -118,16 +116,14 @@ void MeshPartition::permute(ctd::span<const float> in, ctd::span<float> out,
   }
 }
 
-void MeshPartition::inv_permute(ctd::span<const float> in, ctd::span<float> out,
-                                CudaRuntime rt) {
+void MeshPartition::inv_permute(ctd::span<const float> in, ctd::span<float> out, CudaRuntime rt) {
   assert(in.size() == 3 * h_perm.size());
   assert(out.size() == 3 * h_perm.size());
   assert(is_device_mem(in.data()) == is_device_mem(out.data()));
 
   if (is_device_mem(in.data())) {
     int grid_num = div_round_up(d_perm->size(), 128);
-    d_perm_then_assign<<<grid_num, 128, 0, rt.stream.get()>>>(in, *d_inv_perm,
-                                                              out);
+    d_perm_then_assign<<<grid_num, 128, 0, rt.stream.get()>>>(in, *d_inv_perm, out);
   } else {
     h_perm_then_assign(in, h_inv_perm, out);
   }

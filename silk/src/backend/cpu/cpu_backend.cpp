@@ -29,8 +29,8 @@ CpuBackend::~CpuBackend() = default;
 
 Result CpuBackend::set_global_config(GlobalConfig config) {
   auto& c = config;
-  impl_->solver_pipeline_.const_acceleration = {
-      c.acceleration_x, c.acceleration_y, c.acceleration_z};
+  impl_->solver_pipeline_.const_acceleration = {c.acceleration_x, c.acceleration_y,
+                                                c.acceleration_z};
   impl_->solver_pipeline_.dt = c.dt;
   impl_->solver_pipeline_.max_outer_iteration = c.max_outer_iteration;
   impl_->solver_pipeline_.max_inner_iteration = c.max_inner_iteration;
@@ -49,10 +49,9 @@ Result CpuBackend::solver_reset() {
   return Result::ok();
 }
 
-Result CpuBackend::add_cloth(ClothConfig cloth_config,
-                             CollisionConfig collision_config,
-                             MeshConfig mesh_config,
-                             std::span<const int> pin_index, uint32_t& handle) {
+Result CpuBackend::add_cloth(ClothConfig cloth_config, CollisionConfig collision_config,
+                             MeshConfig mesh_config, std::span<const int> pin_index,
+                             uint32_t& handle) {
   auto tri_mesh = make_cloth_mesh(mesh_config);
   if (!tri_mesh) {
     handle = 0;
@@ -95,8 +94,7 @@ Result CpuBackend::remove_cloth(uint32_t handle) {
   return Result::ok();
 }
 
-Result CpuBackend::get_cloth_position(uint32_t handle,
-                                      std::span<float> position) const {
+Result CpuBackend::get_cloth_position(uint32_t handle, std::span<float> position) const {
   if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -105,8 +103,7 @@ Result CpuBackend::get_cloth_position(uint32_t handle,
     if ((int)position.size() < obj_state->state_num) {
       return Result::error(ErrorCode::InvalidPosition);
     }
-    memcpy(position.data(), obj_state->curr_state.data(),
-           obj_state->state_num * sizeof(float));
+    memcpy(position.data(), obj_state->curr_state.data(), obj_state->state_num * sizeof(float));
     return Result::ok();
   }
   auto mesh = impl_->registry_.get<TriMesh>(handle);
@@ -135,8 +132,7 @@ Result CpuBackend::set_cloth_config(uint32_t handle, ClothConfig config) {
   return Result::ok();
 }
 
-Result CpuBackend::set_cloth_collision_config(uint32_t handle,
-                                              CollisionConfig config) {
+Result CpuBackend::set_cloth_collision_config(uint32_t handle, CollisionConfig config) {
   if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -150,8 +146,7 @@ Result CpuBackend::set_cloth_collision_config(uint32_t handle,
   return Result::ok();
 }
 
-Result CpuBackend::set_cloth_pin_index(uint32_t handle,
-                                       std::span<const int> pin_index) {
+Result CpuBackend::set_cloth_pin_index(uint32_t handle, std::span<const int> pin_index) {
   if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -173,8 +168,7 @@ Result CpuBackend::set_cloth_pin_index(uint32_t handle,
   return Result::ok();
 }
 
-Result CpuBackend::set_cloth_pin_position(uint32_t handle,
-                                          std::span<const float> position) {
+Result CpuBackend::set_cloth_pin_position(uint32_t handle, std::span<const float> position) {
   if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -191,16 +185,15 @@ Result CpuBackend::set_cloth_pin_position(uint32_t handle,
   if (position.empty()) {
     pin->curr_position.resize(0);
   } else {
-    pin->curr_position =
-        Eigen::Map<const Eigen::VectorXf>(position.data(), position.size());
+    pin->curr_position = Eigen::Map<const Eigen::VectorXf>(position.data(), position.size());
   }
   pin->is_static = false;
   pin->is_static_twice = false;
   return Result::ok();
 }
 
-Result CpuBackend::add_obstacle(CollisionConfig collision_config,
-                                MeshConfig mesh_config, uint32_t& handle) {
+Result CpuBackend::add_obstacle(CollisionConfig collision_config, MeshConfig mesh_config,
+                                uint32_t& handle) {
   auto tri_mesh = make_obstacle_mesh(mesh_config);
   if (!tri_mesh) {
     handle = 0;
@@ -235,8 +228,7 @@ Result CpuBackend::remove_obstacle(uint32_t handle) {
   return Result::ok();
 }
 
-Result CpuBackend::set_obstacle_collision_config(uint32_t handle,
-                                                 CollisionConfig config) {
+Result CpuBackend::set_obstacle_collision_config(uint32_t handle, CollisionConfig config) {
   if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -250,8 +242,7 @@ Result CpuBackend::set_obstacle_collision_config(uint32_t handle,
   return Result::ok();
 }
 
-Result CpuBackend::set_obstacle_position(uint32_t handle,
-                                         std::span<const float> position) {
+Result CpuBackend::set_obstacle_position(uint32_t handle, std::span<const float> position) {
   if (!impl_->registry_.has_entity(handle)) {
     return Result::error(ErrorCode::InvalidHandle);
   }
@@ -265,8 +256,7 @@ Result CpuBackend::set_obstacle_position(uint32_t handle,
   pos->is_static = false;
   pos->is_static_twice = false;
   std::swap(pos->curr_position, pos->prev_position);
-  pos->curr_position =
-      Eigen::Map<const Eigen::VectorXf>(position.data(), position.size());
+  pos->curr_position = Eigen::Map<const Eigen::VectorXf>(position.data(), position.size());
   return Result::ok();
 }
 

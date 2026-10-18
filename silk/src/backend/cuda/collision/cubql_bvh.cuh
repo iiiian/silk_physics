@@ -38,8 +38,7 @@ __both__ inline cuBQL::box3f to_cubql_box(const Bbox& bbox) {
 }
 
 template <typename X>
-__global__ void update_cubql_boxes(ctd::span<const X> colliders,
-                                   ctd::span<cuBQL::box3f> boxes) {
+__global__ void update_cubql_boxes(ctd::span<const X> colliders, ctd::span<cuBQL::box3f> boxes) {
   int collider_id = blockIdx.x * blockDim.x + threadIdx.x;
   if (collider_id >= colliders.size()) {
     return;
@@ -49,16 +48,14 @@ __global__ void update_cubql_boxes(ctd::span<const X> colliders,
 
 template <typename X, typename Y, typename Filter, bool dedup_self>
 __global__ void cubql_batch_traversal(ctd::span<const Y> queries,
-                                      ctd::span<const uint32_t> query_ids,
-                                      CubqlBVHView<X> tree, Filter filter,
-                                      DynSpan<CubqlCollisionPair<X, Y>> out) {
+                                      ctd::span<const uint32_t> query_ids, CubqlBVHView<X> tree,
+                                      Filter filter, DynSpan<CubqlCollisionPair<X, Y>> out) {
   int sorted_query_id = blockIdx.x * blockDim.x + threadIdx.x;
   if (sorted_query_id >= queries.size()) {
     return;
   }
 
-  int query_id =
-      query_ids.empty() ? sorted_query_id : query_ids[sorted_query_id];
+  int query_id = query_ids.empty() ? sorted_query_id : query_ids[sorted_query_id];
   cuBQL::box3f query_box = to_cubql_box(queries[query_id].bbox);
   cuBQL::fixedBoxQuery::forEachLeaf(
       [=] __device__(const uint32_t* primitive_ids, int primitive_num) {
@@ -75,8 +72,7 @@ __global__ void cubql_batch_traversal(ctd::span<const Y> queries,
           const X& target = tree.colliders[target_id];
           // fixedBoxQuery reports every primitive in an overlapping leaf, so
           // apply the exact inclusive primitive-box test before emitting it.
-          if (!Bbox::is_colliding(target.bbox, query.bbox) ||
-              !filter(target, query)) {
+          if (!Bbox::is_colliding(target.bbox, query.bbox) || !filter(target, query)) {
             continue;
           }
 
@@ -98,8 +94,7 @@ class CubqlBVH {
  public:
   CubqlBVH() = default;
 
-  CubqlBVH(const Bbox& root_bbox, cu::device_buffer<X> colliders,
-           CudaRuntime rt)
+  CubqlBVH(const Bbox& root_bbox, cu::device_buffer<X> colliders, CudaRuntime rt)
       : colliders_(std::move(colliders)), stream_(rt.stream.get()) {
     (void)root_bbox;
     assert(!colliders_->empty());
@@ -130,9 +125,7 @@ class CubqlBVH {
     return *this;
   }
 
-  CubqlBVHView<X> view() const {
-    return {.bvh = bvh_, .colliders = *colliders_};
-  }
+  CubqlBVHView<X> view() const { return {.bvh = bvh_, .colliders = *colliders_}; }
 
   ctd::span<X> get_colliders() { return *colliders_; }
 
@@ -140,26 +133,22 @@ class CubqlBVH {
     (void)root_bbox;
     update_boxes(rt);
     detail::free_cubql_bvh(bvh_, rt.stream.get());
-    detail::build_cubql_bvh(bvh_, boxes_->data(), boxes_->size(),
-                            rt.stream.get());
+    detail::build_cubql_bvh(bvh_, boxes_->data(), boxes_->size(), rt.stream.get());
   }
 
   template <typename Filter>
-  void test_self_collision(Filter filter,
-                           cu::device_buffer<CubqlCollisionPair<X, X>>& out,
+  void test_self_collision(Filter filter, cu::device_buffer<CubqlCollisionPair<X, X>>& out,
                            int& fill, CudaRuntime rt) {
     if (colliders_->empty()) {
       return;
     }
 
     auto device_fill = alloc<int>(rt, 1, fill);
-    DynSpan<CubqlCollisionPair<X, X>> dynamic_output{.fill = device_fill.data(),
-                                                     .data = out};
+    DynSpan<CubqlCollisionPair<X, X>> dynamic_output{.fill = device_fill.data(), .data = out};
     int grid_num = div_round_up(colliders_->size(), 128);
     ctd::span<const uint32_t> sorted_ids(bvh_.primIDs, bvh_.numPrims);
-    detail::cubql_batch_traversal<X, X, Filter, true>
-        <<<grid_num, 128, 0, rt.stream.get()>>>(*colliders_, sorted_ids, view(),
-                                                filter, dynamic_output);
+    detail::cubql_batch_traversal<X, X, Filter, true><<<grid_num, 128, 0, rt.stream.get()>>>(
+        *colliders_, sorted_ids, view(), filter, dynamic_output);
     check_cuda(cudaGetLastError());
 
     int old_fill = fill;
@@ -168,49 +157,42 @@ class CubqlBVH {
       resize_buffer(fill + 1, out, rt);
       dynamic_output.data = out;
       scalar_write(device_fill.data(), old_fill, rt);
-      detail::cubql_batch_traversal<X, X, Filter, true>
-          <<<grid_num, 128, 0, rt.stream.get()>>>(
-              *colliders_, sorted_ids, view(), filter, dynamic_output);
+      detail::cubql_batch_traversal<X, X, Filter, true><<<grid_num, 128, 0, rt.stream.get()>>>(
+          *colliders_, sorted_ids, view(), filter, dynamic_output);
       check_cuda(cudaGetLastError());
     }
   }
 
   template <typename Y, typename Filter>
   void test_ext_collision(ctd::span<const Y> colliders, Filter filter,
-                          cu::device_buffer<CubqlCollisionPair<X, Y>>& out,
-                          int& fill, CudaRuntime rt) {
+                          cu::device_buffer<CubqlCollisionPair<X, Y>>& out, int& fill,
+                          CudaRuntime rt) {
     test_ext_collision_impl<Y>(colliders, {}, filter, out, fill, rt);
   }
 
   template <typename Y, typename Filter>
   void test_ext_collision(const CubqlBVH<Y>& colliders, Filter filter,
-                          cu::device_buffer<CubqlCollisionPair<X, Y>>& out,
-                          int& fill, CudaRuntime rt) {
+                          cu::device_buffer<CubqlCollisionPair<X, Y>>& out, int& fill,
+                          CudaRuntime rt) {
     CubqlBVHView<Y> query_tree = colliders.view();
-    ctd::span<const uint32_t> sorted_ids(query_tree.bvh.primIDs,
-                                         query_tree.bvh.numPrims);
-    test_ext_collision_impl<Y>(query_tree.colliders, sorted_ids, filter, out,
-                               fill, rt);
+    ctd::span<const uint32_t> sorted_ids(query_tree.bvh.primIDs, query_tree.bvh.numPrims);
+    test_ext_collision_impl<Y>(query_tree.colliders, sorted_ids, filter, out, fill, rt);
   }
 
  private:
   template <typename Y, typename Filter>
-  void test_ext_collision_impl(ctd::span<const Y> colliders,
-                               ctd::span<const uint32_t> query_ids,
-                               Filter filter,
-                               cu::device_buffer<CubqlCollisionPair<X, Y>>& out,
+  void test_ext_collision_impl(ctd::span<const Y> colliders, ctd::span<const uint32_t> query_ids,
+                               Filter filter, cu::device_buffer<CubqlCollisionPair<X, Y>>& out,
                                int& fill, CudaRuntime rt) {
     if (colliders_->empty() || colliders.empty()) {
       return;
     }
 
     auto device_fill = alloc<int>(rt, 1, fill);
-    DynSpan<CubqlCollisionPair<X, Y>> dynamic_output{.fill = device_fill.data(),
-                                                     .data = out};
+    DynSpan<CubqlCollisionPair<X, Y>> dynamic_output{.fill = device_fill.data(), .data = out};
     int grid_num = div_round_up(colliders.size(), 128);
-    detail::cubql_batch_traversal<X, Y, Filter, false>
-        <<<grid_num, 128, 0, rt.stream.get()>>>(colliders, query_ids, view(),
-                                                filter, dynamic_output);
+    detail::cubql_batch_traversal<X, Y, Filter, false><<<grid_num, 128, 0, rt.stream.get()>>>(
+        colliders, query_ids, view(), filter, dynamic_output);
     check_cuda(cudaGetLastError());
 
     int old_fill = fill;
@@ -219,17 +201,15 @@ class CubqlBVH {
       resize_buffer(fill + 1, out, rt);
       dynamic_output.data = out;
       scalar_write(device_fill.data(), old_fill, rt);
-      detail::cubql_batch_traversal<X, Y, Filter, false>
-          <<<grid_num, 128, 0, rt.stream.get()>>>(colliders, query_ids, view(),
-                                                  filter, dynamic_output);
+      detail::cubql_batch_traversal<X, Y, Filter, false><<<grid_num, 128, 0, rt.stream.get()>>>(
+          colliders, query_ids, view(), filter, dynamic_output);
       check_cuda(cudaGetLastError());
     }
   }
 
   void update_boxes(CudaRuntime rt) {
     int grid_num = div_round_up(colliders_->size(), 128);
-    detail::update_cubql_boxes<X>
-        <<<grid_num, 128, 0, rt.stream.get()>>>(*colliders_, *boxes_);
+    detail::update_cubql_boxes<X><<<grid_num, 128, 0, rt.stream.get()>>>(*colliders_, *boxes_);
     check_cuda(cudaGetLastError());
   }
 

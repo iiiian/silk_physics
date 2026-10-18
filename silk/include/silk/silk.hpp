@@ -17,10 +17,8 @@ namespace silk {
 
 /// @brief Triangle mesh definition for cloth and obstacles.
 struct MeshConfig {
-  std::span<const float>
-      verts;  ///< Vertex positions as [x0,y0,z0, x1,y1,z1, ...]
-  std::span<const int>
-      faces;  ///< Triangle indices as [i0,j0,k0, i1,j1,k1, ...]
+  std::span<const float> verts;  ///< Vertex positions as [x0,y0,z0, x1,y1,z1, ...]
+  std::span<const int> faces;    ///< Triangle indices as [i0,j0,k0, i1,j1,k1, ...]
 };
 
 /// @brief Collision behavior configuration for entities.
@@ -139,10 +137,8 @@ class World {
   /// @param handle Output handle for the new cloth object. Set to zero if
   /// fails.
   /// @return Success with valid handle, or error (InvalidMesh, TooManyBody)
-  [[nodiscard]] Result add_cloth(ClothConfig cloth_config,
-                                 CollisionConfig collision_config,
-                                 MeshConfig mesh_config,
-                                 std::span<const int> pin_index,
+  [[nodiscard]] Result add_cloth(ClothConfig cloth_config, CollisionConfig collision_config,
+                                 MeshConfig mesh_config, std::span<const int> pin_index,
                                  uint32_t& handle);
 
   /// @brief Remove cloth object from simulation.
@@ -158,8 +154,7 @@ class World {
   /// @param handle Cloth object handle
   /// @param position Output buffer for vertex positions (must be pre-allocated)
   /// @return Success, or InvalidHandle/IncorrectPositionNum on error
-  [[nodiscard]] Result get_cloth_position(uint32_t handle,
-                                          std::span<float> position) const;
+  [[nodiscard]] Result get_cloth_position(uint32_t handle, std::span<float> position) const;
 
   /// @brief Update physical properties of existing cloth.
   ///
@@ -174,8 +169,7 @@ class World {
   /// @param handle Cloth object handle
   /// @param config New collision settings
   /// @return Success, or InvalidHandle if cloth not found
-  [[nodiscard]] Result set_cloth_collision_config(uint32_t handle,
-                                                  CollisionConfig config);
+  [[nodiscard]] Result set_cloth_collision_config(uint32_t handle, CollisionConfig config);
 
   /// @brief Update which vertices are pinned in place.
   ///
@@ -184,8 +178,7 @@ class World {
   /// @param handle Cloth object handle
   /// @param pin_index Vertex indices to pin (may be empty to unpin all)
   /// @return Success, or InvalidHandle if cloth not found
-  [[nodiscard]] Result set_cloth_pin_index(uint32_t handle,
-                                           std::span<const int> pin_index);
+  [[nodiscard]] Result set_cloth_pin_index(uint32_t handle, std::span<const int> pin_index);
 
   /// @brief Move pinned vertices to new target positions.
   ///
@@ -195,8 +188,7 @@ class World {
   /// @param position Target positions for pinned vertices [x0,y0,z0, x1,y1,z1,
   /// ...]
   /// @return Success, or InvalidHandle/IncorrectPinNum on error
-  [[nodiscard]] Result set_cloth_pin_position(uint32_t handle,
-                                              std::span<const float> position);
+  [[nodiscard]] Result set_cloth_pin_position(uint32_t handle, std::span<const float> position);
 
   // ---------------------------------------
   // Obstacle API
@@ -211,8 +203,8 @@ class World {
   /// @param mesh_config Triangle mesh definition
   /// @param handle Output handle for the new obstacle. Set to zero if fails.
   /// @return Success with valid handle, or error (InvalidMesh, TooManyBody)
-  [[nodiscard]] Result add_obstacle(CollisionConfig collision_config,
-                                    MeshConfig mesh_config, uint32_t& handle);
+  [[nodiscard]] Result add_obstacle(CollisionConfig collision_config, MeshConfig mesh_config,
+                                    uint32_t& handle);
 
   /// @brief Remove obstacle from simulation.
   /// @param handle Obstacle handle
@@ -223,8 +215,7 @@ class World {
   /// @param handle Obstacle handle
   /// @param config New collision settings
   /// @return Success, or InvalidHandle if obstacle not found
-  [[nodiscard]] Result set_obstacle_collision_config(uint32_t handle,
-                                                     CollisionConfig config);
+  [[nodiscard]] Result set_obstacle_collision_config(uint32_t handle, CollisionConfig config);
 
   /// @brief Move obstacle to new position.
   ///
@@ -234,8 +225,7 @@ class World {
   /// @param handle Obstacle handle
   /// @param position New vertex positions [x0,y0,z0, x1,y1,z1, ...]
   /// @return Success, or InvalidHandle/IncorrectPositionNum on error
-  [[nodiscard]] Result set_obstacle_position(uint32_t handle,
-                                             std::span<const float> position);
+  [[nodiscard]] Result set_obstacle_position(uint32_t handle, std::span<const float> position);
 };
 
 }  // namespace silk

@@ -4,21 +4,18 @@
 
 namespace silk::cuda {
 
-PinIndex::PinIndex(std::span<const int> index)
-    : index(index.begin(), index.end()) {}
+PinIndex::PinIndex(std::span<const int> index) : index(index.begin(), index.end()) {}
 
 PinPosition PinPosition::from_position(std::span<const float> position) {
   PinPosition p;
   p.curr_position.resize(position.size());
-  memcpy(p.curr_position.data(), position.data(),
-         position.size() * sizeof(float));
+  memcpy(p.curr_position.data(), position.data(), position.size() * sizeof(float));
   p.prev_position = p.curr_position;
 
   return p;
 }
 
-PinPosition PinPosition::from_vertices(const PinIndex& index,
-                                       std::span<const float> V) {
+PinPosition PinPosition::from_vertices(const PinIndex& index, std::span<const float> V) {
   if (index.is_all_pinned) {
     return from_position(V);
   }

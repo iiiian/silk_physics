@@ -7,8 +7,7 @@ namespace silk::cpu {
 std::optional<std::pair<float, float>> exact_pt_uv(const Eigen::Vector3f& x0,
                                                    const Eigen::Vector3f& x1,
                                                    const Eigen::Vector3f& x2,
-                                                   const Eigen::Vector3f& x3,
-                                                   float eps) {
+                                                   const Eigen::Vector3f& x3, float eps) {
   Eigen::Vector3f x21 = x2 - x1;
   Eigen::Vector3f x31 = x3 - x1;
   Eigen::Vector3f x01 = x0 - x1;
@@ -39,8 +38,7 @@ std::optional<std::pair<float, float>> exact_pt_uv(const Eigen::Vector3f& x0,
 std::optional<std::pair<float, float>> exact_ee_uv(const Eigen::Vector3f& x0,
                                                    const Eigen::Vector3f& x1,
                                                    const Eigen::Vector3f& x2,
-                                                   const Eigen::Vector3f& x3,
-                                                   float eps) {
+                                                   const Eigen::Vector3f& x3, float eps) {
   const Eigen::Vector3f& p1 = x0;
   const Eigen::Vector3f& q1 = x1;
   const Eigen::Vector3f& p2 = x2;
@@ -64,9 +62,7 @@ std::optional<std::pair<float, float>> exact_ee_uv(const Eigen::Vector3f& x0,
   }
 
   double denominator = a * e - b * b;
-  double u = denominator > eps2 * a * e
-                 ? std::clamp((b * f - c * e) / denominator, 0.0, 1.0)
-                 : 0.0;
+  double u = denominator > eps2 * a * e ? std::clamp((b * f - c * e) / denominator, 0.0, 1.0) : 0.0;
 
   double v = (b * u + f) / e;
   if (v < 0.0) {

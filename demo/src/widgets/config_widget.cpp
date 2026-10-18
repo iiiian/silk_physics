@@ -15,22 +15,20 @@ ConfigWidget::ConfigWidget(Context& ctx) : ctx_(ctx) {}
 void ConfigWidget::draw() {
   ImGui::PushID(this);
 
-  if (ImGui::CollapsingHeader("Config Selection##config",
-                              ImGuiTreeNodeFlags_DefaultOpen)) {
+  if (ImGui::CollapsingHeader("Config Selection##config", ImGuiTreeNodeFlags_DefaultOpen)) {
     // Choose Custom JSON File
     if (ImGui::Button("Load JSON##config_btn")) {
       const std::vector<std::string> filters = {"JSON File", "*.json"};
       std::vector<std::string> results =
-          pfd::open_file("Select JSON config", ".", filters, pfd::opt::none)
-              .result();
+          pfd::open_file("Select JSON config", ".", filters, pfd::opt::none).result();
 
       if (!results.empty()) {
         std::filesystem::path picked{results[0]};
 
         if (picked.extension() != ".json") {
           ui_error("[Config] Invalid file type. Please select a .json file.");
-          pfd::message("Invalid file", "Please select a .json file.",
-                       pfd::choice::ok, pfd::icon::error);
+          pfd::message("Invalid file", "Please select a .json file.", pfd::choice::ok,
+                       pfd::icon::error);
         } else {
           ui_info("[Config] Selected JSON file name: {}", picked.string());
 
@@ -59,10 +57,8 @@ void ConfigWidget::apply_config_to_gui(const SimConfig& config) {
   ctx_.global_config.acceleration_y = c.global.acceleration[1];
   ctx_.global_config.acceleration_z = c.global.acceleration[2];
   ctx_.global_config.linear_solver_abs_tol = c.global.linear_solver_abs_tol;
-  ctx_.global_config.linear_solver_rel_tol_min =
-      c.global.linear_solver_rel_tol_min;
-  ctx_.global_config.linear_solver_rel_tol_max =
-      c.global.linear_solver_rel_tol_max;
+  ctx_.global_config.linear_solver_rel_tol_min = c.global.linear_solver_rel_tol_min;
+  ctx_.global_config.linear_solver_rel_tol_max = c.global.linear_solver_rel_tol_max;
   ctx_.global_config.initial_linear_rel_tol = c.global.initial_linear_rel_tol;
   ctx_.global_config.admm_abs_tol = c.global.admm_abs_tol;
   ctx_.global_config.admm_rel_tol = c.global.admm_rel_tol;

@@ -61,15 +61,14 @@ __device__ void condNegSwap(bool c, float &X, float &Y) {
 }
 
 // matrix multiplication M = A * B
-__device__ void multAB(float a11, float a12, float a13, float a21, float a22,
-                       float a23, float a31, float a32, float a33,
+__device__ void multAB(float a11, float a12, float a13, float a21, float a22, float a23, float a31,
+                       float a32, float a33,
                        //
-                       float b11, float b12, float b13, float b21, float b22,
-                       float b23, float b31, float b32, float b33,
+                       float b11, float b12, float b13, float b21, float b22, float b23, float b31,
+                       float b32, float b33,
                        //
-                       float &m11, float &m12, float &m13, float &m21,
-                       float &m22, float &m23, float &m31, float &m32,
-                       float &m33) {
+                       float &m11, float &m12, float &m13, float &m21, float &m22, float &m23,
+                       float &m31, float &m32, float &m33) {
   m11 = a11 * b11 + a12 * b21 + a13 * b31;
   m12 = a11 * b12 + a12 * b22 + a13 * b32;
   m13 = a11 * b13 + a12 * b23 + a13 * b33;
@@ -82,15 +81,14 @@ __device__ void multAB(float a11, float a12, float a13, float a21, float a22,
 }
 
 // matrix multiplication M = Transpose[A] * B
-__device__ void multAtB(float a11, float a12, float a13, float a21, float a22,
-                        float a23, float a31, float a32, float a33,
+__device__ void multAtB(float a11, float a12, float a13, float a21, float a22, float a23, float a31,
+                        float a32, float a33,
                         //
-                        float b11, float b12, float b13, float b21, float b22,
-                        float b23, float b31, float b32, float b33,
+                        float b11, float b12, float b13, float b21, float b22, float b23, float b31,
+                        float b32, float b33,
                         //
-                        float &m11, float &m12, float &m13, float &m21,
-                        float &m22, float &m23, float &m31, float &m32,
-                        float &m33) {
+                        float &m11, float &m12, float &m13, float &m21, float &m22, float &m23,
+                        float &m31, float &m32, float &m33) {
   m11 = a11 * b11 + a21 * b21 + a31 * b31;
   m12 = a11 * b12 + a21 * b22 + a31 * b32;
   m13 = a11 * b13 + a21 * b23 + a31 * b33;
@@ -102,9 +100,8 @@ __device__ void multAtB(float a11, float a12, float a13, float a21, float a22,
   m33 = a13 * b13 + a23 * b23 + a33 * b33;
 }
 
-__device__ void quatToMat3(const float *qV, float &m11, float &m12, float &m13,
-                           float &m21, float &m22, float &m23, float &m31,
-                           float &m32, float &m33) {
+__device__ void quatToMat3(const float *qV, float &m11, float &m12, float &m13, float &m21,
+                           float &m22, float &m23, float &m31, float &m32, float &m33) {
   float w = qV[3];
   float x = qV[0];
   float y = qV[1];
@@ -131,14 +128,12 @@ __device__ void quatToMat3(const float *qV, float &m11, float &m12, float &m13,
   m33 = float(1) - float(2) * (qxx + qyy);
 }
 
-__device__ void approximateGivensQuaternion(float a11, float a12, float a22,
-                                            float &ch, float &sh) {
+__device__ void approximateGivensQuaternion(float a11, float a12, float a22, float &ch, float &sh) {
   /*
    * Given givens angle computed by approximateGivensAngles,
    * compute the corresponding rotation quaternion.
    */
-  constexpr double _gamma =
-      5.82842712474619;  // FOUR_GAMMA_SQUARED = sqrt(8)+3;
+  constexpr double _gamma = 5.82842712474619;    // FOUR_GAMMA_SQUARED = sqrt(8)+3;
   constexpr double _cstar = 0.9238795325112867;  // cos(pi/8)
   constexpr double _sstar = 0.3826834323650898;  // sin(p/8)
 
@@ -150,10 +145,8 @@ __device__ void approximateGivensQuaternion(float a11, float a12, float a22,
   sh = b ? w * sh : float(_sstar);
 }
 
-__device__ void jacobiConjugation(const int x, const int y, const int z,
-                                  float &s11, float &s21, float &s22,
-                                  float &s31, float &s32, float &s33,
-                                  float *qV) {
+__device__ void jacobiConjugation(const int x, const int y, const int z, float &s11, float &s21,
+                                  float &s22, float &s31, float &s32, float &s33, float *qV) {
   float ch, sh;
   approximateGivensQuaternion(s11, s21, s22, ch, sh);
 
@@ -212,9 +205,7 @@ __device__ void jacobiConjugation(const int x, const int y, const int z,
   s33 = _s33;
 }
 
-__device__ float dist2(float x, float y, float z) {
-  return x * x + y * y + z * z;
-}
+__device__ float dist2(float x, float y, float z) { return x * x + y * y + z * z; }
 
 // finds transformation that diagonalizes a symmetric matrix
 
@@ -238,11 +229,11 @@ __device__ void jacobiEigenanlysis(  // symmetric matrix
 }
 
 __device__ void sortSingularValues(  // matrix that we want to decompose
-    float &b11, float &b12, float &b13, float &b21, float &b22, float &b23,
-    float &b31, float &b32, float &b33,
+    float &b11, float &b12, float &b13, float &b21, float &b22, float &b23, float &b31, float &b32,
+    float &b33,
     // sort V simultaneously
-    float &v11, float &v12, float &v13, float &v21, float &v22, float &v23,
-    float &v31, float &v32, float &v33) {
+    float &v11, float &v12, float &v13, float &v21, float &v22, float &v23, float &v31, float &v32,
+    float &v33) {
   float rho1 = dist2(b11, b21, b31);
   float rho2 = dist2(b12, b22, b32);
   float rho3 = dist2(b13, b23, b33);
@@ -287,14 +278,14 @@ __device__ void QRGivensQuaternion(float a1, float a2, float &ch, float &sh) {
 }
 
 __device__ void QRDecomposition(  // matrix that we want to decompose
-    float b11, float b12, float b13, float b21, float b22, float b23, float b31,
-    float b32, float b33,
+    float b11, float b12, float b13, float b21, float b22, float b23, float b31, float b32,
+    float b33,
     // output Q
-    float &q11, float &q12, float &q13, float &q21, float &q22, float &q23,
-    float &q31, float &q32, float &q33,
+    float &q11, float &q12, float &q13, float &q21, float &q22, float &q23, float &q31, float &q32,
+    float &q33,
     // output R
-    float &r11, float &r12, float &r13, float &r21, float &r22, float &r23,
-    float &r31, float &r32, float &r33) {
+    float &r11, float &r12, float &r13, float &r21, float &r22, float &r23, float &r31, float &r32,
+    float &r33) {
   float ch1, sh1, ch2, sh2, ch3, sh3;
   float a, b;
 
@@ -355,15 +346,13 @@ __device__ void QRDecomposition(  // matrix that we want to decompose
   q12 = float(4) * ch2 * ch3 * (float(-1) + float(2) * sh12) * sh2 * sh3 +
         float(2) * ch1 * sh1 * (float(-1) + float(2) * sh32);
   q13 = float(4) * ch1 * ch3 * sh1 * sh3 -
-        float(2) * ch2 * (float(-1) + float(2) * sh12) * sh2 *
-            (float(-1) + float(2) * sh32);
+        float(2) * ch2 * (float(-1) + float(2) * sh12) * sh2 * (float(-1) + float(2) * sh32);
 
   q21 = float(2) * ch1 * sh1 * (float(1) - float(2) * sh22);
   q22 = float(-8) * ch1 * ch2 * ch3 * sh1 * sh2 * sh3 +
         (float(-1) + float(2) * sh12) * (float(-1) + float(2) * sh32);
   q23 = float(-2) * ch3 * sh3 +
-        float(4) * sh1 *
-            (ch3 * sh1 * sh3 + ch1 * ch2 * sh2 * (float(-1) + float(2) * sh32));
+        float(4) * sh1 * (ch3 * sh1 * sh3 + ch1 * ch2 * sh2 * (float(-1) + float(2) * sh32));
 
   q31 = float(2) * ch2 * sh2;
   q32 = float(2) * ch3 * (float(1) - float(2) * sh22) * sh3;
@@ -372,25 +361,24 @@ __device__ void QRDecomposition(  // matrix that we want to decompose
 
 __device__ void svd(
     // input A
-    float a11, float a12, float a13, float a21, float a22, float a23, float a31,
-    float a32, float a33,
+    float a11, float a12, float a13, float a21, float a22, float a23, float a31, float a32,
+    float a33,
     // output U
-    float &u11, float &u12, float &u13, float &u21, float &u22, float &u23,
-    float &u31, float &u32, float &u33,
+    float &u11, float &u12, float &u13, float &u21, float &u22, float &u23, float &u31, float &u32,
+    float &u33,
     // output S
-    float &s11, float &s12, float &s13, float &s21, float &s22, float &s23,
-    float &s31, float &s32, float &s33,
+    float &s11, float &s12, float &s13, float &s21, float &s22, float &s23, float &s31, float &s32,
+    float &s33,
     // output V
-    float &v11, float &v12, float &v13, float &v21, float &v22, float &v23,
-    float &v31, float &v32, float &v33) {
+    float &v11, float &v12, float &v13, float &v21, float &v22, float &v23, float &v31, float &v32,
+    float &v33) {
   // normal equations matrix
   float ATA11, ATA12, ATA13;
   float ATA21, ATA22, ATA23;
   float ATA31, ATA32, ATA33;
 
-  multAtB(a11, a12, a13, a21, a22, a23, a31, a32, a33, a11, a12, a13, a21, a22,
-          a23, a31, a32, a33, ATA11, ATA12, ATA13, ATA21, ATA22, ATA23, ATA31,
-          ATA32, ATA33);
+  multAtB(a11, a12, a13, a21, a22, a23, a31, a32, a33, a11, a12, a13, a21, a22, a23, a31, a32, a33,
+          ATA11, ATA12, ATA13, ATA21, ATA22, ATA23, ATA31, ATA32, ATA33);
 
   // symmetric eigenalysis
   float qV[4];
@@ -400,31 +388,30 @@ __device__ void svd(
   float b11, b12, b13;
   float b21, b22, b23;
   float b31, b32, b33;
-  multAB(a11, a12, a13, a21, a22, a23, a31, a32, a33, v11, v12, v13, v21, v22,
-         v23, v31, v32, v33, b11, b12, b13, b21, b22, b23, b31, b32, b33);
+  multAB(a11, a12, a13, a21, a22, a23, a31, a32, a33, v11, v12, v13, v21, v22, v23, v31, v32, v33,
+         b11, b12, b13, b21, b22, b23, b31, b32, b33);
 
   // sort singular values and find V
-  sortSingularValues(b11, b12, b13, b21, b22, b23, b31, b32, b33, v11, v12, v13,
-                     v21, v22, v23, v31, v32, v33);
+  sortSingularValues(b11, b12, b13, b21, b22, b23, b31, b32, b33, v11, v12, v13, v21, v22, v23, v31,
+                     v32, v33);
 
   // QR decomposition
-  QRDecomposition(b11, b12, b13, b21, b22, b23, b31, b32, b33, u11, u12, u13,
-                  u21, u22, u23, u31, u32, u33, s11, s12, s13, s21, s22, s23,
-                  s31, s32, s33);
+  QRDecomposition(b11, b12, b13, b21, b22, b23, b31, b32, b33, u11, u12, u13, u21, u22, u23, u31,
+                  u32, u33, s11, s12, s13, s21, s22, s23, s31, s32, s33);
 }
 
 __device__ void svd33(
     // input A
-    float a11, float a21, float a31, float a12, float a22, float a32, float a13,
-    float a23, float a33,
+    float a11, float a21, float a31, float a12, float a22, float a32, float a13, float a23,
+    float a33,
     // output U
-    float &u11, float &u21, float &u31, float &u12, float &u22, float &u32,
-    float &u13, float &u23, float &u33,
+    float &u11, float &u21, float &u31, float &u12, float &u22, float &u32, float &u13, float &u23,
+    float &u33,
     // output S
     float &s11, float &s22, float &s33,
     // output V
-    float &v11, float &v21, float &v31, float &v12, float &v22, float &v32,
-    float &v13, float &v23, float &v33) {
+    float &v11, float &v21, float &v31, float &v12, float &v22, float &v32, float &v13, float &v23,
+    float &v33) {
   float s12, s13, s21, s23, s31, s32;
   svd(
       // input A
@@ -466,8 +453,8 @@ __device__ void svd32(
   svd33(d11, d21, d31,     // first column
         d12, d22, d32,     // second column
         0.0f, 0.0f, 0.0f,  // third column
-        fu11, fu21, fu31, fu12, fu22, fu32, fu13, fu23, fu33, fs11, fs22, fs33,
-        fv11, fv21, fv31, fv12, fv22, fv32, fv13, fv23, fv33);
+        fu11, fu21, fu31, fu12, fu22, fu32, fu13, fu23, fu33, fs11, fs22, fs33, fv11, fv21, fv31,
+        fv12, fv22, fv32, fv13, fv23, fv33);
 
   // Thin SVD for D = U * Σ * V^T.
   // Left singular vectors U (3x2), column-major.

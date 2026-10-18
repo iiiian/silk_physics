@@ -9,5 +9,5 @@
 /// @param out_path Destination Alembic file path for the exported scene.
 #include <silk/silk.hpp>
 
-void headless_run(const SimConfig& config, const std::string& out_path,
-                  silk::Backend backend, bool bench);
+void headless_run(const SimConfig& config, const std::string& out_path, silk::Backend backend,
+                  bool bench);

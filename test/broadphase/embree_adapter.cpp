@@ -27,8 +27,7 @@ void embree_error(void*, RTCError code, const char* message) {
 }
 
 void embree_bounds(const RTCBoundsFunctionArguments* arguments) {
-  const auto* geometry =
-      static_cast<const EmbreeGeometryData*>(arguments->geometryUserPtr);
+  const auto* geometry = static_cast<const EmbreeGeometryData*>(arguments->geometryUserPtr);
   const Box& box = geometry->boxes[arguments->primID];
   arguments->bounds_o->lower_x = box.min.x();
   arguments->bounds_o->lower_y = box.min.y();
@@ -38,20 +37,17 @@ void embree_bounds(const RTCBoundsFunctionArguments* arguments) {
   arguments->bounds_o->upper_z = box.max.z();
 }
 
-void embree_collide(void* user_ptr, RTCCollision* collisions,
-                    unsigned int collision_num) {
+void embree_collide(void* user_ptr, RTCCollision* collisions, unsigned int collision_num) {
   auto& context = *static_cast<EmbreeQueryContext*>(user_ptr);
   std::vector<Pair>& local = context.thread_outputs->local();
   for (unsigned int i = 0; i < collision_num; ++i) {
-    Pair pair{static_cast<int>(collisions[i].primID0),
-              static_cast<int>(collisions[i].primID1)};
+    Pair pair{static_cast<int>(collisions[i].primID0), static_cast<int>(collisions[i].primID1)};
     if (context.input->kind == QueryKind::EE && pair.first >= pair.second) {
       continue;
     }
     const Box& box_a = context.input->group_a[pair.first];
-    const Box& box_b = context.input->kind == QueryKind::EE
-                           ? context.input->group_a[pair.second]
-                           : context.input->group_b[pair.second];
+    const Box& box_b = context.input->kind == QueryKind::EE ? context.input->group_a[pair.second]
+                                                            : context.input->group_b[pair.second];
     if (!is_sharing_vertex(box_a, box_b) && is_boxes_overlaping(box_a, box_b)) {
       local.push_back(pair);
     }
@@ -115,8 +111,8 @@ class EmbreeAdapter : public CpuAdapter {
     EmbreeQueryContext context{&input_, &thread_outputs_};
     // If kind == EE -> self collision test.
     // If kind == VF -> tree tree collision test.
-    rtcCollide(scene_a_, input_.kind == QueryKind::EE ? scene_a_ : scene_b_,
-               embree_collide, &context);
+    rtcCollide(scene_a_, input_.kind == QueryKind::EE ? scene_a_ : scene_b_, embree_collide,
+               &context);
     // merge thread local results.
     size_t output_num = 0;
     for (const std::vector<Pair>& local : thread_outputs_) {
@@ -131,8 +127,7 @@ class EmbreeAdapter : public CpuAdapter {
   std::span<const Pair> output() const override { return output_; }
 
  private:
-  RTCScene build_scene(EmbreeGeometryData& geometry_data,
-                       RTCGeometry& geometry_o) {
+  RTCScene build_scene(EmbreeGeometryData& geometry_data, RTCGeometry& geometry_o) {
     RTCScene scene = rtcNewScene(device_);
     rtcSetSceneFlags(scene, RTC_SCENE_FLAG_DYNAMIC);
     rtcSetSceneBuildQuality(scene, RTC_BUILD_QUALITY_LOW);
@@ -180,8 +175,6 @@ class EmbreeAdapter : public CpuAdapter {
 
 }  // namespace
 
-std::unique_ptr<CpuAdapter> make_embree_adapter() {
-  return std::make_unique<EmbreeAdapter>();
-}
+std::unique_ptr<CpuAdapter> make_embree_adapter() { return std::make_unique<EmbreeAdapter>(); }
 
 }  // namespace silk::broadphase_benchmark

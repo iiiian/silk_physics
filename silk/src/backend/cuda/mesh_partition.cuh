@@ -41,8 +41,7 @@ class MeshPartition {
   ///
   /// @param in Position in. Size == 3 * vertex num.
   /// @param out Position out. Size == 3 * vertex num.
-  void inv_permute(ctd::span<const float> in, ctd::span<float> out,
-                   CudaRuntime rt);
+  void inv_permute(ctd::span<const float> in, ctd::span<float> out, CudaRuntime rt);
 };
 
 }  // namespace silk::cuda

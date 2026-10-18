@@ -58,8 +58,7 @@ using CholmodCopyFunc = T* (*)(T*, cholmod_common*);
 /// @tparam T CHOLMOD object type (e.g., cholmod_sparse, cholmod_dense)
 /// @tparam cholmod_copy Function to deep-copy the CHOLMOD object
 /// @tparam cholmod_free Function to free the CHOLMOD object
-template <typename T, CholmodCopyFunc<T> cholmod_copy,
-          CholmodFreeFunc<T> cholmod_free>
+template <typename T, CholmodCopyFunc<T> cholmod_copy, CholmodFreeFunc<T> cholmod_free>
 class RAIIWrapper {
  private:
   /// Pointer to the managed CHOLMOD object (e.g., cholmod_sparse*).
@@ -117,14 +116,11 @@ class RAIIWrapper {
 };
 
 /// RAII wrapper for cholmod_dense objects (dense matrices/vectors).
-using CholmodDense =
-    RAIIWrapper<cholmod_dense, &cholmod_copy_dense, &cholmod_free_dense>;
+using CholmodDense = RAIIWrapper<cholmod_dense, &cholmod_copy_dense, &cholmod_free_dense>;
 /// RAII wrapper for cholmod_sparse objects (sparse matrices).
-using CholmodSparse =
-    RAIIWrapper<cholmod_sparse, &cholmod_copy_sparse, &cholmod_free_sparse>;
+using CholmodSparse = RAIIWrapper<cholmod_sparse, &cholmod_copy_sparse, &cholmod_free_sparse>;
 /// RAII wrapper for cholmod_factor objects (Cholesky factorizations).
-using CholmodFactor =
-    RAIIWrapper<cholmod_factor, &cholmod_copy_factor, &cholmod_free_factor>;
+using CholmodFactor = RAIIWrapper<cholmod_factor, &cholmod_copy_factor, &cholmod_free_factor>;
 
 /// Create a zero-copy CHOLMOD view of an Eigen sparse matrix.
 ///
@@ -136,12 +132,10 @@ using CholmodFactor =
 /// @param sym_stat Matrix symmetry property for CHOLMOD optimization
 /// @return cholmod_sparse view sharing memory with input matrix
 template <typename Scalar>
-cholmod_sparse make_cholmod_sparse_view(
-    Eigen::SparseMatrix<Scalar, Eigen::ColMajor, int>& m,
-    Symmetry sym_stat = Symmetry::NotSymmetric) {
-  static_assert(
-      std::is_same_v<Scalar, float> || std::is_same_v<Scalar, double>,
-      "cholmod sparse view only accepts float/double (real) matrices");
+cholmod_sparse make_cholmod_sparse_view(Eigen::SparseMatrix<Scalar, Eigen::ColMajor, int>& m,
+                                        Symmetry sym_stat = Symmetry::NotSymmetric) {
+  static_assert(std::is_same_v<Scalar, float> || std::is_same_v<Scalar, double>,
+                "cholmod sparse view only accepts float/double (real) matrices");
   // CHOLMOD requires compressed format for efficient operations
   if (!m.isCompressed()) {
     m.makeCompressed();
@@ -152,12 +146,12 @@ cholmod_sparse make_cholmod_sparse_view(
   s.nzmax = m.nonZeros();
   s.p = static_cast<void*>(m.outerIndexPtr());  // Column pointers
   s.i = static_cast<void*>(m.innerIndexPtr());  // Row indices
-  s.nz = nullptr;                          // Not used for compressed format
-  s.x = static_cast<void*>(m.valuePtr());  // Non-zero values
-  s.z = nullptr;                           // No imaginary part (real matrix)
-  s.stype = static_cast<int>(sym_stat);    // Symmetry property
-  s.itype = CHOLMOD_INT;                   // Integer type for indices
-  s.xtype = CHOLMOD_REAL;                  // Real (not complex) values
+  s.nz = nullptr;                               // Not used for compressed format
+  s.x = static_cast<void*>(m.valuePtr());       // Non-zero values
+  s.z = nullptr;                                // No imaginary part (real matrix)
+  s.stype = static_cast<int>(sym_stat);         // Symmetry property
+  s.itype = CHOLMOD_INT;                        // Integer type for indices
+  s.xtype = CHOLMOD_REAL;                       // Real (not complex) values
   if constexpr (std::is_same_v<Scalar, double>) {
     s.dtype = CHOLMOD_DOUBLE;
   } else {
@@ -191,12 +185,12 @@ cholmod_dense make_cholmod_dense_view(Eigen::DenseBase<Derived>& M) {
   cholmod_dense d;
   d.nrow = M.rows();
   d.ncol = M.cols();
-  d.d = M.outerStride();   // Leading dimension (stride between columns)
-  d.nzmax = d.d * d.ncol;  // Total allocated size
+  d.d = M.outerStride();                         // Leading dimension (stride between columns)
+  d.nzmax = d.d * d.ncol;                        // Total allocated size
   d.x = static_cast<void*>(M.derived().data());  // Data pointer
-  d.z = nullptr;           // No imaginary part (real matrix)
-  d.xtype = CHOLMOD_REAL;  // Real (not complex) values
-  d.dtype = dtype;         // Precision type
+  d.z = nullptr;                                 // No imaginary part (real matrix)
+  d.xtype = CHOLMOD_REAL;                        // Real (not complex) values
+  d.dtype = dtype;                               // Precision type
   return d;
 }
 

@@ -15,8 +15,7 @@ namespace silk::cuda {
 /// @param max_part_size Maximum partition size.
 /// @param part_num Total partition num.
 /// @param part_id Partition id of each graph node.
-void graph_partition(ctd::span<int> row_ptr, ctd::span<int> cols,
-                     ctd::span<int> weights, int max_part_size, int &part_num,
-                     std::vector<int> &part_id);
+void graph_partition(ctd::span<int> row_ptr, ctd::span<int> cols, ctd::span<int> weights,
+                     int max_part_size, int &part_num, std::vector<int> &part_id);
 
 }  // namespace silk::cuda

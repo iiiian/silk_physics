@@ -17,8 +17,7 @@
 
 namespace py = polyscope;
 
-std::optional<Obstacle> Obstacle::make_obstacle(silk::World* world,
-                                                std::string name, Vert V,
+std::optional<Obstacle> Obstacle::make_obstacle(silk::World* world, std::string name, Vert V,
                                                 Face F) {
   if (!world) {
     return std::nullopt;
@@ -55,8 +54,7 @@ std::optional<Obstacle> Obstacle::make_obstacle(silk::World* world,
   o.position_ = glm::vec3(0.0f);
   o.rotation_ = glm::vec3(0.0f);
   o.angular_velocity_ = glm::vec3(0.0f);
-  o.rotation_pivot_ = glm::vec3(o.V_.col(0).mean(), o.V_.col(1).mean(),
-                                o.V_.col(2).mean());
+  o.rotation_pivot_ = glm::vec3(o.V_.col(0).mean(), o.V_.col(1).mean(), o.V_.col(2).mean());
   o.scale_ = 1.0f;
   o.transform_changed_ = false;
   o.drag_position_changed_ = false;
@@ -64,8 +62,8 @@ std::optional<Obstacle> Obstacle::make_obstacle(silk::World* world,
   return o;
 }
 
-std::optional<Obstacle> Obstacle::make_obstacle(
-    silk::World* world, const config::ObstacleObject& obj) {
+std::optional<Obstacle> Obstacle::make_obstacle(silk::World* world,
+                                                const config::ObstacleObject& obj) {
   auto mesh = load_mesh_from_file(obj.mesh);
   if (!mesh) {
     return std::nullopt;
@@ -74,21 +72,18 @@ std::optional<Obstacle> Obstacle::make_obstacle(
   AffineTransformer transformer{obj.transform};
   transformer.apply(mesh->verts);
 
-  auto obstacle = make_obstacle(world, obj.name, std::move(mesh->verts),
-                                std::move(mesh->faces));
+  auto obstacle = make_obstacle(world, obj.name, std::move(mesh->verts), std::move(mesh->faces));
   if (!obstacle) {
     return std::nullopt;
   }
 
   obstacle->collision_config_.is_collision_on = obj.collision.enabled;
-  obstacle->collision_config_.is_self_collision_on =
-      obj.collision.self_collision;
+  obstacle->collision_config_.is_self_collision_on = obj.collision.self_collision;
   obstacle->collision_config_.group = obj.collision.group;
   obstacle->collision_config_.friction = obj.collision.friction;
   obstacle->collision_config_.restitution = obj.collision.restitution;
   obstacle->angular_velocity_ = glm::radians(glm::vec3(
-      obj.angular_velocity_deg_s[0], obj.angular_velocity_deg_s[1],
-      obj.angular_velocity_deg_s[2]));
+      obj.angular_velocity_deg_s[0], obj.angular_velocity_deg_s[1], obj.angular_velocity_deg_s[2]));
 
   return obstacle;
 }
@@ -185,19 +180,16 @@ bool Obstacle::init_sim() {
   mesh_->vertexPositions.markHostBufferUpdated();
   mesh_->resetTransform();
 
-  std::span<const float> vert_span =
-      make_const_span_from_position(mesh_->vertexPositions);
+  std::span<const float> vert_span = make_const_span_from_position(mesh_->vertexPositions);
 
   if (silk_handle_ == 0) {
     silk::MeshConfig mesh_config;
     mesh_config.verts = vert_span;
     mesh_config.faces = std::span<const int>(F_.data(), F_.size());
 
-    silk::Result r =
-        world_->add_obstacle(collision_config_, mesh_config, silk_handle_);
+    silk::Result r = world_->add_obstacle(collision_config_, mesh_config, silk_handle_);
     if (!r) {
-      spdlog::error("Fail to init obstacle {}. Error: {}", name_,
-                    r.to_string());
+      spdlog::error("Fail to init obstacle {}. Error: {}", name_, r.to_string());
       return false;
     }
     return true;
@@ -205,8 +197,7 @@ bool Obstacle::init_sim() {
 
   silk::Result r = world_->set_obstacle_position(silk_handle_, vert_span);
   if (!r) {
-    spdlog::error("Fail to set obstacle {} init position. Error: {}", name_,
-                  r.to_string());
+    spdlog::error("Fail to set obstacle {} init position. Error: {}", name_, r.to_string());
     return false;
   }
 
@@ -215,11 +206,9 @@ bool Obstacle::init_sim() {
 
 bool Obstacle::sim_step_pre(float dt) {
   if (collision_config_changed_) {
-    silk::Result r =
-        world_->set_obstacle_collision_config(silk_handle_, collision_config_);
+    silk::Result r = world_->set_obstacle_collision_config(silk_handle_, collision_config_);
     if (!r) {
-      spdlog::error("Fail to update obstacle {} collision config. Error: {}",
-                    name_, r.to_string());
+      spdlog::error("Fail to update obstacle {} collision config. Error: {}", name_, r.to_string());
       return false;
     }
     collision_config_changed_ = false;
@@ -230,8 +219,7 @@ bool Obstacle::sim_step_pre(float dt) {
     for (glm::vec3& vertex : mesh_->vertexPositions.data) {
       vertex -= rotation_pivot_;
     }
-    AffineTransformer transformer{glm::vec3(0.0f), dt * angular_velocity_,
-                                  1.0f};
+    AffineTransformer transformer{glm::vec3(0.0f), dt * angular_velocity_, 1.0f};
     transformer.apply(mesh_->vertexPositions.data);
     for (glm::vec3& vertex : mesh_->vertexPositions.data) {
       vertex += rotation_pivot_;
@@ -242,12 +230,10 @@ bool Obstacle::sim_step_pre(float dt) {
 
   if (drag_position_changed_) {
     mesh_->vertexPositions.ensureHostBufferPopulated();
-    std::span<const float> vert_span =
-        make_const_span_from_position(mesh_->vertexPositions);
+    std::span<const float> vert_span = make_const_span_from_position(mesh_->vertexPositions);
     silk::Result r = world_->set_obstacle_position(silk_handle_, vert_span);
     if (!r) {
-      spdlog::error("Fail to update obstacle {} drag position. Error: {}",
-                    name_, r.to_string());
+      spdlog::error("Fail to update obstacle {} drag position. Error: {}", name_, r.to_string());
       return false;
     }
   }
@@ -258,8 +244,7 @@ bool Obstacle::sim_step_pre(float dt) {
 bool Obstacle::sim_step_post(float current_time) {
   if (cache_.empty() || drag_position_changed_) {
     mesh_->vertexPositions.ensureHostBufferPopulated();
-    std::span<const float> vert_span =
-        make_const_span_from_position(mesh_->vertexPositions);
+    std::span<const float> vert_span = make_const_span_from_position(mesh_->vertexPositions);
     Eigen::Map<const Vert> vert{vert_span.data(), (int)vert_span.size() / 3, 3};
     cache_.emplace_back(current_time, vert);
 

@@ -23,8 +23,7 @@ __host__ __device__ int index_upper_mat(int dim, int i, int j) {
 
 // Same as the kernel in mas_preconditioner.cu
 template <int N>
-__global__ void batched_invert_upper_original(float *d_matrices,
-                                              bool *success) {
+__global__ void batched_invert_upper_original(float *d_matrices, bool *success) {
   int mat_idx = blockIdx.x;
   constexpr int STORAGE = N * (N + 1) / 2;
   float *d_A = d_matrices + mat_idx * STORAGE;
@@ -64,8 +63,7 @@ __global__ void batched_invert_upper_original(float *d_matrices,
           continue;
         }
 
-        float updated =
-            s_A[index_upper_mat(N, tx, col)] - a_ik * s_col[col] / s_pivot;
+        float updated = s_A[index_upper_mat(N, tx, col)] - a_ik * s_col[col] / s_pivot;
         if (!ctd::isfinite(updated)) {
           *success = false;
         }
@@ -106,8 +104,7 @@ __global__ void batched_invert_upper_original(float *d_matrices,
 // Optimized: column-by-column sweep to eliminate bank conflicts + hoisted
 // division
 template <int N>
-__global__ void batched_invert_upper_optimized(float *d_matrices,
-                                               bool *success) {
+__global__ void batched_invert_upper_optimized(float *d_matrices, bool *success) {
   int mat_idx = blockIdx.x;
   constexpr int STORAGE = N * (N + 1) / 2;
   float *d_A = d_matrices + mat_idx * STORAGE;
@@ -225,8 +222,7 @@ int main(int argc, char *argv[]) {
   constexpr int N = 96;
   constexpr int STORAGE = N * (N + 1) / 2;
 
-  printf("Benchmark: batched_invert_upper (N=%d, matrices=%d)\n", N,
-         num_matrices);
+  printf("Benchmark: batched_invert_upper (N=%d, matrices=%d)\n", N, num_matrices);
   printf("Shared mem per block: %zu bytes\n",
          STORAGE * sizeof(float) + N * sizeof(float) + sizeof(float));
 
@@ -248,8 +244,7 @@ int main(int argc, char *argv[]) {
     cudaMemcpy(d_buf, h_matrices.data(), num_matrices * STORAGE * sizeof(float),
                cudaMemcpyHostToDevice);
     bool h_success_init = true;
-    cudaMemcpy(d_success, &h_success_init, sizeof(bool),
-               cudaMemcpyHostToDevice);
+    cudaMemcpy(d_success, &h_success_init, sizeof(bool), cudaMemcpyHostToDevice);
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
       kernel_fn<<<num_matrices, N>>>(d_buf, d_success);
@@ -274,8 +269,7 @@ int main(int argc, char *argv[]) {
     bool success = true;
     cudaMemcpy(&success, d_success, sizeof(bool), cudaMemcpyDeviceToHost);
 
-    printf("  %s: %.3f ms/kernel (success=%s)\n", name, ms_per_kernel,
-           success ? "true" : "false");
+    printf("  %s: %.3f ms/kernel (success=%s)\n", name, ms_per_kernel, success ? "true" : "false");
 
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
@@ -298,8 +292,7 @@ int main(int argc, char *argv[]) {
     cudaMemcpy(d_buf, h_matrices.data(), num_matrices * STORAGE * sizeof(float),
                cudaMemcpyHostToDevice);
     bool h_success_init = true;
-    cudaMemcpy(d_success, &h_success_init, sizeof(bool),
-               cudaMemcpyHostToDevice);
+    cudaMemcpy(d_success, &h_success_init, sizeof(bool), cudaMemcpyHostToDevice);
     kernel_fn<<<num_matrices, N>>>(d_buf, d_success);
     cudaMemcpy(h_result.data(), d_buf, num_matrices * STORAGE * sizeof(float),
                cudaMemcpyDeviceToHost);
@@ -314,16 +307,14 @@ int main(int argc, char *argv[]) {
           float device_val = h_result[index_upper_mat(N, i, j) + m * STORAGE];
           float eigen_val = eigen_inv(i, j);
           double denom = std::max(std::abs((double)eigen_val), 1e-3);
-          double rel_err =
-              std::abs((double)device_val - (double)eigen_val) / denom;
+          double rel_err = std::abs((double)device_val - (double)eigen_val) / denom;
           max_rel_err = std::max(max_rel_err, rel_err);
           avg_rel_err += rel_err;
         }
       }
     }
     avg_rel_err /= (double)check_count * N * (N + 1) / 2;
-    printf("  %s vs Eigen: max_rel_err=%.6e, avg_rel_err=%.6e\n", name,
-           max_rel_err, avg_rel_err);
+    printf("  %s vs Eigen: max_rel_err=%.6e, avg_rel_err=%.6e\n", name, max_rel_err, avg_rel_err);
   };
 
   check_kernel("Original", batched_invert_upper_original<N>);

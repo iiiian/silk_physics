@@ -10,9 +10,9 @@ namespace silk::cpu {
 /// The time interval stores conservative bounds for the earliest time of
 /// impact. Units follow input space.
 struct CCDResult {
-  Eigen::Array2f t;   // Time-of-impact interval [t_min, t_max] within [0, 1].
-  float tolerance;    // Co-domain tolerance used at termination.
-  bool use_small_ms;  // True if a smaller minimum separation was used.
+  Eigen::Array2f t;           // Time-of-impact interval [t_min, t_max] within [0, 1].
+  float tolerance;            // Co-domain tolerance used at termination.
+  bool use_small_ms;          // True if a smaller minimum separation was used.
   Eigen::Array2f small_ms_t;  // TOI interval obtained with the refined ms.
 };
 
@@ -37,13 +37,12 @@ struct CCDResult {
 /// possible.
 /// @param[in] max_time Upper bound of the searched time interval.
 /// @return Populated CCDResult on collision; std::nullopt otherwise.
-std::optional<CCDResult> edge_edge_ccd(
-    const Eigen::Vector3f &ea0_t0, const Eigen::Vector3f &ea1_t0,
-    const Eigen::Vector3f &eb0_t0, const Eigen::Vector3f &eb1_t0,
-    const Eigen::Vector3f &ea0_t1, const Eigen::Vector3f &ea1_t1,
-    const Eigen::Vector3f &eb0_t1, const Eigen::Vector3f &eb1_t1,
-    const Eigen::Array3f &err, float ms, float tolerance, long max_iter,
-    bool no_zero_toi, float max_time = 1.0f);
+std::optional<CCDResult> edge_edge_ccd(const Eigen::Vector3f &ea0_t0, const Eigen::Vector3f &ea1_t0,
+                                       const Eigen::Vector3f &eb0_t0, const Eigen::Vector3f &eb1_t0,
+                                       const Eigen::Vector3f &ea0_t1, const Eigen::Vector3f &ea1_t1,
+                                       const Eigen::Vector3f &eb0_t1, const Eigen::Vector3f &eb1_t1,
+                                       const Eigen::Array3f &err, float ms, float tolerance,
+                                       long max_iter, bool no_zero_toi, float max_time = 1.0f);
 
 /// @brief Vertex–face CCD with minimum separation and earliest TOI.
 ///
@@ -66,12 +65,11 @@ std::optional<CCDResult> edge_edge_ccd(
 /// possible.
 /// @param[in] max_time Upper bound of the searched time interval.
 /// @return Populated CCDResult on collision; std::nullopt otherwise.
-std::optional<CCDResult> vertex_face_ccd(
-    const Eigen::Vector3f &v_t0, const Eigen::Vector3f &f0_t0,
-    const Eigen::Vector3f &f1_t0, const Eigen::Vector3f &f2_t0,
-    const Eigen::Vector3f &v_t1, const Eigen::Vector3f &f0_t1,
-    const Eigen::Vector3f &f1_t1, const Eigen::Vector3f &f2_t1,
-    const Eigen::Array3f &err, float ms, float tolerance, long max_iter,
-    bool no_zero_toi, float max_time = 1.0f);
+std::optional<CCDResult> vertex_face_ccd(const Eigen::Vector3f &v_t0, const Eigen::Vector3f &f0_t0,
+                                         const Eigen::Vector3f &f1_t0, const Eigen::Vector3f &f2_t0,
+                                         const Eigen::Vector3f &v_t1, const Eigen::Vector3f &f0_t1,
+                                         const Eigen::Vector3f &f1_t1, const Eigen::Vector3f &f2_t1,
+                                         const Eigen::Array3f &err, float ms, float tolerance,
+                                         long max_iter, bool no_zero_toi, float max_time = 1.0f);
 
 }  // namespace silk::cpu

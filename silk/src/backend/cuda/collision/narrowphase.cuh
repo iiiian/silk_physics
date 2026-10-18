@@ -20,10 +20,9 @@ namespace silk::cuda {
 /// @param tolerance Tight Inclusion solving precision.
 /// @param max_iter Tight Inclusion maximum iteration count.
 /// @param rt Cuda runtime.
-float find_pt_min_toi(ctd::span<PTCCache> pt_ccache, const Vec3f& vf_err,
-                      float time_start, float interval_time, float max_toi,
-                      float minimum_separation, float tolerance, int max_iter,
-                      CudaRuntime rt);
+float find_pt_min_toi(ctd::span<PTCCache> pt_ccache, const Vec3f& vf_err, float time_start,
+                      float interval_time, float max_toi, float minimum_separation, float tolerance,
+                      int max_iter, CudaRuntime rt);
 
 /// @brief Find the minimum edge-edge CCD time.
 /// @param ee_ccache Candidate pairs.
@@ -35,21 +34,16 @@ float find_pt_min_toi(ctd::span<PTCCache> pt_ccache, const Vec3f& vf_err,
 /// @param tolerance Tight Inclusion solving precision.
 /// @param max_iter Tight Inclusion maximum iteration count.
 /// @param rt Cuda runtime.
-float find_ee_min_toi(ctd::span<EECCache> ee_ccache, const Vec3f& ee_err,
-                      float time_start, float interval_time, float max_toi,
-                      float minimum_separation, float tolerance, int max_iter,
-                      CudaRuntime rt);
+float find_ee_min_toi(ctd::span<EECCache> ee_ccache, const Vec3f& ee_err, float time_start,
+                      float interval_time, float max_toi, float minimum_separation, float tolerance,
+                      int max_iter, CudaRuntime rt);
 
 /// @brief Append active point-triangle DCD contacts.
-void find_pt_active_collisions(ctd::span<PTCCache> pt_ccache, float time,
-                               float activation_distance,
-                               cu::device_buffer<Collision>& output, int& fill,
-                               CudaRuntime rt);
+void find_pt_active_collisions(ctd::span<PTCCache> pt_ccache, float time, float activation_distance,
+                               cu::device_buffer<Collision>& output, int& fill, CudaRuntime rt);
 
 /// @brief Append active edge-edge DCD contacts.
-void find_ee_active_collisions(ctd::span<EECCache> ee_ccache, float time,
-                               float activation_distance,
-                               cu::device_buffer<Collision>& output, int& fill,
-                               CudaRuntime rt);
+void find_ee_active_collisions(ctd::span<EECCache> ee_ccache, float time, float activation_distance,
+                               cu::device_buffer<Collision>& output, int& fill, CudaRuntime rt);
 
 }  // namespace silk::cuda

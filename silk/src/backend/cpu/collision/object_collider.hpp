@@ -43,17 +43,15 @@ class ObjectCollider {
   /// @param mass Per-degree-of-freedom mass vector used to compute inverse
   /// mass.
   /// @param state_offset Offset into the solver state array for this object.
-  ObjectCollider(uint32_t entity, const CollisionConfig& config,
-                 const TriMesh& mesh, const Pin& pin,
-                 const Eigen::VectorXf& mass, int state_offset);
+  ObjectCollider(uint32_t entity, const CollisionConfig& config, const TriMesh& mesh,
+                 const Pin& pin, const Eigen::VectorXf& mass, int state_offset);
 
   /// @brief Build a collider for a purely kinematic obstacle.
   ///
   /// @param entity Owning entity id used to look the collider up.
   /// @param config Collision parameters that control filtering and materials.
   /// @param mesh Geometry source; positions are copied into collider buffers.
-  ObjectCollider(uint32_t entity, const CollisionConfig& config,
-                 const TriMesh& mesh);
+  ObjectCollider(uint32_t entity, const CollisionConfig& config, const TriMesh& mesh);
 
   /// @brief Sync collider geometry with a dynamic object's current state.
   ///
@@ -63,16 +61,14 @@ class ObjectCollider {
   /// @param global_curr_state Stacked xyz positions at the end of the step.
   /// @param global_prev_state Stacked xyz positions at the start of the step.
   void update(const CollisionConfig& config, const ObjectState& object_state,
-              const Eigen::VectorXf global_curr_state,
-              const Eigen::VectorXf global_prev_state);
+              const Eigen::VectorXf global_curr_state, const Eigen::VectorXf global_prev_state);
 
   /// @brief Sync collider geometry with a kinematic obstacle.
   ///
   /// @param config Runtime collision controls (group toggles, restitution,
   /// etc).
   /// @param obstacle_position Buffered obstacle poses and static state flags.
-  void update(const CollisionConfig& config,
-              const ObstaclePosition& obstacle_position);
+  void update(const CollisionConfig& config, const ObstaclePosition& obstacle_position);
 
  private:
   ObjectCollider() = default;

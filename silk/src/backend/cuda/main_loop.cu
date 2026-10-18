@@ -21,10 +21,9 @@ namespace silk::cuda {
 
 namespace {
 
-std::optional<MainLoop::Error> init(ObjRegistry& registry,
-                                    cu::device_buffer<float>& global_state,
-                                    cu::device_buffer<float>& global_velocity,
-                                    float dt, CudaRuntime rt) {
+std::optional<MainLoop::Error> init(ObjRegistry& registry, cu::device_buffer<float>& global_state,
+                                    cu::device_buffer<float>& global_velocity, float dt,
+                                    CudaRuntime rt) {
   int state_num = 0;
   for (uint32_t e : registry.get_all_entities()) {
     auto cloth_config = registry.get<ClothConfig>(e);
@@ -75,10 +74,8 @@ std::optional<MainLoop::Error> init(ObjRegistry& registry,
   return std::nullopt;
 }
 
-__global__ void predict(int vert_num, float dt, Vec3f acc,
-                        ctd::span<const float> state,
-                        ctd::span<const float> velocity,
-                        ctd::span<float> next_state) {
+__global__ void predict(int vert_num, float dt, Vec3f acc, ctd::span<const float> state,
+                        ctd::span<const float> velocity, ctd::span<float> next_state) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= vert_num) {
     return;
@@ -98,8 +95,7 @@ __global__ void predict(int vert_num, float dt, Vec3f acc,
 }
 
 __global__ void update_velocity(float dt, ctd::span<const float> curr_state,
-                                ctd::span<const float> next_state,
-                                ctd::span<float> velocity_out) {
+                                ctd::span<const float> next_state, ctd::span<float> velocity_out) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= curr_state.size()) {
     return;
@@ -121,24 +117,20 @@ __global__ void mix(float w, ctd::span<const float> a, ctd::span<const float> b,
 
 void update_collision_state(ObjRegistry& registry, ctd::span<const float> curr,
                             ctd::span<const float> prev, CudaRuntime rt) {
-  for (uint32_t e :
-       registry.get_entity_with_components<PhysicalState, ObjectCollider>()) {
+  for (uint32_t e : registry.get_entity_with_components<PhysicalState, ObjectCollider>()) {
     auto phy_state = registry.get<PhysicalState>(e);
     auto collider = registry.get<ObjectCollider>(e);
     assert(phy_state && collider);
 
-    ctd::span<const float> local_curr(curr.data() + phy_state->state_offset,
-                                      phy_state->state_num);
-    ctd::span<const float> local_prev(prev.data() + phy_state->state_offset,
-                                      phy_state->state_num);
+    ctd::span<const float> local_curr(curr.data() + phy_state->state_offset, phy_state->state_num);
+    ctd::span<const float> local_prev(prev.data() + phy_state->state_offset, phy_state->state_num);
     collider->update_position(local_curr, local_prev, rt);
   }
 }
 
 }  // namespace
 
-std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
-                                              CudaRuntime rt) {
+std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry, CudaRuntime rt) {
   SPDLOG_DEBUG("solver step");
   Timer timer_main_loop("cuda backend main loop", rt);
 
@@ -156,10 +148,8 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
   for (const ObjectCollider& collider : object_colliders) {
     scene_bbox_padding = ctd::min(scene_bbox_padding, collider.bbox_padding);
   }
-  float ccd_minimum_separation =
-      ccd_minimum_separation_scale * scene_bbox_padding;
-  float dcd_activation_distance =
-      dcd_activation_distance_scale * scene_bbox_padding;
+  float ccd_minimum_separation = ccd_minimum_separation_scale * scene_bbox_padding;
+  float dcd_activation_distance = dcd_activation_distance_scale * scene_bbox_padding;
 
   int state_num = prev_state.size();
   auto outer_state = alloc<float>(rt, state_num);
@@ -174,9 +164,8 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
 
   // DCD owns the active set. Initialize it at the beginning of the frame.
   update_collision_state(registry, outer_state, outer_state, rt);
-  auto collisions =
-      find_active_collisions(registry, init_broadphase_cache_size, 0.0f,
-                             dcd_activation_distance, collision_storage, rt);
+  auto collisions = find_active_collisions(registry, init_broadphase_cache_size, 0.0f,
+                                           dcd_activation_distance, collision_storage, rt);
   ContactConstraints contact_constraints(registry, state_num, collisions, rt);
 
   timer_init_contacts.end();
@@ -187,15 +176,14 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     int vert_num = state_num / 3;
     int grid_num = div_round_up(vert_num, 128);
     Timer timer_predict("predict solution", rt);
-    predict<<<grid_num, 128, 0, rt.stream.get()>>>(
-        vert_num, dt, const_acceleration, outer_state, outer_velocity,
-        inner_state);
+    predict<<<grid_num, 128, 0, rt.stream.get()>>>(vert_num, dt, const_acceleration, outer_state,
+                                                   outer_velocity, inner_state);
     timer_predict.end();
 
     Timer timer_admm_solve("ADMM solve", rt);
-    auto admm_err = admm_solver.solve(
-        registry, prev_state, prev_velocity, inner_state, pin_constraints,
-        &contact_constraints, dt, const_acceleration, rt);
+    auto admm_err =
+        admm_solver.solve(registry, prev_state, prev_velocity, inner_state, pin_constraints,
+                          &contact_constraints, dt, const_acceleration, rt);
     if (admm_err) {
       return Error::Diverge;
     }
@@ -206,18 +194,16 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     // CCD only determines the safe line-search interval.
     update_collision_state(registry, inner_state, outer_state, rt);
     float time_start = 1.0f - remaining_step;
-    float min_toi = find_min_toi(
-        registry, init_broadphase_cache_size, time_start, remaining_step,
-        ccd_minimum_separation, ccd_tolerance, ccd_max_iter, rt);
+    float min_toi = find_min_toi(registry, init_broadphase_cache_size, time_start, remaining_step,
+                                 ccd_minimum_separation, ccd_tolerance, ccd_max_iter, rt);
 
     grid_num = div_round_up(state_num, 128);
-    update_velocity<<<grid_num, 128, 0, rt.stream.get()>>>(
-        dt, outer_state, inner_state, outer_velocity);
+    update_velocity<<<grid_num, 128, 0, rt.stream.get()>>>(dt, outer_state, inner_state,
+                                                           outer_velocity);
 
     if (min_toi >= remaining_step) {
-      SPDLOG_INFO(
-          "Outer it {}. Earliest toi {} >= remaining step {}. terminate.",
-          outer_it, min_toi, remaining_step);
+      SPDLOG_INFO("Outer it {}. Earliest toi {} >= remaining step {}. terminate.", outer_it,
+                  min_toi, remaining_step);
       cu::copy_bytes(rt.stream, inner_state, outer_state);
       break;
     }
@@ -225,8 +211,8 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     float rollback_toi = 0.8f * min_toi;
     SPDLOG_INFO("Outer it {}, CCD rollback to toi {}", outer_it, rollback_toi);
     float rollback_fraction = rollback_toi / remaining_step;
-    mix<<<grid_num, 128, 0, rt.stream.get()>>>(rollback_fraction, inner_state,
-                                               outer_state, outer_state);
+    mix<<<grid_num, 128, 0, rt.stream.get()>>>(rollback_fraction, inner_state, outer_state,
+                                               outer_state);
     remaining_step -= rollback_toi;
     timer_ccd.end();
 
@@ -234,12 +220,11 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
     // Refit to the rolled-back state, then expand active contacts with DCD.
     update_collision_state(registry, outer_state, outer_state, rt);
     float time = 1.0f - remaining_step;
-    collisions =
-        find_active_collisions(registry, init_broadphase_cache_size, time,
-                               dcd_activation_distance, collision_storage, rt);
+    collisions = find_active_collisions(registry, init_broadphase_cache_size, time,
+                                        dcd_activation_distance, collision_storage, rt);
     int new_contact_num = contact_constraints.append_contacts(collisions, rt);
-    SPDLOG_DEBUG("DCD appended {} contacts; {} active this timestep.",
-                 new_contact_num, contact_constraints.get_contact_num());
+    SPDLOG_DEBUG("DCD appended {} contacts; {} active this timestep.", new_contact_num,
+                 contact_constraints.get_contact_num());
     timer_active_collisions.end();
   }
   timer_outer.end();
@@ -248,8 +233,8 @@ std::optional<MainLoop::Error> MainLoop::step(ObjRegistry& registry,
   // CCD may accept the frame through several rollback segments. Reconstruct
   // velocity from the complete accepted displacement, not the final segment.
   int grid_num = div_round_up(state_num, 128);
-  update_velocity<<<grid_num, 128, 0, rt.stream.get()>>>(
-      dt, prev_state, outer_state, outer_velocity);
+  update_velocity<<<grid_num, 128, 0, rt.stream.get()>>>(dt, prev_state, outer_state,
+                                                         outer_velocity);
 
   // Write solution back to registry.
   for (auto& physical_state : registry.get_all_components<PhysicalState>()) {

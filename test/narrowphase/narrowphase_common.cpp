@@ -32,20 +32,17 @@ struct PairHash {
 using ExpectedMap = std::unordered_map<Pair, bool, PairHash>;
 
 ExpectedMap load_expected(const SceneFiles& scene_files,
-                          const broadphase_benchmark::TestCase& test_case,
-                          QueryKind kind, int timestep_index,
-                          std::vector<Pair>* dataset_pairs) {
-  const std::filesystem::path& boxes_path =
-      kind == QueryKind::EE ? scene_files.boxes_ee[timestep_index]
-                            : scene_files.boxes_vf[timestep_index];
-  std::filesystem::path label_path = boxes_path.parent_path().parent_path() /
-                                     "mma_bool" /
-                                     (std::to_string(test_case.timestep) +
-                                      query_name(kind) + "_mma_bool.json");
+                          const broadphase_benchmark::TestCase& test_case, QueryKind kind,
+                          int timestep_index, std::vector<Pair>* dataset_pairs) {
+  const std::filesystem::path& boxes_path = kind == QueryKind::EE
+                                                ? scene_files.boxes_ee[timestep_index]
+                                                : scene_files.boxes_vf[timestep_index];
+  std::filesystem::path label_path =
+      boxes_path.parent_path().parent_path() / "mma_bool" /
+      (std::to_string(test_case.timestep) + query_name(kind) + "_mma_bool.json");
   std::ifstream boxes_input(boxes_path);
   if (!boxes_input) {
-    throw std::runtime_error("Unable to load pairs from " +
-                             boxes_path.string());
+    throw std::runtime_error("Unable to load pairs from " + boxes_path.string());
   }
 
   nlohmann::json pairs = nlohmann::json::parse(boxes_input);
@@ -54,14 +51,11 @@ ExpectedMap load_expected(const SceneFiles& scene_files,
   }
   std::ifstream labels_input(label_path);
   if (!labels_input) {
-    throw std::runtime_error("Unable to load labels for " +
-                             boxes_path.string());
+    throw std::runtime_error("Unable to load labels for " + boxes_path.string());
   }
-  std::vector<bool> labels =
-      nlohmann::json::parse(labels_input).get<std::vector<bool>>();
+  std::vector<bool> labels = nlohmann::json::parse(labels_input).get<std::vector<bool>>();
   if (pairs.size() != labels.size()) {
-    throw std::runtime_error("Pair and label counts differ in " +
-                             boxes_path.string());
+    throw std::runtime_error("Pair and label counts differ in " + boxes_path.string());
   }
 
   int vertex_num = test_case.vertex_boxes.size();
@@ -98,23 +92,19 @@ Eigen::Vector3f vertex(const Eigen::MatrixXd& vertices, int vertex_id) {
   return vertices.row(vertex_id).cast<float>();
 }
 
-Query make_query(const broadphase_benchmark::TestCase& test_case,
-                 QueryKind kind, Pair pair, const Eigen::Array3f& err,
-                 int query_index, const ExpectedMap& expected) {
+Query make_query(const broadphase_benchmark::TestCase& test_case, QueryKind kind, Pair pair,
+                 const Eigen::Array3f& err, int query_index, const ExpectedMap& expected) {
   const broadphase_benchmark::Box& primitive_a =
-      kind == QueryKind::EE ? test_case.edge_boxes[pair.first]
-                            : test_case.vertex_boxes[pair.first];
+      kind == QueryKind::EE ? test_case.edge_boxes[pair.first] : test_case.vertex_boxes[pair.first];
   const broadphase_benchmark::Box& primitive_b =
-      kind == QueryKind::EE ? test_case.edge_boxes[pair.second]
-                            : test_case.face_boxes[pair.second];
+      kind == QueryKind::EE ? test_case.edge_boxes[pair.second] : test_case.face_boxes[pair.second];
 
   Query query;
   query.err = err;
   query.timestep = test_case.timestep;
   query.timestep_query = query_index;
   for (int frame = 0; frame < 2; ++frame) {
-    const Eigen::MatrixXd& vertices =
-        frame == 0 ? test_case.vertices_t0 : test_case.vertices_t1;
+    const Eigen::MatrixXd& vertices = frame == 0 ? test_case.vertices_t0 : test_case.vertices_t1;
     int offset = frame * 4;
     if (kind == QueryKind::EE) {
       query.vertices[offset] = vertex(vertices, primitive_a.vertex_ids[0]);
@@ -124,8 +114,7 @@ Query make_query(const broadphase_benchmark::TestCase& test_case,
     } else {
       query.vertices[offset] = vertex(vertices, primitive_a.vertex_ids[0]);
       for (int i = 0; i < 3; ++i) {
-        query.vertices[offset + i + 1] =
-            vertex(vertices, primitive_b.vertex_ids[i]);
+        query.vertices[offset + i + 1] = vertex(vertices, primitive_b.vertex_ids[i]);
       }
     }
   }
@@ -139,16 +128,13 @@ Query make_query(const broadphase_benchmark::TestCase& test_case,
 
 }  // namespace
 
-std::vector<SceneFiles> resolve_scene_files(
-    const std::filesystem::path& data_root) {
+std::vector<SceneFiles> resolve_scene_files(const std::filesystem::path& data_root) {
   return broadphase_benchmark::resolve_scene_files(data_root);
 }
 
 SceneBounds load_scene_bounds(const SceneFiles& scene_files) {
-  Eigen::Vector3d scene_min =
-      Eigen::Vector3d::Constant(std::numeric_limits<double>::infinity());
-  Eigen::Vector3d scene_max =
-      Eigen::Vector3d::Constant(-std::numeric_limits<double>::infinity());
+  Eigen::Vector3d scene_min = Eigen::Vector3d::Constant(std::numeric_limits<double>::infinity());
+  Eigen::Vector3d scene_max = Eigen::Vector3d::Constant(-std::numeric_limits<double>::infinity());
   bool found_vertex = false;
   for (const std::filesystem::path& frame : scene_files.frames) {
     Eigen::MatrixXd vertices;
@@ -171,8 +157,8 @@ SceneBounds load_scene_bounds(const SceneFiles& scene_files) {
   for (int axis = 0; axis < 3; ++axis) {
     result.min(axis) = std::nextafter(static_cast<float>(scene_min(axis)),
                                       -std::numeric_limits<float>::infinity());
-    result.max(axis) = std::nextafter(static_cast<float>(scene_max(axis)),
-                                      std::numeric_limits<float>::infinity());
+    result.max(axis) =
+        std::nextafter(static_cast<float>(scene_max(axis)), std::numeric_limits<float>::infinity());
   }
   return result;
 }
@@ -183,18 +169,16 @@ QueryBatch load_batch(const SceneFiles& scene_files, QueryKind kind,
   broadphase_benchmark::TestCase test_case =
       broadphase_benchmark::load_case(scene_files, timestep_index);
 
-  Eigen::Vector3f abs_max =
-      scene_bounds.min.cwiseAbs().cwiseMax(scene_bounds.max.cwiseAbs());
+  Eigen::Vector3f abs_max = scene_bounds.min.cwiseAbs().cwiseMax(scene_bounds.max.cwiseAbs());
   Eigen::Array3f err = cpu::get_numerical_error(abs_max, kind == QueryKind::VF);
   std::vector<Pair> pairs;
-  ExpectedMap expected =
-      load_expected(scene_files, test_case, kind, timestep_index,
-                    broadphase == nullptr ? &pairs : nullptr);
+  ExpectedMap expected = load_expected(scene_files, test_case, kind, timestep_index,
+                                       broadphase == nullptr ? &pairs : nullptr);
 
   if (broadphase != nullptr) {
-    broadphase_benchmark::QueryKind broadphase_kind =
-        kind == QueryKind::EE ? broadphase_benchmark::QueryKind::EE
-                              : broadphase_benchmark::QueryKind::VF;
+    broadphase_benchmark::QueryKind broadphase_kind = kind == QueryKind::EE
+                                                          ? broadphase_benchmark::QueryKind::EE
+                                                          : broadphase_benchmark::QueryKind::VF;
     broadphase_benchmark::QueryInput input =
         broadphase_benchmark::make_query(test_case, broadphase_kind);
     broadphase->prepare(input);
@@ -209,15 +193,12 @@ QueryBatch load_batch(const SceneFiles& scene_files, QueryKind kind,
   QueryBatch batch{.scene = scene_files.name, .kind = kind, .timestep_num = 1};
   batch.queries.reserve(pairs.size());
   for (int i = 0; i < pairs.size(); ++i) {
-    batch.queries.push_back(
-        make_query(test_case, kind, pairs[i], err, i, expected));
+    batch.queries.push_back(make_query(test_case, kind, pairs[i], err, i, expected));
   }
   return batch;
 }
 
-std::string query_name(QueryKind kind) {
-  return kind == QueryKind::EE ? "ee" : "vf";
-}
+std::string query_name(QueryKind kind) { return kind == QueryKind::EE ? "ee" : "vf"; }
 
 float compute_minimum_separation(const Query&, QueryKind) { return 0.0f; }
 

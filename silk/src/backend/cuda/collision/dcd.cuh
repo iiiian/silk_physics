@@ -18,8 +18,7 @@ namespace silk::cuda {
 /// @param x1 triangle vertex 1.
 /// @param x2 triangle vertex 2.
 /// @param x3 triangle vertex 3.
-__both__ inline Vec3f eval_triangle_parameter(float u, float v, const Vec3f& x1,
-                                              const Vec3f& x2,
+__both__ inline Vec3f eval_triangle_parameter(float u, float v, const Vec3f& x1, const Vec3f& x2,
                                               const Vec3f& x3) {
   Vec3f tmp = axpby(1.0f - u - v, x1, u, x2);
   return axpby(1.0f, tmp, v, x3);
@@ -30,8 +29,7 @@ __both__ inline Vec3f eval_triangle_parameter(float u, float v, const Vec3f& x1,
 /// @param v param v.
 /// @param x1 edge vertex 1.
 /// @param x2 edge vertex 2.
-__both__ inline Vec3f eval_edge_parameter(float u, const Vec3f& x1,
-                                          const Vec3f& x2) {
+__both__ inline Vec3f eval_edge_parameter(float u, const Vec3f& x1, const Vec3f& x2) {
   return axpby(1.0f - u, x1, u, x2);
 }
 
@@ -58,22 +56,16 @@ __both__ ctd::optional<ctd::pair<float, float>> exact_pt_uv(
 /// @param x2 edge vertex 2.
 /// @param eps epsilon for degenerate case.
 /// @return pair (u,v) if success. nullopt if edge is degenerate.
-__both__ ctd::optional<ctd::pair<float, float>> exact_ee_uv(const Vec3f& x0,
-                                                            const Vec3f& x1,
-                                                            const Vec3f& x2,
-                                                            const Vec3f& x3,
+__both__ ctd::optional<ctd::pair<float, float>> exact_ee_uv(const Vec3f& x0, const Vec3f& x1,
+                                                            const Vec3f& x2, const Vec3f& x3,
                                                             float eps);
 
 /// @brief Append active point-triangle DCD contacts.
-void append_pt_dcd_collisions(ctd::span<PTCCache> pt_ccache, float time,
-                              float activation_distance,
-                              cu::device_buffer<Collision>& output, int& fill,
-                              CudaRuntime rt);
+void append_pt_dcd_collisions(ctd::span<PTCCache> pt_ccache, float time, float activation_distance,
+                              cu::device_buffer<Collision>& output, int& fill, CudaRuntime rt);
 
 /// @brief Append active edge-edge DCD contacts.
-void append_ee_dcd_collisions(ctd::span<EECCache> ee_ccache, float time,
-                              float activation_distance,
-                              cu::device_buffer<Collision>& output, int& fill,
-                              CudaRuntime rt);
+void append_ee_dcd_collisions(ctd::span<EECCache> ee_ccache, float time, float activation_distance,
+                              cu::device_buffer<Collision>& output, int& fill, CudaRuntime rt);
 
 }  // namespace silk::cuda

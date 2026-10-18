@@ -30,8 +30,8 @@ class BSRMatrix {
 
   /// @brief Build from host CSR matrix. Empty permutation implies identity.
   /// Sync stream before return.
-  BSRMatrix(const Eigen::SparseMatrix<float> &A, int block_dim,
-            ctd::span<const int> permutation, CudaRuntime rt);
+  BSRMatrix(const Eigen::SparseMatrix<float> &A, int block_dim, ctd::span<const int> permutation,
+            CudaRuntime rt);
 
   BSRView view() const {
     // clang-format off

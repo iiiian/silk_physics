@@ -18,8 +18,7 @@ struct SilkCollider {
   int id = -1;
 };
 
-inline std::vector<SilkCollider> make_silk_colliders(
-    std::span<const Box> boxes) {
+inline std::vector<SilkCollider> make_silk_colliders(std::span<const Box> boxes) {
   std::vector<SilkCollider> result;
   result.reserve(boxes.size());
   for (const Box& box : boxes) {
@@ -54,10 +53,8 @@ inline silk::cpu::Bbox root_bbox(const std::vector<SilkCollider>& a,
     result.merge_inplace(collider.bbox);
   }
   for (int axis = 0; axis < 3; ++axis) {
-    result.min(axis) = std::nextafter(result.min(axis),
-                                      -std::numeric_limits<float>::infinity());
-    result.max(axis) = std::nextafter(result.max(axis),
-                                      std::numeric_limits<float>::infinity());
+    result.min(axis) = std::nextafter(result.min(axis), -std::numeric_limits<float>::infinity());
+    result.max(axis) = std::nextafter(result.max(axis), std::numeric_limits<float>::infinity());
   }
   return result;
 }

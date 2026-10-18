@@ -16,9 +16,8 @@ class SilkKdTreeAdapter : public CpuAdapter {
   void prepare(const QueryInput& input) override {
     clear_output();
     std::vector<SilkCollider> a = make_silk_colliders(input.group_a);
-    std::vector<SilkCollider> b = input.group_b.empty()
-                                      ? std::vector<SilkCollider>{}
-                                      : make_silk_colliders(input.group_b);
+    std::vector<SilkCollider> b =
+        input.group_b.empty() ? std::vector<SilkCollider>{} : make_silk_colliders(input.group_b);
     if (!built_) {
       kind_ = input.kind;
       prepared_a_ = std::move(a);
@@ -42,9 +41,8 @@ class SilkKdTreeAdapter : public CpuAdapter {
       }
       built_ = true;
     } else {
-      root = kind_ == QueryKind::VF
-                 ? root_bbox(tree_a_.get_colliders(), tree_b_.get_colliders())
-                 : root_bbox(tree_a_.get_colliders());
+      root = kind_ == QueryKind::VF ? root_bbox(tree_a_.get_colliders(), tree_b_.get_colliders())
+                                    : root_bbox(tree_a_.get_colliders());
     }
     tree_a_.update(root);
     // if kind == EE, this is a self collision query, no second tree.
@@ -62,8 +60,7 @@ class SilkKdTreeAdapter : public CpuAdapter {
     if (kind_ == QueryKind::EE) {
       tree_a_.test_self_collision(CanCollide{}, cache_);
     } else {
-      silk::cpu::KDTree<SilkCollider>::test_tree_collision(
-          tree_a_, tree_b_, CanCollide{}, cache_);
+      silk::cpu::KDTree<SilkCollider>::test_tree_collision(tree_a_, tree_b_, CanCollide{}, cache_);
     }
   }
 

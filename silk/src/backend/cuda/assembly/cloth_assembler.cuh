@@ -7,7 +7,7 @@
 
 namespace silk::cuda {
 
-void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt,
-                    int state_offset, CudaRuntime rt);
+void assemble_cloth(ObjRegistry& registry, uint32_t entity, float dt, int state_offset,
+                    CudaRuntime rt);
 
 }  // namespace silk::cuda

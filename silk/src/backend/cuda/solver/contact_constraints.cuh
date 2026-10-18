@@ -42,8 +42,7 @@ struct FrictionContact {
 };
 
 /// Exact analytical Signorini--Coulomb solve for one contact.
-__both__ Vec3f solve_coulomb_contact(const Vec3f& u_star, const Vec3f& normal,
-                                     float mu);
+__both__ Vec3f solve_coulomb_contact(const Vec3f& u_star, const Vec3f& normal, float mu);
 
 struct ContactKey {
   CollisionType type;
@@ -60,8 +59,8 @@ struct ContactKeyHash {
 
 class ContactConstraints {
  public:
-  ContactConstraints(ObjRegistry& registry, int state_num,
-                     ctd::span<const Collision> collisions, CudaRuntime rt);
+  ContactConstraints(ObjRegistry& registry, int state_num, ctd::span<const Collision> collisions,
+                     CudaRuntime rt);
 
   int get_active_dof() const { return active_dof_; }
   int get_contact_num() const { return contacts_.size(); }
@@ -70,11 +69,9 @@ class ContactConstraints {
   int append_contacts(ctd::span<const Collision> collisions, CudaRuntime rt);
 
   /// Eval constraint for ADMM main.
-  void eval(ctd::span<float> lhs_diag, ctd::span<float> rhs,
-            CudaRuntime rt) const;
+  void eval(ctd::span<float> lhs_diag, ctd::span<float> rhs, CudaRuntime rt) const;
 
-  void update_aux_var_and_lagrange_mul(ctd::span<const float> state,
-                                       ADMMResidualView residual,
+  void update_aux_var_and_lagrange_mul(ctd::span<const float> state, ADMMResidualView residual,
                                        CudaRuntime rt);
 
   /// Project vertices to feasible states.

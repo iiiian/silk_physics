@@ -14,8 +14,7 @@
 
 namespace silk::cuda {
 
-void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
-                       CudaRuntime rt) {
+void assemble_obstacle(ObjRegistry& registry, uint32_t& entity, CudaRuntime rt) {
   auto& e = entity;
 
   auto config = registry.get<CollisionConfigPlus>(e);
@@ -28,8 +27,7 @@ void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
 
   auto pin_pos = registry.get<PinPosition>(e);
   if (!pin_pos) {
-    std::span<const float> pos_span(init_state->position.data(),
-                                    init_state->position.size());
+    std::span<const float> pos_span(init_state->position.data(), init_state->position.size());
     pin_pos = registry.set(e, PinPosition::from_position(pos_span));
   }
   assert(pin_pos != nullptr);
@@ -37,10 +35,8 @@ void assemble_obstacle(ObjRegistry& registry, uint32_t& entity,
   // Ensure collider exists and is up-to-date
   auto collider = registry.get<ObjectCollider>(e);
   if (!collider) {
-    ctd::span<const float> init_pos(init_state->position.data(),
-                                    init_state->position.size());
-    auto new_collider =
-        ObjectCollider::from_obstacle(*config, *mesh, init_pos, entity, rt);
+    ctd::span<const float> init_pos(init_state->position.data(), init_state->position.size());
+    auto new_collider = ObjectCollider::from_obstacle(*config, *mesh, init_pos, entity, rt);
     collider = registry.set<ObjectCollider>(e, std::move(new_collider));
   }
   assert(collider != nullptr);

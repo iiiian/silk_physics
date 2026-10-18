@@ -58,9 +58,8 @@ struct Bbox {
   /// @param b Second bounding box
   /// @return True if boxes overlap in all three dimensions
   static inline bool is_colliding(const Bbox& a, const Bbox& b) {
-    return (a.min.x() <= b.max.x() && b.min.x() <= a.max.x() &&
-            a.min.y() <= b.max.y() && b.min.y() <= a.max.y() &&
-            a.min.z() <= b.max.z() && b.min.z() <= a.max.z());
+    return (a.min.x() <= b.max.x() && b.min.x() <= a.max.x() && a.min.y() <= b.max.y() &&
+            b.min.y() <= a.max.y() && a.min.z() <= b.max.z() && b.min.z() <= a.max.z());
   }
 
   /// Calculate the geometric center of the bounding box.
@@ -71,8 +70,7 @@ struct Bbox {
   /// @param other Bounding box to test for containment
   /// @return True if other is entirely within this box (strict containment)
   inline bool is_inside(const Bbox& other) const {
-    return ((min.array() < other.min.array()).all() &&
-            (max.array() > other.max.array()).all());
+    return ((min.array() < other.min.array()).all() && (max.array() > other.max.array()).all());
   }
 
   /// Expand this bounding box to include another box.

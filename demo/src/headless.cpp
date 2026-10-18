@@ -52,20 +52,18 @@ class HeadlessCloth : public IObject {
   PositionCache cache_;
 
  public:
-  static std::optional<HeadlessCloth> make_headless_cloth(
-      silk::World* world, const config::ClothObject& config) {
+  static std::optional<HeadlessCloth> make_headless_cloth(silk::World* world,
+                                                          const config::ClothObject& config) {
     assert(world != nullptr);
 
     auto mesh = load_mesh_from_file(config.mesh);
     if (!mesh) {
-      spdlog::error("Failed to load cloth mesh '{}' for headless simulation.",
-                    config.mesh);
+      spdlog::error("Failed to load cloth mesh '{}' for headless simulation.", config.mesh);
       return std::nullopt;
     }
 
     if (mesh->verts.rows() == 0 || mesh->faces.rows() == 0) {
-      spdlog::error("Empty cloth mesh '{}' for headless simulation.",
-                    config.mesh);
+      spdlog::error("Empty cloth mesh '{}' for headless simulation.", config.mesh);
       return std::nullopt;
     }
 
@@ -80,14 +78,13 @@ class HeadlessCloth : public IObject {
     cloth.cloth_config_ = to_cloth_config(config.cloth);
     cloth.collision_config_ = to_collision_config(config.collision);
     if (config.pin_selection && config.pin_selection->bbox) {
-      cloth.pin_index_ = pin_selection::select_bbox_vertices(
-          cloth.verts_, *config.pin_selection->bbox);
+      cloth.pin_index_ =
+          pin_selection::select_bbox_vertices(cloth.verts_, *config.pin_selection->bbox);
       if (cloth.pin_index_.empty()) {
-        spdlog::warn("Pin selection for cloth '{}' matched no vertices.",
-                     cloth.name_);
+        spdlog::warn("Pin selection for cloth '{}' matched no vertices.", cloth.name_);
       } else {
-        spdlog::info("Pin selection for cloth '{}' matched {} vertices.",
-                     cloth.name_, cloth.pin_index_.size());
+        spdlog::info("Pin selection for cloth '{}' matched {} vertices.", cloth.name_,
+                     cloth.pin_index_.size());
       }
     }
     cloth.handle_ = 0;
@@ -101,9 +98,8 @@ class HeadlessCloth : public IObject {
     if (world_ && handle_ != 0) {
       silk::Result r = world_->remove_cloth(handle_);
       if (!r) {
-        spdlog::warn(
-            "Failed to remove cloth '{}' during destruction. Error: {}", name_,
-            r.to_string());
+        spdlog::warn("Failed to remove cloth '{}' during destruction. Error: {}", name_,
+                     r.to_string());
       }
     }
   }
@@ -151,12 +147,11 @@ class HeadlessCloth : public IObject {
     mesh_config.verts = std::span<const float>(verts_.data(), verts_.size());
     mesh_config.faces = std::span<const int>(faces_.data(), faces_.size());
 
-    silk::Result r = world_->add_cloth(cloth_config_, collision_config_,
-                                       mesh_config, pin_index_, handle_);
+    silk::Result r =
+        world_->add_cloth(cloth_config_, collision_config_, mesh_config, pin_index_, handle_);
     if (!r) {
-      spdlog::error(
-          "Failed to add cloth '{}' to headless simulation. Error: {}", name_,
-          r.to_string());
+      spdlog::error("Failed to add cloth '{}' to headless simulation. Error: {}", name_,
+                    r.to_string());
       return false;
     }
 
@@ -174,8 +169,7 @@ class HeadlessCloth : public IObject {
 
     silk::Result r = world_->get_cloth_position(handle_, position_span);
     if (!r) {
-      spdlog::error("Failed to fetch cloth '{}' positions. Error: {}", name_,
-                    r.to_string());
+      spdlog::error("Failed to fetch cloth '{}' positions. Error: {}", name_, r.to_string());
       return false;
     }
 
@@ -227,9 +221,7 @@ class HeadlessObstacle : public IObject {
 
     auto mesh = load_mesh_from_file(config.mesh);
     if (!mesh) {
-      spdlog::error(
-          "Failed to load obstacle mesh '{}' for headless simulation.",
-          config.mesh);
+      spdlog::error("Failed to load obstacle mesh '{}' for headless simulation.", config.mesh);
       return std::nullopt;
     }
 
@@ -249,8 +241,7 @@ class HeadlessObstacle : public IObject {
     obstacle.collision_config_ = to_collision_config(config.collision);
     obstacle.rotation_pivot_ = obstacle.verts_.colwise().mean().transpose();
     for (int axis = 0; axis < 3; ++axis) {
-      obstacle.angular_velocity_[axis] =
-          glm::radians(config.angular_velocity_deg_s[axis]);
+      obstacle.angular_velocity_[axis] = glm::radians(config.angular_velocity_deg_s[axis]);
     }
     obstacle.handle_ = 0;
     obstacle.cache_ = {};
@@ -263,9 +254,8 @@ class HeadlessObstacle : public IObject {
     if (world_ && handle_ != 0) {
       silk::Result r = world_->remove_obstacle(handle_);
       if (!r) {
-        spdlog::warn(
-            "Failed to remove obstacle '{}' during destruction. Error: {}",
-            name_, r.to_string());
+        spdlog::warn("Failed to remove obstacle '{}' during destruction. Error: {}", name_,
+                     r.to_string());
       }
     }
   }
@@ -314,12 +304,10 @@ class HeadlessObstacle : public IObject {
     mesh_config.verts = std::span<const float>(verts_.data(), verts_.size());
     mesh_config.faces = std::span<const int>(faces_.data(), faces_.size());
 
-    silk::Result r =
-        world_->add_obstacle(collision_config_, mesh_config, handle_);
+    silk::Result r = world_->add_obstacle(collision_config_, mesh_config, handle_);
     if (!r) {
-      spdlog::error(
-          "Failed to add obstacle '{}' to headless simulation. Error: {}",
-          name_, r.to_string());
+      spdlog::error("Failed to add obstacle '{}' to headless simulation. Error: {}", name_,
+                    r.to_string());
       return false;
     }
 
@@ -331,19 +319,16 @@ class HeadlessObstacle : public IObject {
       return true;
     }
 
-    std::array<float, 3> rotation{dt * angular_velocity_[0],
-                                  dt * angular_velocity_[1],
+    std::array<float, 3> rotation{dt * angular_velocity_[0], dt * angular_velocity_[1],
                                   dt * angular_velocity_[2]};
-    AffineTransformer transformer{std::array<float, 3>{0.0f, 0.0f, 0.0f},
-                                  rotation, 1.0f};
+    AffineTransformer transformer{std::array<float, 3>{0.0f, 0.0f, 0.0f}, rotation, 1.0f};
     verts_.rowwise() -= rotation_pivot_.transpose();
     transformer.apply(verts_);
     verts_.rowwise() += rotation_pivot_.transpose();
     std::span<const float> vert_span(verts_.data(), verts_.size());
     silk::Result r = world_->set_obstacle_position(handle_, vert_span);
     if (!r) {
-      spdlog::error("Failed to rotate obstacle '{}'. Error: {}", name_,
-                    r.to_string());
+      spdlog::error("Failed to rotate obstacle '{}'. Error: {}", name_, r.to_string());
       return false;
     }
     return true;
@@ -399,13 +384,12 @@ silk::GlobalConfig make_global_config(const config::Global& global_cfg) {
   return cfg;
 }
 
-void headless_run(const SimConfig& sim_config, const std::string& out_path,
-                  silk::Backend backend, bool bench) {
+void headless_run(const SimConfig& sim_config, const std::string& out_path, silk::Backend backend,
+                  bool bench) {
   silk::World world;
   // Initialize backend before creating any objects or running solver.
   if (!world.init(backend)) {
-    spdlog::error(
-        "Requested backend not available. Rebuild with CUDA or select CPU.");
+    spdlog::error("Requested backend not available. Rebuild with CUDA or select CPU.");
     return;
   }
 
@@ -420,8 +404,7 @@ void headless_run(const SimConfig& sim_config, const std::string& out_path,
   }
 
   for (const auto& obstacle_cfg : sim_config.obstacles) {
-    auto obstacle =
-        HeadlessObstacle::make_headless_obstacle(&world, obstacle_cfg);
+    auto obstacle = HeadlessObstacle::make_headless_obstacle(&world, obstacle_cfg);
     if (!obstacle) {
       continue;
     }
@@ -435,8 +418,7 @@ void headless_run(const SimConfig& sim_config, const std::string& out_path,
 
   for (auto& object : objects) {
     if (!object->init_sim()) {
-      spdlog::error("Headless simulation aborted while initializing '{}'.",
-                    object->get_name());
+      spdlog::error("Headless simulation aborted while initializing '{}'.", object->get_name());
       return;
     }
   }
@@ -458,16 +440,14 @@ void headless_run(const SimConfig& sim_config, const std::string& out_path,
   for (int step = 0; step < total_steps; ++step) {
     for (auto& object : objects) {
       if (!object->sim_step_pre(global_cfg.dt)) {
-        spdlog::error("Headless simulation aborted during pre-step for '{}'.",
-                      object->get_name());
+        spdlog::error("Headless simulation aborted during pre-step for '{}'.", object->get_name());
         return;
       }
     }
 
     silk::Result step_result = world.solver_step();
     if (!step_result) {
-      spdlog::error("Solver step {} failed. Error: {}", step,
-                    step_result.to_string());
+      spdlog::error("Solver step {} failed. Error: {}", step, step_result.to_string());
       return;
     }
 
@@ -476,9 +456,8 @@ void headless_run(const SimConfig& sim_config, const std::string& out_path,
     if (!bench) {
       for (auto& object : objects) {
         if (!object->sim_step_post(current_time)) {
-          spdlog::error(
-              "Headless simulation aborted during post-step for '{}'.",
-              object->get_name());
+          spdlog::error("Headless simulation aborted during post-step for '{}'.",
+                        object->get_name());
           return;
         }
       }
@@ -487,8 +466,7 @@ void headless_run(const SimConfig& sim_config, const std::string& out_path,
 
   for (auto& object : objects) {
     if (!object->exit_sim()) {
-      spdlog::warn("Object '{}' reported errors while exiting simulation.",
-                   object->get_name());
+      spdlog::warn("Object '{}' reported errors while exiting simulation.", object->get_name());
     }
   }
 

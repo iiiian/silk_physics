@@ -70,8 +70,7 @@ struct BboxSOAStore {
 /// @param axis SAP axis.
 /// @param overlap_proxies Output buffer for overlapped proxies.
 /// @return Overlap proxy count.
-int sap_bbox_overlaps(const Bbox& query_bbox,
-                      const BboxSOAView& candidate_bboxes,
+int sap_bbox_overlaps(const Bbox& query_bbox, const BboxSOAView& candidate_bboxes,
                       std::span<const int> candidate_proxies, int axis,
                       std::vector<int>& overlap_proxies);
 

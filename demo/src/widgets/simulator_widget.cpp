@@ -61,8 +61,7 @@ void SimulatorWidget::solver_step(int substep) {
   // pre-step hooks
   for (auto& pobj : ctx_.objects) {
     if (!pobj->sim_step_pre(ctx_.global_config.dt)) {
-      spdlog::info("Object {} fails to compute pre-simulation step.",
-                   pobj->get_name());
+      spdlog::info("Object {} fails to compute pre-simulation step.", pobj->get_name());
       return;
     }
   }
@@ -80,8 +79,7 @@ void SimulatorWidget::solver_step(int substep) {
   sim_time_ += substep * ctx_.global_config.dt;
   for (auto& pobj : ctx_.objects) {
     if (!pobj->sim_step_post(sim_time_)) {
-      spdlog::info("Object {} fails to compute post-simulation step.",
-                   pobj->get_name());
+      spdlog::info("Object {} fails to compute post-simulation step.", pobj->get_name());
       return;
     }
   }
@@ -94,10 +92,8 @@ void SimulatorWidget::draw() {
     ImGui::Text("Simulation FPS: %f", sim_fps_);
     ImGui::Text("Simulation Time: %f", sim_time_);
 
-    ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal &&
-                         ctx_.ui_mode != UIMode::Sim);
-    if (ImGui::Button(ctx_.ui_mode == UIMode::Sim ? "Stop Simulation"
-                                                  : "Start Simulation")) {
+    ImGui::BeginDisabled(ctx_.ui_mode != UIMode::Normal && ctx_.ui_mode != UIMode::Sim);
+    if (ImGui::Button(ctx_.ui_mode == UIMode::Sim ? "Stop Simulation" : "Start Simulation")) {
       if (ctx_.ui_mode == UIMode::Sim) {
         leave_sim_mode();
       } else {
@@ -108,16 +104,14 @@ void SimulatorWidget::draw() {
 
     ImGui::SameLine();
 
-    bool can_export_scene =
-        (ctx_.ui_mode == UIMode::Normal) && !ctx_.objects.empty();
+    bool can_export_scene = (ctx_.ui_mode == UIMode::Normal) && !ctx_.objects.empty();
     ImGui::BeginDisabled(!can_export_scene);
     if (ImGui::Button("Export Simulation")) {
       std::vector<std::string> filters = {"Alembic Files", "*.abc"};
 
-      std::string destination =
-          pfd::save_file("Export Simulation", "scene export.abc", filters,
-                         pfd::opt::force_overwrite)
-              .result();
+      std::string destination = pfd::save_file("Export Simulation", "scene export.abc", filters,
+                                               pfd::opt::force_overwrite)
+                                    .result();
 
       if (!destination.empty()) {
         std::filesystem::path export_path(destination);
@@ -138,9 +132,7 @@ void SimulatorWidget::draw() {
     using std::chrono::steady_clock;
 
     auto now = steady_clock::now();
-    double elapsed_us =
-        std::chrono::duration_cast<microseconds>(now - prev_update_time_)
-            .count();
+    double elapsed_us = std::chrono::duration_cast<microseconds>(now - prev_update_time_).count();
 
     double dt_us = 1e6f * ctx_.global_config.dt;
     int substep = static_cast<int>(std::floor(elapsed_us / dt_us));
@@ -188,9 +180,7 @@ void SimulatorWidget::handle_pin_dragging() {
     if (!mesh) {
       return;
     }
-    auto pred = [mesh](const pIObject& obj) -> bool {
-      return (obj->get_mesh() == mesh);
-    };
+    auto pred = [mesh](const pIObject& obj) -> bool { return (obj->get_mesh() == mesh); };
     auto it = std::find_if(ctx_.objects.begin(), ctx_.objects.end(), pred);
     if (it == ctx_.objects.end()) {
       return;
@@ -210,8 +200,7 @@ void SimulatorWidget::handle_pin_dragging() {
     // Get camera parameters for 3D conversion
     py::CameraParameters camera = py::view::getCameraParametersForCurrentView();
 
-    float plane_dist =
-        glm::dot(camera.getLookDir(), drag_position_ - camera.getPosition());
+    float plane_dist = glm::dot(camera.getLookDir(), drag_position_ - camera.getPosition());
 
     // Calculate world space conversion factors
     float fov_y = camera.getFoVVerticalDegrees();
@@ -225,8 +214,7 @@ void SimulatorWidget::handle_pin_dragging() {
 
     glm::vec3 camera_right = camera.getRightDir();
     glm::vec3 camera_up = camera.getUpDir();
-    glm::vec3 delta = mouse_dx_ratio * span_x * camera_right -
-                      mouse_dy_ratio * span_y * camera_up;
+    glm::vec3 delta = mouse_dx_ratio * span_x * camera_right - mouse_dy_ratio * span_y * camera_up;
 
     // Apply shift directly as glm::vec3
     drag_object_->handle_drag(delta);

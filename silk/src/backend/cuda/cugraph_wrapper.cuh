@@ -50,16 +50,13 @@ class CudaGraph {
       cudaGraphExecUpdateResultInfo result_info{};
       check_cuda(cudaGraphExecUpdate(graph_exec_, graph.graph_, &result_info));
     } else {
-      check_cuda(cudaGraphInstantiate(&graph_exec_, graph.graph_, nullptr,
-                                      nullptr, 0));
+      check_cuda(cudaGraphInstantiate(&graph_exec_, graph.graph_, nullptr, nullptr, 0));
     }
 
     check_cuda(cudaGraphDestroy(graph_));
     graph_ = std::exchange(graph.graph_, nullptr);
   }
 
-  void launch(CudaRuntime rt) {
-    check_cuda(cudaGraphLaunch(graph_exec_, rt.stream.get()));
-  }
+  void launch(CudaRuntime rt) { check_cuda(cudaGraphLaunch(graph_exec_, rt.stream.get())); }
 };
 }  // namespace silk::cuda

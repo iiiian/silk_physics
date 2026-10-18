@@ -22,8 +22,7 @@ namespace silk::cpu {
 
 namespace {
 
-void update_dynamic_colliders(Registry& registry,
-                              const Eigen::VectorXf& current_state,
+void update_dynamic_colliders(Registry& registry, const Eigen::VectorXf& current_state,
                               const Eigen::VectorXf& previous_state) {
   for (uint32_t entity : registry.get_all_entities()) {
     auto config = registry.get<CollisionConfig>(entity);
@@ -74,22 +73,18 @@ bool SolverPipeline::step(Registry& registry) {
 
   // Init active collisions.
   update_dynamic_colliders(registry, curr_state, curr_state);
-  std::vector<Collision> collisions =
-      collision_pipeline.find_active_collisions(registry, 0.0f);
+  std::vector<Collision> collisions = collision_pipeline.find_active_collisions(registry, 0.0f);
 
   for (int outer_it = 0; outer_it < max_outer_iteration; ++outer_it) {
     SPDLOG_DEBUG("Outer iter {}", outer_it);
 
     Eigen::VectorXf outer_rhs = init_rhs;
-    BarrierConstrain barrier_constrain =
-        compute_barrier_constrain(curr_state, collisions);
+    BarrierConstrain barrier_constrain = compute_barrier_constrain(curr_state, collisions);
     // Prediction based on linear velocity.
-    Eigen::VectorXf next_state =
-        curr_state + dt * state_velocity + (dt * dt) * acceleration;
+    Eigen::VectorXf next_state = curr_state + dt * state_velocity + (dt * dt) * acceleration;
 
-    if (!batch_compute_cloth_outer_loop(registry, curr_state, state_velocity,
-                                        acceleration, barrier_constrain,
-                                        outer_rhs)) {
+    if (!batch_compute_cloth_outer_loop(registry, curr_state, state_velocity, acceleration,
+                                        barrier_constrain, outer_rhs)) {
       return false;
     }
 
@@ -98,8 +93,7 @@ bool SolverPipeline::step(Registry& registry) {
       SPDLOG_DEBUG("Inner iter {}", inner_it);
 
       Eigen::VectorXf solution(state_num);
-      if (!batch_compute_cloth_inner_loop(registry, next_state, outer_rhs,
-                                          solution)) {
+      if (!batch_compute_cloth_inner_loop(registry, next_state, outer_rhs, solution)) {
         return false;
       }
 
@@ -129,15 +123,14 @@ bool SolverPipeline::step(Registry& registry) {
     // CCD rollback.
     update_dynamic_colliders(registry, next_state, curr_state);
     float time_start = 1.0f - remaining_step;
-    float earliest_toi = collision_pipeline.find_earliest_toi(
-        registry, scene_bbox, time_start, remaining_step);
+    float earliest_toi =
+        collision_pipeline.find_earliest_toi(registry, scene_bbox, time_start, remaining_step);
 
     state_velocity = (next_state - curr_state) / dt;
 
     if (earliest_toi >= remaining_step) {
-      SPDLOG_DEBUG(
-          "earliest toi  {} >= remaining step {}. terminate outer loop.",
-          earliest_toi, remaining_step);
+      SPDLOG_DEBUG("earliest toi  {} >= remaining step {}. terminate outer loop.", earliest_toi,
+                   remaining_step);
       curr_state += remaining_step * (next_state - curr_state);
       break;
     }
@@ -152,8 +145,7 @@ bool SolverPipeline::step(Registry& registry) {
     // to build the active set.
     update_dynamic_colliders(registry, curr_state, curr_state);
     float frame_time = 1.0f - remaining_step;
-    collisions =
-        collision_pipeline.find_active_collisions(registry, frame_time);
+    collisions = collision_pipeline.find_active_collisions(registry, frame_time);
     SPDLOG_DEBUG("DCD found {} active collisions", collisions.size());
   }
 
@@ -274,9 +266,9 @@ BarrierConstrain SolverPipeline::compute_barrier_constrain(
   return BarrierConstrain{std::move(lhs), std::move(rhs)};
 }
 
-void SolverPipeline::enforce_barrier_constrain(
-    const BarrierConstrain& barrier_constrain, const Bbox& scene_bbox,
-    Eigen::VectorXf& state) const {
+void SolverPipeline::enforce_barrier_constrain(const BarrierConstrain& barrier_constrain,
+                                               const Bbox& scene_bbox,
+                                               Eigen::VectorXf& state) const {
   auto& b = barrier_constrain;
 
   int state_num = state.size();
@@ -292,8 +284,7 @@ void SolverPipeline::enforce_barrier_constrain(
     float target = b.rhs(i) / b.lhs(i);
     float abs_diff = std::abs(target - state(i));
     if (abs_diff > threshold) {
-      SPDLOG_DEBUG("barrier constrain fails. abs diff {} > {}", abs_diff,
-                   threshold);
+      SPDLOG_DEBUG("barrier constrain fails. abs diff {} > {}", abs_diff, threshold);
     }
 
     state(i) = target;

@@ -45,12 +45,11 @@ class SolverPipeline {
   Bbox compute_scene_bbox(const Eigen::VectorXf& state);
 
   /// @brief Build diagonal LHS weights and RHS targets from current collisions.
-  BarrierConstrain compute_barrier_constrain(
-      const Eigen::VectorXf& state, const std::vector<Collision>& collisions);
+  BarrierConstrain compute_barrier_constrain(const Eigen::VectorXf& state,
+                                             const std::vector<Collision>& collisions);
 
   /// @brief Project state onto barrier targets where constraints are active.
-  void enforce_barrier_constrain(const BarrierConstrain& barrier_constrain,
-                                 const Bbox& scene_bbox,
+  void enforce_barrier_constrain(const BarrierConstrain& barrier_constrain, const Bbox& scene_bbox,
                                  Eigen::VectorXf& state) const;
 };
 

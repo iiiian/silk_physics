@@ -24,17 +24,15 @@ std::array<int, 3> pad_vertex_ids(const Box& box) {
 
 scalable_ccd::cuda::AABB make_scalable_gpu_box(const Box& box) {
   using scalable_ccd::cuda::make_Scalar3;
-  scalable_ccd::cuda::AABB result(
-      make_Scalar3(box.min.x(), box.min.y(), box.min.z()),
-      make_Scalar3(box.max.x(), box.max.y(), box.max.z()));
+  scalable_ccd::cuda::AABB result(make_Scalar3(box.min.x(), box.min.y(), box.min.z()),
+                                  make_Scalar3(box.max.x(), box.max.y(), box.max.z()));
   const std::array<int, 3> vertex_ids = pad_vertex_ids(box);
   result.vertex_ids = make_int3(vertex_ids[0], vertex_ids[1], vertex_ids[2]);
   result.element_id = box.id;
   return result;
 }
 
-std::vector<scalable_ccd::cuda::AABB> make_scalable_gpu_boxes(
-    std::span<const Box> boxes) {
+std::vector<scalable_ccd::cuda::AABB> make_scalable_gpu_boxes(std::span<const Box> boxes) {
   std::vector<scalable_ccd::cuda::AABB> result;
   result.reserve(boxes.size());
   for (const Box& box : boxes) {
@@ -68,9 +66,7 @@ class ScalableStqAdapter final : public GpuAdapter {
 
   void query() override { output_ = broadphase_.detect_overlaps(); }
 
-  void synchronize() override {
-    silk::cuda::check_cuda(cudaDeviceSynchronize());
-  }
+  void synchronize() override { silk::cuda::check_cuda(cudaDeviceSynchronize()); }
 
   void materialize_output() override {}
 

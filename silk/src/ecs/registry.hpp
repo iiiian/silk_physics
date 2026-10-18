@@ -75,8 +75,7 @@ class Registry {
       std::mt19937 engine(rd());
       // In legacy ECS zero implies invalid/empty entity.
       // Some demo code still depends on this behavior.
-      std::uniform_int_distribution<uint32_t> dist(
-          1, std::numeric_limits<uint32_t>::max());
+      std::uniform_int_distribution<uint32_t> dist(1, std::numeric_limits<uint32_t>::max());
       entity = dist(engine);
     } while (entities_.contains(entity));
 
@@ -96,9 +95,8 @@ class Registry {
   /// @return Vector of entity id.
   template <typename... T>
   auto get_entity_with_components() const {
-    return entities_ | std::views::filter([this](uint32_t e) {
-             return (has_component<T>(e) && ...);
-           });
+    return entities_ |
+           std::views::filter([this](uint32_t e) { return (has_component<T>(e) && ...); });
   }
 
   // -----------------------------------------------------

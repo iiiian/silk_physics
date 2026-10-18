@@ -31,8 +31,7 @@ void check_partition_invariants(int node_num, int max_part_size, int part_num,
 
 }  // namespace
 
-TEST_CASE("graph_partition: trivial case fits in one partition",
-          "[graph_partition]") {
+TEST_CASE("graph_partition: trivial case fits in one partition", "[graph_partition]") {
   int max_part_size = 32;
 
   std::vector<int> row_ptr = {0};
@@ -74,8 +73,7 @@ TEST_CASE("graph_partition: small chain graph", "[graph_partition]") {
   check_partition_invariants(node_num, max_part_size, part_num, part_id);
 }
 
-TEST_CASE("graph_partition: chain graph requiring multiple partitions",
-          "[graph_partition]") {
+TEST_CASE("graph_partition: chain graph requiring multiple partitions", "[graph_partition]") {
   int max_part_size = 3;
 
   // Chain graph: 0-1-2-3-4-5-6-7-8-9
@@ -103,8 +101,7 @@ TEST_CASE("graph_partition: chain graph requiring multiple partitions",
   REQUIRE(part_num > 1);
 }
 
-TEST_CASE("graph_partition: chain graph with weighted edges",
-          "[graph_partition]") {
+TEST_CASE("graph_partition: chain graph with weighted edges", "[graph_partition]") {
   int max_part_size = 4;
 
   int node_num = 20;
